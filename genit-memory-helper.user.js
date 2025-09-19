@@ -8,8 +8,8 @@
 // @match        https://www.genit.ai/*
 // @grant        GM_setClipboard
 // @run-at       document-idle
-// @downloadURL  https://raw.githubusercontent.com/devforai-creator/genit-memory-helper/main/genit-memory-helper.user.js
-// @updateURL    https://raw.githubusercontent.com/devforai-creator/genit-memory-helper/main/genit-memory-helper.user.js
+// @updateURL    https://github.com/devforai-creator/genit-memory-helper/raw/main/genit-memory-helper.user.js
+// @downloadURL  https://github.com/devforai-creator/genit-memory-helper/raw/main/genit-memory-helper.user.js
 // @license      MIT
 // ==/UserScript==
 
