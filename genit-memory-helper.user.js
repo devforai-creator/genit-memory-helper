@@ -257,7 +257,10 @@
       const [, time, modeRaw, placeRaw] = m;
       headers.push({ idx: i, sig: `${time}|${modeRaw}|${placeRaw}` });
     }
-    if (!headers.length) return [];
+    if (!headers.length) {
+      const fallback = raw.trim();
+      return fallback ? [fallback] : [];
+    }
 
     const NEAR = 80;
     const headerIdx = [];
@@ -407,14 +410,25 @@
   function parseSceneChunk(chunk) {
     const lines = chunk.split('\n').map((s) => s.trim()).filter(Boolean);
     const hi = lines.findIndex((l) => HEADER_RE.test(l));
-    if (hi === -1) throw new Error('Missing INFO header line');
+    const sceneWarnings = [];
+    const hasHeader = hi !== -1;
+    if (!hasHeader) sceneWarnings.push('INFO header missing; fallback header used.');
 
-    const after = lines.slice(hi + 1);
+    const after = hasHeader ? lines.slice(hi + 1) : lines.slice();
     const idxActors = after.findIndex((l) => stripBrackets(l).replace(/\s+/g, '') === '등장');
     const idxMap = after.findIndex((l) => (l || '').startsWith('지도'));
 
-    const extraTagLines = after.slice(0, Math.max(0, idxActors)).filter(Boolean);
-    const header = parseHeader(lines[hi], extraTagLines);
+    const extraTagLines = hasHeader
+      ? after.slice(0, Math.max(0, idxActors)).filter(Boolean)
+      : [];
+    const header = hasHeader
+      ? parseHeader(lines[hi], extraTagLines)
+      : {
+          time: '(unknown time)',
+          mode: 'unknown',
+          place: 'unknown',
+          tags: {},
+        };
 
     let actorLines = [];
     if (idxActors !== -1) {
@@ -428,7 +442,7 @@
       }
     }
     const actors = parseActors(actorLines);
-    if (!actors.length) throw new Error('No actors parsed');
+    if (!actors.length) sceneWarnings.push('No actors parsed; using empty actor list.');
 
     const mapLines = (() => {
       const out = [];
@@ -445,7 +459,8 @@
     })();
     const map = parseMap(mapLines);
 
-    const { items: codesRaw, warnings } = parseRecordCodes(after);
+    const { items: codesRaw, warnings: codeWarnings } = parseRecordCodes(after);
+    if (codeWarnings.length) sceneWarnings.push(...codeWarnings);
     const codes = codesRaw.length ? dedupeCodesKeepLast(codesRaw) : null;
 
     let turns = extractDialogueArea(chunk, actors);
@@ -461,15 +476,17 @@
       return b && b.role === t.role && b.idx === i;
     });
 
-    const infoLabelIdx = hi > 0 && isInfoLabel(lines[hi - 1]) ? hi - 1 : -1;
-    const rawInfo = (infoLabelIdx !== -1 ? lines[infoLabelIdx] + '\n' : '') + lines[hi];
+    const infoLabelIdx = hasHeader && hi > 0 && isInfoLabel(lines[hi - 1]) ? hi - 1 : -1;
+    const rawInfo = hasHeader
+      ? (infoLabelIdx !== -1 ? lines[infoLabelIdx] + '\n' : '') + lines[hi]
+      : lines.slice(0, Math.min(4, lines.length)).join('\n');
 
     return {
       header,
       actors,
       map,
       codes,
-      warnings,
+      warnings: sceneWarnings,
       raw: { info: rawInfo },
       turns,
     };
