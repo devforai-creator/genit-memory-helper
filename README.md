@@ -2,10 +2,31 @@
 
 Genit 대화 로그를 정형화된 JSON으로 추출하고, LLM 요약 프롬프트를 원클릭 복사해 유저노트(2000자)에 넣을 수 있게 하는 사용자 스크립트입니다.
 
-## 설치 방법
-1. Chrome/Edge 등 브라우저에 Tampermonkey 확장 설치
-2. `genit-memory-helper.user.js` 파일 열고 "Install" 클릭
-3. Genit 접속 후 우하단 패널 확인
+## 🔧 설치 방법 (개선된 버전)
+
+1. **Tampermonkey 확장 설치**
+
+   * [Tampermonkey 공식 사이트](https://www.tampermonkey.net/)에서 크롬/엣지/파이어폭스용 확장을 설치하세요.
+
+2. **GitHub에서 스크립트 열기**
+
+   * 저장소 링크: [genit-memory-helper](https://github.com/devforai-creator/genit-memory-helper)
+   * `genit-memory-helper.user.js` 파일을 클릭한 뒤, 상단의 **Raw 버튼**을 누르세요.
+
+3. **Tampermonkey 설치 팝업 확인**
+
+   * Raw 버튼을 누르면 Tampermonkey가 자동으로 설치 확인 창을 띄웁니다.
+   * **Install** 버튼을 눌러 설치를 완료하세요.
+
+4. **개발자 모드 활성화 (추천)**
+
+   * 브라우저 툴바에서 Tampermonkey 아이콘 클릭 → **Dashboard** → 상단 **설정(Settings)** 탭.
+   * “고급 모드(Advanced)”를 \*\*사용(Enabled)\*\*으로 켜 두면, 스크립트 오류 로그 확인이나 수동 업데이트가 가능합니다.
+
+5. **Genit에서 확인**
+
+   * 설치가 끝나면 Genit 접속 시 화면 우하단에 **메모링 패널**이 표시됩니다.
+
 
 ## 사용법
 - **JSON 내보내기**: 무한스크롤로 필요한 구간까지 올린 뒤 클릭 → 파일 저장
