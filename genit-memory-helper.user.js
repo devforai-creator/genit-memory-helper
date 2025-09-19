@@ -1,14 +1,18 @@
 // ==UserScript==
-// @name         Genit Memory Helper (v0.5-role)
+// @name         Genit Memory Helper
 // @namespace    local.dev
-// @version      0.5
-// @description  Parse Genit chat scenes and build robust memory blocks (multi-INFO aware, with dialogue turns; stable speaker detection + role tagging: player|npc|narration).
-// @author       you
+// @version      0.6
+// @description  Genit 대화로그 JSON 추출 + 요약/재요약 프롬프트 복사 기능
+// @author       devforai-creator
 // @match        https://genit.ai/*
 // @match        https://www.genit.ai/*
 // @grant        GM_setClipboard
 // @run-at       document-idle
+// @downloadURL  https://raw.githubusercontent.com/devforai-creator/genit-memory-helper/main/genit-memory-helper.user.js
+// @updateURL    https://raw.githubusercontent.com/devforai-creator/genit-memory-helper/main/genit-memory-helper.user.js
+// @license      MIT
 // ==/UserScript==
+
 
 (function () {
   'use strict';
