@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Genit Memory Helper
 // @namespace    local.dev
-// @version      0.9
+// @version      0.91
 // @description  Genit 대화로그 JSON/TXT/MD 추출 + 요약/재요약 프롬프트 복사 기능
 // @author       devforai-creator
 // @match        https://genit.ai/*
@@ -118,9 +118,11 @@
   const DOM_ADAPTER = (() => {
     const selectors = {
       chatContainers: [
+        '[data-chat-container]',
         '[data-testid="chat-scroll-region"]',
         '[data-testid="conversation-scroll"]',
-        '[role="log"]',
+        '[data-testid="chat-container"]',
+        '[data-role="conversation"]',
         '[data-overlayscrollbars]',
         '.flex-1.min-h-0.overflow-y-auto',
         'main [class*="overflow-y"]',
@@ -156,6 +158,7 @@
         '[data-testid="profile-name"]',
         'header [data-username]'
       ],
+      textHints: ['메시지', '채팅', '대화'],
     };
 
     const playerScopeSelector = selectors.playerScopes.filter(Boolean).join(',');
@@ -215,14 +218,42 @@
       return null;
     };
 
+    const findByRole = () => {
+      const roleNodes = collectAll(['[role]']);
+      return roleNodes.find((node) => {
+        const role = node.getAttribute('role') || '';
+        return /log|list|main|region/i.test(role) && isScrollable(node);
+      });
+    };
+
+    const findByTextHint = () => {
+      const hints = selectors.textHints || [];
+      if (!hints.length) return null;
+      const nodes = collectAll(['main', 'section', 'article']).filter((node) => {
+        if (!node || node.childElementCount < 3) return false;
+        const text = (node.textContent || '').trim();
+        if (!text || text.length > 400) return false;
+        return hints.some((hint) => text.includes(hint));
+      });
+      return nodes.find((node) => isScrollable(node));
+    };
+
     const getChatContainer = () => {
       const direct = firstMatch(selectors.chatContainers);
       if (direct && isScrollable(direct)) return direct;
+
+      const roleMatch = findByRole();
+      if (roleMatch) return roleMatch;
+
       const block = firstMatch(selectors.messageRoot);
       if (block) {
         const scrollable = findScrollableAncestor(block.parentElement);
         if (scrollable) return scrollable;
       }
+
+      const hintMatch = findByTextHint();
+      if (hintMatch) return hintMatch;
+
       return null;
     };
 
@@ -353,8 +384,148 @@
       emitTranscriptLines,
       guessPlayerNames,
       getPanelAnchor,
+      dumpSelectors: () => selectors,
     };
   })();
+
+  let STATUS_ELEMENT = null;
+  let PROFILE_SELECT_ELEMENT = null;
+
+  function attachStatusElement(el) {
+    STATUS_ELEMENT = el || null;
+  }
+
+  function setPanelStatus(msg, color = '#9ca3af') {
+    if (!STATUS_ELEMENT) return;
+    STATUS_ELEMENT.textContent = msg;
+    STATUS_ELEMENT.style.color = color;
+  }
+
+  const AUTO_PROFILES = {
+    default: { cycleDelayMs: 700, settleTimeoutMs: 2000, maxStableRounds: 3, guardLimit: 60 },
+    stability: { cycleDelayMs: 1200, settleTimeoutMs: 2600, maxStableRounds: 5, guardLimit: 140 },
+    fast: { cycleDelayMs: 350, settleTimeoutMs: 900, maxStableRounds: 2, guardLimit: 40 },
+  };
+
+  const AUTO_CFG = {
+    profile: 'default',
+  };
+
+  function getAutoProfile() {
+    return AUTO_PROFILES[AUTO_CFG.profile] || AUTO_PROFILES.default;
+  }
+
+  function syncProfileSelect() {
+    if (PROFILE_SELECT_ELEMENT) {
+      PROFILE_SELECT_ELEMENT.value = AUTO_CFG.profile;
+    }
+  }
+
+  function describeNode(node) {
+    if (!node || !(node instanceof Element)) return null;
+    const parts = [];
+    let current = node;
+    let depth = 0;
+    while (current && depth < 5) {
+      let part = current.tagName.toLowerCase();
+      if (current.id) part += `#${current.id}`;
+      if (current.classList?.length) part += `.${Array.from(current.classList).slice(0, 3).join('.')}`;
+      parts.unshift(part);
+      current = current.parentElement;
+      depth += 1;
+    }
+    return parts.join(' > ');
+  }
+
+  function downloadDomSnapshot() {
+    try {
+      const container = DOM_ADAPTER.getChatContainer();
+      const blocks = DOM_ADAPTER.getMessageBlocks(container || document);
+      const snapshot = {
+        url: location.href,
+        captured_at: new Date().toISOString(),
+        profile: AUTO_CFG.profile,
+        container_path: describeNode(container),
+        block_count: blocks.length,
+        selector_strategies: DOM_ADAPTER.dumpSelectors?.(),
+        container_html_sample: container
+          ? (container.innerHTML || '').slice(0, 40000)
+          : null,
+      };
+      const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
+        type: 'application/json',
+      });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `genit-snapshot-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      setPanelStatus('🗂️ DOM 스냅샷이 저장되었습니다.', '#c7d2fe');
+    } catch (error) {
+      console.error('[GMH] snapshot error', error);
+      setPanelStatus(`스냅샷 실패: ${(error && error.message) || error}`, '#fecaca');
+    }
+  }
+
+  const autoLoader = {
+    lastMode: null,
+    lastTarget: null,
+    lastProfile: AUTO_CFG.profile,
+    async start(mode, target, opts = {}) {
+      if (opts.profile) {
+        AUTO_CFG.profile = AUTO_PROFILES[opts.profile] ? opts.profile : 'default';
+        syncProfileSelect();
+      }
+      this.lastMode = mode;
+      this.lastProfile = AUTO_CFG.profile;
+      try {
+        if (mode === 'all') {
+          setPanelStatus('🔁 위로 불러오는 중...', '#fef3c7');
+          this.lastTarget = null;
+          return await autoLoadAll(setPanelStatus);
+        }
+        if (mode === 'turns') {
+          const numericTarget = Number(target);
+          const goal = Number.isFinite(numericTarget) ? numericTarget : Number(target) || 0;
+          if (!goal || goal <= 0) {
+            setPanelStatus('플레이어 턴 목표가 올바르지 않습니다.', '#fecaca');
+            return null;
+          }
+          this.lastTarget = goal;
+          setPanelStatus(`플레이어 턴 ${goal}개 확보 중...`, '#fef3c7');
+          return await autoLoadUntilPlayerTurns(goal, setPanelStatus);
+        }
+      } catch (error) {
+        console.error('[GMH] auto loader error', error);
+        setPanelStatus(`자동 로딩 오류: ${(error && error.message) || error}`, '#fecaca');
+        throw error;
+      }
+      return null;
+    },
+    async startCurrent(profileName) {
+      if (!this.lastMode) {
+        setPanelStatus('재시도할 이전 작업이 없습니다.', '#d1d5db');
+        return null;
+      }
+      if (profileName) {
+        AUTO_CFG.profile = AUTO_PROFILES[profileName] ? profileName : 'default';
+      } else {
+        AUTO_CFG.profile = this.lastProfile || 'default';
+      }
+      syncProfileSelect();
+      return this.start(this.lastMode, this.lastTarget);
+    },
+    setProfile(profileName) {
+      const next = AUTO_PROFILES[profileName] ? profileName : 'default';
+      AUTO_CFG.profile = next;
+      this.lastProfile = next;
+      setPanelStatus(`프로파일이 '${next}'로 설정되었습니다.`, '#c7d2fe');
+      syncProfileSelect();
+    },
+    stop() {
+      stopAutoLoad();
+    },
+  };
 
   function guessPlayerNamesFromDOM() {
     return DOM_ADAPTER.guessPlayerNames();
@@ -703,13 +874,6 @@
   // -------------------------------
   // 3.5) Scroll auto loader & turn stats
   // -------------------------------
-  const AUTO_CFG = {
-    cycleDelayMs: 700,
-    settleTimeoutMs: 2000,
-    maxStableRounds: 3,
-    guardLimit: 6,
-  };
-
   const AUTO_STATE = {
     running: false,
     container: null,
@@ -740,7 +904,7 @@
     return document.scrollingElement || document.documentElement || document.body;
   }
 
-  function waitForGrowth(el, startHeight, timeout = AUTO_CFG.settleTimeoutMs) {
+  function waitForGrowth(el, startHeight, timeout) {
     return new Promise((resolve) => {
       let finished = false;
       const obs = new MutationObserver(() => {
@@ -760,11 +924,11 @@
     });
   }
 
-  async function scrollUpCycle(container) {
+  async function scrollUpCycle(container, profile) {
     if (!container) return { grew: false, before: 0, after: 0 };
     const before = container.scrollHeight;
     container.scrollTop = 0;
-    const grew = await waitForGrowth(container, before);
+    const grew = await waitForGrowth(container, before, profile.settleTimeoutMs);
     return { grew, before, after: container.scrollHeight };
   }
 
@@ -785,19 +949,22 @@
   }
 
   async function autoLoadAll(setStatus) {
+    const profile = getAutoProfile();
     const container = ensureScrollContainer();
     AUTO_STATE.running = true;
     AUTO_STATE.container = container;
     let stableRounds = 0;
+    let guard = 0;
 
-    while (AUTO_STATE.running) {
-      const { grew, before, after } = await scrollUpCycle(container);
+    while (AUTO_STATE.running && guard < profile.guardLimit) {
+      guard += 1;
+      const { grew, before, after } = await scrollUpCycle(container, profile);
       if (!AUTO_STATE.running) break;
       const delta = after - before;
       if (!grew || delta < 6) stableRounds += 1;
       else stableRounds = 0;
-      if (stableRounds >= AUTO_CFG.maxStableRounds) break;
-      await sleep(AUTO_CFG.cycleDelayMs);
+      if (stableRounds >= profile.maxStableRounds) break;
+      await sleep(profile.cycleDelayMs);
     }
 
     AUTO_STATE.running = false;
@@ -810,14 +977,17 @@
   }
 
   async function autoLoadUntilPlayerTurns(target, setStatus) {
+    const profile = getAutoProfile();
     const container = ensureScrollContainer();
     AUTO_STATE.running = true;
     AUTO_STATE.container = container;
     let stableRounds = 0;
-    let guard = 0;
+    let stagnantRounds = 0;
+    let loopCount = 0;
     let prevPlayerTurns = -1;
 
-    while (AUTO_STATE.running) {
+    while (AUTO_STATE.running && loopCount < profile.guardLimit) {
+      loopCount += 1;
       const stats = collectTurnStats();
       if (stats.error) {
         if (setStatus) setStatus('파싱 실패 - DOM 변화를 감지하지 못했습니다.', '#fecaca');
@@ -835,21 +1005,21 @@
           '#fef3c7'
         );
 
-      const { grew, before, after } = await scrollUpCycle(container);
+      const { grew, before, after } = await scrollUpCycle(container, profile);
       if (!AUTO_STATE.running) break;
       const delta = after - before;
       if (!grew || delta < 6) stableRounds += 1;
       else stableRounds = 0;
 
-      guard = stats.playerTurns === prevPlayerTurns ? guard + 1 : 0;
+      stagnantRounds = stats.playerTurns === prevPlayerTurns ? stagnantRounds + 1 : 0;
       prevPlayerTurns = stats.playerTurns;
 
-      if (stableRounds >= AUTO_CFG.maxStableRounds || guard >= AUTO_CFG.guardLimit) {
+      if (stableRounds >= profile.maxStableRounds || stagnantRounds >= profile.guardLimit) {
         if (setStatus)
           setStatus('추가 데이터를 불러오지 못했습니다. 더 이상 기록이 없거나 막혀있습니다.', '#fca5a5');
         break;
       }
-      await sleep(AUTO_CFG.cycleDelayMs);
+      await sleep(profile.cycleDelayMs);
     }
 
     AUTO_STATE.running = false;
@@ -883,7 +1053,7 @@
     }, 1500);
   }
 
-  function ensureAutoLoadControls(panel, setStatus) {
+  function ensureAutoLoadControls(panel) {
     if (!panel || panel.querySelector('#gmh-autoload-controls')) return;
 
     const wrap = document.createElement('div');
@@ -924,9 +1094,8 @@
     btnAll.onclick = async () => {
       if (AUTO_STATE.running) return;
       toggleControls(true);
-      setStatus('🔁 위로 불러오는 중...', '#fef3c7');
       try {
-        await autoLoadAll(setStatus);
+        await autoLoader.start('all');
       } finally {
         toggleControls(false);
       }
@@ -937,14 +1106,14 @@
       const rawVal = inputTurns?.value?.trim();
       const target = Number.parseInt(rawVal || '0', 10);
       if (!Number.isFinite(target) || target <= 0) {
-        setStatus('플레이어 턴 수를 입력해주세요.', '#fecaca');
+        setPanelStatus('플레이어 턴 수를 입력해주세요.', '#fecaca');
         return;
       }
       toggleControls(true);
       try {
-        const stats = await autoLoadUntilPlayerTurns(target, setStatus);
-        if (!stats.error) {
-          setStatus(`현재 플레이어 턴 ${stats.playerTurns}개 확보.`, '#a7f3d0');
+        const stats = await autoLoader.start('turns', target);
+        if (stats && !stats.error) {
+          setPanelStatus(`현재 플레이어 턴 ${stats.playerTurns}개 확보.`, '#a7f3d0');
         }
       } finally {
         toggleControls(false);
@@ -953,14 +1122,75 @@
 
     btnStop.onclick = () => {
       if (!AUTO_STATE.running) {
-        setStatus('자동 로딩이 실행 중이 아닙니다.', '#9ca3af');
+        setPanelStatus('자동 로딩이 실행 중이 아닙니다.', '#9ca3af');
         return;
       }
-      stopAutoLoad();
-      setStatus('⏹️ 자동 로딩 중지를 요청했습니다.', '#fca5a5');
+      autoLoader.stop();
+      setPanelStatus('⏹️ 자동 로딩 중지를 요청했습니다.', '#fca5a5');
     };
 
     startTurnMeter(meter);
+  }
+
+  function mountStatusActions(panel) {
+    if (!panel || panel.querySelector('#gmh-status-actions')) return;
+
+    const actions = document.createElement('div');
+    actions.id = 'gmh-status-actions';
+    actions.style.cssText = 'display:grid; gap:6px; border-top:1px solid rgba(148,163,184,0.25); padding-top:6px;';
+    actions.innerHTML = `
+      <div style="display:flex; gap:6px; align-items:center;">
+        <label for="gmh-profile-select" style="font-size:11px; color:#94a3b8;">프로파일</label>
+        <select id="gmh-profile-select" style="flex:1; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:6px; padding:6px;">
+          <option value="default">기본</option>
+          <option value="stability">안정</option>
+          <option value="fast">빠름</option>
+        </select>
+      </div>
+      <div style="display:flex; gap:6px;">
+        <button id="gmh-btn-retry" style="flex:1; background:#f1f5f9; color:#0f172a; border:0; border-radius:6px; padding:6px; cursor:pointer;">재시도</button>
+        <button id="gmh-btn-retry-stable" style="flex:1; background:#e0e7ff; color:#1e1b4b; border:0; border-radius:6px; padding:6px; cursor:pointer;">안정 모드 재시도</button>
+        <button id="gmh-btn-snapshot" style="flex:1; background:#ffe4e6; color:#881337; border:0; border-radius:6px; padding:6px; cursor:pointer;">DOM 스냅샷</button>
+      </div>
+    `;
+
+    PROFILE_SELECT_ELEMENT = actions.querySelector('#gmh-profile-select');
+    if (PROFILE_SELECT_ELEMENT) {
+      PROFILE_SELECT_ELEMENT.value = AUTO_CFG.profile;
+      PROFILE_SELECT_ELEMENT.onchange = (event) => {
+        autoLoader.setProfile(event.target.value);
+      };
+    }
+    syncProfileSelect();
+
+    const retryBtn = actions.querySelector('#gmh-btn-retry');
+    if (retryBtn) {
+      retryBtn.onclick = async () => {
+        if (AUTO_STATE.running) {
+          setPanelStatus('이미 자동 로딩이 진행 중입니다.', '#cbd5f5');
+          return;
+        }
+        await autoLoader.startCurrent();
+      };
+    }
+
+    const retryStableBtn = actions.querySelector('#gmh-btn-retry-stable');
+    if (retryStableBtn) {
+      retryStableBtn.onclick = async () => {
+        if (AUTO_STATE.running) {
+          setPanelStatus('이미 자동 로딩이 진행 중입니다.', '#cbd5f5');
+          return;
+        }
+        await autoLoader.startCurrent('stability');
+      };
+    }
+
+    const snapshotBtn = actions.querySelector('#gmh-btn-snapshot');
+    if (snapshotBtn) {
+      snapshotBtn.onclick = () => downloadDomSnapshot();
+    }
+
+    panel.appendChild(actions);
   }
 
   // -------------------------------
@@ -1003,14 +1233,11 @@
     anchor.appendChild(panel);
 
     const statusEl = panel.querySelector('#gmh-status');
-    const setStatus = (msg, color = '#9ca3af') => {
-      if (statusEl) {
-        statusEl.textContent = msg;
-        statusEl.style.color = color;
-      }
-    };
+    attachStatusElement(statusEl);
+    setPanelStatus('준비 완료', '#9ca3af');
 
-    ensureAutoLoadControls(panel, setStatus);
+    ensureAutoLoadControls(panel);
+    mountStatusActions(panel);
 
     const parseAll = () => {
       const raw = readTranscriptText();
@@ -1031,11 +1258,11 @@
         });
         GM_setClipboard(md, { type: 'text', mimetype: 'text/plain' });
         const turnsTotal = session.meta.turn_count;
-        setStatus(`최근 15턴 복사 완료. 플레이어 턴 ${turnsTotal}개.`, '#a7f3d0');
+        setPanelStatus(`최근 15턴 복사 완료. 플레이어 턴 ${turnsTotal}개.`, '#a7f3d0');
         if (session.warnings.length) console.warn('[GMH] warnings:', session.warnings);
       } catch (e) {
         alert(`오류: ${(e && e.message) || e}`);
-        setStatus('복사 실패', '#fecaca');
+        setPanelStatus('복사 실패', '#fecaca');
       }
     };
 
@@ -1045,11 +1272,11 @@
         const md = toMarkdownExport(session);
         GM_setClipboard(md, { type: 'text', mimetype: 'text/plain' });
         const turnsTotal = session.meta.turn_count;
-        setStatus(`전체 Markdown 복사 완료. 플레이어 턴 ${turnsTotal}개.`, '#bfdbfe');
+        setPanelStatus(`전체 Markdown 복사 완료. 플레이어 턴 ${turnsTotal}개.`, '#bfdbfe');
         if (session.warnings.length) console.warn('[GMH] warnings:', session.warnings);
       } catch (e) {
         alert(`오류: ${(e && e.message) || e}`);
-        setStatus('복사 실패', '#fecaca');
+        setPanelStatus('복사 실패', '#fecaca');
       }
     };
 
@@ -1066,14 +1293,14 @@
         a.click();
         URL.revokeObjectURL(a.href);
         const turnsTotal = session.meta.turn_count;
-        setStatus(
+        setPanelStatus(
           `${format.toUpperCase()} 내보내기 완료. 플레이어 턴 ${turnsTotal}개.`,
           '#d1fae5'
         );
         if (session.warnings.length) console.warn('[GMH] warnings:', session.warnings);
       } catch (e) {
         alert(`오류: ${(e && e.message) || e}`);
-        setStatus('내보내기 실패', '#fecaca');
+        setPanelStatus('내보내기 실패', '#fecaca');
       }
     };
 
@@ -1081,14 +1308,14 @@
       try {
         const { session } = parseAll();
         const turnsTotal = session.meta.turn_count;
-        setStatus(
+        setPanelStatus(
           `재파싱 완료: 플레이어 턴 ${turnsTotal}개. 경고 ${session.warnings.length}건.`,
           '#fde68a'
         );
         if (session.warnings.length) console.warn('[GMH] warnings:', session.warnings);
       } catch (e) {
         alert(`오류: ${(e && e.message) || e}`);
-        setStatus('재파싱 실패', '#fecaca');
+        setPanelStatus('재파싱 실패', '#fecaca');
       }
     };
 
@@ -1115,7 +1342,7 @@
    - 플레이어 이름은 "플레이어"로 통일.
 `;
       GM_setClipboard(prompt, { type: 'text', mimetype: 'text/plain' });
-      setStatus('✅ 요약 프롬프트가 클립보드에 복사되었습니다.', '#c4b5fd');
+      setPanelStatus('✅ 요약 프롬프트가 클립보드에 복사되었습니다.', '#c4b5fd');
     };
 
     panel.querySelector('#gmh-reguide').onclick = () => {
@@ -1130,7 +1357,7 @@
 - 길이는 1200~1800자.
 `;
       GM_setClipboard(prompt, { type: 'text', mimetype: 'text/plain' });
-      setStatus('✅ 재요약 프롬프트가 클립보드에 복사되었습니다.', '#fcd34d');
+      setPanelStatus('✅ 재요약 프롬프트가 클립보드에 복사되었습니다.', '#fcd34d');
     };
   }
 
