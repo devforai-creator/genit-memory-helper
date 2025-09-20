@@ -1,0 +1,23 @@
+{
+  "name": "genit-memory-helper",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "pretest": "npm run build",
+    "test": "vitest --run tests/unit",
+    "test:unit": "vitest --run",
+    "test:smoke": "playwright test",
+    "fingerprint": "node scripts/fingerprint.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.0",
+    "@types/node": "^20.11.30",
+    "jsdom": "^24.0.0",
+    "playwright": "^1.47.0",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0",
+    "vitest": "^2.0.5"
+  }
+}

@@ -1,28 +1,17 @@
-# OS-generated files
-.DS_Store
-Thumbs.db
+# Dependencies
+node_modules/
 
-# Logs and temporary files
-*.log
-*.tmp
+# Build output
+dist/
+.auth/
+.pw-browsers/
+
+# Test artifacts
+playwright-report/
+test-results/
+
+# Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
-# Build and cache directories
-node_modules/
-dist/
-build/
-tmp/
-.idea/
-.vscode/
-
-# Environment and local overrides
-.env
-.env.*
-*.local
-
-# Ignore contributor docs generated locally
-Agent.md
-AGENTS.md
 privacy-test.log

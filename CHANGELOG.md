@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.0 (2025-09-26)
+- GitHub Actions CI를 도입해 빌드·Vitest 단위 테스트·Playwright 스모크 테스트를 자동 실행하고 DOM 변화 감시 예약 스케줄을 추가
+- Playwright 로그인 상태(global setup)와 세션/데모 이중 스모크 테스트를 추가해 테스트 계정·공개 데모 환경 모두에서 패널 동작을 검증
+- Genit 홈 자산 해시를 기록하는 fingerprint 스크립트를 추가해 외부 DOM 업데이트 신호를 수집
+- 태그 푸시 시 dist/genit-memory-helper.user.js를 빌드 후 GitHub Release에 업로드하는 자동 릴리스 파이프라인 구성
+- Node 기반 build 스크립트 및 테스트 픽스처를 추가해 Tampermonkey 사용자 스크립트 산출물을 표준 dist 디렉터리에 생성
+
 ## v0.93 (2025-09-25)
 - GMH 네임스페이스를 도입해 Core/Privacy/UI/Export 모듈을 분리하고 창 전역에 읽기 전용으로 노출
 - Genit 전용 DOM 어댑터를 `GMH.Adapters.genit`으로 분리해 플랫폼 확장 스캐폴드를 마련

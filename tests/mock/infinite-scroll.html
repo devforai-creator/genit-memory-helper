@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>GMH Mock Chat</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, sans-serif;
+        background: #0f172a;
+        color: #f8fafc;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+      }
+      #frame {
+        width: 960px;
+        height: 640px;
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 24px 64px rgba(8, 15, 30, 0.5);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        background: rgba(15, 23, 42, 0.92);
+        display: grid;
+        grid-template-rows: 56px 1fr;
+      }
+      #header {
+        padding: 0 18px;
+        display: flex;
+        align-items: center;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+        font-weight: 600;
+        letter-spacing: 0.01em;
+      }
+      #chat-container {
+        position: relative;
+        overflow-y: auto;
+        padding: 18px 24px 24px;
+        display: grid;
+        gap: 12px;
+      }
+      .message {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+      }
+      .message.player {
+        justify-content: flex-end;
+      }
+      .bubble {
+        max-width: 60%;
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: rgba(30, 41, 59, 0.9);
+        border: 1px solid rgba(37, 99, 235, 0.2);
+      }
+      .message.player .bubble {
+        background: rgba(59, 130, 246, 0.18);
+        border: 1px solid rgba(96, 165, 250, 0.35);
+      }
+      .speaker {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: rgba(148, 163, 184, 0.75);
+        margin-bottom: 6px;
+      }
+      .text {
+        line-height: 1.5;
+        font-size: 14px;
+        color: #e2e8f0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="frame">
+      <div id="header">GMH Mock Conversation</div>
+      <div id="chat-container" data-chat-container></div>
+    </div>
+
+    <template id="message-template">
+      <div class="message" data-role="msg">
+        <div class="bubble">
+          <div class="speaker"></div>
+          <div class="text"></div>
+        </div>
+      </div>
+    </template>
+
+    <script>
+      const chat = document.getElementById('chat-container');
+      const tpl = document.getElementById('message-template');
+
+      const agents = [
+        { name: '플레이어', role: 'player', preset: '저장된 기억을 검색 중...' },
+        { name: '메모링', role: 'npc', preset: '대답을 준비합니다.' },
+        { name: '내레이션', role: 'narration', preset: '장면 전환이 진행됩니다.' }
+      ];
+
+      let chunk = 0;
+      const MAX_CHUNKS = 6;
+
+      function makeMessage(index) {
+        const data = agents[index % agents.length];
+        const node = tpl.content.firstElementChild.cloneNode(true);
+
+        node.classList.add(data.role);
+        node.querySelector('.speaker').textContent = data.name;
+        node.querySelector('.text').textContent = `${data.preset} (${chunk}-${index})`;
+
+        return node;
+      }
+
+      function appendChunk(size = 18) {
+        if (chunk >= MAX_CHUNKS) return false;
+        const frag = document.createDocumentFragment();
+        for (let i = 0; i < size; i += 1) {
+          frag.appendChild(makeMessage(chunk * size + i));
+        }
+        chat.insertBefore(frag, chat.firstChild);
+        chat.scrollTop = chat.scrollHeight;
+        chunk += 1;
+        return true;
+      }
+
+      appendChunk();
+
+      let loading = false;
+      function handleScroll() {
+        if (chat.scrollTop < 120 && !loading) {
+          loading = true;
+          setTimeout(() => {
+            const added = appendChunk();
+            if (!added) {
+              chat.removeEventListener('scroll', handleScroll);
+            }
+            loading = false;
+          }, 250);
+        }
+      }
+
+      chat.addEventListener('scroll', handleScroll);
+    </script>
+  </body>
+</html>

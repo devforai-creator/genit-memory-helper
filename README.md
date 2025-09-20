@@ -20,6 +20,7 @@ Genit 대화 로그를 정형화된 JSON으로 추출하고, LLM 요약 프롬�
 ### 🔄 업데이트
 - 새 버전이 나오면 위의 Raw 페이지에 올라갑니다.  
 - 기존 유저는 Tampermonkey가 자동으로 업데이트를 체크합니다.  
+- **v1.0.0**: GitHub Actions CI/릴리스 파이프라인과 Playwright 스모크 테스트를 추가해 DOM 변화 감시 및 자동 배포를 지원합니다.  
 - **v0.93**: GMH 네임스페이스/어댑터 스캐폴드로 내부 구조를 분리하고, 프라이버시 미리보기·톤 별 상태 피드백·원클릭 내보내기 등 UX를 개선했습니다.  
 - **v0.92**: SAFE/STANDARD/RESEARCH 프라이버시 프로필, 자동 레다크션 + 내보내기 전 확인창, manifest(감사 로그)와 커스텀 블랙/화이트리스트 지원.  
 - v0.91: 데이터 속성 우선 탐지, 안정 모드 프로파일, 패널 내 재시도/스냅샷 UI 추가.  
@@ -55,6 +56,29 @@ Genit Memory Helper는 **현재 화면에 로드된 대화만** JSON으로 내�
 
 👉 즉, 스크롤을 어디까지 올리느냐가 곧 “요약 범위 선택”이 됩니다.  
 이 단순한 제스처 덕분에 사용자는 "어디까지 기억을 정리할지"를 직접 컨트롤할 수 있습니다.
+
+## 개발 & 테스트
+- `npm install`
+- `npm run build`
+- `npm test` (Vitest 기반 단위 테스트 – dist 산출물을 검사합니다)
+- `npm run test:smoke`
+  - `GENIT_TEST_URL` + `GENIT_USER`/`GENIT_PASS`를 설정하면 테스트 계정으로 로그인해 실제 세션 페이지에서 패널과 자동 스크롤을 검증합니다.
+  - 공개 데모 URL이 있다면 `GENIT_DEMO_URL`을 지정해 로그인 없이 패널 렌더만 확인할 수 있습니다.
+- 로그인 페이지가 기본 셀렉터와 다르다면 아래 환경변수로 조정하세요.
+  - `GENIT_LOGIN_URL`, `GENIT_LOGIN_EMAIL_SELECTOR`, `GENIT_LOGIN_PASSWORD_SELECTOR`, `GENIT_LOGIN_SUBMIT_SELECTOR`, `GENIT_LOGIN_SUCCESS_SELECTOR`
+
+### GitHub Actions 비밀 설정
+CI에서 스모크 테스트와 자동 릴리스를 활용하려면 프로젝트의 **Settings → Secrets → Actions**에 다음 키를 추가하세요.
+
+| Secret | 설명 |
+| --- | --- |
+| `GENIT_TEST_URL` | 로그인 후 접근 가능한 테스트용 대화 세션 URL |
+| `GENIT_DEMO_URL` (옵션) | 로그인 불필요한 공개 데모 URL |
+| `GENIT_USER` / `GENIT_PASS` | 테스트 계정 자격 증명 |
+| 그 외 (옵션) | 로그인 커스터마이징을 위한 `GENIT_LOGIN_*` 시리즈 |
+| `GENIT_HOME_URL` (옵션) | 자산 해시 핑거프린트 대상 홈 URL(기본: https://genit.ai/) |
+
+GitHub Actions 워크플로는 비밀이 없는 경우 해당 단계(로그인/스모크)를 자동으로 건너뜁니다.
 
 ## 🔒 프라이버시 가드
 - 패널 상단에서 **SAFE/STANDARD/RESEARCH** 프로필을 선택할 수 있습니다.

@@ -1,0 +1,65 @@
+name: CI - Build, Test, DOM Smoke
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  schedule:
+    - cron: '0 18 * * *' # 매일 03:00 KST
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build user script
+        run: npm run build
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Smoke test (Playwright)
+        env:
+          GENIT_TEST_URL: ${{ secrets.GENIT_TEST_URL }}
+          GENIT_DEMO_URL: ${{ secrets.GENIT_DEMO_URL }}
+          GENIT_USER: ${{ secrets.GENIT_USER }}
+          GENIT_PASS: ${{ secrets.GENIT_PASS }}
+          GENIT_LOGIN_URL: ${{ secrets.GENIT_LOGIN_URL }}
+          GENIT_LOGIN_EMAIL_SELECTOR: ${{ secrets.GENIT_LOGIN_EMAIL_SELECTOR }}
+          GENIT_LOGIN_PASSWORD_SELECTOR: ${{ secrets.GENIT_LOGIN_PASSWORD_SELECTOR }}
+          GENIT_LOGIN_SUBMIT_SELECTOR: ${{ secrets.GENIT_LOGIN_SUBMIT_SELECTOR }}
+          GENIT_LOGIN_SUCCESS_SELECTOR: ${{ secrets.GENIT_LOGIN_SUCCESS_SELECTOR }}
+        run: |
+          npx playwright test --config=playwright.config.ts
+
+      - name: Fingerprint Genit assets
+        continue-on-error: true
+        env:
+          GENIT_HOME_URL: ${{ secrets.GENIT_HOME_URL }}
+        run: npm run fingerprint
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            playwright-report/
+            test-results/
+            dist/

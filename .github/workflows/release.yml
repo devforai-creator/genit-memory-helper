@@ -1,0 +1,41 @@
+name: Release - Build & Publish user.js
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build user script
+        run: npm run build
+
+      - name: Generate checksum
+        run: |
+          cd dist
+          sha256sum genit-memory-helper.user.js > genit-memory-helper.user.js.sha256
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/genit-memory-helper.user.js
+            dist/genit-memory-helper.user.js.sha256
+          draft: false
+          prerelease: false
