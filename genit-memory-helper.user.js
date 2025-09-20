@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Genit Memory Helper
 // @namespace    local.dev
-// @version      0.7
+// @version      0.8
 // @description  Genit 대화로그 JSON/TXT/MD 추출 + 요약/재요약 프롬프트 복사 기능
 // @author       devforai-creator
 // @match        https://genit.ai/*
@@ -54,6 +54,10 @@
 
   function sanitizeText(s) {
     return collapseSpaces(normNL(s).replace(/[\t\v\f\u00a0\u200b]/g, ' '));
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   function looksLikeName(raw) {
@@ -158,6 +162,9 @@
       if (!textClean) return;
       const speakerName = normalizeSpeakerName(speaker || '내레이션');
       const role = roleOverride || roleForSpeaker(speakerName);
+      if (role === 'player' && turns.length) {
+        currentSceneId += 1;
+      }
       const last = turns[turns.length - 1];
       if (last && last.speaker === speakerName && last.role === role) {
         last.text = `${last.text} ${textClean}`.trim();
@@ -317,8 +324,7 @@
     meta.actors = Array.from(actorSet);
     if (!meta.title && meta.place) meta.title = `${meta.place} 세션`;
     meta.player = PLAYER_NAMES[0] || '플레이어';
-    meta.turn_count = turns.length;
-    meta.scene_count = new Set(turns.map((t) => t.sceneId)).size;
+    meta.turn_count = turns.filter((t) => t.role === 'player').length;
     return meta;
   }
 
@@ -498,6 +504,261 @@
   }
 
   // -------------------------------
+  // 3.5) Scroll auto loader & turn stats
+  // -------------------------------
+  const AUTO_CFG = {
+    cycleDelayMs: 700,
+    settleTimeoutMs: 2000,
+    maxStableRounds: 3,
+    guardLimit: 6,
+  };
+
+  const AUTO_STATE = {
+    running: false,
+    container: null,
+    meterTimer: null,
+  };
+
+  function ensureScrollContainer() {
+    const cand = document.querySelector(CHAT_CONTAINER_SEL);
+    if (cand && isScrollable(cand)) return cand;
+    const fallback = document.scrollingElement || document.documentElement || document.body;
+    return fallback;
+  }
+
+  function isScrollable(el) {
+    if (!el) return false;
+    if (el === document.body || el === document.documentElement) return true;
+    const cs = getComputedStyle(el);
+    const oy = cs.overflowY;
+    const scrollableStyle = oy === 'auto' || oy === 'scroll' || oy === 'overlay';
+    return scrollableStyle && el.scrollHeight > el.clientHeight + 4;
+  }
+
+  function waitForGrowth(el, startHeight, timeout = AUTO_CFG.settleTimeoutMs) {
+    return new Promise((resolve) => {
+      let finished = false;
+      const obs = new MutationObserver(() => {
+        if (el.scrollHeight > startHeight + 4) {
+          finished = true;
+          obs.disconnect();
+          resolve(true);
+        }
+      });
+      obs.observe(el, { childList: true, subtree: true });
+      setTimeout(() => {
+        if (!finished) {
+          obs.disconnect();
+          resolve(false);
+        }
+      }, timeout);
+    });
+  }
+
+  async function scrollUpCycle(container) {
+    if (!container) return { grew: false, before: 0, after: 0 };
+    const before = container.scrollHeight;
+    container.scrollTop = 0;
+    const grew = await waitForGrowth(container, before);
+    return { grew, before, after: container.scrollHeight };
+  }
+
+  function collectTurnStats() {
+    try {
+      const raw = readTranscriptText();
+      const normalized = normalizeTranscript(raw);
+      const session = buildSession(normalized);
+      const playerTurns = session.turns.filter((t) => t.role === 'player').length;
+      return {
+        session,
+        playerTurns,
+        totalTurns: session.turns.length,
+      };
+    } catch (error) {
+      return { session: null, playerTurns: 0, totalTurns: 0, error };
+    }
+  }
+
+  async function autoLoadAll(setStatus) {
+    const container = ensureScrollContainer();
+    AUTO_STATE.running = true;
+    AUTO_STATE.container = container;
+    let stableRounds = 0;
+
+    while (AUTO_STATE.running) {
+      const { grew, before, after } = await scrollUpCycle(container);
+      if (!AUTO_STATE.running) break;
+      const delta = after - before;
+      if (!grew || delta < 6) stableRounds += 1;
+      else stableRounds = 0;
+      if (stableRounds >= AUTO_CFG.maxStableRounds) break;
+      await sleep(AUTO_CFG.cycleDelayMs);
+    }
+
+    AUTO_STATE.running = false;
+    const stats = collectTurnStats();
+    if (setStatus && !stats.error) {
+      setStatus(`🔁 스크롤 완료. 플레이어 턴 ${stats.playerTurns}개 확보.`, '#a7f3d0');
+    }
+    if (stats.error && setStatus) setStatus('스크롤 후 파싱 실패', '#fecaca');
+    return stats;
+  }
+
+  async function autoLoadUntilPlayerTurns(target, setStatus) {
+    const container = ensureScrollContainer();
+    AUTO_STATE.running = true;
+    AUTO_STATE.container = container;
+    let stableRounds = 0;
+    let guard = 0;
+    let prevPlayerTurns = -1;
+
+    while (AUTO_STATE.running) {
+      const stats = collectTurnStats();
+      if (stats.error) {
+        if (setStatus) setStatus('파싱 실패 - DOM 변화를 감지하지 못했습니다.', '#fecaca');
+        break;
+      }
+      if (stats.playerTurns >= target) {
+        if (setStatus)
+          setStatus(`✅ 목표 달성: 플레이어 턴 ${stats.playerTurns}개 확보.`, '#c4b5fd');
+        break;
+      }
+
+      if (setStatus)
+        setStatus(
+          `위로 불러오는 중... 현재 플레이어 턴 ${stats.playerTurns}/${target}.`,
+          '#fef3c7'
+        );
+
+      const { grew, before, after } = await scrollUpCycle(container);
+      if (!AUTO_STATE.running) break;
+      const delta = after - before;
+      if (!grew || delta < 6) stableRounds += 1;
+      else stableRounds = 0;
+
+      guard = stats.playerTurns === prevPlayerTurns ? guard + 1 : 0;
+      prevPlayerTurns = stats.playerTurns;
+
+      if (stableRounds >= AUTO_CFG.maxStableRounds || guard >= AUTO_CFG.guardLimit) {
+        if (setStatus)
+          setStatus('추가 데이터를 불러오지 못했습니다. 더 이상 기록이 없거나 막혀있습니다.', '#fca5a5');
+        break;
+      }
+      await sleep(AUTO_CFG.cycleDelayMs);
+    }
+
+    AUTO_STATE.running = false;
+    return collectTurnStats();
+  }
+
+  function stopAutoLoad() {
+    if (!AUTO_STATE.running) return;
+    AUTO_STATE.running = false;
+  }
+
+  function startTurnMeter(meter) {
+    if (!meter) return;
+    const render = () => {
+      const stats = collectTurnStats();
+      if (stats.error) {
+        meter.textContent = '턴 측정 실패: DOM을 읽을 수 없습니다.';
+        return;
+      }
+      meter.textContent = `턴 현황 · 플레이어 ${stats.playerTurns}턴`;
+    };
+    render();
+    if (AUTO_STATE.meterTimer) return;
+    AUTO_STATE.meterTimer = window.setInterval(() => {
+      if (!meter.isConnected) {
+        clearInterval(AUTO_STATE.meterTimer);
+        AUTO_STATE.meterTimer = null;
+        return;
+      }
+      render();
+    }, 1500);
+  }
+
+  function ensureAutoLoadControls(panel, setStatus) {
+    if (!panel || panel.querySelector('#gmh-autoload-controls')) return;
+
+    const wrap = document.createElement('div');
+    wrap.id = 'gmh-autoload-controls';
+    wrap.style.cssText = 'display:grid; gap:6px; border-top:1px solid #1f2937; padding-top:6px;';
+    wrap.innerHTML = `
+      <div style="display:flex; gap:8px;">
+        <button id="gmh-autoload-all" style="flex:1; background:#38bdf8; border:0; color:#041; border-radius:8px; padding:6px; cursor:pointer;">위로 끝까지 로딩</button>
+        <button id="gmh-autoload-stop" style="width:88px; background:#ef4444; border:0; color:#fff; border-radius:8px; padding:6px; cursor:pointer;">정지</button>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input id="gmh-autoload-turns" type="number" min="1" step="1" placeholder="최근 플레이어 턴 N" style="flex:1; background:#111827; color:#f1f5f9; border:1px solid #1f2937; border-radius:8px; padding:6px;" />
+        <button id="gmh-autoload-turns-btn" style="width:96px; background:#34d399; border:0; color:#041; border-radius:8px; padding:6px; cursor:pointer;">턴 확보</button>
+      </div>
+      <div id="gmh-turn-meter" style="opacity:.7; font-size:11px;"></div>
+    `;
+
+    panel.appendChild(wrap);
+
+    const btnAll = wrap.querySelector('#gmh-autoload-all');
+    const btnStop = wrap.querySelector('#gmh-autoload-stop');
+    const btnTurns = wrap.querySelector('#gmh-autoload-turns-btn');
+    const inputTurns = wrap.querySelector('#gmh-autoload-turns');
+    const meter = wrap.querySelector('#gmh-turn-meter');
+
+    const toggleControls = (disabled) => {
+      btnAll.disabled = disabled;
+      btnTurns.disabled = disabled;
+      if (disabled) {
+        btnAll.style.opacity = '0.6';
+        btnTurns.style.opacity = '0.6';
+      } else {
+        btnAll.style.opacity = '1';
+        btnTurns.style.opacity = '1';
+      }
+    };
+
+    btnAll.onclick = async () => {
+      if (AUTO_STATE.running) return;
+      toggleControls(true);
+      setStatus('🔁 위로 불러오는 중...', '#fef3c7');
+      try {
+        await autoLoadAll(setStatus);
+      } finally {
+        toggleControls(false);
+      }
+    };
+
+    btnTurns.onclick = async () => {
+      if (AUTO_STATE.running) return;
+      const rawVal = inputTurns?.value?.trim();
+      const target = Number.parseInt(rawVal || '0', 10);
+      if (!Number.isFinite(target) || target <= 0) {
+        setStatus('플레이어 턴 수를 입력해주세요.', '#fecaca');
+        return;
+      }
+      toggleControls(true);
+      try {
+        const stats = await autoLoadUntilPlayerTurns(target, setStatus);
+        if (!stats.error) {
+          setStatus(`현재 플레이어 턴 ${stats.playerTurns}개 확보.`, '#a7f3d0');
+        }
+      } finally {
+        toggleControls(false);
+      }
+    };
+
+    btnStop.onclick = () => {
+      if (!AUTO_STATE.running) {
+        setStatus('자동 로딩이 실행 중이 아닙니다.', '#9ca3af');
+        return;
+      }
+      stopAutoLoad();
+      setStatus('⏹️ 자동 로딩 중지를 요청했습니다.', '#fca5a5');
+    };
+
+    startTurnMeter(meter);
+  }
+
+  // -------------------------------
   // 4) UI Panel
   // -------------------------------
   function mountPanel() {
@@ -543,6 +804,8 @@
       }
     };
 
+    ensureAutoLoadControls(panel, setStatus);
+
     const parseAll = () => {
       const raw = readTranscriptText();
       const normalized = normalizeTranscript(raw);
@@ -561,7 +824,8 @@
           heading: '## 최근 15턴',
         });
         GM_setClipboard(md, { type: 'text', mimetype: 'text/plain' });
-        setStatus(`최근 15턴 복사 완료. 총 턴 ${session.turns.length}개.`, '#a7f3d0');
+        const turnsTotal = session.meta.turn_count;
+        setStatus(`최근 15턴 복사 완료. 플레이어 턴 ${turnsTotal}개.`, '#a7f3d0');
         if (session.warnings.length) console.warn('[GMH] warnings:', session.warnings);
       } catch (e) {
         alert(`오류: ${(e && e.message) || e}`);
@@ -574,7 +838,8 @@
         const { session } = parseAll();
         const md = toMarkdownExport(session);
         GM_setClipboard(md, { type: 'text', mimetype: 'text/plain' });
-        setStatus(`전체 Markdown 복사 완료. 턴 ${session.turns.length}개.`, '#bfdbfe');
+        const turnsTotal = session.meta.turn_count;
+        setStatus(`전체 Markdown 복사 완료. 플레이어 턴 ${turnsTotal}개.`, '#bfdbfe');
         if (session.warnings.length) console.warn('[GMH] warnings:', session.warnings);
       } catch (e) {
         alert(`오류: ${(e && e.message) || e}`);
@@ -594,7 +859,11 @@
         a.download = bundle.filename;
         a.click();
         URL.revokeObjectURL(a.href);
-        setStatus(`${format.toUpperCase()} 내보내기 완료. 턴 ${session.turns.length}개.`, '#d1fae5');
+        const turnsTotal = session.meta.turn_count;
+        setStatus(
+          `${format.toUpperCase()} 내보내기 완료. 플레이어 턴 ${turnsTotal}개.`,
+          '#d1fae5'
+        );
         if (session.warnings.length) console.warn('[GMH] warnings:', session.warnings);
       } catch (e) {
         alert(`오류: ${(e && e.message) || e}`);
@@ -605,7 +874,11 @@
     panel.querySelector('#gmh-reparse').onclick = () => {
       try {
         const { session } = parseAll();
-        setStatus(`재파싱 완료: 턴 ${session.turns.length}개. 경고 ${session.warnings.length}건.`, '#fde68a');
+        const turnsTotal = session.meta.turn_count;
+        setStatus(
+          `재파싱 완료: 플레이어 턴 ${turnsTotal}개. 경고 ${session.warnings.length}건.`,
+          '#fde68a'
+        );
         if (session.warnings.length) console.warn('[GMH] warnings:', session.warnings);
       } catch (e) {
         alert(`오류: ${(e && e.message) || e}`);
