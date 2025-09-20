@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Genit Memory Helper
 // @namespace    local.dev
-// @version      0.8
+// @version      0.9
 // @description  Genit 대화로그 JSON/TXT/MD 추출 + 요약/재요약 프롬프트 복사 기능
 // @author       devforai-creator
 // @match        https://genit.ai/*
@@ -60,6 +60,19 @@
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  function isScrollable(el) {
+    if (!el) return false;
+    if (el === document.body || el === document.documentElement) {
+      const target = el === document.body ? document.documentElement : el;
+      return target.scrollHeight > target.clientHeight + 4;
+    }
+    if (!(el instanceof Element)) return false;
+    const cs = getComputedStyle(el);
+    const oy = cs.overflowY;
+    const scrollableStyle = oy === 'auto' || oy === 'scroll' || oy === 'overlay';
+    return scrollableStyle && el.scrollHeight > el.clientHeight + 4;
+  }
+
   function looksLikeName(raw) {
     const s = String(raw ?? '')
       .replace(/^[\-•\s]+/, '')
@@ -75,6 +88,12 @@
     if (/^[\[\(].*[\]\)]$/.test(s)) return true;
     if (/^(...|···|…)/.test(s)) return true;
     if (/^(당신|너는|그는|그녀는)\s/.test(s)) return true;
+    if (/[.!?"']$/.test(s)) return true;
+    if (/[가-힣]{2,}(은|는|이|가|을|를|으로|로|에게|에서|하며|면서|라고)\s/.test(s)) return true;
+    if (s.includes(' ')) {
+      const words = s.split(/\s+/);
+      if (words.length >= 4) return true;
+    }
     return false;
   }
 
@@ -96,23 +115,249 @@
     return false;
   }
 
-  function guessPlayerNamesFromDOM() {
-    const cands = new Set();
-    const selectors = [
-      '[data-username]',
-      '[data-profile-name]',
-      '.profile-name',
-      '.user-name',
-      'header [class*="name"]',
-      'nav [class*="name"]',
-    ];
-    for (const sel of selectors) {
-      document.querySelectorAll(sel).forEach((node) => {
-        const text = node.textContent?.trim();
-        if (text && /^[\w가-힣][\w가-힣 _.-]{1,20}$/.test(text)) cands.add(text);
+  const DOM_ADAPTER = (() => {
+    const selectors = {
+      chatContainers: [
+        '[data-testid="chat-scroll-region"]',
+        '[data-testid="conversation-scroll"]',
+        '[role="log"]',
+        '[data-overlayscrollbars]',
+        '.flex-1.min-h-0.overflow-y-auto',
+        'main [class*="overflow-y"]',
+      ],
+      messageRoot: ['[data-message-id]', '[role="listitem"][data-id]', '[data-testid="message-wrapper"]'],
+      infoCode: ['code.language-INFO', 'pre code.language-INFO'],
+      playerScopes: [
+        '[data-role="user"]',
+        '[data-from-user="true"]',
+        '[data-author-role="user"]',
+        '.flex.w-full.justify-end',
+        '.flex.flex-col.items-end',
+      ],
+      playerText: [
+        '[data-role="user"] .markdown-content',
+        '.markdown-content.text-right',
+        '.p-4.rounded-xl.bg-background p',
+      ],
+      npcGroups: ['[data-role="assistant"]', '.flex.flex-col.w-full.group'],
+      npcName: [
+        '[data-author-name]',
+        '[data-author]',
+        '[data-username]',
+        '.text-sm.text-muted-foreground.mb-1.ml-1',
+      ],
+      npcBubble: ['.p-4.rounded-xl.bg-background p', '.markdown-content:not(.text-right)'],
+      narrationBlocks: ['.markdown-content.text-muted-foreground', '.text-muted-foreground.text-sm'],
+      panelAnchor: ['[data-testid="app-root"]', '#__next', '#root', 'main'],
+      playerNameHints: [
+        '[data-role="user"] [data-username]',
+        '[data-profile-name]',
+        '[data-user-name]',
+        '[data-testid="profile-name"]',
+        'header [data-username]'
+      ],
+    };
+
+    const playerScopeSelector = selectors.playerScopes.filter(Boolean).join(',');
+    const npcScopeSelector = selectors.npcGroups.filter(Boolean).join(',');
+
+    const collectAll = (selList, root = document) => {
+      const out = [];
+      const seen = new Set();
+      if (!selList?.length) return out;
+      for (const sel of selList) {
+        if (!sel) continue;
+        let nodes;
+        try {
+          nodes = root.querySelectorAll(sel);
+        } catch (e) {
+          continue;
+        }
+        nodes.forEach((node) => {
+          if (!node || seen.has(node)) return;
+          seen.add(node);
+          out.push(node);
+        });
+      }
+      return out;
+    };
+
+    const firstMatch = (selList, root = document) => {
+      if (!selList?.length) return null;
+      for (const sel of selList) {
+        if (!sel) continue;
+        try {
+          const node = root.querySelector(sel);
+          if (node) return node;
+        } catch (e) {
+          continue;
+        }
+      }
+      return null;
+    };
+
+    const textSegmentsFromNode = (node) => {
+      if (!node) return [];
+      const text = node.innerText ?? node.textContent ?? '';
+      if (!text) return [];
+      return text
+        .split(/\r?\n+/)
+        .map((seg) => seg.trim())
+        .filter(Boolean);
+    };
+
+    const findScrollableAncestor = (node) => {
+      let current = node instanceof Element ? node : null;
+      for (let depth = 0; depth < 6 && current; depth += 1) {
+        if (isScrollable(current)) return current;
+        current = current.parentElement;
+      }
+      return null;
+    };
+
+    const getChatContainer = () => {
+      const direct = firstMatch(selectors.chatContainers);
+      if (direct && isScrollable(direct)) return direct;
+      const block = firstMatch(selectors.messageRoot);
+      if (block) {
+        const scrollable = findScrollableAncestor(block.parentElement);
+        if (scrollable) return scrollable;
+      }
+      return null;
+    };
+
+    const getMessageBlocks = (root) => {
+      const targetRoot = root || document;
+      const blocks = collectAll(selectors.messageRoot, targetRoot);
+      if (blocks.length) return blocks;
+      if (targetRoot !== document) {
+        const fallback = collectAll(selectors.messageRoot, document);
+        if (fallback.length) return fallback;
+      }
+      return [];
+    };
+
+    const emitInfo = (block, pushLine) => {
+      const infoNode = firstMatch(selectors.infoCode, block);
+      if (!infoNode) return;
+      pushLine('INFO');
+      textSegmentsFromNode(infoNode).forEach((seg) => pushLine(seg));
+    };
+
+    const emitPlayerLines = (block, pushLine) => {
+      const scopes = collectAll(selectors.playerScopes, block);
+      if (!scopes.length) return;
+      const textNodes = [];
+      const nodeSeen = new Set();
+      for (const scope of scopes) {
+        collectAll(selectors.playerText, scope).forEach((node) => {
+          if (!nodeSeen.has(node)) {
+            nodeSeen.add(node);
+            textNodes.push(node);
+          }
+        });
+      }
+      const targets = textNodes.length ? textNodes : scopes;
+      const seenSegments = new Set();
+      targets.forEach((node) => {
+        textSegmentsFromNode(node).forEach((seg) => {
+          if (!seg) return;
+          if (seenSegments.has(seg)) return;
+          seenSegments.add(seg);
+          pushLine(PLAYER_MARK + seg);
+        });
       });
-    }
-    return Array.from(cands);
+    };
+
+    const extractNameFromGroup = (group) => {
+      const nameNode = firstMatch(selectors.npcName, group);
+      let name = nameNode?.getAttribute?.('data-author-name') || nameNode?.textContent;
+      if (!name) {
+        name =
+          group.getAttribute('data-author') ||
+          group.getAttribute('data-username') ||
+          group.getAttribute('data-name');
+      }
+      return stripQuotes(collapseSpaces(name || '')).slice(0, 40);
+    };
+
+    const emitNpcLines = (block, pushLine) => {
+      const groups = collectAll(selectors.npcGroups, block);
+      if (!groups.length) return;
+      groups.forEach((group) => {
+        if (playerScopeSelector && group.closest(playerScopeSelector)) return;
+        const nameRaw = extractNameFromGroup(group);
+        const name = nameRaw || 'NPC';
+        const bubbleNodes = collectAll(selectors.npcBubble, group);
+        const targets = bubbleNodes.length ? bubbleNodes : [group];
+        targets.forEach((node) => {
+          textSegmentsFromNode(node).forEach((seg) => {
+            if (!seg) return;
+            pushLine(`@${name}@ "${seg}"`);
+          });
+        });
+      });
+    };
+
+    const emitNarrationLines = (block, pushLine) => {
+      const nodes = collectAll(selectors.narrationBlocks, block);
+      if (!nodes.length) return;
+      nodes.forEach((node) => {
+        if (playerScopeSelector && node.closest(playerScopeSelector)) return;
+        if (npcScopeSelector && node.closest(npcScopeSelector)) return;
+        textSegmentsFromNode(node).forEach((seg) => {
+          if (!seg) return;
+          pushLine(seg);
+        });
+      });
+    };
+
+    const emitTranscriptLines = (block, pushLine) => {
+      emitInfo(block, pushLine);
+      emitPlayerLines(block, pushLine);
+      emitNpcLines(block, pushLine);
+      emitNarrationLines(block, pushLine);
+    };
+
+    const guessPlayerNames = () => {
+      const results = new Set();
+      collectAll(selectors.playerNameHints).forEach((node) => {
+        const text = node?.textContent?.trim();
+        if (text) results.add(stripQuotes(text));
+        const attrNames = ['data-username', 'data-user-name', 'data-display-name'];
+        for (const attr of attrNames) {
+          const val = node.getAttribute?.(attr);
+          if (val) results.add(stripQuotes(val));
+        }
+      });
+      collectAll(selectors.playerScopes).forEach((scope) => {
+        const attrNames = ['data-username', 'data-user-name', 'data-author'];
+        for (const attr of attrNames) {
+          const val = scope.getAttribute?.(attr);
+          if (val) results.add(stripQuotes(val));
+        }
+      });
+      return Array.from(results)
+        .map((name) => collapseSpaces(name || ''))
+        .filter((name) => name && /^[\w가-힣][\w가-힣 _.-]{1,20}$/.test(name));
+    };
+
+    const getPanelAnchor = () => {
+      const anchor = firstMatch(selectors.panelAnchor);
+      return anchor || document.body;
+    };
+
+    return {
+      getChatContainer,
+      getMessageBlocks,
+      emitTranscriptLines,
+      guessPlayerNames,
+      getPanelAnchor,
+    };
+  })();
+
+  function guessPlayerNamesFromDOM() {
+    return DOM_ADAPTER.guessPlayerNames();
   }
 
   const PLAYER_NAMES = Array.from(
@@ -245,6 +490,12 @@
         continue;
       }
 
+      if (looksNarrative(line) || /^".+"$/.test(line) || /^“.+”$/.test(line)) {
+        pushTurn('내레이션', stripQuotes(line), 'narration');
+        pendingSpeaker = null;
+        continue;
+      }
+
       if (looksLikeName(line)) {
         const speaker = normalizeSpeakerName(line);
         let textBuf = [];
@@ -279,12 +530,6 @@
           continue;
         }
         pendingSpeaker = speaker;
-        continue;
-      }
-
-      if (looksNarrative(line) || /^".+"$/.test(line) || /^“.+”$/.test(line)) {
-        pushTurn('내레이션', stripQuotes(line), 'narration');
-        pendingSpeaker = null;
         continue;
       }
 
@@ -430,14 +675,13 @@
   // -------------------------------
   // 3) DOM Reader
   // -------------------------------
-  const CHAT_CONTAINER_SEL = '.flex-1.min-h-0.overflow-y-auto';
-  const MSG_ROOT_SEL = '[data-message-id]';
-
   function readTranscriptText() {
-    const root = document.querySelector(CHAT_CONTAINER_SEL);
-    if (!root) throw new Error('채팅 컨테이너를 찾을 수 없습니다.');
+    const container = DOM_ADAPTER.getChatContainer();
+    const blocks = DOM_ADAPTER.getMessageBlocks(container || document);
+    if (!container && !blocks.length)
+      throw new Error('채팅 컨테이너를 찾을 수 없습니다.');
+    if (!blocks.length) return '';
 
-    const blocks = Array.from(root.querySelectorAll(MSG_ROOT_SEL));
     const seenLine = new Set();
     const out = [];
 
@@ -449,55 +693,8 @@
       out.push(s);
     };
 
-    for (const b of blocks) {
-      const infoCode = b.querySelector('code.language-INFO');
-      if (infoCode) {
-        pushLine('INFO');
-        infoCode.textContent
-          .split(/\r?\n/)
-          .map((s) => s.trimEnd())
-          .forEach((s) => pushLine(s));
-      }
-
-      const userScopes = b.querySelectorAll(
-        '.flex.w-full.justify-end, .flex.flex-col.items-end'
-      );
-      for (const scope of userScopes) {
-        scope.querySelectorAll('.p-4.rounded-xl.bg-background p').forEach((p) => {
-          const txt = p.innerText?.trim();
-          if (!txt) return;
-          pushLine(PLAYER_MARK + txt);
-        });
-        scope.querySelectorAll('.markdown-content.text-right').forEach((md) => {
-          const t = md.innerText?.trim();
-          if (!t) return;
-          t.split(/\n+/).forEach((row) => pushLine(PLAYER_MARK + row.trim()));
-        });
-      }
-
-      b.querySelectorAll('.flex.flex-col.w-full.group').forEach((group) => {
-        const name = group.querySelector(
-          '.text-sm.text-muted-foreground.mb-1.ml-1'
-        )?.innerText?.trim();
-        const bubblePs = group.querySelectorAll('.p-4.rounded-xl.bg-background p');
-        if (!name || !bubblePs.length) return;
-        if (group.closest('.justify-end, .items-end')) return;
-
-        bubblePs.forEach((p) => {
-          const txt = p.innerText?.trim();
-          if (!txt) return;
-          pushLine(`@${name}@ "${txt}"`);
-        });
-      });
-
-      b.querySelectorAll('.markdown-content.text-muted-foreground.text-sm').forEach(
-        (md) => {
-          if (md.closest('.justify-end, .items-end, .text-right')) return;
-          const t = md.innerText?.trim();
-          if (!t) return;
-          t.split(/\n+/).forEach((row) => pushLine(row.trim()));
-        }
-      );
+    for (const block of blocks) {
+      DOM_ADAPTER.emitTranscriptLines(block, pushLine);
     }
 
     return out.join('\n');
@@ -520,19 +717,27 @@
   };
 
   function ensureScrollContainer() {
-    const cand = document.querySelector(CHAT_CONTAINER_SEL);
-    if (cand && isScrollable(cand)) return cand;
-    const fallback = document.scrollingElement || document.documentElement || document.body;
-    return fallback;
-  }
-
-  function isScrollable(el) {
-    if (!el) return false;
-    if (el === document.body || el === document.documentElement) return true;
-    const cs = getComputedStyle(el);
-    const oy = cs.overflowY;
-    const scrollableStyle = oy === 'auto' || oy === 'scroll' || oy === 'overlay';
-    return scrollableStyle && el.scrollHeight > el.clientHeight + 4;
+    const adapterContainer = DOM_ADAPTER.getChatContainer();
+    if (adapterContainer) {
+      if (isScrollable(adapterContainer)) return adapterContainer;
+      if (adapterContainer instanceof Element) {
+        let ancestor = adapterContainer.parentElement;
+        for (let depth = 0; depth < 6 && ancestor; depth += 1) {
+          if (isScrollable(ancestor)) return ancestor;
+          ancestor = ancestor.parentElement;
+        }
+      }
+      return adapterContainer;
+    }
+    const messageBlocks = DOM_ADAPTER.getMessageBlocks(document);
+    if (messageBlocks.length) {
+      let ancestor = messageBlocks[0]?.parentElement || null;
+      for (let depth = 0; depth < 6 && ancestor; depth += 1) {
+        if (isScrollable(ancestor)) return ancestor;
+        ancestor = ancestor.parentElement;
+      }
+    }
+    return document.scrollingElement || document.documentElement || document.body;
   }
 
   function waitForGrowth(el, startHeight, timeout = AUTO_CFG.settleTimeoutMs) {
@@ -794,7 +999,8 @@
       </div>
       <div id="gmh-status" style="opacity:.85"></div>
     `;
-    document.body.appendChild(panel);
+    const anchor = DOM_ADAPTER.getPanelAnchor() || document.body;
+    anchor.appendChild(panel);
 
     const statusEl = panel.querySelector('#gmh-status');
     const setStatus = (msg, color = '#9ca3af') => {
@@ -945,8 +1151,14 @@
     window.addEventListener('DOMContentLoaded', () => setTimeout(boot, 1200));
   }
 
+  let moScheduled = false;
   const mo = new MutationObserver(() => {
-    if (!document.querySelector('#genit-memory-helper-panel')) boot();
+    if (moScheduled) return;
+    moScheduled = true;
+    requestAnimationFrame(() => {
+      moScheduled = false;
+      if (!document.querySelector('#genit-memory-helper-panel')) boot();
+    });
   });
   mo.observe(document.documentElement, { subtree: true, childList: true });
 })();
