@@ -25,3 +25,4 @@ tmp/
 # Ignore contributor docs generated locally
 Agent.md
 AGENTS.md
+privacy-test.log

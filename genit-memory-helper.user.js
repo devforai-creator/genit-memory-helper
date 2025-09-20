@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Genit Memory Helper
 // @namespace    local.dev
-// @version      0.91
+// @version      0.92
 // @description  Genit 대화로그 JSON/TXT/MD 추출 + 요약/재요약 프롬프트 복사 기능
 // @author       devforai-creator
 // @match        https://genit.ai/*
@@ -16,15 +16,397 @@
 (function () {
   'use strict';
 
+  const SCRIPT_VERSION = '0.92';
+
   // -------------------------------
   // 0) Constants & utils
   // -------------------------------
+  const PAGE_WINDOW = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
   const PLAYER_MARK = '⟦PLAYER⟧ ';
   const HEADER_RE =
     /^(\d+월\s*\d+일.*?\d{1,2}:\d{2})\s*\|\s*([^|]+?)\s*\|\s*📍\s*([^|]+)\s*\|?(.*)$/;
   const CODE_RE = /^([A-J])\/(\d+)\/(\d+)\/(\d+)\/(\d+)$/i;
   const META_KEYWORDS = ['지도', '등장', 'Actors', '배우', '기록코드', 'Codes', 'SCENE'];
   const PLAYER_NAME_FALLBACKS = ['플레이어', '소중한코알라5299'];
+  const STORAGE_KEYS = {
+    privacyProfile: 'gmh_privacy_profile',
+    privacyBlacklist: 'gmh_privacy_blacklist',
+    privacyWhitelist: 'gmh_privacy_whitelist',
+  };
+
+  const PRIVACY_PROFILES = {
+    safe: {
+      key: 'safe',
+      label: 'SAFE (권장)',
+      maskAddressHints: true,
+      maskNarrativeSensitive: true,
+    },
+    standard: {
+      key: 'standard',
+      label: 'STANDARD',
+      maskAddressHints: false,
+      maskNarrativeSensitive: false,
+    },
+    research: {
+      key: 'research',
+      label: 'RESEARCH',
+      maskAddressHints: false,
+      maskNarrativeSensitive: false,
+    },
+  };
+
+  const PRIVACY_CFG = loadPrivacySettings();
+
+  function loadPrivacySettings() {
+    const profile = localStorage.getItem(STORAGE_KEYS.privacyProfile) || 'safe';
+    let blacklist = [];
+    let whitelist = [];
+    try {
+      const rawBlack = localStorage.getItem(STORAGE_KEYS.privacyBlacklist);
+      if (rawBlack) blacklist = JSON.parse(rawBlack);
+    } catch (err) {
+      console.warn('[GMH] privacy blacklist load failed', err);
+    }
+    try {
+      const rawWhite = localStorage.getItem(STORAGE_KEYS.privacyWhitelist);
+      if (rawWhite) whitelist = JSON.parse(rawWhite);
+    } catch (err) {
+      console.warn('[GMH] privacy whitelist load failed', err);
+    }
+    const normalizedBlack = Array.isArray(blacklist)
+      ? blacklist.map((item) => collapseSpaces(item)).filter(Boolean)
+      : [];
+    const normalizedWhite = Array.isArray(whitelist)
+      ? whitelist.map((item) => collapseSpaces(item)).filter(Boolean)
+      : [];
+    const profileKey = PRIVACY_PROFILES[profile] ? profile : 'safe';
+    return {
+      profile: profileKey,
+      blacklist: normalizedBlack,
+      whitelist: normalizedWhite,
+    };
+  }
+
+  function persistPrivacySettings() {
+    try {
+      localStorage.setItem(STORAGE_KEYS.privacyProfile, PRIVACY_CFG.profile);
+      localStorage.setItem(
+        STORAGE_KEYS.privacyBlacklist,
+        JSON.stringify(PRIVACY_CFG.blacklist || [])
+      );
+      localStorage.setItem(
+        STORAGE_KEYS.privacyWhitelist,
+        JSON.stringify(PRIVACY_CFG.whitelist || [])
+      );
+    } catch (err) {
+      console.warn('[GMH] privacy settings persist failed', err);
+    }
+  }
+
+  function setPrivacyProfile(profileKey) {
+    PRIVACY_CFG.profile = PRIVACY_PROFILES[profileKey] ? profileKey : 'safe';
+    persistPrivacySettings();
+    syncPrivacyProfileSelect();
+  }
+
+  function setCustomList(type, items) {
+    if (!Array.isArray(items)) return;
+    const normalized = items.map((item) => collapseSpaces(item)).filter(Boolean);
+    if (type === 'blacklist') PRIVACY_CFG.blacklist = normalized;
+    if (type === 'whitelist') PRIVACY_CFG.whitelist = normalized;
+    persistPrivacySettings();
+  }
+
+  const REDACTION_PATTERNS = {
+    email: /\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/gi,
+    krPhone: /\b01[016789]-?\d{3,4}-?\d{4}\b/g,
+    intlPhone: /\+\d{1,3}\s?\d{1,4}[\s-]?\d{3,4}[\s-]?\d{4}\b/g,
+    rrn: /\b\d{6}-?\d{7}\b/g,
+    card: /\b(?:\d[ -]?){13,19}\b/g,
+    ip: /\b\d{1,3}(\.\d{1,3}){3}\b/g,
+    handle: /@[A-Za-z0-9_]{2,30}\b/g,
+    addressHint: /(\d+호|\d+동|[가-힣]{2,}(로|길)\s?\d+(-\d+)?)/g,
+  };
+
+  function luhnValid(value) {
+    const digits = String(value || '').replace(/[^\d]/g, '');
+    if (digits.length < 13 || digits.length > 19) return false;
+    let sum = 0;
+    let shouldDouble = false;
+    for (let i = digits.length - 1; i >= 0; i -= 1) {
+      let digit = parseInt(digits[i], 10);
+      if (Number.isNaN(digit)) return false;
+      if (shouldDouble) {
+        digit *= 2;
+        if (digit > 9) digit -= 9;
+      }
+      sum += digit;
+      shouldDouble = !shouldDouble;
+    }
+    return sum % 10 === 0;
+  }
+
+  function escapeForRegex(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function createRedactionRules(profileKey) {
+    const rules = [
+      {
+        name: 'EMAIL',
+        rx: REDACTION_PATTERNS.email,
+        mask: () => '[REDACTED:EMAIL]',
+      },
+      {
+        name: 'PHONE',
+        rx: REDACTION_PATTERNS.krPhone,
+        mask: () => '[REDACTED:PHONE]',
+      },
+      {
+        name: 'PHONE',
+        rx: REDACTION_PATTERNS.intlPhone,
+        mask: () => '[REDACTED:PHONE]',
+      },
+      {
+        name: 'RRN',
+        rx: REDACTION_PATTERNS.rrn,
+        mask: () => '[REDACTED:RRN]',
+      },
+      {
+        name: 'CARD',
+        rx: REDACTION_PATTERNS.card,
+        validator: luhnValid,
+        mask: () => '[REDACTED:CARD]',
+      },
+      {
+        name: 'IP',
+        rx: REDACTION_PATTERNS.ip,
+        mask: () => '[REDACTED:IP]',
+      },
+      {
+        name: 'HANDLE',
+        rx: REDACTION_PATTERNS.handle,
+        mask: () => '[REDACTED:HANDLE]',
+      },
+    ];
+    const profile = PRIVACY_PROFILES[profileKey] || PRIVACY_PROFILES.safe;
+    if (profile.maskAddressHints) {
+      rules.push({
+        name: 'ADDR',
+        rx: REDACTION_PATTERNS.addressHint,
+        mask: () => '[REDACTED:ADDR]',
+      });
+    }
+    return rules;
+  }
+
+  function protectWhitelist(text, whitelist) {
+    if (!Array.isArray(whitelist) || !whitelist.length) return { text, tokens: [] };
+    let output = text;
+    const tokens = [];
+    whitelist.forEach((term, index) => {
+      if (!term) return;
+      const token = `§WL${index}_${term.length}§`;
+      const rx = new RegExp(escapeForRegex(term), 'gi');
+      let replaced = false;
+      output = output.replace(rx, () => {
+        replaced = true;
+        return token;
+      });
+      if (replaced) tokens.push({ token, value: term });
+    });
+    return { text: output, tokens };
+  }
+
+  function restoreWhitelist(text, tokens) {
+    if (!tokens?.length) return text;
+    let output = text;
+    tokens.forEach(({ token, value }) => {
+      const rx = new RegExp(escapeForRegex(token), 'g');
+      output = output.replace(rx, value);
+    });
+    return output;
+  }
+
+  function applyRules(text, rules, counts) {
+    let output = text;
+    for (const rule of rules) {
+      if (!rule || !rule.rx) continue;
+      output = output.replace(rule.rx, (match) => {
+        if (rule.validator && !rule.validator(match)) return match;
+        counts[rule.name] = (counts[rule.name] || 0) + 1;
+        return typeof rule.mask === 'function' ? rule.mask(match) : rule.mask;
+      });
+    }
+    return output;
+  }
+
+  function applyCustomBlacklist(text, blacklist, counts) {
+    if (!Array.isArray(blacklist) || !blacklist.length) return text;
+    let output = text;
+    blacklist.forEach((term) => {
+      if (!term) return;
+      const rx = new RegExp(escapeForRegex(term), 'gi');
+      output = output.replace(rx, () => {
+        counts.CUSTOM = (counts.CUSTOM || 0) + 1;
+        return '[REDACTED:CUSTOM]';
+      });
+    });
+    return output;
+  }
+
+  const MINOR_KEYWORDS = /(미성년|중학생|고등학생|나이\s*1[0-7]|소년|소녀|minor|under\s*18)/i;
+  const SEXUAL_KEYWORDS = /(성관계|성적|섹스|sex|음란|선정|야한|야스|삽입|자위|강간|에로)/i;
+
+  function hasMinorSexualContext(text) {
+    if (!text) return false;
+    return MINOR_KEYWORDS.test(text) && SEXUAL_KEYWORDS.test(text);
+  }
+
+  function redactText(text, profileKey, counts) {
+    const profile = PRIVACY_PROFILES[profileKey] || PRIVACY_PROFILES.safe;
+    const rules = createRedactionRules(profile.key);
+    const baseCounts = counts || {};
+    const { text: protectedText, tokens } = protectWhitelist(String(text || ''), PRIVACY_CFG.whitelist);
+    let result = applyRules(protectedText, rules, baseCounts);
+    result = applyCustomBlacklist(result, PRIVACY_CFG.blacklist, baseCounts);
+    result = restoreWhitelist(result, tokens);
+    if (profile.maskNarrativeSensitive) {
+      result = result.replace(/(자살|자해|강간|폭행|살해)/gi, () => {
+        baseCounts.SENSITIVE = (baseCounts.SENSITIVE || 0) + 1;
+        return '[REDACTED:SENSITIVE]';
+      });
+    }
+    return result;
+  }
+
+  function cloneSession(session) {
+    return {
+      meta: { ...(session?.meta || {}) },
+      turns: Array.isArray(session?.turns)
+        ? session.turns.map((turn) => ({ ...turn }))
+        : [],
+      warnings: Array.isArray(session?.warnings) ? [...session.warnings] : [],
+      source: session?.source,
+    };
+  }
+
+  function applyPrivacyPipeline(session, rawText, profileKey) {
+    const profile = PRIVACY_PROFILES[profileKey] ? profileKey : 'safe';
+    const counts = {};
+    const sanitizedSession = cloneSession(session);
+    sanitizedSession.turns = sanitizedSession.turns.map((turn) => {
+      const next = { ...turn };
+      next.text = redactText(turn.text, profile, counts);
+      if (next.speaker) next.speaker = redactText(next.speaker, profile, counts);
+      return next;
+    });
+    const sanitizedMeta = {};
+    Object.entries(sanitizedSession.meta || {}).forEach(([key, value]) => {
+      if (typeof value === 'string') {
+        sanitizedMeta[key] = redactText(value, profile, counts);
+      } else if (Array.isArray(value)) {
+        sanitizedMeta[key] = value.map((item) =>
+          typeof item === 'string' ? redactText(item, profile, counts) : item
+        );
+      } else {
+        sanitizedMeta[key] = value;
+      }
+    });
+    sanitizedSession.meta = sanitizedMeta;
+    sanitizedSession.warnings = sanitizedSession.warnings.map((warning) =>
+      typeof warning === 'string' ? redactText(warning, profile, counts) : warning
+    );
+    const sanitizedPlayers = PLAYER_NAMES.map((name) => redactText(name, profile, counts));
+    sanitizedSession.player_names = sanitizedPlayers;
+    const sanitizedRaw = redactText(rawText, profile, counts);
+    const aggregatedCounts = counts;
+    const totalRedactions = Object.values(aggregatedCounts).reduce(
+      (sum, value) => sum + (value || 0),
+      0
+    );
+    const minorBlocked = hasMinorSexualContext(rawText);
+    return {
+      profile,
+      sanitizedSession,
+      sanitizedRaw,
+      playerNames: sanitizedPlayers,
+      counts: aggregatedCounts,
+      totalRedactions,
+      blocked: minorBlocked,
+    };
+  }
+
+  function formatRedactionCounts(counts) {
+    const entries = Object.entries(counts || {}).filter(([, value]) => value > 0);
+    if (!entries.length) return '레다크션 없음';
+    return entries
+      .map(([key, value]) => `${key}:${value}`)
+      .join(', ');
+  }
+
+  function collectSessionStats(session) {
+    if (!session) return { playerTurns: 0, totalTurns: 0, warnings: 0 };
+    const playerTurns = session.turns?.filter((turn) => turn.role === 'player')?.length || 0;
+    const totalTurns = session.turns?.length || 0;
+    const warnings = session.warnings?.length || 0;
+    return { playerTurns, totalTurns, warnings };
+  }
+
+  function confirmPrivacyGate({ profile, counts, stats }) {
+    const profileLabel = PRIVACY_PROFILES[profile]?.label || profile;
+    const summary = formatRedactionCounts(counts);
+    const lines = [
+      `프라이버시 프로필: ${profileLabel}`,
+      `플레이어 턴: ${stats.playerTurns} / 전체 턴: ${stats.totalTurns}`,
+      `레다크션: ${summary}`,
+      '',
+      '외부 도구에 공유하기 전에 개인정보 보호 책임을 이해하고 있나요?',
+      '확인을 누르면 가공된 결과를 복사/저장합니다.',
+    ];
+    return window.confirm(lines.join('\n'));
+  }
+
+  function buildExportManifest({
+    profile,
+    counts,
+    stats,
+    format,
+    warnings,
+    source,
+  }) {
+    return {
+      tool: 'Genit Memory Helper',
+      version: SCRIPT_VERSION,
+      generated_at: new Date().toISOString(),
+      profile,
+      counts,
+      stats,
+      format,
+      warnings,
+      source,
+    };
+  }
+
+  function configurePrivacyLists() {
+    const currentBlack = PRIVACY_CFG.blacklist?.join('\n') || '';
+    const nextBlack = window.prompt(
+      '레다크션 강제 대상(블랙리스트)을 줄바꿈 또는 쉼표로 구분해 입력하세요.\n비워두면 목록을 초기화합니다.',
+      currentBlack
+    );
+    if (nextBlack !== null) {
+      setCustomList('blacklist', parseListInput(nextBlack));
+    }
+    const currentWhite = PRIVACY_CFG.whitelist?.join('\n') || '';
+    const nextWhite = window.prompt(
+      '레다크션 예외 대상(화이트리스트)을 줄바꿈 또는 쉼표로 구분해 입력하세요.\n비워두면 목록을 초기화합니다.',
+      currentWhite
+    );
+    if (nextWhite !== null) {
+      setCustomList('whitelist', parseListInput(nextWhite));
+    }
+    setPanelStatus('프라이버시 사용자 목록을 저장했습니다.', '#c7d2fe');
+  }
 
   function normNL(s) {
     return String(s ?? '').replace(/\r\n?|\u2028|\u2029/g, '\n');
@@ -56,8 +438,24 @@
     return collapseSpaces(normNL(s).replace(/[\t\v\f\u00a0\u200b]/g, ' '));
   }
 
+  function parseListInput(raw) {
+    if (!raw) return [];
+    return normNL(raw)
+      .split(/[,\n]/)
+      .map((item) => collapseSpaces(item))
+      .filter(Boolean);
+  }
+
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function triggerDownload(blob, filename) {
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(link.href);
   }
 
   function isScrollable(el) {
@@ -390,6 +788,7 @@
 
   let STATUS_ELEMENT = null;
   let PROFILE_SELECT_ELEMENT = null;
+  let PRIVACY_SELECT_ELEMENT = null;
 
   function attachStatusElement(el) {
     STATUS_ELEMENT = el || null;
@@ -399,6 +798,12 @@
     if (!STATUS_ELEMENT) return;
     STATUS_ELEMENT.textContent = msg;
     STATUS_ELEMENT.style.color = color;
+  }
+
+  function syncPrivacyProfileSelect() {
+    if (PRIVACY_SELECT_ELEMENT) {
+      PRIVACY_SELECT_ELEMENT.value = PRIVACY_CFG.profile;
+    }
   }
 
   const AUTO_PROFILES = {
@@ -455,11 +860,7 @@
       const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
         type: 'application/json',
       });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `genit-snapshot-${Date.now()}.json`;
-      a.click();
-      URL.revokeObjectURL(a.href);
+      triggerDownload(blob, `genit-snapshot-${Date.now()}.json`);
       setPanelStatus('🗂️ DOM 스냅샷이 저장되었습니다.', '#c7d2fe');
     } catch (error) {
       console.error('[GMH] snapshot error', error);
@@ -763,7 +1164,7 @@
       version: '1.0',
       generated_at: new Date().toISOString(),
       source: session.source,
-      player_names: PLAYER_NAMES,
+      player_names: session.player_names || PLAYER_NAMES,
       meta: session.meta,
       turns: session.turns,
       warnings: session.warnings,
@@ -819,14 +1220,15 @@
     return lines.join('\n').trim();
   }
 
-  function buildExportBundle(session, normalizedRaw, format) {
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const base = `genit_turns_${stamp}`;
+  function buildExportBundle(session, normalizedRaw, format, stamp) {
+    const stampToken = stamp || new Date().toISOString().replace(/[:.]/g, '-');
+    const base = `genit_turns_${stampToken}`;
     if (format === 'md') {
       return {
         filename: `${base}.md`,
         mime: 'text/markdown',
         content: toMarkdownExport(session),
+        stamp: stampToken,
       };
     }
     if (format === 'txt') {
@@ -834,12 +1236,14 @@
         filename: `${base}.txt`,
         mime: 'text/plain',
         content: toTXTExport(session),
+        stamp: stampToken,
       };
     }
     return {
       filename: `${base}.json`,
       mime: 'application/json',
       content: toJSONExport(session, normalizedRaw),
+      stamp: stampToken,
     };
   }
 
@@ -1208,6 +1612,14 @@
     `;
     panel.innerHTML = `
       <div style="font-weight:600">Genit Memory Helper</div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <select id="gmh-privacy-profile" style="flex:1; background:#111827; color:#f1f5f9; border:1px solid #1f2937; border-radius:8px; padding:8px;">
+          <option value="safe">SAFE (권장)</option>
+          <option value="standard">STANDARD</option>
+          <option value="research">RESEARCH</option>
+        </select>
+        <button id="gmh-privacy-config" style="background:#c084fc; border:0; color:#210; border-radius:8px; padding:8px; cursor:pointer;">민감어</button>
+      </div>
       <div style="display:flex; gap:8px;">
         <button id="gmh-copy-recent" style="flex:1; background:#22c55e; border:0; color:#051; border-radius:8px; padding:8px; cursor:pointer;">최근 15턴 복사</button>
         <button id="gmh-copy-all" style="flex:1; background:#60a5fa; border:0; color:#031; border-radius:8px; padding:8px; cursor:pointer;">전체 MD 복사</button>
@@ -1236,6 +1648,24 @@
     attachStatusElement(statusEl);
     setPanelStatus('준비 완료', '#9ca3af');
 
+    PRIVACY_SELECT_ELEMENT = panel.querySelector('#gmh-privacy-profile');
+    if (PRIVACY_SELECT_ELEMENT) {
+      PRIVACY_SELECT_ELEMENT.value = PRIVACY_CFG.profile;
+      PRIVACY_SELECT_ELEMENT.onchange = (event) => {
+        const value = event.target.value;
+        setPrivacyProfile(value);
+        setPanelStatus(
+          `프라이버시 프로필이 ${PRIVACY_PROFILES[value]?.label || value}로 설정되었습니다.`,
+          '#c7d2fe'
+        );
+      };
+    }
+
+    const privacyConfigBtn = panel.querySelector('#gmh-privacy-config');
+    if (privacyConfigBtn) {
+      privacyConfigBtn.onclick = () => configurePrivacyLists();
+    }
+
     ensureAutoLoadControls(panel);
     mountStatusActions(panel);
 
@@ -1249,17 +1679,38 @@
 
     panel.querySelector('#gmh-copy-recent').onclick = () => {
       try {
-        const { session } = parseAll();
-        const turns = session.turns.slice(-15);
-        const md = toMarkdownExport(session, {
+        const { session, raw } = parseAll();
+        const privacy = applyPrivacyPipeline(session, raw, PRIVACY_CFG.profile);
+        if (privacy.blocked) {
+          alert('미성년자 성적 맥락이 감지되어 복사를 중단했습니다.');
+          setPanelStatus('미성년자 민감 맥락으로 복사가 차단되었습니다.', '#fecaca');
+          return;
+        }
+        const stats = collectSessionStats(privacy.sanitizedSession);
+        const gateOk = confirmPrivacyGate({
+          profile: privacy.profile,
+          counts: privacy.counts,
+          stats,
+        });
+        if (!gateOk) {
+          setPanelStatus('복사를 취소했습니다.', '#d1d5db');
+          return;
+        }
+        const turns = privacy.sanitizedSession.turns.slice(-15);
+        const md = toMarkdownExport(privacy.sanitizedSession, {
           turns,
           includeMeta: false,
           heading: '## 최근 15턴',
         });
         GM_setClipboard(md, { type: 'text', mimetype: 'text/plain' });
-        const turnsTotal = session.meta.turn_count;
-        setPanelStatus(`최근 15턴 복사 완료. 플레이어 턴 ${turnsTotal}개.`, '#a7f3d0');
-        if (session.warnings.length) console.warn('[GMH] warnings:', session.warnings);
+        const summary = formatRedactionCounts(privacy.counts);
+        const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
+        setPanelStatus(
+          `최근 15턴 복사 완료 · 플레이어 턴 ${stats.playerTurns}개 · ${profileLabel} · ${summary}`,
+          '#a7f3d0'
+        );
+        if (privacy.sanitizedSession.warnings.length)
+          console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
       } catch (e) {
         alert(`오류: ${(e && e.message) || e}`);
         setPanelStatus('복사 실패', '#fecaca');
@@ -1268,12 +1719,33 @@
 
     panel.querySelector('#gmh-copy-all').onclick = () => {
       try {
-        const { session } = parseAll();
-        const md = toMarkdownExport(session);
+        const { session, raw } = parseAll();
+        const privacy = applyPrivacyPipeline(session, raw, PRIVACY_CFG.profile);
+        if (privacy.blocked) {
+          alert('미성년자 성적 맥락이 감지되어 복사를 중단했습니다.');
+          setPanelStatus('미성년자 민감 맥락으로 복사가 차단되었습니다.', '#fecaca');
+          return;
+        }
+        const stats = collectSessionStats(privacy.sanitizedSession);
+        const gateOk = confirmPrivacyGate({
+          profile: privacy.profile,
+          counts: privacy.counts,
+          stats,
+        });
+        if (!gateOk) {
+          setPanelStatus('복사를 취소했습니다.', '#d1d5db');
+          return;
+        }
+        const md = toMarkdownExport(privacy.sanitizedSession);
         GM_setClipboard(md, { type: 'text', mimetype: 'text/plain' });
-        const turnsTotal = session.meta.turn_count;
-        setPanelStatus(`전체 Markdown 복사 완료. 플레이어 턴 ${turnsTotal}개.`, '#bfdbfe');
-        if (session.warnings.length) console.warn('[GMH] warnings:', session.warnings);
+        const summary = formatRedactionCounts(privacy.counts);
+        const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
+        setPanelStatus(
+          `전체 Markdown 복사 완료 · 플레이어 턴 ${stats.playerTurns}개 · ${profileLabel} · ${summary}`,
+          '#bfdbfe'
+        );
+        if (privacy.sanitizedSession.warnings.length)
+          console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
       } catch (e) {
         alert(`오류: ${(e && e.message) || e}`);
         setPanelStatus('복사 실패', '#fecaca');
@@ -1285,19 +1757,49 @@
         const { session, raw } = parseAll();
         const select = panel.querySelector('#gmh-export-format');
         const format = select?.value || 'json';
-        const bundle = buildExportBundle(session, raw, format);
-        const blob = new Blob([bundle.content], { type: bundle.mime });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = bundle.filename;
-        a.click();
-        URL.revokeObjectURL(a.href);
-        const turnsTotal = session.meta.turn_count;
+        const privacy = applyPrivacyPipeline(session, raw, PRIVACY_CFG.profile);
+        if (privacy.blocked) {
+          alert('미성년자 성적 맥락이 감지되어 내보내기를 중단했습니다.');
+          setPanelStatus('미성년자 민감 맥락으로 내보내기가 차단되었습니다.', '#fecaca');
+          return;
+        }
+        const stats = collectSessionStats(privacy.sanitizedSession);
+        const gateOk = confirmPrivacyGate({
+          profile: privacy.profile,
+          counts: privacy.counts,
+          stats,
+        });
+        if (!gateOk) {
+          setPanelStatus('내보내기를 취소했습니다.', '#d1d5db');
+          return;
+        }
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const bundle = buildExportBundle(privacy.sanitizedSession, privacy.sanitizedRaw, format, stamp);
+        const fileBlob = new Blob([bundle.content], { type: bundle.mime });
+        triggerDownload(fileBlob, bundle.filename);
+
+        const manifest = buildExportManifest({
+          profile: privacy.profile,
+          counts: { ...privacy.counts },
+          stats,
+          format,
+          warnings: privacy.sanitizedSession.warnings,
+          source: privacy.sanitizedSession.source,
+        });
+        const manifestBlob = new Blob([JSON.stringify(manifest, null, 2)], {
+          type: 'application/json',
+        });
+        const manifestName = `${bundle.filename.replace(/\.[^.]+$/, '')}.manifest.json`;
+        triggerDownload(manifestBlob, manifestName);
+
+        const summary = formatRedactionCounts(privacy.counts);
+        const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
         setPanelStatus(
-          `${format.toUpperCase()} 내보내기 완료. 플레이어 턴 ${turnsTotal}개.`,
+          `${format.toUpperCase()} 내보내기 완료 · 플레이어 턴 ${stats.playerTurns}개 · ${profileLabel} · ${summary}`,
           '#d1fae5'
         );
-        if (session.warnings.length) console.warn('[GMH] warnings:', session.warnings);
+        if (privacy.sanitizedSession.warnings.length)
+          console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
       } catch (e) {
         alert(`오류: ${(e && e.message) || e}`);
         setPanelStatus('내보내기 실패', '#fecaca');
@@ -1306,13 +1808,18 @@
 
     panel.querySelector('#gmh-reparse').onclick = () => {
       try {
-        const { session } = parseAll();
-        const turnsTotal = session.meta.turn_count;
+        const { session, raw } = parseAll();
+        const privacy = applyPrivacyPipeline(session, raw, PRIVACY_CFG.profile);
+        const stats = collectSessionStats(privacy.sanitizedSession);
+        const summary = formatRedactionCounts(privacy.counts);
+        const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
+        const extra = privacy.blocked ? ' · ⚠️ 미성년자 맥락 감지' : '';
         setPanelStatus(
-          `재파싱 완료: 플레이어 턴 ${turnsTotal}개. 경고 ${session.warnings.length}건.`,
+          `재파싱 완료 · 플레이어 턴 ${stats.playerTurns}개 · 경고 ${privacy.sanitizedSession.warnings.length}건 · ${profileLabel} · ${summary}${extra}`,
           '#fde68a'
         );
-        if (session.warnings.length) console.warn('[GMH] warnings:', session.warnings);
+        if (privacy.sanitizedSession.warnings.length)
+          console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
       } catch (e) {
         alert(`오류: ${(e && e.message) || e}`);
         setPanelStatus('재파싱 실패', '#fecaca');
@@ -1388,4 +1895,25 @@
     });
   });
   mo.observe(document.documentElement, { subtree: true, childList: true });
+
+  if (!PAGE_WINDOW.__GMHTest) {
+    Object.defineProperty(PAGE_WINDOW, '__GMHTest', {
+      value: {
+        runPrivacyCheck(rawText, profileKey = 'safe') {
+          try {
+            const normalized = normalizeTranscript(rawText || '');
+            const session = buildSession(normalized);
+            return applyPrivacyPipeline(session, normalized, profileKey);
+          } catch (error) {
+            console.error('[GMH] runPrivacyCheck error', error);
+            return { error: error?.message || String(error) };
+          }
+        },
+        profiles: PRIVACY_PROFILES,
+        formatCounts: formatRedactionCounts,
+      },
+      writable: false,
+      configurable: false,
+    });
+  }
 })();
