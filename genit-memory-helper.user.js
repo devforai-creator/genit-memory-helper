@@ -363,18 +363,167 @@
     return { playerTurns, totalTurns, warnings };
   }
 
-  function confirmPrivacyGate({ profile, counts, stats }) {
+  const PREVIEW_TURN_LIMIT = 5;
+
+  function ensurePreviewStyles() {
+    if (document.getElementById('gmh-preview-style')) return;
+    const style = document.createElement('style');
+    style.id = 'gmh-preview-style';
+    style.textContent = `
+.gmh-preview-overlay{position:fixed;inset:0;background:rgba(15,23,42,0.72);z-index:9999999;display:flex;align-items:center;justify-content:center;padding:24px;}
+.gmh-preview-card{background:#0f172a;color:#e2e8f0;border-radius:14px;box-shadow:0 18px 48px rgba(8,15,30,0.55);width:min(520px,94vw);max-height:94vh;display:flex;flex-direction:column;overflow:hidden;font:13px/1.5 'Inter',system-ui,sans-serif;}
+.gmh-preview-header{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid rgba(148,163,184,0.25);font-weight:600;}
+.gmh-preview-body{padding:18px 20px;overflow:auto;display:grid;gap:16px;}
+.gmh-preview-summary{display:grid;gap:8px;border:1px solid rgba(148,163,184,0.25);border-radius:10px;padding:12px;background:rgba(30,41,59,0.65);}
+.gmh-preview-summary div{display:flex;justify-content:space-between;gap:12px;}
+.gmh-preview-summary strong{color:#bfdbfe;}
+.gmh-preview-turns{list-style:none;margin:0;padding:0;display:grid;gap:10px;}
+.gmh-preview-turn{background:rgba(30,41,59,0.55);border-radius:10px;padding:10px 12px;border:1px solid rgba(59,130,246,0.12);}
+.gmh-preview-turn-speaker{font-weight:600;color:#c4b5fd;margin-bottom:4px;}
+.gmh-preview-turn-text{color:#e2e8f0;}
+.gmh-preview-footnote{font-size:12px;color:#94a3b8;}
+.gmh-preview-actions{display:flex;gap:10px;padding:16px 20px;border-top:1px solid rgba(148,163,184,0.25);background:rgba(15,23,42,0.92);}
+.gmh-preview-actions button{flex:1;padding:10px 12px;border-radius:10px;border:0;font-weight:600;cursor:pointer;transition:background 0.15s ease;}
+.gmh-preview-cancel{background:#1e293b;color:#e2e8f0;}
+.gmh-preview-cancel:hover{background:#243049;}
+.gmh-preview-confirm{background:#34d399;color:#053527;}
+.gmh-preview-confirm:hover{background:#22c55e;color:#052e21;}
+.gmh-preview-close{background:none;border:0;color:#94a3b8;font-size:18px;cursor:pointer;}
+.gmh-preview-close:hover{color:#f8fafc;}
+@media (max-width:480px){.gmh-preview-card{width:100%;border-radius:12px;}}
+`;
+    document.head.appendChild(style);
+  }
+
+  function truncateText(value, max = 220) {
+    const text = String(value || '').trim();
+    if (text.length <= max) return text;
+    return `${text.slice(0, max - 1)}…`;
+  }
+
+  function confirmPrivacyGate({
+    profile,
+    counts,
+    stats,
+    previewTurns = [],
+    actionLabel = '계속',
+    heading = '공유 전 확인',
+    subheading = '외부로 공유하기 전에 민감정보가 없는지 확인하세요.',
+  }) {
+    ensurePreviewStyles();
     const profileLabel = PRIVACY_PROFILES[profile]?.label || profile;
     const summary = formatRedactionCounts(counts);
-    const lines = [
-      `프라이버시 프로필: ${profileLabel}`,
-      `플레이어 턴: ${stats.playerTurns} / 전체 턴: ${stats.totalTurns}`,
-      `레다크션: ${summary}`,
-      '',
-      '외부 도구에 공유하기 전에 개인정보 보호 책임을 이해하고 있나요?',
-      '확인을 누르면 가공된 결과를 복사/저장합니다.',
-    ];
-    return window.confirm(lines.join('\n'));
+    const overlay = document.createElement('div');
+    overlay.className = 'gmh-preview-overlay';
+    const card = document.createElement('div');
+    card.className = 'gmh-preview-card';
+    overlay.appendChild(card);
+
+    const header = document.createElement('div');
+    header.className = 'gmh-preview-header';
+    header.innerHTML = `<span>${heading}</span>`;
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'gmh-preview-close';
+    closeBtn.setAttribute('aria-label', '닫기');
+    closeBtn.textContent = '✕';
+    header.appendChild(closeBtn);
+    card.appendChild(header);
+
+    const body = document.createElement('div');
+    body.className = 'gmh-preview-body';
+    const summaryBox = document.createElement('div');
+    summaryBox.className = 'gmh-preview-summary';
+    const rowProfile = document.createElement('div');
+    rowProfile.innerHTML = `<strong>프로필</strong><span>${profileLabel}</span>`;
+    const rowTurns = document.createElement('div');
+    rowTurns.innerHTML = `<strong>턴 수</strong><span>플레이어 ${stats.playerTurns} / 전체 ${stats.totalTurns}</span>`;
+    const rowCounts = document.createElement('div');
+    rowCounts.innerHTML = `<strong>레다크션</strong><span>${summary}</span>`;
+    summaryBox.appendChild(rowProfile);
+    summaryBox.appendChild(rowTurns);
+    summaryBox.appendChild(rowCounts);
+    body.appendChild(summaryBox);
+
+    const previewTitle = document.createElement('div');
+    previewTitle.style.fontWeight = '600';
+    previewTitle.style.color = '#cbd5f5';
+    previewTitle.textContent = `미리보기 (${Math.min(previewTurns.length, PREVIEW_TURN_LIMIT)}턴)`;
+    body.appendChild(previewTitle);
+
+    const turnList = document.createElement('ul');
+    turnList.className = 'gmh-preview-turns';
+    previewTurns.slice(-PREVIEW_TURN_LIMIT).forEach((turn, index) => {
+      if (!turn) return;
+      const item = document.createElement('li');
+      item.className = 'gmh-preview-turn';
+      const speaker = document.createElement('div');
+      speaker.className = 'gmh-preview-turn-speaker';
+      speaker.textContent = `${turn.speaker || '??'} · ${turn.role}`;
+      const text = document.createElement('div');
+      text.className = 'gmh-preview-turn-text';
+      text.textContent = truncateText(turn.text || '');
+      item.appendChild(speaker);
+      item.appendChild(text);
+      turnList.appendChild(item);
+    });
+    if (!turnList.children.length) {
+      const empty = document.createElement('div');
+      empty.className = 'gmh-preview-turn';
+      const text = document.createElement('div');
+      text.className = 'gmh-preview-turn-text';
+      text.textContent = '표시할 턴이 없습니다. 상단 요약만 확인해주세요.';
+      empty.appendChild(text);
+      turnList.appendChild(empty);
+    }
+    body.appendChild(turnList);
+
+    const footnote = document.createElement('div');
+    footnote.className = 'gmh-preview-footnote';
+    footnote.textContent = subheading;
+    body.appendChild(footnote);
+
+    card.appendChild(body);
+
+    const actions = document.createElement('div');
+    actions.className = 'gmh-preview-actions';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'gmh-preview-cancel';
+    cancelBtn.textContent = '취소';
+    const confirmBtn = document.createElement('button');
+    confirmBtn.type = 'button';
+    confirmBtn.className = 'gmh-preview-confirm';
+    confirmBtn.textContent = actionLabel;
+    actions.appendChild(cancelBtn);
+    actions.appendChild(confirmBtn);
+    card.appendChild(actions);
+
+    const bodyEl = document.body;
+    const prevOverflow = bodyEl.style.overflow;
+    bodyEl.style.overflow = 'hidden';
+    bodyEl.appendChild(overlay);
+
+    return new Promise((resolve) => {
+      const cleanup = (result) => {
+        bodyEl.style.overflow = prevOverflow;
+        overlay.remove();
+        document.removeEventListener('keydown', onKey);
+        resolve(result);
+      };
+
+      const onKey = (event) => {
+        if (event.key === 'Escape') cleanup(false);
+      };
+      document.addEventListener('keydown', onKey);
+
+      overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) cleanup(false);
+      });
+      closeBtn.addEventListener('click', () => cleanup(false));
+      cancelBtn.addEventListener('click', () => cleanup(false));
+      confirmBtn.addEventListener('click', () => cleanup(true));
+    });
   }
 
   function buildExportManifest({
@@ -415,7 +564,7 @@
     if (nextWhite !== null) {
       setCustomList('whitelist', parseListInput(nextWhite));
     }
-    setPanelStatus('프라이버시 사용자 목록을 저장했습니다.', '#c7d2fe');
+    setPanelStatus('프라이버시 사용자 목록을 저장했습니다.', 'info');
   }
 
   function normNL(s) {
@@ -828,14 +977,44 @@
   let PROFILE_SELECT_ELEMENT = null;
   let PRIVACY_SELECT_ELEMENT = null;
 
+  const STATUS_TONES = {
+    success: { color: '#34d399', icon: '✅' },
+    info: { color: '#93c5fd', icon: 'ℹ️' },
+    progress: { color: '#facc15', icon: '⏳' },
+    warning: { color: '#f97316', icon: '⚠️' },
+    error: { color: '#f87171', icon: '❌' },
+    muted: { color: '#cbd5f5', icon: '' },
+  };
+
   function attachStatusElement(el) {
     STATUS_ELEMENT = el || null;
   }
 
-  function setPanelStatus(msg, color = '#9ca3af') {
+  function setPanelStatus(message, toneOrColor = 'info') {
     if (!STATUS_ELEMENT) return;
-    STATUS_ELEMENT.textContent = msg;
+    const text = String(message || '');
+    let icon = '';
+    let color = '#9ca3af';
+    let tone = toneOrColor;
+
+    if (typeof toneOrColor === 'string' && toneOrColor.startsWith('#')) {
+      color = toneOrColor;
+      tone = null;
+    } else if (typeof toneOrColor === 'string' && STATUS_TONES[toneOrColor]) {
+      tone = toneOrColor;
+    } else if (!toneOrColor) {
+      tone = 'info';
+    }
+
+    if (tone && STATUS_TONES[tone]) {
+      color = STATUS_TONES[tone].color;
+      icon = STATUS_TONES[tone].icon || '';
+    }
+
+    STATUS_ELEMENT.textContent = icon ? `${icon} ${text}` : text;
     STATUS_ELEMENT.style.color = color;
+    if (tone) STATUS_ELEMENT.dataset.tone = tone;
+    else delete STATUS_ELEMENT.dataset.tone;
   }
 
   function syncPrivacyProfileSelect() {
@@ -900,10 +1079,10 @@
         type: 'application/json',
       });
       triggerDownload(blob, `genit-snapshot-${Date.now()}.json`);
-      setPanelStatus('🗂️ DOM 스냅샷이 저장되었습니다.', '#c7d2fe');
+      setPanelStatus('DOM 스냅샷이 저장되었습니다.', 'success');
     } catch (error) {
       console.error('[GMH] snapshot error', error);
-      setPanelStatus(`스냅샷 실패: ${(error && error.message) || error}`, '#fecaca');
+      setPanelStatus(`스냅샷 실패: ${(error && error.message) || error}`, 'error');
     }
   }
 
@@ -920,7 +1099,7 @@
       this.lastProfile = AUTO_CFG.profile;
       try {
         if (mode === 'all') {
-          setPanelStatus('🔁 위로 불러오는 중...', '#fef3c7');
+          setPanelStatus('위로 불러오는 중...', 'progress');
           this.lastTarget = null;
           return await autoLoadAll(setPanelStatus);
         }
@@ -928,23 +1107,23 @@
           const numericTarget = Number(target);
           const goal = Number.isFinite(numericTarget) ? numericTarget : Number(target) || 0;
           if (!goal || goal <= 0) {
-            setPanelStatus('플레이어 턴 목표가 올바르지 않습니다.', '#fecaca');
+            setPanelStatus('플레이어 턴 목표가 올바르지 않습니다.', 'error');
             return null;
           }
           this.lastTarget = goal;
-          setPanelStatus(`플레이어 턴 ${goal}개 확보 중...`, '#fef3c7');
+          setPanelStatus(`플레이어 턴 ${goal}개 확보 중...`, 'progress');
           return await autoLoadUntilPlayerTurns(goal, setPanelStatus);
         }
       } catch (error) {
         console.error('[GMH] auto loader error', error);
-        setPanelStatus(`자동 로딩 오류: ${(error && error.message) || error}`, '#fecaca');
+        setPanelStatus(`자동 로딩 오류: ${(error && error.message) || error}`, 'error');
         throw error;
       }
       return null;
     },
     async startCurrent(profileName) {
       if (!this.lastMode) {
-        setPanelStatus('재시도할 이전 작업이 없습니다.', '#d1d5db');
+        setPanelStatus('재시도할 이전 작업이 없습니다.', 'muted');
         return null;
       }
       if (profileName) {
@@ -959,7 +1138,7 @@
       const next = AUTO_PROFILES[profileName] ? profileName : 'default';
       AUTO_CFG.profile = next;
       this.lastProfile = next;
-      setPanelStatus(`프로파일이 '${next}'로 설정되었습니다.`, '#c7d2fe');
+      setPanelStatus(`프로파일이 '${next}'로 설정되었습니다.`, 'info');
       syncProfileSelect();
     },
     stop() {
@@ -1416,9 +1595,9 @@
     AUTO_STATE.running = false;
     const stats = collectTurnStats();
     if (setStatus && !stats.error) {
-      setStatus(`🔁 스크롤 완료. 플레이어 턴 ${stats.playerTurns}개 확보.`, '#a7f3d0');
+      setStatus(`스크롤 완료. 플레이어 턴 ${stats.playerTurns}개 확보.`, 'success');
     }
-    if (stats.error && setStatus) setStatus('스크롤 후 파싱 실패', '#fecaca');
+    if (stats.error && setStatus) setStatus('스크롤 후 파싱 실패', 'error');
     return stats;
   }
 
@@ -1436,19 +1615,19 @@
       loopCount += 1;
       const stats = collectTurnStats();
       if (stats.error) {
-        if (setStatus) setStatus('파싱 실패 - DOM 변화를 감지하지 못했습니다.', '#fecaca');
+        if (setStatus) setStatus('파싱 실패 - DOM 변화를 감지하지 못했습니다.', 'error');
         break;
       }
       if (stats.playerTurns >= target) {
         if (setStatus)
-          setStatus(`✅ 목표 달성: 플레이어 턴 ${stats.playerTurns}개 확보.`, '#c4b5fd');
+          setStatus(`목표 달성: 플레이어 턴 ${stats.playerTurns}개 확보.`, 'success');
         break;
       }
 
       if (setStatus)
         setStatus(
           `위로 불러오는 중... 현재 플레이어 턴 ${stats.playerTurns}/${target}.`,
-          '#fef3c7'
+          'progress'
         );
 
       const { grew, before, after } = await scrollUpCycle(container, profile);
@@ -1462,7 +1641,7 @@
 
       if (stableRounds >= profile.maxStableRounds || stagnantRounds >= profile.guardLimit) {
         if (setStatus)
-          setStatus('추가 데이터를 불러오지 못했습니다. 더 이상 기록이 없거나 막혀있습니다.', '#fca5a5');
+          setStatus('추가 데이터를 불러오지 못했습니다. 더 이상 기록이 없거나 막혀있습니다.', 'warning');
         break;
       }
       await sleep(profile.cycleDelayMs);
@@ -1552,14 +1731,14 @@
       const rawVal = inputTurns?.value?.trim();
       const target = Number.parseInt(rawVal || '0', 10);
       if (!Number.isFinite(target) || target <= 0) {
-        setPanelStatus('플레이어 턴 수를 입력해주세요.', '#fecaca');
+        setPanelStatus('플레이어 턴 수를 입력해주세요.', 'error');
         return;
       }
       toggleControls(true);
       try {
         const stats = await autoLoader.start('turns', target);
         if (stats && !stats.error) {
-          setPanelStatus(`현재 플레이어 턴 ${stats.playerTurns}개 확보.`, '#a7f3d0');
+          setPanelStatus(`현재 플레이어 턴 ${stats.playerTurns}개 확보.`, 'success');
         }
       } finally {
         toggleControls(false);
@@ -1568,11 +1747,11 @@
 
     btnStop.onclick = () => {
       if (!AUTO_STATE.running) {
-        setPanelStatus('자동 로딩이 실행 중이 아닙니다.', '#9ca3af');
+        setPanelStatus('자동 로딩이 실행 중이 아닙니다.', 'muted');
         return;
       }
       autoLoader.stop();
-      setPanelStatus('⏹️ 자동 로딩 중지를 요청했습니다.', '#fca5a5');
+      setPanelStatus('자동 로딩 중지를 요청했습니다.', 'warning');
     };
 
     startTurnMeter(meter);
@@ -1613,7 +1792,7 @@
     if (retryBtn) {
       retryBtn.onclick = async () => {
         if (AUTO_STATE.running) {
-          setPanelStatus('이미 자동 로딩이 진행 중입니다.', '#cbd5f5');
+          setPanelStatus('이미 자동 로딩이 진행 중입니다.', 'muted');
           return;
         }
         await autoLoader.startCurrent();
@@ -1624,7 +1803,7 @@
     if (retryStableBtn) {
       retryStableBtn.onclick = async () => {
         if (AUTO_STATE.running) {
-          setPanelStatus('이미 자동 로딩이 진행 중입니다.', '#cbd5f5');
+          setPanelStatus('이미 자동 로딩이 진행 중입니다.', 'muted');
           return;
         }
         await autoLoader.startCurrent('stability');
@@ -1675,6 +1854,9 @@
         <button id="gmh-export" style="flex:1; background:#2dd4bf; border:0; color:#052; border-radius:8px; padding:8px; cursor:pointer;">내보내기</button>
       </div>
       <div style="display:flex; gap:8px;">
+        <button id="gmh-quick-export" style="flex:1; background:#38bdf8; border:0; color:#031; border-radius:8px; padding:8px; cursor:pointer;">원클릭 내보내기</button>
+      </div>
+      <div style="display:flex; gap:8px;">
         <button id="gmh-reparse" style="flex:1; background:#f59e0b; border:0; color:#210; border-radius:8px; padding:8px; cursor:pointer;">재파싱</button>
         <button id="gmh-guide" style="flex:1; background:#a78bfa; border:0; color:#210; border-radius:8px; padding:8px; cursor:pointer;">요약 가이드</button>
       </div>
@@ -1689,7 +1871,7 @@
 
     const statusEl = panel.querySelector('#gmh-status');
     attachStatusElement(statusEl);
-    setPanelStatus('준비 완료', '#9ca3af');
+    setPanelStatus('준비 완료', 'info');
 
     PRIVACY_SELECT_ELEMENT = panel.querySelector('#gmh-privacy-profile');
     if (PRIVACY_SELECT_ELEMENT) {
@@ -1699,7 +1881,7 @@
         setPrivacyProfile(value);
         setPanelStatus(
           `프라이버시 프로필이 ${PRIVACY_PROFILES[value]?.label || value}로 설정되었습니다.`,
-          '#c7d2fe'
+          'info'
         );
       };
     }
@@ -1720,102 +1902,47 @@
       return { session, raw: normalized };
     };
 
-    panel.querySelector('#gmh-copy-recent').onclick = () => {
-      try {
-        const { session, raw } = parseAll();
-        const privacy = applyPrivacyPipeline(session, raw, PRIVACY_CFG.profile);
-        if (privacy.blocked) {
-          alert('미성년자 성적 맥락이 감지되어 복사를 중단했습니다.');
-          setPanelStatus('미성년자 민감 맥락으로 복사가 차단되었습니다.', '#fecaca');
-          return;
-        }
-        const stats = collectSessionStats(privacy.sanitizedSession);
-        const gateOk = confirmPrivacyGate({
-          profile: privacy.profile,
-          counts: privacy.counts,
-          stats,
-        });
-        if (!gateOk) {
-          setPanelStatus('복사를 취소했습니다.', '#d1d5db');
-          return;
-        }
-        const turns = privacy.sanitizedSession.turns.slice(-15);
-        const md = toMarkdownExport(privacy.sanitizedSession, {
-          turns,
-          includeMeta: false,
-          heading: '## 최근 15턴',
-        });
-        GM_setClipboard(md, { type: 'text', mimetype: 'text/plain' });
-        const summary = formatRedactionCounts(privacy.counts);
-        const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
-        setPanelStatus(
-          `최근 15턴 복사 완료 · 플레이어 턴 ${stats.playerTurns}개 · ${profileLabel} · ${summary}`,
-          '#a7f3d0'
-        );
-        if (privacy.sanitizedSession.warnings.length)
-          console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
-      } catch (e) {
-        alert(`오류: ${(e && e.message) || e}`);
-        setPanelStatus('복사 실패', '#fecaca');
-      }
-    };
+    const exportFormatSelect = panel.querySelector('#gmh-export-format');
+    const quickExportBtn = panel.querySelector('#gmh-quick-export');
 
-    panel.querySelector('#gmh-copy-all').onclick = () => {
+    async function prepareShare({
+      confirmLabel,
+      cancelStatusMessage,
+      blockedStatusMessage,
+    }) {
       try {
         const { session, raw } = parseAll();
         const privacy = applyPrivacyPipeline(session, raw, PRIVACY_CFG.profile);
         if (privacy.blocked) {
-          alert('미성년자 성적 맥락이 감지되어 복사를 중단했습니다.');
-          setPanelStatus('미성년자 민감 맥락으로 복사가 차단되었습니다.', '#fecaca');
-          return;
+          alert('미성년자 성적 맥락이 감지되어 작업을 중단했습니다.');
+          setPanelStatus(blockedStatusMessage || '미성년자 민감 맥락으로 작업이 차단되었습니다.', 'error');
+          return null;
         }
         const stats = collectSessionStats(privacy.sanitizedSession);
-        const gateOk = confirmPrivacyGate({
+        const previewTurns = privacy.sanitizedSession.turns.slice(-PREVIEW_TURN_LIMIT);
+        const ok = await confirmPrivacyGate({
           profile: privacy.profile,
           counts: privacy.counts,
           stats,
+          previewTurns,
+          actionLabel: confirmLabel || '계속',
         });
-        if (!gateOk) {
-          setPanelStatus('복사를 취소했습니다.', '#d1d5db');
-          return;
+        if (!ok) {
+          if (cancelStatusMessage) setPanelStatus(cancelStatusMessage, 'muted');
+          return null;
         }
-        const md = toMarkdownExport(privacy.sanitizedSession);
-        GM_setClipboard(md, { type: 'text', mimetype: 'text/plain' });
-        const summary = formatRedactionCounts(privacy.counts);
-        const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
-        setPanelStatus(
-          `전체 Markdown 복사 완료 · 플레이어 턴 ${stats.playerTurns}개 · ${profileLabel} · ${summary}`,
-          '#bfdbfe'
-        );
-        if (privacy.sanitizedSession.warnings.length)
-          console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
-      } catch (e) {
-        alert(`오류: ${(e && e.message) || e}`);
-        setPanelStatus('복사 실패', '#fecaca');
+        return { session, raw, privacy, stats };
+      } catch (error) {
+        alert(`오류: ${(error && error.message) || error}`);
+        setPanelStatus('작업 준비 중 오류가 발생했습니다.', 'error');
+        return null;
       }
-    };
+    }
 
-    panel.querySelector('#gmh-export').onclick = () => {
+    async function performExport(prepared, format) {
+      if (!prepared) return false;
       try {
-        const { session, raw } = parseAll();
-        const select = panel.querySelector('#gmh-export-format');
-        const format = select?.value || 'json';
-        const privacy = applyPrivacyPipeline(session, raw, PRIVACY_CFG.profile);
-        if (privacy.blocked) {
-          alert('미성년자 성적 맥락이 감지되어 내보내기를 중단했습니다.');
-          setPanelStatus('미성년자 민감 맥락으로 내보내기가 차단되었습니다.', '#fecaca');
-          return;
-        }
-        const stats = collectSessionStats(privacy.sanitizedSession);
-        const gateOk = confirmPrivacyGate({
-          profile: privacy.profile,
-          counts: privacy.counts,
-          stats,
-        });
-        if (!gateOk) {
-          setPanelStatus('내보내기를 취소했습니다.', '#d1d5db');
-          return;
-        }
+        const { privacy, stats } = prepared;
         const stamp = new Date().toISOString().replace(/[:.]/g, '-');
         const bundle = buildExportBundle(privacy.sanitizedSession, privacy.sanitizedRaw, format, stamp);
         const fileBlob = new Blob([bundle.content], { type: bundle.mime });
@@ -1839,15 +1966,122 @@
         const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
         setPanelStatus(
           `${format.toUpperCase()} 내보내기 완료 · 플레이어 턴 ${stats.playerTurns}개 · ${profileLabel} · ${summary}`,
-          '#d1fae5'
+          'success'
         );
         if (privacy.sanitizedSession.warnings.length)
           console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
-      } catch (e) {
-        alert(`오류: ${(e && e.message) || e}`);
-        setPanelStatus('내보내기 실패', '#fecaca');
+        return true;
+      } catch (error) {
+        alert(`오류: ${(error && error.message) || error}`);
+        setPanelStatus('내보내기 실패', 'error');
+        return false;
       }
-    };
+    }
+
+    const copyRecentBtn = panel.querySelector('#gmh-copy-recent');
+    if (copyRecentBtn) {
+      copyRecentBtn.onclick = async () => {
+        const prepared = await prepareShare({
+          confirmLabel: '복사 계속',
+          cancelStatusMessage: '복사를 취소했습니다.',
+          blockedStatusMessage: '미성년자 민감 맥락으로 복사가 차단되었습니다.',
+        });
+        if (!prepared) return;
+        try {
+          const { privacy, stats } = prepared;
+          const turns = privacy.sanitizedSession.turns.slice(-15);
+          const md = toMarkdownExport(privacy.sanitizedSession, {
+            turns,
+            includeMeta: false,
+            heading: '## 최근 15턴',
+          });
+          GM_setClipboard(md, { type: 'text', mimetype: 'text/plain' });
+          const summary = formatRedactionCounts(privacy.counts);
+          const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
+          setPanelStatus(
+            `최근 15턴 복사 완료 · 플레이어 턴 ${stats.playerTurns}개 · ${profileLabel} · ${summary}`,
+            'success'
+          );
+          if (privacy.sanitizedSession.warnings.length)
+            console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
+        } catch (error) {
+          alert(`오류: ${(error && error.message) || error}`);
+          setPanelStatus('복사 실패', 'error');
+        }
+      };
+    }
+
+    const copyAllBtn = panel.querySelector('#gmh-copy-all');
+    if (copyAllBtn) {
+      copyAllBtn.onclick = async () => {
+        const prepared = await prepareShare({
+          confirmLabel: '복사 계속',
+          cancelStatusMessage: '복사를 취소했습니다.',
+          blockedStatusMessage: '미성년자 민감 맥락으로 복사가 차단되었습니다.',
+        });
+        if (!prepared) return;
+        try {
+          const { privacy, stats } = prepared;
+          const md = toMarkdownExport(privacy.sanitizedSession);
+          GM_setClipboard(md, { type: 'text', mimetype: 'text/plain' });
+          const summary = formatRedactionCounts(privacy.counts);
+          const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
+          setPanelStatus(
+            `전체 Markdown 복사 완료 · 플레이어 턴 ${stats.playerTurns}개 · ${profileLabel} · ${summary}`,
+            'success'
+          );
+          if (privacy.sanitizedSession.warnings.length)
+            console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
+        } catch (error) {
+          alert(`오류: ${(error && error.message) || error}`);
+          setPanelStatus('복사 실패', 'error');
+        }
+      };
+    }
+
+    const exportBtn = panel.querySelector('#gmh-export');
+    if (exportBtn) {
+      exportBtn.onclick = async () => {
+        const format = exportFormatSelect?.value || 'json';
+        const prepared = await prepareShare({
+          confirmLabel: '내보내기 진행',
+          cancelStatusMessage: '내보내기를 취소했습니다.',
+          blockedStatusMessage: '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
+        });
+        if (!prepared) return;
+        await performExport(prepared, format);
+      };
+    }
+
+    if (quickExportBtn) {
+      quickExportBtn.onclick = async () => {
+        if (AUTO_STATE.running) {
+          setPanelStatus('이미 자동 로딩이 진행 중입니다.', 'muted');
+          return;
+        }
+        const originalText = quickExportBtn.textContent;
+        quickExportBtn.disabled = true;
+        quickExportBtn.textContent = '진행 중...';
+        try {
+          setPanelStatus('전체 로딩 중...', 'progress');
+          await autoLoader.start('all');
+          const format = exportFormatSelect?.value || 'json';
+          const prepared = await prepareShare({
+            confirmLabel: `${format.toUpperCase()} 내보내기`,
+            cancelStatusMessage: '내보내기를 취소했습니다.',
+            blockedStatusMessage: '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
+          });
+          if (!prepared) return;
+          await performExport(prepared, format);
+        } catch (error) {
+          alert(`오류: ${(error && error.message) || error}`);
+          setPanelStatus('원클릭 내보내기 실패', 'error');
+        } finally {
+          quickExportBtn.disabled = false;
+          quickExportBtn.textContent = originalText;
+        }
+      };
+    }
 
     panel.querySelector('#gmh-reparse').onclick = () => {
       try {
@@ -1859,13 +2093,13 @@
         const extra = privacy.blocked ? ' · ⚠️ 미성년자 맥락 감지' : '';
         setPanelStatus(
           `재파싱 완료 · 플레이어 턴 ${stats.playerTurns}개 · 경고 ${privacy.sanitizedSession.warnings.length}건 · ${profileLabel} · ${summary}${extra}`,
-          '#fde68a'
+          'info'
         );
         if (privacy.sanitizedSession.warnings.length)
           console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
       } catch (e) {
         alert(`오류: ${(e && e.message) || e}`);
-        setPanelStatus('재파싱 실패', '#fecaca');
+        setPanelStatus('재파싱 실패', 'error');
       }
     };
 
@@ -1892,7 +2126,7 @@
    - 플레이어 이름은 "플레이어"로 통일.
 `;
       GM_setClipboard(prompt, { type: 'text', mimetype: 'text/plain' });
-      setPanelStatus('✅ 요약 프롬프트가 클립보드에 복사되었습니다.', '#c4b5fd');
+      setPanelStatus('요약 프롬프트가 클립보드에 복사되었습니다.', 'success');
     };
 
     panel.querySelector('#gmh-reguide').onclick = () => {
@@ -1907,7 +2141,7 @@
 - 길이는 1200~1800자.
 `;
       GM_setClipboard(prompt, { type: 'text', mimetype: 'text/plain' });
-      setPanelStatus('✅ 재요약 프롬프트가 클립보드에 복사되었습니다.', '#fcd34d');
+      setPanelStatus('재요약 프롬프트가 클립보드에 복사되었습니다.', 'success');
     };
   }
 
