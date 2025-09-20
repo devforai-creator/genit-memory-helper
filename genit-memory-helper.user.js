@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Genit Memory Helper
 // @namespace    local.dev
-// @version      0.92
+// @version      0.93
 // @description  Genit 대화로그 JSON/TXT/MD 추출 + 요약/재요약 프롬프트 복사 기능
 // @author       devforai-creator
 // @match        https://genit.ai/*
@@ -16,7 +16,17 @@
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '0.92';
+  const SCRIPT_VERSION = '0.93';
+
+  const GMH = {
+    VERSION: SCRIPT_VERSION,
+    Util: {},
+    Privacy: {},
+    Export: {},
+    UI: {},
+    Core: {},
+    Adapters: {},
+  };
 
   // -------------------------------
   // 0) Constants & utils
@@ -513,7 +523,7 @@
     return false;
   }
 
-  const DOM_ADAPTER = (() => {
+  GMH.Adapters.genit = (() => {
     const selectors = {
       chatContainers: [
         '[data-chat-container]',
@@ -616,18 +626,18 @@
       return null;
     };
 
-    const findByRole = () => {
-      const roleNodes = collectAll(['[role]']);
+    const findByRole = (root = document) => {
+      const roleNodes = collectAll(['[role]'], root);
       return roleNodes.find((node) => {
         const role = node.getAttribute('role') || '';
         return /log|list|main|region/i.test(role) && isScrollable(node);
       });
     };
 
-    const findByTextHint = () => {
+    const findByTextHint = (root = document) => {
       const hints = selectors.textHints || [];
       if (!hints.length) return null;
-      const nodes = collectAll(['main', 'section', 'article']).filter((node) => {
+      const nodes = collectAll(['main', 'section', 'article'], root).filter((node) => {
         if (!node || node.childElementCount < 3) return false;
         const text = (node.textContent || '').trim();
         if (!text || text.length > 400) return false;
@@ -636,20 +646,20 @@
       return nodes.find((node) => isScrollable(node));
     };
 
-    const getChatContainer = () => {
-      const direct = firstMatch(selectors.chatContainers);
+    const getChatContainer = (doc = document) => {
+      const direct = firstMatch(selectors.chatContainers, doc);
       if (direct && isScrollable(direct)) return direct;
 
-      const roleMatch = findByRole();
+      const roleMatch = findByRole(doc);
       if (roleMatch) return roleMatch;
 
-      const block = firstMatch(selectors.messageRoot);
+      const block = firstMatch(selectors.messageRoot, doc);
       if (block) {
         const scrollable = findScrollableAncestor(block.parentElement);
         if (scrollable) return scrollable;
       }
 
-      const hintMatch = findByTextHint();
+      const hintMatch = findByTextHint(doc);
       if (hintMatch) return hintMatch;
 
       return null;
@@ -771,20 +781,48 @@
         .filter((name) => name && /^[\w가-힣][\w가-힣 _.-]{1,20}$/.test(name));
     };
 
-    const getPanelAnchor = () => {
-      const anchor = firstMatch(selectors.panelAnchor);
-      return anchor || document.body;
+    const getPanelAnchor = (doc = document) => {
+      const anchor = firstMatch(selectors.panelAnchor, doc);
+      return anchor || doc.body;
     };
 
+    const match = (loc) => /genit\.ai/i.test(loc.hostname);
+
     return {
-      getChatContainer,
-      getMessageBlocks,
+      id: 'genit',
+      label: 'Genit',
+      match,
+      findContainer: (doc = document) => getChatContainer(doc),
+      listMessageBlocks: (root) => getMessageBlocks(root),
       emitTranscriptLines,
       guessPlayerNames,
       getPanelAnchor,
       dumpSelectors: () => selectors,
     };
   })();
+
+  GMH.Core.adapters = [GMH.Adapters.genit];
+
+  GMH.Core.pickAdapter = function pickAdapter(loc = location, doc = document) {
+    const candidates = Array.isArray(GMH.Core.adapters) ? GMH.Core.adapters : [];
+    for (const adapter of candidates) {
+      try {
+        if (adapter?.match?.(loc, doc)) return adapter;
+      } catch (err) {
+        console.warn('[GMH] adapter match error', err);
+      }
+    }
+    return GMH.Adapters.genit;
+  };
+
+  let ACTIVE_ADAPTER = null;
+
+  function getActiveAdapter() {
+    if (!ACTIVE_ADAPTER) {
+      ACTIVE_ADAPTER = GMH.Core.pickAdapter(location, document);
+    }
+    return ACTIVE_ADAPTER;
+  }
 
   let STATUS_ELEMENT = null;
   let PROFILE_SELECT_ELEMENT = null;
@@ -844,15 +882,16 @@
 
   function downloadDomSnapshot() {
     try {
-      const container = DOM_ADAPTER.getChatContainer();
-      const blocks = DOM_ADAPTER.getMessageBlocks(container || document);
+      const adapter = getActiveAdapter();
+      const container = adapter?.findContainer?.(document);
+      const blocks = adapter?.listMessageBlocks?.(container || document) || [];
       const snapshot = {
         url: location.href,
         captured_at: new Date().toISOString(),
         profile: AUTO_CFG.profile,
         container_path: describeNode(container),
         block_count: blocks.length,
-        selector_strategies: DOM_ADAPTER.dumpSelectors?.(),
+        selector_strategies: adapter?.dumpSelectors?.(),
         container_html_sample: container
           ? (container.innerHTML || '').slice(0, 40000)
           : null,
@@ -929,7 +968,8 @@
   };
 
   function guessPlayerNamesFromDOM() {
-    return DOM_ADAPTER.guessPlayerNames();
+    const adapter = getActiveAdapter();
+    return adapter?.guessPlayerNames?.() || [];
   }
 
   const PLAYER_NAMES = Array.from(
@@ -1251,8 +1291,9 @@
   // 3) DOM Reader
   // -------------------------------
   function readTranscriptText() {
-    const container = DOM_ADAPTER.getChatContainer();
-    const blocks = DOM_ADAPTER.getMessageBlocks(container || document);
+    const adapter = getActiveAdapter();
+    const container = adapter?.findContainer?.(document);
+    const blocks = adapter?.listMessageBlocks?.(container || document) || [];
     if (!container && !blocks.length)
       throw new Error('채팅 컨테이너를 찾을 수 없습니다.');
     if (!blocks.length) return '';
@@ -1269,7 +1310,7 @@
     };
 
     for (const block of blocks) {
-      DOM_ADAPTER.emitTranscriptLines(block, pushLine);
+      adapter?.emitTranscriptLines?.(block, pushLine);
     }
 
     return out.join('\n');
@@ -1285,7 +1326,8 @@
   };
 
   function ensureScrollContainer() {
-    const adapterContainer = DOM_ADAPTER.getChatContainer();
+    const adapter = getActiveAdapter();
+    const adapterContainer = adapter?.findContainer?.(document);
     if (adapterContainer) {
       if (isScrollable(adapterContainer)) return adapterContainer;
       if (adapterContainer instanceof Element) {
@@ -1297,7 +1339,7 @@
       }
       return adapterContainer;
     }
-    const messageBlocks = DOM_ADAPTER.getMessageBlocks(document);
+    const messageBlocks = adapter?.listMessageBlocks?.(document) || [];
     if (messageBlocks.length) {
       let ancestor = messageBlocks[0]?.parentElement || null;
       for (let depth = 0; depth < 6 && ancestor; depth += 1) {
@@ -1641,7 +1683,8 @@
       </div>
       <div id="gmh-status" style="opacity:.85"></div>
     `;
-    const anchor = DOM_ADAPTER.getPanelAnchor() || document.body;
+    const adapter = getActiveAdapter();
+    const anchor = (adapter?.getPanelAnchor?.(document)) || document.body;
     anchor.appendChild(panel);
 
     const statusEl = panel.querySelector('#gmh-status');
@@ -1915,5 +1958,65 @@
       writable: false,
       configurable: false,
     });
+  }
+
+  Object.assign(GMH.Util, {
+    normNL,
+    stripTicks,
+    collapseSpaces,
+    stripQuotes,
+    stripBrackets,
+    sanitizeText,
+    parseListInput,
+    luhnValid,
+    escapeForRegex,
+    describeNode,
+  });
+
+  Object.assign(GMH.Privacy, {
+    profiles: PRIVACY_PROFILES,
+    config: PRIVACY_CFG,
+    setPrivacyProfile,
+    setCustomList,
+    applyPrivacyPipeline,
+    redactText,
+    hasMinorSexualContext,
+    formatRedactionCounts,
+  });
+
+  Object.assign(GMH.Export, {
+    toJSONExport,
+    toTXTExport,
+    toMarkdownExport,
+    buildExportBundle,
+    buildExportManifest,
+  });
+
+  Object.assign(GMH.UI, {
+    mountPanel,
+    setPanelStatus,
+    configurePrivacyLists,
+  });
+
+  Object.assign(GMH.Core, {
+    getAdapter: getActiveAdapter,
+    readTranscriptText,
+    normalizeTranscript,
+    parseTurns,
+    buildSession,
+    collectSessionStats,
+    autoLoader,
+  });
+
+  if (!PAGE_WINDOW.GMH) {
+    try {
+      Object.defineProperty(PAGE_WINDOW, 'GMH', {
+        value: GMH,
+        writable: false,
+        configurable: false,
+      });
+    } catch (err) {
+      console.warn('[GMH] expose GMH failed', err);
+    }
   }
 })();
