@@ -9,7 +9,7 @@ Genit 대화 로그를 정형화된 JSON으로 추출하고, LLM 요약 프롬�
 1. 먼저 Tampermonkey를 설치하세요. (Chrome/Edge/Firefox 지원)
 2. 아래 버튼을 클릭해 스크립트를 설치하세요:
 
-👉 [**최신 버전 다운로드 (Raw)**](https://github.com/devforai-creator/genit-memory-helper/raw/main genit-memory-helper.user.js)
+👉 [**최신 버전 다운로드 (Raw)**](https://github.com/devforai-creator/genit-memory-helper/raw/main/genit-memory-helper.user.js)
 
 
 3. 브라우저가 `.user.js` 파일을 다운로드하면, Tampermonkey가 자동으로 설치 화면을 띄워줍니다.  
