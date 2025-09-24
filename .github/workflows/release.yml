@@ -23,15 +23,31 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build user script
+      - name: Build user scripts
         run: npm run build
 
-      - name: Generate checksum
+      - name: Determine release channel
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == *"beta"* ]]; then
+            echo "IS_BETA=true" >> $GITHUB_ENV
+          else
+            echo "IS_BETA=false" >> $GITHUB_ENV
+          fi
+
+      - name: Generate checksum (stable)
+        if: env.IS_BETA == 'false'
         run: |
           cd dist
           sha256sum genit-memory-helper.user.js > genit-memory-helper.user.js.sha256
 
-      - name: Publish release
+      - name: Generate checksum (beta)
+        if: env.IS_BETA == 'true'
+        run: |
+          cd dist
+          sha256sum genit-memory-helper.beta.user.js > genit-memory-helper.beta.user.js.sha256
+
+      - name: Publish stable release
+        if: env.IS_BETA == 'false'
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -39,3 +55,13 @@ jobs:
             dist/genit-memory-helper.user.js.sha256
           draft: false
           prerelease: false
+
+      - name: Publish beta release
+        if: env.IS_BETA == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/genit-memory-helper.beta.user.js
+            dist/genit-memory-helper.beta.user.js.sha256
+          draft: false
+          prerelease: true
