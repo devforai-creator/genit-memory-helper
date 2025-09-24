@@ -28,6 +28,121 @@
     Adapters: {},
   };
 
+  const Flags = (() => {
+    let betaQuery = false;
+    try {
+      const params = new URLSearchParams(location.search || '');
+      betaQuery = params.has('gmhBeta');
+    } catch (err) {
+      betaQuery = false;
+    }
+    const storedNewUI = (() => {
+      try {
+        return localStorage.getItem('gmh_flag_newUI');
+      } catch (err) {
+        return null;
+      }
+    })();
+    const storedKill = (() => {
+      try {
+        return localStorage.getItem('gmh_kill');
+      } catch (err) {
+        return null;
+      }
+    })();
+    const newUI = storedNewUI === '1' || betaQuery;
+    const killSwitch = storedKill === '1';
+    return {
+      newUI,
+      killSwitch,
+      betaQuery,
+    };
+  })();
+
+  GMH.Flags = Flags;
+
+  const isModernUIActive = Flags.newUI && !Flags.killSwitch;
+
+  const dbg = (...args) => {
+    if (isModernUIActive) console.debug('[GMHβ]', ...args);
+  };
+
+  const GMH_STATE = {
+    IDLE: 'idle',
+    SCANNING: 'scanning',
+    REDACTING: 'redacting',
+    PREVIEW: 'preview',
+    EXPORTING: 'exporting',
+    DONE: 'done',
+    ERROR: 'error',
+  };
+
+  const STATE_TRANSITIONS = {
+    idle: ['idle', 'scanning', 'redacting', 'error'],
+    scanning: ['scanning', 'redacting', 'preview', 'error', 'idle'],
+    redacting: ['redacting', 'preview', 'exporting', 'error', 'idle'],
+    preview: ['preview', 'exporting', 'idle', 'done', 'error'],
+    exporting: ['exporting', 'done', 'error', 'idle'],
+    done: ['done', 'idle', 'scanning', 'redacting'],
+    error: ['error', 'idle', 'scanning', 'redacting'],
+  };
+
+  const VALID_STATES = new Set(Object.values(GMH_STATE));
+  const stateSubscribers = new Set();
+
+  function normalizeState(value) {
+    if (!value) return null;
+    const next = String(value).toLowerCase();
+    return VALID_STATES.has(next) ? next : null;
+  }
+
+  GMH.Core.STATE = GMH_STATE;
+  GMH.Core.State = {
+    current: GMH_STATE.IDLE,
+    previous: null,
+    payload: null,
+    getState() {
+      return this.current;
+    },
+    subscribe(listener) {
+      if (typeof listener !== 'function') return () => {};
+      stateSubscribers.add(listener);
+      return () => {
+        stateSubscribers.delete(listener);
+      };
+    },
+    setState(nextState, payload) {
+      const next = normalizeState(nextState);
+      if (!next) {
+        console.warn('[GMH] unknown state requested', nextState);
+        return false;
+      }
+      const allowed = STATE_TRANSITIONS[this.current]?.includes(next);
+      if (!allowed) {
+        console.warn('[GMH] invalid state transition', this.current, '→', next);
+        return false;
+      }
+      this.previous = this.current;
+      this.current = next;
+      this.payload = payload ?? null;
+      dbg('state →', this.current, this.payload);
+      stateSubscribers.forEach((listener) => {
+        try {
+          listener(this.current, {
+            previous: this.previous,
+            payload: this.payload,
+          });
+        } catch (err) {
+          console.error('[GMH] state listener failed', err);
+        }
+      });
+      return true;
+    },
+    reset() {
+      this.setState(GMH_STATE.IDLE, null);
+    },
+  };
+
   // -------------------------------
   // 0) Constants & utils
   // -------------------------------
@@ -365,7 +480,7 @@
 
   const PREVIEW_TURN_LIMIT = 5;
 
-  function ensurePreviewStyles() {
+  function ensureLegacyPreviewStyles() {
     if (document.getElementById('gmh-preview-style')) return;
     const style = document.createElement('style');
     style.id = 'gmh-preview-style';
@@ -395,13 +510,307 @@
     document.head.appendChild(style);
   }
 
+  function ensureDesignSystemStyles() {
+    if (document.getElementById('gmh-design-system-style')) return;
+    const style = document.createElement('style');
+    style.id = 'gmh-design-system-style';
+    style.textContent = `
+:root{--gmh-bg:#0b1020;--gmh-surface:#0f172a;--gmh-surface-alt:rgba(30,41,59,0.65);--gmh-fg:#e2e8f0;--gmh-muted:#94a3b8;--gmh-accent:#38bdf8;--gmh-accent-soft:#c4b5fd;--gmh-success:#34d399;--gmh-warning:#fbbf24;--gmh-danger:#f87171;--gmh-border:rgba(148,163,184,0.25);--gmh-radius:14px;--gmh-radius-sm:10px;--gmh-panel-shadow:0 18px 48px rgba(8,15,30,0.55);--gmh-font:13px/1.5 'Inter',system-ui,-apple-system,BlinkMacSystemFont,sans-serif;}
+.gmh-modal-overlay{position:fixed;inset:0;background:rgba(8,11,20,0.72);z-index:9999999;display:flex;align-items:center;justify-content:center;padding:24px;}
+.gmh-modal{background:var(--gmh-surface);color:var(--gmh-fg);border-radius:var(--gmh-radius);box-shadow:var(--gmh-panel-shadow);width:min(560px,94vw);max-height:94vh;display:flex;flex-direction:column;overflow:hidden;font:var(--gmh-font);}
+.gmh-modal--sm{width:min(420px,94vw);}
+.gmh-modal--lg{width:min(720px,94vw);}
+.gmh-modal__header{display:flex;flex-direction:column;gap:8px;padding:18px 22px;border-bottom:1px solid var(--gmh-border);}
+.gmh-modal__header-row{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.gmh-modal__title{font-size:16px;font-weight:600;margin:0;color:var(--gmh-fg);}
+.gmh-modal__description{margin:0;font-size:13px;color:var(--gmh-muted);line-height:1.45;}
+.gmh-modal__body{padding:20px 22px;}
+.gmh-modal__body--scroll{overflow:auto;display:grid;gap:18px;}
+.gmh-modal__footer{padding:18px 22px;border-top:1px solid var(--gmh-border);background:rgba(11,16,32,0.92);}
+.gmh-modal__actions{display:flex;gap:12px;flex-wrap:wrap;}
+.gmh-modal__close{border:0;background:none;color:var(--gmh-muted);font-size:18px;cursor:pointer;padding:4px;border-radius:50%;transition:color 0.15s ease,background 0.15s ease;}
+.gmh-modal__close:hover{color:#f8fafc;background:rgba(148,163,184,0.16);}
+.gmh-button{flex:1;padding:10px 12px;border-radius:var(--gmh-radius-sm);border:0;font-weight:600;cursor:pointer;transition:background 0.15s ease,color 0.15s ease;min-width:120px;}
+.gmh-button--primary{background:var(--gmh-success);color:#053527;}
+.gmh-button--primary:hover{background:#22c55e;color:#052e21;}
+.gmh-button--secondary{background:#1e293b;color:var(--gmh-fg);border:1px solid var(--gmh-border);}
+.gmh-button--secondary:hover{background:#243049;}
+.gmh-button--ghost{background:rgba(15,23,42,0.65);color:var(--gmh-muted);border:1px solid transparent;}
+.gmh-button--ghost:hover{color:var(--gmh-fg);border-color:var(--gmh-border);}
+.gmh-modal-footnote{font-size:12px;color:var(--gmh-muted);}
+.gmh-modal-stack{display:grid;gap:18px;}
+.gmh-privacy-summary{display:grid;gap:8px;border:1px solid var(--gmh-border);border-radius:var(--gmh-radius-sm);padding:14px;background:var(--gmh-surface-alt);}
+.gmh-privacy-summary__row{display:flex;justify-content:space-between;gap:12px;font-size:13px;}
+.gmh-privacy-summary__label{color:var(--gmh-muted);font-weight:600;}
+.gmh-section-title{font-weight:600;color:#cbd5f5;font-size:13px;}
+.gmh-turn-list{list-style:none;margin:0;padding:0;display:grid;gap:10px;}
+.gmh-turn-list__item{background:var(--gmh-surface-alt);border-radius:var(--gmh-radius-sm);padding:10px 12px;border:1px solid rgba(59,130,246,0.18);}
+.gmh-turn-list__speaker{font-weight:600;color:var(--gmh-accent-soft);margin-bottom:4px;font-size:12px;}
+.gmh-turn-list__text{color:var(--gmh-fg);font-size:13px;line-height:1.45;white-space:pre-wrap;word-break:break-word;}
+.gmh-turn-list__empty{color:var(--gmh-muted);text-align:center;}
+.gmh-panel{position:fixed;right:16px;bottom:16px;z-index:999999;background:var(--gmh-bg);color:var(--gmh-fg);padding:16px;border-radius:18px;box-shadow:var(--gmh-panel-shadow);display:grid;gap:14px;width:min(320px,92vw);font:var(--gmh-font);}
+.gmh-panel__header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;}
+.gmh-panel__title{font-size:15px;font-weight:600;margin:0;}
+.gmh-panel__tag{font-size:11px;color:var(--gmh-muted);margin-top:2px;}
+.gmh-panel__section{border-top:1px solid var(--gmh-border);padding-top:12px;display:grid;gap:10px;}
+.gmh-panel__section:first-of-type{border-top:none;padding-top:0;}
+.gmh-panel__section-title{font-size:12px;color:var(--gmh-muted);font-weight:600;letter-spacing:0.08em;text-transform:uppercase;}
+.gmh-field-row{display:flex;gap:10px;align-items:center;width:100%;}
+.gmh-input,.gmh-select{flex:1;background:#111827;color:var(--gmh-fg);border:1px solid var(--gmh-border);border-radius:var(--gmh-radius-sm);padding:8px 10px;font:inherit;}
+.gmh-textarea{width:100%;min-height:96px;background:#111827;color:var(--gmh-fg);border:1px solid var(--gmh-border);border-radius:var(--gmh-radius-sm);padding:10px;font:inherit;resize:vertical;}
+.gmh-small-btn{padding:8px 10px;border-radius:var(--gmh-radius-sm);border:1px solid transparent;cursor:pointer;font-weight:600;font-size:12px;background:rgba(15,23,42,0.65);color:var(--gmh-muted);transition:background 0.15s ease,color 0.15s ease,border 0.15s ease;}
+.gmh-small-btn--accent{background:var(--gmh-accent);color:#041016;}
+.gmh-small-btn--muted{background:rgba(15,23,42,0.65);color:var(--gmh-muted);border:1px solid transparent;}
+.gmh-small-btn--muted:hover{color:var(--gmh-fg);border-color:var(--gmh-border);}
+.gmh-small-btn--accent:hover{background:#0ea5e9;color:#03212f;}
+.gmh-panel-btn{flex:1;padding:10px 12px;border-radius:var(--gmh-radius-sm);border:0;font-weight:600;cursor:pointer;transition:background 0.15s ease,color 0.15s ease;}
+.gmh-panel-btn--accent{background:var(--gmh-success);color:#053527;}
+.gmh-panel-btn--accent:hover{background:#22c55e;color:#052e21;}
+.gmh-panel-btn--neutral{background:#1e293b;color:var(--gmh-fg);}
+.gmh-panel-btn--neutral:hover{background:#243049;}
+.gmh-panel-btn--warn{background:#ef4444;color:#fff;}
+.gmh-panel-btn--warn:hover{background:#dc2626;}
+.gmh-panel-btn--compact{flex:0.5;}
+.gmh-disabled{opacity:0.6;pointer-events:none;}
+.gmh-progress{display:grid;gap:6px;}
+.gmh-progress__track{height:6px;border-radius:999px;background:rgba(148,163,184,0.2);overflow:hidden;position:relative;}
+.gmh-progress__fill{height:100%;width:0%;border-radius:inherit;background:var(--gmh-accent);transition:width 0.2s ease;}
+.gmh-progress__fill[data-state="error"]{background:var(--gmh-danger);}
+.gmh-progress__fill[data-state="done"]{background:var(--gmh-success);}
+.gmh-progress__fill[data-indeterminate="true"]{width:40%;animation:gmhProgressSlide 1.6s linear infinite;}
+@keyframes gmhProgressSlide{0%{transform:translateX(-120%);}50%{transform:translateX(-10%);}100%{transform:translateX(120%);}}
+.gmh-progress__label{font-size:12px;color:var(--gmh-muted);}
+.gmh-status-line{font-size:12px;color:var(--gmh-muted);}
+.gmh-subtext{font-size:12px;color:var(--gmh-muted);line-height:1.5;}
+@media (max-width:480px){.gmh-modal{width:100%;border-radius:12px;}.gmh-modal__actions{flex-direction:column;}.gmh-panel{right:12px;left:12px;bottom:12px;width:auto;}}
+`;
+    document.head.appendChild(style);
+  }
+
+  GMH.UI.Modal = (() => {
+    let activeModal = null;
+    let modalIdCounter = 0;
+
+    const focusableSelector = [
+      'a[href]',
+      'area[href]',
+      'input:not([disabled])',
+      'select:not([disabled])',
+      'textarea:not([disabled])',
+      'button:not([disabled])',
+      '[tabindex]:not([tabindex="-1"])',
+    ].join(',');
+
+    const getFocusable = (root) => {
+      if (!root) return [];
+      return Array.from(root.querySelectorAll(focusableSelector)).filter((el) => {
+        if (!(el instanceof HTMLElement)) return false;
+        const style = window.getComputedStyle(el);
+        return style.visibility !== 'hidden' && style.display !== 'none';
+      });
+    };
+
+    function buildButton(action, finalize) {
+      const button = document.createElement('button');
+      button.type = action.type || 'button';
+      button.className = 'gmh-button';
+      if (action.variant) button.classList.add(`gmh-button--${action.variant}`);
+      if (action.attrs && typeof action.attrs === 'object') {
+        Object.entries(action.attrs).forEach(([key, value]) => {
+          button.setAttribute(key, value);
+        });
+      }
+      if (action.disabled) button.disabled = true;
+      button.textContent = action.label || '확인';
+      button.addEventListener('click', (event) => {
+        if (button.disabled) return;
+        if (typeof action.onSelect === 'function') {
+          const shouldClose = action.onSelect(event);
+          if (shouldClose === false) return;
+        }
+        finalize(action.value);
+      });
+      return button;
+    }
+
+    function closeActive(result) {
+      if (activeModal && typeof activeModal.close === 'function') {
+        activeModal.close(result, true);
+      }
+    }
+
+    function open(options = {}) {
+      ensureDesignSystemStyles();
+      closeActive(false);
+
+      return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'gmh-modal-overlay';
+        const dialog = document.createElement('div');
+        dialog.className = 'gmh-modal';
+        if (options.size === 'small') dialog.classList.add('gmh-modal--sm');
+        if (options.size === 'large') dialog.classList.add('gmh-modal--lg');
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+        dialog.setAttribute('tabindex', '-1');
+        modalIdCounter += 1;
+        const modalId = `gmh-modal-${modalIdCounter}`;
+        const titleId = `${modalId}-title`;
+        const descId = options.description ? `${modalId}-desc` : '';
+        dialog.id = modalId;
+
+        const header = document.createElement('div');
+        header.className = 'gmh-modal__header';
+        const headerRow = document.createElement('div');
+        headerRow.className = 'gmh-modal__header-row';
+
+        const title = document.createElement('h2');
+        title.className = 'gmh-modal__title';
+        title.textContent = options.title || '';
+        title.id = titleId;
+        headerRow.appendChild(title);
+
+        let closeBtn = null;
+        if (options.dismissible !== false) {
+          closeBtn = document.createElement('button');
+          closeBtn.type = 'button';
+          closeBtn.className = 'gmh-modal__close';
+          closeBtn.setAttribute('aria-label', '닫기');
+          closeBtn.innerHTML = '&times;';
+          headerRow.appendChild(closeBtn);
+        }
+
+        header.appendChild(headerRow);
+
+        if (options.description) {
+          const desc = document.createElement('p');
+          desc.className = 'gmh-modal__description';
+          desc.textContent = options.description;
+          desc.id = descId;
+          header.appendChild(desc);
+        }
+
+        dialog.setAttribute('aria-labelledby', titleId);
+        if (options.description) dialog.setAttribute('aria-describedby', descId);
+        else dialog.removeAttribute('aria-describedby');
+
+        const body = document.createElement('div');
+        body.className = 'gmh-modal__body gmh-modal__body--scroll';
+        if (options.bodyClass) body.classList.add(options.bodyClass);
+        if (options.content instanceof Node) {
+          body.appendChild(options.content);
+        } else if (typeof options.content === 'string') {
+          body.innerHTML = options.content;
+        }
+
+        const footer = document.createElement('div');
+        footer.className = 'gmh-modal__footer';
+        const actionsWrap = document.createElement('div');
+        actionsWrap.className = 'gmh-modal__actions';
+        const actions = Array.isArray(options.actions) && options.actions.length
+          ? options.actions
+          : [];
+
+        const finalize = (result) => {
+          cleanup(result);
+        };
+
+        actions.forEach((action) => {
+          const button = buildButton(action, finalize);
+          actionsWrap.appendChild(button);
+        });
+
+        if (actionsWrap.childElementCount) {
+          footer.appendChild(actionsWrap);
+        }
+
+        dialog.appendChild(header);
+        dialog.appendChild(body);
+        if (actionsWrap.childElementCount) dialog.appendChild(footer);
+        overlay.appendChild(dialog);
+
+        const bodyEl = document.body;
+        const prevOverflow = bodyEl.style.overflow;
+        const restoreTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        bodyEl.style.overflow = 'hidden';
+        bodyEl.appendChild(overlay);
+        overlay.setAttribute('role', 'presentation');
+
+        const onKeydown = (event) => {
+          if (event.key === 'Escape' && options.dismissible !== false) {
+            event.preventDefault();
+            cleanup(false);
+            return;
+          }
+          if (event.key === 'Tab') {
+            const focusables = getFocusable(dialog);
+            if (!focusables.length) {
+              event.preventDefault();
+              return;
+            }
+            const first = focusables[0];
+            const last = focusables[focusables.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+              event.preventDefault();
+              last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+              event.preventDefault();
+              first.focus();
+            }
+          }
+        };
+
+        const cleanup = (result) => {
+          if (!overlay.isConnected) return;
+          document.removeEventListener('keydown', onKeydown, true);
+          overlay.remove();
+          bodyEl.style.overflow = prevOverflow;
+          if (restoreTarget && typeof restoreTarget.focus === 'function') {
+            restoreTarget.focus();
+          }
+          activeModal = null;
+          resolve(result);
+        };
+
+        if (options.dismissible !== false) {
+          overlay.addEventListener('click', (event) => {
+            if (event.target === overlay) cleanup(false);
+          });
+          if (closeBtn) closeBtn.addEventListener('click', () => cleanup(false));
+        }
+
+        document.addEventListener('keydown', onKeydown, true);
+
+        const initialSelector = options.initialFocus || '.gmh-button--primary';
+        let focusTarget = initialSelector ? dialog.querySelector(initialSelector) : null;
+        if (!(focusTarget instanceof HTMLElement)) {
+          const focusables = getFocusable(dialog);
+          focusTarget = focusables[0] || closeBtn;
+        }
+        window.setTimeout(() => {
+          if (focusTarget && typeof focusTarget.focus === 'function') focusTarget.focus();
+        }, 20);
+
+        activeModal = {
+          close: cleanup,
+        };
+      });
+    }
+
+    return {
+      open,
+      close: closeActive,
+      isOpen: () => Boolean(activeModal),
+    };
+  })();
+
   function truncateText(value, max = 220) {
     const text = String(value || '').trim();
     if (text.length <= max) return text;
     return `${text.slice(0, max - 1)}…`;
   }
 
-  function confirmPrivacyGate({
+  function confirmPrivacyGateLegacy({
     profile,
     counts,
     stats,
@@ -410,7 +819,7 @@
     heading = '공유 전 확인',
     subheading = '외부로 공유하기 전에 민감정보가 없는지 확인하세요.',
   }) {
-    ensurePreviewStyles();
+    ensureLegacyPreviewStyles();
     const profileLabel = PRIVACY_PROFILES[profile]?.label || profile;
     const summary = formatRedactionCounts(counts);
     const overlay = document.createElement('div');
@@ -453,7 +862,7 @@
 
     const turnList = document.createElement('ul');
     turnList.className = 'gmh-preview-turns';
-    previewTurns.slice(-PREVIEW_TURN_LIMIT).forEach((turn, index) => {
+    previewTurns.slice(-PREVIEW_TURN_LIMIT).forEach((turn) => {
       if (!turn) return;
       const item = document.createElement('li');
       item.className = 'gmh-preview-turn';
@@ -526,6 +935,90 @@
     });
   }
 
+  function confirmPrivacyGateModern({
+    profile,
+    counts,
+    stats,
+    previewTurns = [],
+    actionLabel = '계속',
+    heading = '공유 전 확인',
+    subheading = '외부로 공유하기 전에 민감정보가 없는지 확인하세요.',
+  }) {
+    ensureDesignSystemStyles();
+    const profileLabel = PRIVACY_PROFILES[profile]?.label || profile;
+    const summary = formatRedactionCounts(counts);
+
+    const stack = document.createElement('div');
+    stack.className = 'gmh-modal-stack';
+
+    const summaryBox = document.createElement('div');
+    summaryBox.className = 'gmh-privacy-summary';
+
+    const rowProfile = document.createElement('div');
+    rowProfile.className = 'gmh-privacy-summary__row';
+    rowProfile.innerHTML = `<span class="gmh-privacy-summary__label">프로필</span><span>${profileLabel}</span>`;
+    const rowTurns = document.createElement('div');
+    rowTurns.className = 'gmh-privacy-summary__row';
+    rowTurns.innerHTML = `<span class="gmh-privacy-summary__label">턴 수</span><span>플레이어 ${stats.playerTurns} / 전체 ${stats.totalTurns}</span>`;
+    const rowCounts = document.createElement('div');
+    rowCounts.className = 'gmh-privacy-summary__row';
+    rowCounts.innerHTML = `<span class="gmh-privacy-summary__label">레다크션</span><span>${summary}</span>`;
+    summaryBox.appendChild(rowProfile);
+    summaryBox.appendChild(rowTurns);
+    summaryBox.appendChild(rowCounts);
+    stack.appendChild(summaryBox);
+
+    const previewTitle = document.createElement('div');
+    previewTitle.className = 'gmh-section-title';
+    previewTitle.textContent = `미리보기 (${Math.min(previewTurns.length, PREVIEW_TURN_LIMIT)}턴)`;
+    stack.appendChild(previewTitle);
+
+    const turnList = document.createElement('ul');
+    turnList.className = 'gmh-turn-list';
+    previewTurns.slice(-PREVIEW_TURN_LIMIT).forEach((turn) => {
+      if (!turn) return;
+      const item = document.createElement('li');
+      item.className = 'gmh-turn-list__item';
+      const speaker = document.createElement('div');
+      speaker.className = 'gmh-turn-list__speaker';
+      speaker.textContent = `${turn.speaker || '??'} · ${turn.role}`;
+      const text = document.createElement('div');
+      text.className = 'gmh-turn-list__text';
+      text.textContent = truncateText(turn.text || '');
+      item.appendChild(speaker);
+      item.appendChild(text);
+      turnList.appendChild(item);
+    });
+    if (!turnList.children.length) {
+      const empty = document.createElement('li');
+      empty.className = 'gmh-turn-list__item gmh-turn-list__empty';
+      empty.textContent = '표시할 턴이 없습니다. 상단 요약만 확인해주세요.';
+      turnList.appendChild(empty);
+    }
+    stack.appendChild(turnList);
+
+    const footnote = document.createElement('div');
+    footnote.className = 'gmh-modal-footnote';
+    footnote.textContent = subheading;
+    stack.appendChild(footnote);
+
+    return GMH.UI.Modal.open({
+      title: heading,
+      description: '',
+      content: stack,
+      size: 'medium',
+      initialFocus: '[data-action="confirm"]',
+      actions: [
+        { id: 'cancel', label: '취소', variant: 'secondary', value: false, attrs: { 'data-action': 'cancel' } },
+        { id: 'confirm', label: actionLabel, variant: 'primary', value: true, attrs: { 'data-action': 'confirm' } },
+      ],
+    }).then((result) => Boolean(result));
+  }
+
+  function confirmPrivacyGate(options) {
+    return isModernUIActive ? confirmPrivacyGateModern(options) : confirmPrivacyGateLegacy(options);
+  }
+
   function buildExportManifest({
     profile,
     counts,
@@ -547,7 +1040,62 @@
     };
   }
 
-  function configurePrivacyLists() {
+  async function configurePrivacyListsModern() {
+    ensureDesignSystemStyles();
+    const stack = document.createElement('div');
+    stack.className = 'gmh-modal-stack';
+
+    const intro = document.createElement('p');
+    intro.className = 'gmh-subtext';
+    intro.textContent = '쉼표 또는 줄바꿈으로 여러 항목을 구분하세요. 블랙리스트는 강제 마스킹, 화이트리스트는 예외 처리됩니다.';
+    stack.appendChild(intro);
+
+    const blackLabel = document.createElement('div');
+    blackLabel.className = 'gmh-field-label';
+    blackLabel.textContent = `블랙리스트 (${PRIVACY_CFG.blacklist?.length || 0})`;
+    stack.appendChild(blackLabel);
+
+    const blackTextarea = document.createElement('textarea');
+    blackTextarea.id = 'gmh-privacy-blacklist';
+    blackTextarea.className = 'gmh-textarea';
+    blackTextarea.placeholder = '예: 서울시, 010-1234-5678';
+    blackTextarea.value = PRIVACY_CFG.blacklist?.join('\n') || '';
+    stack.appendChild(blackTextarea);
+
+    const whiteLabel = document.createElement('div');
+    whiteLabel.className = 'gmh-field-label';
+    whiteLabel.textContent = `화이트리스트 (${PRIVACY_CFG.whitelist?.length || 0})`;
+    stack.appendChild(whiteLabel);
+
+    const whiteTextarea = document.createElement('textarea');
+    whiteTextarea.id = 'gmh-privacy-whitelist';
+    whiteTextarea.className = 'gmh-textarea';
+    whiteTextarea.placeholder = '예: 공식 길드명, 공개 닉네임';
+    whiteTextarea.value = PRIVACY_CFG.whitelist?.join('\n') || '';
+    stack.appendChild(whiteTextarea);
+
+    const result = await GMH.UI.Modal.open({
+      title: '프라이버시 민감어 관리',
+      size: 'large',
+      content: stack,
+      actions: [
+        { id: 'cancel', label: '취소', variant: 'secondary', value: false, attrs: { 'data-action': 'cancel' } },
+        { id: 'save', label: '저장', variant: 'primary', value: true, attrs: { 'data-action': 'save' } },
+      ],
+      initialFocus: '#gmh-privacy-blacklist',
+    });
+
+    if (!result) {
+      setPanelStatus('프라이버시 설정 변경을 취소했습니다.', 'muted');
+      return;
+    }
+
+    setCustomList('blacklist', parseListInput(blackTextarea.value));
+    setCustomList('whitelist', parseListInput(whiteTextarea.value));
+    setPanelStatus('프라이버시 사용자 목록을 저장했습니다.', 'success');
+  }
+
+  function configurePrivacyListsLegacy() {
     const currentBlack = PRIVACY_CFG.blacklist?.join('\n') || '';
     const nextBlack = window.prompt(
       '레다크션 강제 대상(블랙리스트)을 줄바꿈 또는 쉼표로 구분해 입력하세요.\n비워두면 목록을 초기화합니다.',
@@ -565,6 +1113,11 @@
       setCustomList('whitelist', parseListInput(nextWhite));
     }
     setPanelStatus('프라이버시 사용자 목록을 저장했습니다.', 'info');
+  }
+
+  async function configurePrivacyLists() {
+    if (isModernUIActive) return configurePrivacyListsModern();
+    return configurePrivacyListsLegacy();
   }
 
   function normNL(s) {
@@ -1017,6 +1570,115 @@
     else delete STATUS_ELEMENT.dataset.tone;
   }
 
+  const STATE_PRESETS = {
+    idle: {
+      label: '대기 중',
+      message: '준비 완료',
+      tone: 'info',
+      progress: { value: 0 },
+    },
+    scanning: {
+      label: '스크롤/수집 중',
+      message: '위로 불러오는 중...',
+      tone: 'progress',
+      progress: { indeterminate: true },
+    },
+    redacting: {
+      label: '민감정보 마스킹 중',
+      message: '레다크션 파이프라인 적용 중...',
+      tone: 'progress',
+      progress: { indeterminate: true },
+    },
+    preview: {
+      label: '미리보기 준비 완료',
+      message: '레다크션 결과를 검토하세요.',
+      tone: 'info',
+      progress: { value: 0.75 },
+    },
+    exporting: {
+      label: '내보내기 진행 중',
+      message: '파일을 준비하는 중입니다...',
+      tone: 'progress',
+      progress: { indeterminate: true },
+    },
+    done: {
+      label: '작업 완료',
+      message: '결과를 확인하세요.',
+      tone: 'success',
+      progress: { value: 1 },
+    },
+    error: {
+      label: '오류 발생',
+      message: '작업을 다시 시도해주세요.',
+      tone: 'error',
+      progress: { value: 1 },
+    },
+  };
+
+  GMH.UI.StateView = (() => {
+    let progressFillEl = null;
+    let progressLabelEl = null;
+    let unsubscribe = null;
+
+    const clamp = (value) => {
+      if (!Number.isFinite(value)) return 0;
+      if (value < 0) return 0;
+      if (value > 1) return 1;
+      return value;
+    };
+
+    const applyState = (stateKey, meta = {}) => {
+      const payload = meta?.payload || {};
+      const preset = STATE_PRESETS[stateKey] || STATE_PRESETS.idle;
+      const label = payload.label || preset.label || '';
+      const tone = payload.tone || preset.tone || 'info';
+      const message = payload.message || preset.message || label || '';
+      const progress = payload.progress || preset.progress || null;
+
+      if (progressLabelEl) progressLabelEl.textContent = label || ' ';
+
+      if (progressFillEl) {
+        if (progress?.indeterminate) {
+          progressFillEl.dataset.indeterminate = 'true';
+          progressFillEl.style.width = '40%';
+          progressFillEl.setAttribute('aria-valuenow', '0');
+        } else {
+          progressFillEl.dataset.indeterminate = 'false';
+          const value = clamp(progress?.value);
+          progressFillEl.style.width = `${Math.round(value * 100)}%`;
+          progressFillEl.setAttribute('aria-valuenow', String(value));
+        }
+        progressFillEl.dataset.state = stateKey || 'idle';
+        if (label) progressFillEl.setAttribute('aria-valuetext', label);
+      }
+
+      if (message) setPanelStatus(message, tone);
+    };
+
+    const bind = ({ progressFill, progressLabel } = {}) => {
+      progressFillEl = progressFill || null;
+      progressLabelEl = progressLabel || null;
+      if (typeof unsubscribe === 'function') unsubscribe();
+      if (progressFillEl) {
+        progressFillEl.setAttribute('role', 'progressbar');
+        progressFillEl.setAttribute('aria-valuemin', '0');
+        progressFillEl.setAttribute('aria-valuemax', '1');
+        progressFillEl.setAttribute('aria-valuenow', '0');
+        progressFillEl.setAttribute('aria-live', 'polite');
+      }
+      if (progressLabelEl) {
+        progressLabelEl.setAttribute('aria-live', 'polite');
+      }
+      unsubscribe = GMH.Core.State.subscribe((state, meta) => {
+        applyState(state, meta);
+      });
+      const current = GMH.Core.State.getState();
+      applyState(current, { payload: STATE_PRESETS[current] || {} });
+    };
+
+    return { bind };
+  })();
+
   function syncPrivacyProfileSelect() {
     if (PRIVACY_SELECT_ELEMENT) {
       PRIVACY_SELECT_ELEMENT.value = PRIVACY_CFG.profile;
@@ -1091,6 +1753,10 @@
     lastTarget: null,
     lastProfile: AUTO_CFG.profile,
     async start(mode, target, opts = {}) {
+      if (AUTO_STATE.running) {
+        setPanelStatus('이미 자동 로딩이 진행 중입니다.', 'muted');
+        return null;
+      }
       if (opts.profile) {
         AUTO_CFG.profile = AUTO_PROFILES[opts.profile] ? opts.profile : 'default';
         syncProfileSelect();
@@ -1099,9 +1765,14 @@
       this.lastProfile = AUTO_CFG.profile;
       try {
         if (mode === 'all') {
-          setPanelStatus('위로 불러오는 중...', 'progress');
           this.lastTarget = null;
-          return await autoLoadAll(setPanelStatus);
+          GMH.Core.State.setState(GMH.Core.STATE.SCANNING, {
+            label: '위로 끝까지 로딩',
+            message: '위로 불러오는 중...',
+            tone: 'progress',
+            progress: { indeterminate: true },
+          });
+          return await autoLoadAll();
         }
         if (mode === 'turns') {
           const numericTarget = Number(target);
@@ -1111,12 +1782,22 @@
             return null;
           }
           this.lastTarget = goal;
-          setPanelStatus(`플레이어 턴 ${goal}개 확보 중...`, 'progress');
-          return await autoLoadUntilPlayerTurns(goal, setPanelStatus);
+          GMH.Core.State.setState(GMH.Core.STATE.SCANNING, {
+            label: '턴 확보 중',
+            message: `플레이어 턴 0/${goal}`,
+            tone: 'progress',
+            progress: { value: 0 },
+          });
+          return await autoLoadUntilPlayerTurns(goal);
         }
       } catch (error) {
         console.error('[GMH] auto loader error', error);
-        setPanelStatus(`자동 로딩 오류: ${(error && error.message) || error}`, 'error');
+        GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
+          label: '자동 로딩 오류',
+          message: `자동 로딩 오류: ${(error && error.message) || error}`,
+          tone: 'error',
+          progress: { value: 1 },
+        });
         throw error;
       }
       return null;
@@ -1573,9 +2254,18 @@
     }
   }
 
-  async function autoLoadAll(setStatus) {
+  async function autoLoadAll() {
     const profile = getAutoProfile();
     const container = ensureScrollContainer();
+    if (!container) {
+      GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
+        label: '자동 로딩 실패',
+        message: '채팅 컨테이너를 찾을 수 없습니다.',
+        tone: 'error',
+        progress: { value: 1 },
+      });
+      return { error: new Error('container missing') };
+    }
     AUTO_STATE.running = true;
     AUTO_STATE.container = container;
     let stableRounds = 0;
@@ -1583,6 +2273,12 @@
 
     while (AUTO_STATE.running && guard < profile.guardLimit) {
       guard += 1;
+      GMH.Core.State.setState(GMH.Core.STATE.SCANNING, {
+        label: '위로 끝까지 로딩',
+        message: `추가 수집 중 (${guard}/${profile.guardLimit})`,
+        tone: 'progress',
+        progress: { indeterminate: true },
+      });
       const { grew, before, after } = await scrollUpCycle(container, profile);
       if (!AUTO_STATE.running) break;
       const delta = after - before;
@@ -1594,16 +2290,36 @@
 
     AUTO_STATE.running = false;
     const stats = collectTurnStats();
-    if (setStatus && !stats.error) {
-      setStatus(`스크롤 완료. 플레이어 턴 ${stats.playerTurns}개 확보.`, 'success');
+    if (stats.error) {
+      GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
+        label: '자동 로딩 실패',
+        message: '스크롤 후 파싱 실패',
+        tone: 'error',
+        progress: { value: 1 },
+      });
+    } else {
+      GMH.Core.State.setState(GMH.Core.STATE.DONE, {
+        label: '자동 로딩 완료',
+        message: `플레이어 턴 ${stats.playerTurns}개 확보`,
+        tone: 'success',
+        progress: { value: 1 },
+      });
     }
-    if (stats.error && setStatus) setStatus('스크롤 후 파싱 실패', 'error');
     return stats;
   }
 
-  async function autoLoadUntilPlayerTurns(target, setStatus) {
+  async function autoLoadUntilPlayerTurns(target) {
     const profile = getAutoProfile();
     const container = ensureScrollContainer();
+    if (!container) {
+      GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
+        label: '자동 로딩 실패',
+        message: '채팅 컨테이너를 찾을 수 없습니다.',
+        tone: 'error',
+        progress: { value: 1 },
+      });
+      return { error: new Error('container missing') };
+    }
     AUTO_STATE.running = true;
     AUTO_STATE.container = container;
     let stableRounds = 0;
@@ -1615,20 +2331,31 @@
       loopCount += 1;
       const stats = collectTurnStats();
       if (stats.error) {
-        if (setStatus) setStatus('파싱 실패 - DOM 변화를 감지하지 못했습니다.', 'error');
+        GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
+          label: '자동 로딩 실패',
+          message: '파싱 실패 - DOM 변화를 감지하지 못했습니다.',
+          tone: 'error',
+          progress: { value: 1 },
+        });
         break;
       }
       if (stats.playerTurns >= target) {
-        if (setStatus)
-          setStatus(`목표 달성: 플레이어 턴 ${stats.playerTurns}개 확보.`, 'success');
+        GMH.Core.State.setState(GMH.Core.STATE.DONE, {
+          label: '자동 로딩 완료',
+          message: `목표 달성 · 플레이어 턴 ${stats.playerTurns}개 확보`,
+          tone: 'success',
+          progress: { value: 1 },
+        });
         break;
       }
 
-      if (setStatus)
-        setStatus(
-          `위로 불러오는 중... 현재 플레이어 턴 ${stats.playerTurns}/${target}.`,
-          'progress'
-        );
+      const ratio = target > 0 ? Math.min(1, stats.playerTurns / target) : 0;
+      GMH.Core.State.setState(GMH.Core.STATE.SCANNING, {
+        label: '턴 확보 중',
+        message: `플레이어 턴 ${stats.playerTurns}/${target}`,
+        tone: 'progress',
+        progress: { value: ratio },
+      });
 
       const { grew, before, after } = await scrollUpCycle(container, profile);
       if (!AUTO_STATE.running) break;
@@ -1640,20 +2367,49 @@
       prevPlayerTurns = stats.playerTurns;
 
       if (stableRounds >= profile.maxStableRounds || stagnantRounds >= profile.guardLimit) {
-        if (setStatus)
-          setStatus('추가 데이터를 불러오지 못했습니다. 더 이상 기록이 없거나 막혀있습니다.', 'warning');
+        GMH.Core.State.setState(GMH.Core.STATE.DONE, {
+          label: '자동 로딩 종료',
+          message: '추가 데이터를 불러오지 못했습니다. 더 이상 기록이 없거나 막혀있습니다.',
+          tone: 'warning',
+          progress: { value: ratio },
+        });
         break;
       }
       await sleep(profile.cycleDelayMs);
     }
 
     AUTO_STATE.running = false;
-    return collectTurnStats();
+    const finalStats = collectTurnStats();
+    if (finalStats?.error) {
+      GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
+        label: '자동 로딩 실패',
+        message: '턴 정보를 수집하지 못했습니다.',
+        tone: 'error',
+        progress: { value: 1 },
+      });
+      return finalStats;
+    }
+    if (GMH.Core.State.getState() === GMH.Core.STATE.SCANNING) {
+      const ratio = target > 0 ? Math.min(1, finalStats.playerTurns / target) : 0;
+      GMH.Core.State.setState(GMH.Core.STATE.DONE, {
+        label: '자동 로딩 종료',
+        message: `플레이어 턴 ${finalStats.playerTurns}/${target}`,
+        tone: 'warning',
+        progress: { value: ratio },
+      });
+    }
+    return finalStats;
   }
 
   function stopAutoLoad() {
     if (!AUTO_STATE.running) return;
     AUTO_STATE.running = false;
+    GMH.Core.State.setState(GMH.Core.STATE.IDLE, {
+      label: '대기 중',
+      message: '자동 로딩을 중지했습니다.',
+      tone: 'info',
+      progress: { value: 0 },
+    });
   }
 
   function startTurnMeter(meter) {
@@ -1678,7 +2434,79 @@
     }, 1500);
   }
 
-  function ensureAutoLoadControls(panel) {
+  function ensureAutoLoadControlsModern(panel) {
+    if (!panel) return;
+    let wrap = panel.querySelector('#gmh-autoload-controls');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = 'gmh-autoload-controls';
+      panel.appendChild(wrap);
+    }
+    if (wrap.dataset.ready === 'true') return;
+    wrap.dataset.ready = 'true';
+    wrap.innerHTML = `
+      <div class="gmh-field-row">
+        <button id="gmh-autoload-all" class="gmh-panel-btn gmh-panel-btn--accent">위로 끝까지 로딩</button>
+        <button id="gmh-autoload-stop" class="gmh-panel-btn gmh-panel-btn--warn gmh-panel-btn--compact">정지</button>
+      </div>
+      <div class="gmh-field-row">
+        <input id="gmh-autoload-turns" class="gmh-input" type="number" min="1" step="1" placeholder="최근 플레이어 턴 N" />
+        <button id="gmh-autoload-turns-btn" class="gmh-small-btn gmh-small-btn--accent">턴 확보</button>
+      </div>
+      <div id="gmh-turn-meter" class="gmh-subtext"></div>
+    `;
+
+    const btnAll = wrap.querySelector('#gmh-autoload-all');
+    const btnStop = wrap.querySelector('#gmh-autoload-stop');
+    const btnTurns = wrap.querySelector('#gmh-autoload-turns-btn');
+    const inputTurns = wrap.querySelector('#gmh-autoload-turns');
+    const meter = wrap.querySelector('#gmh-turn-meter');
+
+    const toggleControls = (disabled) => {
+      btnAll.disabled = disabled;
+      btnTurns.disabled = disabled;
+      btnAll.classList.toggle('gmh-disabled', disabled);
+      btnTurns.classList.toggle('gmh-disabled', disabled);
+    };
+
+    btnAll.onclick = async () => {
+      if (AUTO_STATE.running) return;
+      toggleControls(true);
+      try {
+        await autoLoader.start('all');
+      } finally {
+        toggleControls(false);
+      }
+    };
+
+    btnTurns.onclick = async () => {
+      if (AUTO_STATE.running) return;
+      const rawVal = inputTurns?.value?.trim();
+      const target = Number.parseInt(rawVal || '0', 10);
+      if (!Number.isFinite(target) || target <= 0) {
+        setPanelStatus('플레이어 턴 수를 입력해주세요.', 'error');
+        return;
+      }
+      toggleControls(true);
+      try {
+        await autoLoader.start('turns', target);
+      } finally {
+        toggleControls(false);
+      }
+    };
+
+    btnStop.onclick = () => {
+      if (!AUTO_STATE.running) {
+        setPanelStatus('자동 로딩이 실행 중이 아닙니다.', 'muted');
+        return;
+      }
+      autoLoader.stop();
+    };
+
+    startTurnMeter(meter);
+  }
+
+  function ensureAutoLoadControlsLegacy(panel) {
     if (!panel || panel.querySelector('#gmh-autoload-controls')) return;
 
     const wrap = document.createElement('div');
@@ -1707,13 +2535,8 @@
     const toggleControls = (disabled) => {
       btnAll.disabled = disabled;
       btnTurns.disabled = disabled;
-      if (disabled) {
-        btnAll.style.opacity = '0.6';
-        btnTurns.style.opacity = '0.6';
-      } else {
-        btnAll.style.opacity = '1';
-        btnTurns.style.opacity = '1';
-      }
+      btnAll.style.opacity = disabled ? '0.6' : '1';
+      btnTurns.style.opacity = disabled ? '0.6' : '1';
     };
 
     btnAll.onclick = async () => {
@@ -1757,7 +2580,72 @@
     startTurnMeter(meter);
   }
 
-  function mountStatusActions(panel) {
+  function mountStatusActionsModern(panel) {
+    if (!panel) return;
+    let actions = panel.querySelector('#gmh-status-actions');
+    if (!actions) {
+      actions = document.createElement('div');
+      actions.id = 'gmh-status-actions';
+      panel.appendChild(actions);
+    }
+    if (actions.dataset.ready === 'true') return;
+    actions.dataset.ready = 'true';
+    actions.innerHTML = `
+      <div class="gmh-field-row">
+        <label for="gmh-profile-select" class="gmh-subtext gmh-field-label--inline">프로파일</label>
+        <select id="gmh-profile-select" class="gmh-select">
+          <option value="default">기본</option>
+          <option value="stability">안정</option>
+          <option value="fast">빠름</option>
+        </select>
+      </div>
+      <div class="gmh-field-row">
+        <button id="gmh-btn-retry" class="gmh-small-btn gmh-small-btn--muted">재시도</button>
+        <button id="gmh-btn-retry-stable" class="gmh-small-btn gmh-small-btn--muted">안정 모드</button>
+        <button id="gmh-btn-snapshot" class="gmh-small-btn gmh-small-btn--muted">DOM 스냅샷</button>
+      </div>
+    `;
+
+    PROFILE_SELECT_ELEMENT = actions.querySelector('#gmh-profile-select');
+    if (PROFILE_SELECT_ELEMENT) {
+      PROFILE_SELECT_ELEMENT.value = AUTO_CFG.profile;
+      PROFILE_SELECT_ELEMENT.onchange = (event) => {
+        autoLoader.setProfile(event.target.value);
+      };
+    }
+    syncProfileSelect();
+
+    const retryBtn = actions.querySelector('#gmh-btn-retry');
+    if (retryBtn) {
+      retryBtn.onclick = async () => {
+        if (AUTO_STATE.running) {
+          setPanelStatus('이미 자동 로딩이 진행 중입니다.', 'muted');
+          return;
+        }
+        await autoLoader.startCurrent();
+      };
+    }
+
+    const retryStableBtn = actions.querySelector('#gmh-btn-retry-stable');
+    if (retryStableBtn) {
+      retryStableBtn.onclick = async () => {
+        if (AUTO_STATE.running) {
+          setPanelStatus('이미 자동 로딩이 진행 중입니다.', 'muted');
+          return;
+        }
+        await autoLoader.startCurrent('stability');
+      };
+    }
+
+    const snapshotBtn = actions.querySelector('#gmh-btn-snapshot');
+    if (snapshotBtn) {
+      snapshotBtn.onclick = () => downloadDomSnapshot();
+    }
+
+    panel.appendChild(actions);
+  }
+
+  function mountStatusActionsLegacy(panel) {
     if (!panel || panel.querySelector('#gmh-status-actions')) return;
 
     const actions = document.createElement('div');
@@ -1818,10 +2706,514 @@
     panel.appendChild(actions);
   }
 
+  function setupPanelInteractions(panel, { modern = false } = {}) {
+    PRIVACY_SELECT_ELEMENT = panel.querySelector('#gmh-privacy-profile');
+    if (PRIVACY_SELECT_ELEMENT) {
+      PRIVACY_SELECT_ELEMENT.value = PRIVACY_CFG.profile;
+      PRIVACY_SELECT_ELEMENT.onchange = (event) => {
+        const value = event.target.value;
+        setPrivacyProfile(value);
+        setPanelStatus(
+          `프라이버시 프로필이 ${PRIVACY_PROFILES[value]?.label || value}로 설정되었습니다.`,
+          'info'
+        );
+      };
+    }
+
+    const privacyConfigBtn = panel.querySelector('#gmh-privacy-config');
+    if (privacyConfigBtn) {
+      privacyConfigBtn.onclick = () => configurePrivacyLists();
+    }
+
+    const settingsBtn = panel.querySelector('#gmh-panel-settings');
+    if (settingsBtn) {
+      settingsBtn.onclick = () => configurePrivacyLists();
+    }
+
+    if (modern) {
+      ensureAutoLoadControlsModern(panel);
+      mountStatusActionsModern(panel);
+    } else {
+      ensureAutoLoadControlsLegacy(panel);
+      mountStatusActionsLegacy(panel);
+    }
+
+    if (modern && !PAGE_WINDOW.__GMHShortcutsBound) {
+      const shortcutHandler = (event) => {
+        if (!event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
+        const target = event.target;
+        if (target instanceof HTMLElement) {
+          const tag = target.tagName.toLowerCase();
+          if (['input', 'textarea', 'select'].includes(tag)) return;
+          if (target.isContentEditable) return;
+        }
+        if (GMH.UI.Modal?.isOpen?.()) return;
+        const key = event.key?.toLowerCase();
+        switch (key) {
+          case 'g':
+            event.preventDefault();
+            panel.focus();
+            break;
+          case 's':
+            event.preventDefault();
+            if (!AUTO_STATE.running)
+              autoLoader.start('all').catch((error) => console.warn('[GMH] auto shortcut', error));
+            break;
+          case 'p':
+            event.preventDefault();
+            configurePrivacyLists();
+            break;
+          case 'e':
+            event.preventDefault();
+            panel.querySelector('#gmh-export')?.click();
+            break;
+          default:
+            break;
+        }
+      };
+      window.addEventListener('keydown', shortcutHandler);
+      PAGE_WINDOW.__GMHShortcutsBound = true;
+    }
+
+    const parseAll = () => {
+      const raw = readTranscriptText();
+      const normalized = normalizeTranscript(raw);
+      const session = buildSession(normalized);
+      if (!session.turns.length) throw new Error('대화 턴을 찾을 수 없습니다.');
+      return { session, raw: normalized };
+    };
+
+    const exportFormatSelect = panel.querySelector('#gmh-export-format');
+    const quickExportBtn = panel.querySelector('#gmh-quick-export');
+
+    async function prepareShare({
+      confirmLabel,
+      cancelStatusMessage,
+      blockedStatusMessage,
+    }) {
+      try {
+        GMH.Core.State.setState(GMH.Core.STATE.REDACTING, {
+          label: '민감정보 마스킹 중',
+          message: '레다크션 파이프라인 적용 중...',
+          tone: 'progress',
+          progress: { indeterminate: true },
+        });
+        const { session, raw } = parseAll();
+        const privacy = applyPrivacyPipeline(session, raw, PRIVACY_CFG.profile);
+        if (privacy.blocked) {
+          alert('미성년자 성적 맥락이 감지되어 작업을 중단했습니다.');
+          GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
+            label: '작업 차단',
+            message: blockedStatusMessage || '미성년자 민감 맥락으로 작업이 차단되었습니다.',
+            tone: 'error',
+            progress: { value: 1 },
+          });
+          return null;
+        }
+        const stats = collectSessionStats(privacy.sanitizedSession);
+        const previewTurns = privacy.sanitizedSession.turns.slice(-PREVIEW_TURN_LIMIT);
+        GMH.Core.State.setState(GMH.Core.STATE.PREVIEW, {
+          label: '미리보기 준비 완료',
+          message: '레다크션 결과를 검토하세요.',
+          tone: 'info',
+          progress: { value: 0.75 },
+        });
+        const ok = await confirmPrivacyGate({
+          profile: privacy.profile,
+          counts: privacy.counts,
+          stats,
+          previewTurns,
+          actionLabel: confirmLabel || '계속',
+        });
+        if (!ok) {
+          GMH.Core.State.setState(GMH.Core.STATE.IDLE, {
+            label: '대기 중',
+            message: cancelStatusMessage || '작업을 취소했습니다.',
+            tone: cancelStatusMessage ? 'muted' : 'info',
+            progress: { value: 0 },
+          });
+          if (cancelStatusMessage) setPanelStatus(cancelStatusMessage, 'muted');
+          return null;
+        }
+        return { session, raw, privacy, stats };
+      } catch (error) {
+        alert(`오류: ${(error && error.message) || error}`);
+        GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
+          label: '작업 실패',
+          message: '작업 준비 중 오류가 발생했습니다.',
+          tone: 'error',
+          progress: { value: 1 },
+        });
+        return null;
+      }
+    }
+
+    async function performExport(prepared, format) {
+      if (!prepared) return false;
+      try {
+        GMH.Core.State.setState(GMH.Core.STATE.EXPORTING, {
+          label: '내보내기 진행 중',
+          message: `${format.toUpperCase()} 내보내기를 준비하는 중입니다...`,
+          tone: 'progress',
+          progress: { indeterminate: true },
+        });
+        const { privacy, stats } = prepared;
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const bundle = buildExportBundle(privacy.sanitizedSession, privacy.sanitizedRaw, format, stamp);
+        const fileBlob = new Blob([bundle.content], { type: bundle.mime });
+        triggerDownload(fileBlob, bundle.filename);
+
+        const manifest = buildExportManifest({
+          profile: privacy.profile,
+          counts: { ...privacy.counts },
+          stats,
+          format,
+          warnings: privacy.sanitizedSession.warnings,
+          source: privacy.sanitizedSession.source,
+        });
+        const manifestBlob = new Blob([JSON.stringify(manifest, null, 2)], {
+          type: 'application/json',
+        });
+        const manifestName = `${bundle.filename.replace(/\.[^.]+$/, '')}.manifest.json`;
+        triggerDownload(manifestBlob, manifestName);
+
+        const summary = formatRedactionCounts(privacy.counts);
+        const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
+        const message = `${format.toUpperCase()} 내보내기 완료 · 플레이어 턴 ${stats.playerTurns}개 · ${profileLabel} · ${summary}`;
+        GMH.Core.State.setState(GMH.Core.STATE.DONE, {
+          label: '내보내기 완료',
+          message,
+          tone: 'success',
+          progress: { value: 1 },
+        });
+        if (privacy.sanitizedSession.warnings.length)
+          console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
+        return true;
+      } catch (error) {
+        alert(`오류: ${(error && error.message) || error}`);
+        GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
+          label: '내보내기 실패',
+          message: '내보내기 실패',
+          tone: 'error',
+          progress: { value: 1 },
+        });
+        return false;
+      }
+    }
+
+    const copyRecentBtn = panel.querySelector('#gmh-copy-recent');
+    if (copyRecentBtn) {
+      copyRecentBtn.onclick = async () => {
+        const prepared = await prepareShare({
+          confirmLabel: '복사 계속',
+          cancelStatusMessage: '복사를 취소했습니다.',
+          blockedStatusMessage: '미성년자 민감 맥락으로 복사가 차단되었습니다.',
+        });
+        if (!prepared) return;
+        try {
+          GMH.Core.State.setState(GMH.Core.STATE.EXPORTING, {
+            label: '복사 진행 중',
+            message: '최근 15턴을 복사하는 중입니다...',
+            tone: 'progress',
+            progress: { indeterminate: true },
+          });
+          const { privacy, stats } = prepared;
+          const turns = privacy.sanitizedSession.turns.slice(-15);
+          const md = toMarkdownExport(privacy.sanitizedSession, {
+            turns,
+            includeMeta: false,
+            heading: '## 최근 15턴',
+          });
+          GM_setClipboard(md, { type: 'text', mimetype: 'text/plain' });
+          const summary = formatRedactionCounts(privacy.counts);
+          const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
+          const message = `최근 15턴 복사 완료 · 플레이어 턴 ${stats.playerTurns}개 · ${profileLabel} · ${summary}`;
+          GMH.Core.State.setState(GMH.Core.STATE.DONE, {
+            label: '복사 완료',
+            message,
+            tone: 'success',
+            progress: { value: 1 },
+          });
+          if (privacy.sanitizedSession.warnings.length)
+            console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
+        } catch (error) {
+          alert(`오류: ${(error && error.message) || error}`);
+          GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
+            label: '복사 실패',
+            message: '복사 실패',
+            tone: 'error',
+            progress: { value: 1 },
+          });
+        }
+      };
+    }
+
+    const copyAllBtn = panel.querySelector('#gmh-copy-all');
+    if (copyAllBtn) {
+      copyAllBtn.onclick = async () => {
+        const prepared = await prepareShare({
+          confirmLabel: '복사 계속',
+          cancelStatusMessage: '복사를 취소했습니다.',
+          blockedStatusMessage: '미성년자 민감 맥락으로 복사가 차단되었습니다.',
+        });
+        if (!prepared) return;
+        try {
+          GMH.Core.State.setState(GMH.Core.STATE.EXPORTING, {
+            label: '복사 진행 중',
+            message: '전체 Markdown을 복사하는 중입니다...',
+            tone: 'progress',
+            progress: { indeterminate: true },
+          });
+          const { privacy, stats } = prepared;
+          const md = toMarkdownExport(privacy.sanitizedSession);
+          GM_setClipboard(md, { type: 'text', mimetype: 'text/plain' });
+          const summary = formatRedactionCounts(privacy.counts);
+          const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
+          const message = `전체 Markdown 복사 완료 · 플레이어 턴 ${stats.playerTurns}개 · ${profileLabel} · ${summary}`;
+          GMH.Core.State.setState(GMH.Core.STATE.DONE, {
+            label: '복사 완료',
+            message,
+            tone: 'success',
+            progress: { value: 1 },
+          });
+          if (privacy.sanitizedSession.warnings.length)
+            console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
+        } catch (error) {
+          alert(`오류: ${(error && error.message) || error}`);
+          GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
+            label: '복사 실패',
+            message: '복사 실패',
+            tone: 'error',
+            progress: { value: 1 },
+          });
+        }
+      };
+    }
+
+    const exportBtn = panel.querySelector('#gmh-export');
+    if (exportBtn) {
+      exportBtn.onclick = async () => {
+        const format = exportFormatSelect?.value || 'json';
+        const prepared = await prepareShare({
+          confirmLabel: '내보내기 진행',
+          cancelStatusMessage: '내보내기를 취소했습니다.',
+          blockedStatusMessage: '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
+        });
+        if (!prepared) return;
+        await performExport(prepared, format);
+      };
+    }
+
+    if (quickExportBtn) {
+      quickExportBtn.onclick = async () => {
+        if (AUTO_STATE.running) {
+          setPanelStatus('이미 자동 로딩이 진행 중입니다.', 'muted');
+          return;
+        }
+        const originalText = quickExportBtn.textContent;
+        quickExportBtn.disabled = true;
+        quickExportBtn.textContent = '진행 중...';
+        try {
+          GMH.Core.State.setState(GMH.Core.STATE.SCANNING, {
+            label: '원클릭 내보내기',
+            message: '전체 로딩 중...',
+            tone: 'progress',
+            progress: { indeterminate: true },
+          });
+          await autoLoader.start('all');
+          const format = exportFormatSelect?.value || 'json';
+          const prepared = await prepareShare({
+            confirmLabel: `${format.toUpperCase()} 내보내기`,
+            cancelStatusMessage: '내보내기를 취소했습니다.',
+            blockedStatusMessage: '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
+          });
+          if (!prepared) return;
+          await performExport(prepared, format);
+        } catch (error) {
+          alert(`오류: ${(error && error.message) || error}`);
+          GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
+            label: '원클릭 실패',
+            message: '원클릭 내보내기 실패',
+            tone: 'error',
+            progress: { value: 1 },
+          });
+        } finally {
+          quickExportBtn.disabled = false;
+          quickExportBtn.textContent = originalText;
+        }
+      };
+    }
+
+    const reparseBtn = panel.querySelector('#gmh-reparse');
+    if (reparseBtn) {
+      reparseBtn.onclick = () => {
+        try {
+          GMH.Core.State.setState(GMH.Core.STATE.REDACTING, {
+            label: '재파싱 중',
+            message: '대화 로그를 다시 분석하는 중입니다...',
+            tone: 'progress',
+            progress: { indeterminate: true },
+          });
+          const { session, raw } = parseAll();
+          const privacy = applyPrivacyPipeline(session, raw, PRIVACY_CFG.profile);
+          const stats = collectSessionStats(privacy.sanitizedSession);
+          const summary = formatRedactionCounts(privacy.counts);
+          const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
+          const extra = privacy.blocked ? ' · ⚠️ 미성년자 맥락 감지' : '';
+          const message = `재파싱 완료 · 플레이어 턴 ${stats.playerTurns}개 · 경고 ${privacy.sanitizedSession.warnings.length}건 · ${profileLabel} · ${summary}${extra}`;
+          GMH.Core.State.setState(GMH.Core.STATE.DONE, {
+            label: '재파싱 완료',
+            message,
+            tone: 'info',
+            progress: { value: 1 },
+          });
+          if (privacy.sanitizedSession.warnings.length)
+            console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
+        } catch (e) {
+          alert(`오류: ${(e && e.message) || e}`);
+          GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
+            label: '재파싱 실패',
+            message: '재파싱 실패',
+            tone: 'error',
+            progress: { value: 1 },
+          });
+        }
+      };
+    }
+
+    const guideBtn = panel.querySelector('#gmh-guide');
+    if (guideBtn) {
+      guideBtn.onclick = () => {
+        const prompt = `
+당신은 "장기기억 보관용 사서"입니다.
+아래 파일은 캐릭터 채팅 로그를 정형화한 것입니다.
+목표는 이 데이터를 2000자 이내로 요약하여, 캐릭터 플랫폼의 "유저노트"에 넣을 수 있는 형식으로 정리하는 것입니다.
+
+조건:
+1. 중요도 기준
+   - 플레이어와 NPC 관계 변화, 약속, 목표, 갈등, 선호/금기만 포함.
+   - 사소한 농담·잡담은 제외.
+   - 최근일수록 더 비중 있게 반영.
+
+2. 출력 구조
+   - [전체 줄거리 요약]: 주요 사건 흐름을 3~6개 항목으로.
+   - [주요 관계 변화]: NPC별 감정/태도 변화를 정리.
+   - [핵심 테마]: 반복된 규칙, 세계관 요소, 목표.
+
+3. 형식 규칙
+   - 전체 길이는 1200~1800자.
+   - 문장은 간결하게.
+   - 플레이어 이름은 "플레이어"로 통일.
+`;
+        GM_setClipboard(prompt, { type: 'text', mimetype: 'text/plain' });
+        setPanelStatus('요약 프롬프트가 클립보드에 복사되었습니다.', 'success');
+      };
+    }
+
+    const reguideBtn = panel.querySelector('#gmh-reguide');
+    if (reguideBtn) {
+      reguideBtn.onclick = () => {
+        const prompt = `
+아래에는 [이전 요약본]과 [새 로그 파일]이 있습니다.
+이 둘을 통합하여, 2000자 이내의 "최신 장기기억 요약본"을 만드세요.
+
+규칙:
+- 이전 요약본에서 이미 있는 사실은 유지하되, 새 로그 파일에 나온 사건/관계 변화로 업데이트.
+- 모순되면 "최근 사건"을 우선.
+- 출력 구조는 [전체 줄거리 요약] / [주요 관계 변화] / [핵심 테마].
+- 길이는 1200~1800자.
+`;
+        GM_setClipboard(prompt, { type: 'text', mimetype: 'text/plain' });
+        setPanelStatus('재요약 프롬프트가 클립보드에 복사되었습니다.', 'success');
+      };
+    }
+  }
+
   // -------------------------------
   // 4) UI Panel
   // -------------------------------
-  function mountPanel() {
+  function mountPanelModern() {
+    ensureDesignSystemStyles();
+    if (document.querySelector('#genit-memory-helper-panel')) return;
+    const panel = document.createElement('div');
+    panel.id = 'genit-memory-helper-panel';
+    panel.className = 'gmh-panel';
+    panel.setAttribute('role', 'region');
+    panel.setAttribute('aria-label', 'Genit Memory Helper');
+    panel.tabIndex = -1;
+    panel.innerHTML = `
+      <div class="gmh-panel__header">
+        <div>
+          <div class="gmh-panel__title">Genit Memory Helper</div>
+          <div class="gmh-panel__tag">v${SCRIPT_VERSION}</div>
+        </div>
+        <button id="gmh-panel-settings" class="gmh-small-btn gmh-small-btn--muted" title="설정">⚙</button>
+      </div>
+      <div class="gmh-progress">
+        <div class="gmh-progress__track">
+          <div id="gmh-progress-fill" class="gmh-progress__fill" data-indeterminate="false"></div>
+        </div>
+        <div id="gmh-progress-label" class="gmh-progress__label">대기 중</div>
+      </div>
+      <div id="gmh-status" class="gmh-status-line"></div>
+      <section class="gmh-panel__section" id="gmh-section-privacy">
+        <div class="gmh-panel__section-title">Privacy</div>
+        <div class="gmh-field-row">
+          <select id="gmh-privacy-profile" class="gmh-select">
+            <option value="safe">SAFE (권장)</option>
+            <option value="standard">STANDARD</option>
+            <option value="research">RESEARCH</option>
+          </select>
+          <button id="gmh-privacy-config" class="gmh-small-btn gmh-small-btn--accent">민감어</button>
+        </div>
+      </section>
+      <section class="gmh-panel__section" id="gmh-section-autoload">
+        <div class="gmh-panel__section-title">Auto Load</div>
+        <div id="gmh-autoload-controls"></div>
+      </section>
+      <section class="gmh-panel__section" id="gmh-section-export">
+        <div class="gmh-panel__section-title">Export</div>
+        <div class="gmh-field-row">
+          <button id="gmh-copy-recent" class="gmh-panel-btn gmh-panel-btn--neutral">최근 15턴 복사</button>
+          <button id="gmh-copy-all" class="gmh-panel-btn gmh-panel-btn--neutral">전체 MD 복사</button>
+        </div>
+        <div class="gmh-field-row">
+          <select id="gmh-export-format" class="gmh-select">
+            <option value="json">JSON (.json)</option>
+            <option value="txt">TXT (.txt)</option>
+            <option value="md">Markdown (.md)</option>
+          </select>
+          <button id="gmh-export" class="gmh-small-btn gmh-small-btn--accent">내보내기</button>
+        </div>
+        <button id="gmh-quick-export" class="gmh-panel-btn gmh-panel-btn--accent">원클릭 내보내기</button>
+      </section>
+      <section class="gmh-panel__section" id="gmh-section-guides">
+        <div class="gmh-panel__section-title">Guides & Tools</div>
+        <div class="gmh-field-row">
+          <button id="gmh-reparse" class="gmh-small-btn gmh-small-btn--muted">재파싱</button>
+          <button id="gmh-guide" class="gmh-small-btn gmh-small-btn--muted">요약 가이드</button>
+          <button id="gmh-reguide" class="gmh-small-btn gmh-small-btn--muted">재요약 가이드</button>
+        </div>
+        <div id="gmh-status-actions"></div>
+      </section>
+    `;
+    const adapter = getActiveAdapter();
+    const anchor = (adapter?.getPanelAnchor?.(document)) || document.body;
+    anchor.appendChild(panel);
+
+    const statusEl = panel.querySelector('#gmh-status');
+    attachStatusElement(statusEl);
+    if (statusEl) {
+      statusEl.setAttribute('role', 'status');
+      statusEl.setAttribute('aria-live', 'polite');
+    }
+    const progressFill = panel.querySelector('#gmh-progress-fill');
+    const progressLabel = panel.querySelector('#gmh-progress-label');
+    GMH.UI.StateView.bind({ progressFill, progressLabel });
+    setupPanelInteractions(panel, { modern: true });
+  }
+
+  function mountPanelLegacy() {
     if (document.querySelector('#genit-memory-helper-panel')) return;
     const panel = document.createElement('div');
     panel.id = 'genit-memory-helper-panel';
@@ -1872,277 +3264,17 @@
     const statusEl = panel.querySelector('#gmh-status');
     attachStatusElement(statusEl);
     setPanelStatus('준비 완료', 'info');
+    GMH.UI.StateView.bind();
+    setupPanelInteractions(panel, { modern: false });
+  }
 
-    PRIVACY_SELECT_ELEMENT = panel.querySelector('#gmh-privacy-profile');
-    if (PRIVACY_SELECT_ELEMENT) {
-      PRIVACY_SELECT_ELEMENT.value = PRIVACY_CFG.profile;
-      PRIVACY_SELECT_ELEMENT.onchange = (event) => {
-        const value = event.target.value;
-        setPrivacyProfile(value);
-        setPanelStatus(
-          `프라이버시 프로필이 ${PRIVACY_PROFILES[value]?.label || value}로 설정되었습니다.`,
-          'info'
-        );
-      };
+  function mountPanel() {
+    if (isModernUIActive) {
+      mountPanelModern();
+    } else {
+      if (Flags.killSwitch) console.info('[GMH] modern UI disabled by kill switch');
+      mountPanelLegacy();
     }
-
-    const privacyConfigBtn = panel.querySelector('#gmh-privacy-config');
-    if (privacyConfigBtn) {
-      privacyConfigBtn.onclick = () => configurePrivacyLists();
-    }
-
-    ensureAutoLoadControls(panel);
-    mountStatusActions(panel);
-
-    const parseAll = () => {
-      const raw = readTranscriptText();
-      const normalized = normalizeTranscript(raw);
-      const session = buildSession(normalized);
-      if (!session.turns.length) throw new Error('대화 턴을 찾을 수 없습니다.');
-      return { session, raw: normalized };
-    };
-
-    const exportFormatSelect = panel.querySelector('#gmh-export-format');
-    const quickExportBtn = panel.querySelector('#gmh-quick-export');
-
-    async function prepareShare({
-      confirmLabel,
-      cancelStatusMessage,
-      blockedStatusMessage,
-    }) {
-      try {
-        const { session, raw } = parseAll();
-        const privacy = applyPrivacyPipeline(session, raw, PRIVACY_CFG.profile);
-        if (privacy.blocked) {
-          alert('미성년자 성적 맥락이 감지되어 작업을 중단했습니다.');
-          setPanelStatus(blockedStatusMessage || '미성년자 민감 맥락으로 작업이 차단되었습니다.', 'error');
-          return null;
-        }
-        const stats = collectSessionStats(privacy.sanitizedSession);
-        const previewTurns = privacy.sanitizedSession.turns.slice(-PREVIEW_TURN_LIMIT);
-        const ok = await confirmPrivacyGate({
-          profile: privacy.profile,
-          counts: privacy.counts,
-          stats,
-          previewTurns,
-          actionLabel: confirmLabel || '계속',
-        });
-        if (!ok) {
-          if (cancelStatusMessage) setPanelStatus(cancelStatusMessage, 'muted');
-          return null;
-        }
-        return { session, raw, privacy, stats };
-      } catch (error) {
-        alert(`오류: ${(error && error.message) || error}`);
-        setPanelStatus('작업 준비 중 오류가 발생했습니다.', 'error');
-        return null;
-      }
-    }
-
-    async function performExport(prepared, format) {
-      if (!prepared) return false;
-      try {
-        const { privacy, stats } = prepared;
-        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const bundle = buildExportBundle(privacy.sanitizedSession, privacy.sanitizedRaw, format, stamp);
-        const fileBlob = new Blob([bundle.content], { type: bundle.mime });
-        triggerDownload(fileBlob, bundle.filename);
-
-        const manifest = buildExportManifest({
-          profile: privacy.profile,
-          counts: { ...privacy.counts },
-          stats,
-          format,
-          warnings: privacy.sanitizedSession.warnings,
-          source: privacy.sanitizedSession.source,
-        });
-        const manifestBlob = new Blob([JSON.stringify(manifest, null, 2)], {
-          type: 'application/json',
-        });
-        const manifestName = `${bundle.filename.replace(/\.[^.]+$/, '')}.manifest.json`;
-        triggerDownload(manifestBlob, manifestName);
-
-        const summary = formatRedactionCounts(privacy.counts);
-        const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
-        setPanelStatus(
-          `${format.toUpperCase()} 내보내기 완료 · 플레이어 턴 ${stats.playerTurns}개 · ${profileLabel} · ${summary}`,
-          'success'
-        );
-        if (privacy.sanitizedSession.warnings.length)
-          console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
-        return true;
-      } catch (error) {
-        alert(`오류: ${(error && error.message) || error}`);
-        setPanelStatus('내보내기 실패', 'error');
-        return false;
-      }
-    }
-
-    const copyRecentBtn = panel.querySelector('#gmh-copy-recent');
-    if (copyRecentBtn) {
-      copyRecentBtn.onclick = async () => {
-        const prepared = await prepareShare({
-          confirmLabel: '복사 계속',
-          cancelStatusMessage: '복사를 취소했습니다.',
-          blockedStatusMessage: '미성년자 민감 맥락으로 복사가 차단되었습니다.',
-        });
-        if (!prepared) return;
-        try {
-          const { privacy, stats } = prepared;
-          const turns = privacy.sanitizedSession.turns.slice(-15);
-          const md = toMarkdownExport(privacy.sanitizedSession, {
-            turns,
-            includeMeta: false,
-            heading: '## 최근 15턴',
-          });
-          GM_setClipboard(md, { type: 'text', mimetype: 'text/plain' });
-          const summary = formatRedactionCounts(privacy.counts);
-          const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
-          setPanelStatus(
-            `최근 15턴 복사 완료 · 플레이어 턴 ${stats.playerTurns}개 · ${profileLabel} · ${summary}`,
-            'success'
-          );
-          if (privacy.sanitizedSession.warnings.length)
-            console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
-        } catch (error) {
-          alert(`오류: ${(error && error.message) || error}`);
-          setPanelStatus('복사 실패', 'error');
-        }
-      };
-    }
-
-    const copyAllBtn = panel.querySelector('#gmh-copy-all');
-    if (copyAllBtn) {
-      copyAllBtn.onclick = async () => {
-        const prepared = await prepareShare({
-          confirmLabel: '복사 계속',
-          cancelStatusMessage: '복사를 취소했습니다.',
-          blockedStatusMessage: '미성년자 민감 맥락으로 복사가 차단되었습니다.',
-        });
-        if (!prepared) return;
-        try {
-          const { privacy, stats } = prepared;
-          const md = toMarkdownExport(privacy.sanitizedSession);
-          GM_setClipboard(md, { type: 'text', mimetype: 'text/plain' });
-          const summary = formatRedactionCounts(privacy.counts);
-          const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
-          setPanelStatus(
-            `전체 Markdown 복사 완료 · 플레이어 턴 ${stats.playerTurns}개 · ${profileLabel} · ${summary}`,
-            'success'
-          );
-          if (privacy.sanitizedSession.warnings.length)
-            console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
-        } catch (error) {
-          alert(`오류: ${(error && error.message) || error}`);
-          setPanelStatus('복사 실패', 'error');
-        }
-      };
-    }
-
-    const exportBtn = panel.querySelector('#gmh-export');
-    if (exportBtn) {
-      exportBtn.onclick = async () => {
-        const format = exportFormatSelect?.value || 'json';
-        const prepared = await prepareShare({
-          confirmLabel: '내보내기 진행',
-          cancelStatusMessage: '내보내기를 취소했습니다.',
-          blockedStatusMessage: '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
-        });
-        if (!prepared) return;
-        await performExport(prepared, format);
-      };
-    }
-
-    if (quickExportBtn) {
-      quickExportBtn.onclick = async () => {
-        if (AUTO_STATE.running) {
-          setPanelStatus('이미 자동 로딩이 진행 중입니다.', 'muted');
-          return;
-        }
-        const originalText = quickExportBtn.textContent;
-        quickExportBtn.disabled = true;
-        quickExportBtn.textContent = '진행 중...';
-        try {
-          setPanelStatus('전체 로딩 중...', 'progress');
-          await autoLoader.start('all');
-          const format = exportFormatSelect?.value || 'json';
-          const prepared = await prepareShare({
-            confirmLabel: `${format.toUpperCase()} 내보내기`,
-            cancelStatusMessage: '내보내기를 취소했습니다.',
-            blockedStatusMessage: '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
-          });
-          if (!prepared) return;
-          await performExport(prepared, format);
-        } catch (error) {
-          alert(`오류: ${(error && error.message) || error}`);
-          setPanelStatus('원클릭 내보내기 실패', 'error');
-        } finally {
-          quickExportBtn.disabled = false;
-          quickExportBtn.textContent = originalText;
-        }
-      };
-    }
-
-    panel.querySelector('#gmh-reparse').onclick = () => {
-      try {
-        const { session, raw } = parseAll();
-        const privacy = applyPrivacyPipeline(session, raw, PRIVACY_CFG.profile);
-        const stats = collectSessionStats(privacy.sanitizedSession);
-        const summary = formatRedactionCounts(privacy.counts);
-        const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
-        const extra = privacy.blocked ? ' · ⚠️ 미성년자 맥락 감지' : '';
-        setPanelStatus(
-          `재파싱 완료 · 플레이어 턴 ${stats.playerTurns}개 · 경고 ${privacy.sanitizedSession.warnings.length}건 · ${profileLabel} · ${summary}${extra}`,
-          'info'
-        );
-        if (privacy.sanitizedSession.warnings.length)
-          console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
-      } catch (e) {
-        alert(`오류: ${(e && e.message) || e}`);
-        setPanelStatus('재파싱 실패', 'error');
-      }
-    };
-
-    panel.querySelector('#gmh-guide').onclick = () => {
-      const prompt = `
-당신은 "장기기억 보관용 사서"입니다.
-아래 파일은 캐릭터 채팅 로그를 정형화한 것입니다.
-목표는 이 데이터를 2000자 이내로 요약하여, 캐릭터 플랫폼의 "유저노트"에 넣을 수 있는 형식으로 정리하는 것입니다.
-
-조건:
-1. 중요도 기준
-   - 플레이어와 NPC 관계 변화, 약속, 목표, 갈등, 선호/금기만 포함.
-   - 사소한 농담·잡담은 제외.
-   - 최근일수록 더 비중 있게 반영.
-
-2. 출력 구조
-   - [전체 줄거리 요약]: 주요 사건 흐름을 3~6개 항목으로.
-   - [주요 관계 변화]: NPC별 감정/태도 변화를 정리.
-   - [핵심 테마]: 반복된 규칙, 세계관 요소, 목표.
-
-3. 형식 규칙
-   - 전체 길이는 1200~1800자.
-   - 문장은 간결하게.
-   - 플레이어 이름은 "플레이어"로 통일.
-`;
-      GM_setClipboard(prompt, { type: 'text', mimetype: 'text/plain' });
-      setPanelStatus('요약 프롬프트가 클립보드에 복사되었습니다.', 'success');
-    };
-
-    panel.querySelector('#gmh-reguide').onclick = () => {
-      const prompt = `
-아래에는 [이전 요약본]과 [새 로그 파일]이 있습니다.
-이 둘을 통합하여, 2000자 이내의 "최신 장기기억 요약본"을 만드세요.
-
-규칙:
-- 이전 요약본에서 이미 있는 사실은 유지하되, 새 로그 파일에 나온 사건/관계 변화로 업데이트.
-- 모순되면 "최근 사건"을 우선.
-- 출력 구조는 [전체 줄거리 요약] / [주요 관계 변화] / [핵심 테마].
-- 길이는 1200~1800자.
-`;
-      GM_setClipboard(prompt, { type: 'text', mimetype: 'text/plain' });
-      setPanelStatus('재요약 프롬프트가 클립보드에 복사되었습니다.', 'success');
-    };
   }
 
   // -------------------------------
