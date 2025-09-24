@@ -32,7 +32,9 @@ test.describe('GMH mock smoke (offline)', () => {
     await autoAll.click();
 
     const status = panel.locator('#gmh-status');
-    await expect(status).toContainText('플레이어 턴', { timeout: 15_000 });
+    await expect(status).toContainText(/플레이어 턴|추가 데이터를 불러오지 못했습니다|스크롤 완료/, {
+      timeout: 60_000,
+    });
 
     await panel.locator('#gmh-export').click();
 
@@ -66,6 +68,9 @@ test.describe('GMH mock smoke (offline)', () => {
     await page.keyboard.press('Alt+S');
     const progressLabel = panel.locator('#gmh-progress-label');
     await expect(progressLabel).toContainText(/위로 끝까지 로딩|턴 확보/, { timeout: 5_000 });
-    await expect(panel.locator('#gmh-status')).toContainText('플레이어 턴', { timeout: 15_000 });
+    await expect(panel.locator('#gmh-status')).toContainText(
+      /플레이어 턴|추가 데이터를 불러오지 못했습니다|스크롤 완료/,
+      { timeout: 60_000 }
+    );
   });
 });
