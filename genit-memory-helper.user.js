@@ -79,8 +79,8 @@
 
   const STATE_TRANSITIONS = {
     idle: ['idle', 'scanning', 'redacting', 'error'],
-    scanning: ['scanning', 'redacting', 'preview', 'error', 'idle'],
-    redacting: ['redacting', 'preview', 'exporting', 'error', 'idle'],
+    scanning: ['scanning', 'redacting', 'preview', 'done', 'error', 'idle'],
+    redacting: ['redacting', 'preview', 'exporting', 'done', 'error', 'idle'],
     preview: ['preview', 'exporting', 'idle', 'done', 'error'],
     exporting: ['exporting', 'done', 'error', 'idle'],
     done: ['done', 'idle', 'scanning', 'redacting'],
