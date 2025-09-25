@@ -2099,6 +2099,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     let dragSession = null;
     let resizeSession = null;
     let applyingSettings = false;
+    let focusTimeouts = [];
+    let focusAnimationFrame = null;
 
     let currentSettings = PanelSettings.get();
     let currentLayout = coerceLayout(currentSettings.layout);
@@ -2156,6 +2158,17 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       lastFocusTarget = active;
     };
 
+    const clearFocusSchedules = () => {
+      if (focusAnimationFrame) {
+        cancelAnimationFrame(focusAnimationFrame);
+        focusAnimationFrame = null;
+      }
+      if (focusTimeouts.length) {
+        focusTimeouts.forEach((id) => clearTimeout(id));
+        focusTimeouts = [];
+      }
+    };
+
     const clearFocusMemory = () => {
       lastFocusTarget = null;
     };
@@ -2183,10 +2196,16 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           /* noop */
         }
       };
+      clearFocusSchedules();
       attempt();
-      requestAnimationFrame(attempt);
-      setTimeout(attempt, 0);
-      setTimeout(attempt, 50);
+      focusAnimationFrame = requestAnimationFrame(() => {
+        focusAnimationFrame = null;
+        attempt();
+      });
+      focusTimeouts = [
+        setTimeout(attempt, 0),
+        setTimeout(attempt, 50),
+      ];
     };
 
     const clearIdleTimer = () => {
@@ -2686,6 +2705,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       syncAria(true);
       fabEl && fabEl.setAttribute('aria-expanded', 'false');
       clearIdleTimer();
+      clearFocusSchedules();
       if (reason === 'user') {
         userCollapsed = true;
         persistCollapsed(true);
