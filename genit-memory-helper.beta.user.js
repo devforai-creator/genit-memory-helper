@@ -1637,6 +1637,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const COLLAPSED_CLASS = 'gmh-collapsed';
     const OPEN_CLASS = 'gmh-panel-open';
     const AUTO_HIDE_DELAY = 10000;
+    const STORAGE_KEY = 'gmh_panel_collapsed';
     let panelEl = null;
     let fabEl = null;
     let modernMode = false;
@@ -1647,6 +1648,28 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     let panelListenersBound = false;
     let currentState = GMH_STATE.IDLE;
     let userCollapsed = false;
+    let persistedPreference = null;
+
+    const loadPersistedCollapsed = () => {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw === '1') return true;
+        if (raw === '0') return false;
+      } catch (err) {
+        console.warn('[GMHβ] failed to read panel state', err);
+      }
+      return null;
+    };
+
+    const persistCollapsed = (value) => {
+      persistedPreference = value;
+      try {
+        if (value === null) localStorage.removeItem(STORAGE_KEY);
+        else localStorage.setItem(STORAGE_KEY, value ? '1' : '0');
+      } catch (err) {
+        console.warn('[GMHβ] failed to persist panel state', err);
+      }
+    };
 
     const getRoot = () => document.documentElement;
 
@@ -1788,7 +1811,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       });
     };
 
-    const open = ({ focus = false } = {}) => {
+    const open = ({ focus = false, persist = false } = {}) => {
       if (!panelEl) return false;
       if (!modernMode) {
         if (focus && typeof panelEl.focus === 'function') {
@@ -1799,6 +1822,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const wasCollapsed = isCollapsed();
       applyRootState(false);
       syncAria(false);
+      if (persist) persistCollapsed(false);
       userCollapsed = false;
       if (focus && typeof panelEl.focus === 'function') {
         requestAnimationFrame(() => panelEl.focus({ preventScroll: true }));
@@ -1814,7 +1838,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       applyRootState(true);
       syncAria(true);
       clearIdleTimer();
-      if (reason === 'user') userCollapsed = true;
+      if (reason === 'user') {
+        userCollapsed = true;
+        persistCollapsed(true);
+      }
       if (reason === 'idle') userCollapsed = false;
       return true;
     };
@@ -1822,7 +1849,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const toggle = () => {
       if (!panelEl || !modernMode) return false;
       if (isCollapsed()) {
-        open({ focus: true });
+        open({ focus: true, persist: true });
         return true;
       }
       close('user');
@@ -1850,9 +1877,20 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       attachPanelListeners();
       ensureOutsideHandler();
       ensureEscapeHandler();
-      applyRootState(true);
-      syncAria(true);
-      userCollapsed = false;
+      persistedPreference = loadPersistedCollapsed();
+      const shouldCollapse = (() => {
+        if (typeof persistedPreference === 'boolean')
+          return persistedPreference;
+        const mq = window.matchMedia?.('(max-width: 768px)');
+        if (mq?.matches) return true;
+        if (typeof window.innerWidth === 'number')
+          return window.innerWidth <= 768;
+        return false;
+      })();
+      applyRootState(shouldCollapse);
+      syncAria(shouldCollapse);
+      userCollapsed = shouldCollapse;
+      if (!shouldCollapse) scheduleIdleClose();
     };
 
     const onStatusUpdate = ({ tone } = {}) => {
@@ -3164,7 +3202,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         switch (key) {
           case 'g':
             event.preventDefault();
-            PanelVisibility.open({ focus: true });
+            PanelVisibility.open({ focus: true, persist: true });
             break;
           case 'm':
             event.preventDefault();
