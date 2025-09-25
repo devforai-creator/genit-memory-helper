@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Genit Memory Helper
 // @namespace    local.dev
-// @version      1.0.1
+// @version      1.0.2
 // @description  Genit 대화로그 JSON/TXT/MD 추출 + 요약/재요약 프롬프트 복사 기능
 // @author       devforai-creator
 // @match        https://genit.ai/*
@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '1.0.1';
+  const SCRIPT_VERSION = '1.0.2';
 
   const GMH = {
     VERSION: SCRIPT_VERSION,
@@ -146,12 +146,21 @@
   // -------------------------------
   // 0) Constants & utils
   // -------------------------------
-  const PAGE_WINDOW = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+  const PAGE_WINDOW =
+    typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
   const PLAYER_MARK = '⟦PLAYER⟧ ';
   const HEADER_RE =
     /^(\d+월\s*\d+일.*?\d{1,2}:\d{2})\s*\|\s*([^|]+?)\s*\|\s*📍\s*([^|]+)\s*\|?(.*)$/;
   const CODE_RE = /^([A-J])\/(\d+)\/(\d+)\/(\d+)\/(\d+)$/i;
-  const META_KEYWORDS = ['지도', '등장', 'Actors', '배우', '기록코드', 'Codes', 'SCENE'];
+  const META_KEYWORDS = [
+    '지도',
+    '등장',
+    'Actors',
+    '배우',
+    '기록코드',
+    'Codes',
+    'SCENE',
+  ];
   const PLAYER_NAME_FALLBACKS = ['플레이어', '소중한코알라5299'];
   const STORAGE_KEYS = {
     privacyProfile: 'gmh_privacy_profile',
@@ -217,11 +226,11 @@
       localStorage.setItem(STORAGE_KEYS.privacyProfile, PRIVACY_CFG.profile);
       localStorage.setItem(
         STORAGE_KEYS.privacyBlacklist,
-        JSON.stringify(PRIVACY_CFG.blacklist || [])
+        JSON.stringify(PRIVACY_CFG.blacklist || []),
       );
       localStorage.setItem(
         STORAGE_KEYS.privacyWhitelist,
-        JSON.stringify(PRIVACY_CFG.whitelist || [])
+        JSON.stringify(PRIVACY_CFG.whitelist || []),
       );
     } catch (err) {
       console.warn('[GMH] privacy settings persist failed', err);
@@ -236,7 +245,9 @@
 
   function setCustomList(type, items) {
     if (!Array.isArray(items)) return;
-    const normalized = items.map((item) => collapseSpaces(item)).filter(Boolean);
+    const normalized = items
+      .map((item) => collapseSpaces(item))
+      .filter(Boolean);
     if (type === 'blacklist') PRIVACY_CFG.blacklist = normalized;
     if (type === 'whitelist') PRIVACY_CFG.whitelist = normalized;
     persistPrivacySettings();
@@ -326,7 +337,8 @@
   }
 
   function protectWhitelist(text, whitelist) {
-    if (!Array.isArray(whitelist) || !whitelist.length) return { text, tokens: [] };
+    if (!Array.isArray(whitelist) || !whitelist.length)
+      return { text, tokens: [] };
     let output = text;
     const tokens = [];
     whitelist.forEach((term, index) => {
@@ -380,8 +392,10 @@
     return output;
   }
 
-  const MINOR_KEYWORDS = /(미성년|중학생|고등학생|나이\s*1[0-7]|소년|소녀|minor|under\s*18)/i;
-  const SEXUAL_KEYWORDS = /(성관계|성적|섹스|sex|음란|선정|야한|야스|삽입|자위|강간|에로)/i;
+  const MINOR_KEYWORDS =
+    /(미성년|중학생|고등학생|나이\s*1[0-7]|소년|소녀|minor|under\s*18)/i;
+  const SEXUAL_KEYWORDS =
+    /(성관계|성적|섹스|sex|음란|선정|야한|야스|삽입|자위|강간|에로)/i;
 
   function hasMinorSexualContext(text) {
     if (!text) return false;
@@ -392,7 +406,10 @@
     const profile = PRIVACY_PROFILES[profileKey] || PRIVACY_PROFILES.safe;
     const rules = createRedactionRules(profile.key);
     const baseCounts = counts || {};
-    const { text: protectedText, tokens } = protectWhitelist(String(text || ''), PRIVACY_CFG.whitelist);
+    const { text: protectedText, tokens } = protectWhitelist(
+      String(text || ''),
+      PRIVACY_CFG.whitelist,
+    );
     let result = applyRules(protectedText, rules, baseCounts);
     result = applyCustomBlacklist(result, PRIVACY_CFG.blacklist, baseCounts);
     result = restoreWhitelist(result, tokens);
@@ -423,7 +440,8 @@
     sanitizedSession.turns = sanitizedSession.turns.map((turn) => {
       const next = { ...turn };
       next.text = redactText(turn.text, profile, counts);
-      if (next.speaker) next.speaker = redactText(next.speaker, profile, counts);
+      if (next.speaker)
+        next.speaker = redactText(next.speaker, profile, counts);
       return next;
     });
     const sanitizedMeta = {};
@@ -432,7 +450,7 @@
         sanitizedMeta[key] = redactText(value, profile, counts);
       } else if (Array.isArray(value)) {
         sanitizedMeta[key] = value.map((item) =>
-          typeof item === 'string' ? redactText(item, profile, counts) : item
+          typeof item === 'string' ? redactText(item, profile, counts) : item,
         );
       } else {
         sanitizedMeta[key] = value;
@@ -440,15 +458,19 @@
     });
     sanitizedSession.meta = sanitizedMeta;
     sanitizedSession.warnings = sanitizedSession.warnings.map((warning) =>
-      typeof warning === 'string' ? redactText(warning, profile, counts) : warning
+      typeof warning === 'string'
+        ? redactText(warning, profile, counts)
+        : warning,
     );
-    const sanitizedPlayers = PLAYER_NAMES.map((name) => redactText(name, profile, counts));
+    const sanitizedPlayers = PLAYER_NAMES.map((name) =>
+      redactText(name, profile, counts),
+    );
     sanitizedSession.player_names = sanitizedPlayers;
     const sanitizedRaw = redactText(rawText, profile, counts);
     const aggregatedCounts = counts;
     const totalRedactions = Object.values(aggregatedCounts).reduce(
       (sum, value) => sum + (value || 0),
-      0
+      0,
     );
     const minorBlocked = hasMinorSexualContext(rawText);
     return {
@@ -463,16 +485,17 @@
   }
 
   function formatRedactionCounts(counts) {
-    const entries = Object.entries(counts || {}).filter(([, value]) => value > 0);
+    const entries = Object.entries(counts || {}).filter(
+      ([, value]) => value > 0,
+    );
     if (!entries.length) return '레다크션 없음';
-    return entries
-      .map(([key, value]) => `${key}:${value}`)
-      .join(', ');
+    return entries.map(([key, value]) => `${key}:${value}`).join(', ');
   }
 
   function collectSessionStats(session) {
     if (!session) return { playerTurns: 0, totalTurns: 0, warnings: 0 };
-    const playerTurns = session.turns?.filter((turn) => turn.role === 'player')?.length || 0;
+    const playerTurns =
+      session.turns?.filter((turn) => turn.role === 'player')?.length || 0;
     const totalTurns = session.turns?.length || 0;
     const warnings = session.warnings?.length || 0;
     return { playerTurns, totalTurns, warnings };
@@ -548,7 +571,13 @@
 .gmh-turn-list__speaker{font-weight:600;color:var(--gmh-accent-soft);margin-bottom:4px;font-size:12px;}
 .gmh-turn-list__text{color:var(--gmh-fg);font-size:13px;line-height:1.45;white-space:pre-wrap;word-break:break-word;}
 .gmh-turn-list__empty{color:var(--gmh-muted);text-align:center;}
-.gmh-panel{position:fixed;right:16px;bottom:16px;z-index:999999;background:var(--gmh-bg);color:var(--gmh-fg);padding:16px;border-radius:18px;box-shadow:var(--gmh-panel-shadow);display:grid;gap:14px;width:min(320px,92vw);font:var(--gmh-font);}
+.gmh-panel{position:fixed;right:16px;bottom:16px;z-index:2147483000;background:var(--gmh-bg);color:var(--gmh-fg);padding:16px;border-radius:18px;box-shadow:var(--gmh-panel-shadow);display:grid;gap:14px;width:min(320px,92vw);font:var(--gmh-font);max-height:70vh;overflow:auto;transform:translateY(0);opacity:1;visibility:visible;transition:transform 0.2s ease,opacity 0.15s ease,visibility 0.15s ease;will-change:transform,opacity;}
+html.gmh-collapsed #genit-memory-helper-panel{transform:translateY(calc(100% + 24px));opacity:0;visibility:hidden;pointer-events:none;}
+html.gmh-panel-open #genit-memory-helper-panel{pointer-events:auto;}
+#gmh-fab{position:fixed;right:16px;bottom:16px;width:52px;height:52px;border-radius:50%;border:0;display:grid;place-items:center;font:700 13px/1 var(--gmh-font);background:var(--gmh-accent);color:#041016;cursor:pointer;box-shadow:0 10px 28px rgba(8,15,30,0.45);z-index:2147483001;transition:transform 0.2s ease,box-shadow 0.2s ease,opacity 0.15s ease;touch-action:manipulation;}
+#gmh-fab:hover{box-shadow:0 14px 32px rgba(8,15,30,0.55);transform:translateY(-2px);}
+#gmh-fab:active{transform:translateY(0);box-shadow:0 6px 18px rgba(8,15,30,0.45);}
+html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px rgba(8,15,30,0.5);}
 .gmh-panel__header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;}
 .gmh-panel__title{font-size:15px;font-weight:600;margin:0;}
 .gmh-panel__tag{font-size:11px;color:var(--gmh-muted);margin-top:2px;}
@@ -582,7 +611,7 @@
 .gmh-progress__label{font-size:12px;color:var(--gmh-muted);}
 .gmh-status-line{font-size:12px;color:var(--gmh-muted);}
 .gmh-subtext{font-size:12px;color:var(--gmh-muted);line-height:1.5;}
-@media (max-width:480px){.gmh-modal{width:100%;border-radius:12px;}.gmh-modal__actions{flex-direction:column;}.gmh-panel{right:12px;left:12px;bottom:12px;width:auto;}}
+@media (max-width:480px){.gmh-modal{width:100%;border-radius:12px;}.gmh-modal__actions{flex-direction:column;}.gmh-panel{right:12px;left:12px;bottom:12px;width:auto;max-height:76vh;}.gmh-panel::-webkit-scrollbar{width:6px;}.gmh-panel::-webkit-scrollbar-thumb{background:rgba(148,163,184,0.35);border-radius:999px;}#gmh-fab{width:48px;height:48px;right:12px;bottom:12px;font-size:12px;}}
 `;
     document.head.appendChild(style);
   }
@@ -603,11 +632,13 @@
 
     const getFocusable = (root) => {
       if (!root) return [];
-      return Array.from(root.querySelectorAll(focusableSelector)).filter((el) => {
-        if (!(el instanceof HTMLElement)) return false;
-        const style = window.getComputedStyle(el);
-        return style.visibility !== 'hidden' && style.display !== 'none';
-      });
+      return Array.from(root.querySelectorAll(focusableSelector)).filter(
+        (el) => {
+          if (!(el instanceof HTMLElement)) return false;
+          const style = window.getComputedStyle(el);
+          return style.visibility !== 'hidden' && style.display !== 'none';
+        },
+      );
     };
 
     function buildButton(action, finalize) {
@@ -691,7 +722,8 @@
         }
 
         dialog.setAttribute('aria-labelledby', titleId);
-        if (options.description) dialog.setAttribute('aria-describedby', descId);
+        if (options.description)
+          dialog.setAttribute('aria-describedby', descId);
         else dialog.removeAttribute('aria-describedby');
 
         const body = document.createElement('div');
@@ -707,9 +739,10 @@
         footer.className = 'gmh-modal__footer';
         const actionsWrap = document.createElement('div');
         actionsWrap.className = 'gmh-modal__actions';
-        const actions = Array.isArray(options.actions) && options.actions.length
-          ? options.actions
-          : [];
+        const actions =
+          Array.isArray(options.actions) && options.actions.length
+            ? options.actions
+            : [];
 
         const finalize = (result) => {
           cleanup(result);
@@ -731,7 +764,10 @@
 
         const bodyEl = document.body;
         const prevOverflow = bodyEl.style.overflow;
-        const restoreTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const restoreTarget =
+          document.activeElement instanceof HTMLElement
+            ? document.activeElement
+            : null;
         bodyEl.style.overflow = 'hidden';
         bodyEl.appendChild(overlay);
         overlay.setAttribute('role', 'presentation');
@@ -776,19 +812,23 @@
           overlay.addEventListener('click', (event) => {
             if (event.target === overlay) cleanup(false);
           });
-          if (closeBtn) closeBtn.addEventListener('click', () => cleanup(false));
+          if (closeBtn)
+            closeBtn.addEventListener('click', () => cleanup(false));
         }
 
         document.addEventListener('keydown', onKeydown, true);
 
         const initialSelector = options.initialFocus || '.gmh-button--primary';
-        let focusTarget = initialSelector ? dialog.querySelector(initialSelector) : null;
+        let focusTarget = initialSelector
+          ? dialog.querySelector(initialSelector)
+          : null;
         if (!(focusTarget instanceof HTMLElement)) {
           const focusables = getFocusable(dialog);
           focusTarget = focusables[0] || closeBtn;
         }
         window.setTimeout(() => {
-          if (focusTarget && typeof focusTarget.focus === 'function') focusTarget.focus();
+          if (focusTarget && typeof focusTarget.focus === 'function')
+            focusTarget.focus();
         }, 20);
 
         activeModal = {
@@ -1009,14 +1049,28 @@
       size: 'medium',
       initialFocus: '[data-action="confirm"]',
       actions: [
-        { id: 'cancel', label: '취소', variant: 'secondary', value: false, attrs: { 'data-action': 'cancel' } },
-        { id: 'confirm', label: actionLabel, variant: 'primary', value: true, attrs: { 'data-action': 'confirm' } },
+        {
+          id: 'cancel',
+          label: '취소',
+          variant: 'secondary',
+          value: false,
+          attrs: { 'data-action': 'cancel' },
+        },
+        {
+          id: 'confirm',
+          label: actionLabel,
+          variant: 'primary',
+          value: true,
+          attrs: { 'data-action': 'confirm' },
+        },
       ],
     }).then((result) => Boolean(result));
   }
 
   function confirmPrivacyGate(options) {
-    return isModernUIActive ? confirmPrivacyGateModern(options) : confirmPrivacyGateLegacy(options);
+    return isModernUIActive
+      ? confirmPrivacyGateModern(options)
+      : confirmPrivacyGateLegacy(options);
   }
 
   function buildExportManifest({
@@ -1047,7 +1101,8 @@
 
     const intro = document.createElement('p');
     intro.className = 'gmh-subtext';
-    intro.textContent = '쉼표 또는 줄바꿈으로 여러 항목을 구분하세요. 블랙리스트는 강제 마스킹, 화이트리스트는 예외 처리됩니다.';
+    intro.textContent =
+      '쉼표 또는 줄바꿈으로 여러 항목을 구분하세요. 블랙리스트는 강제 마스킹, 화이트리스트는 예외 처리됩니다.';
     stack.appendChild(intro);
 
     const blackLabel = document.createElement('div');
@@ -1079,8 +1134,20 @@
       size: 'large',
       content: stack,
       actions: [
-        { id: 'cancel', label: '취소', variant: 'secondary', value: false, attrs: { 'data-action': 'cancel' } },
-        { id: 'save', label: '저장', variant: 'primary', value: true, attrs: { 'data-action': 'save' } },
+        {
+          id: 'cancel',
+          label: '취소',
+          variant: 'secondary',
+          value: false,
+          attrs: { 'data-action': 'cancel' },
+        },
+        {
+          id: 'save',
+          label: '저장',
+          variant: 'primary',
+          value: true,
+          attrs: { 'data-action': 'save' },
+        },
       ],
       initialFocus: '#gmh-privacy-blacklist',
     });
@@ -1099,7 +1166,7 @@
     const currentBlack = PRIVACY_CFG.blacklist?.join('\n') || '';
     const nextBlack = window.prompt(
       '레다크션 강제 대상(블랙리스트)을 줄바꿈 또는 쉼표로 구분해 입력하세요.\n비워두면 목록을 초기화합니다.',
-      currentBlack
+      currentBlack,
     );
     if (nextBlack !== null) {
       setCustomList('blacklist', parseListInput(nextBlack));
@@ -1107,7 +1174,7 @@
     const currentWhite = PRIVACY_CFG.whitelist?.join('\n') || '';
     const nextWhite = window.prompt(
       '레다크션 예외 대상(화이트리스트)을 줄바꿈 또는 쉼표로 구분해 입력하세요.\n비워두면 목록을 초기화합니다.',
-      currentWhite
+      currentWhite,
     );
     if (nextWhite !== null) {
       setCustomList('whitelist', parseListInput(nextWhite));
@@ -1143,7 +1210,9 @@
   }
 
   function stripBrackets(v) {
-    return String(v ?? '').replace(/^\[|\]$/g, '').trim();
+    return String(v ?? '')
+      .replace(/^\[|\]$/g, '')
+      .trim();
   }
 
   function sanitizeText(s) {
@@ -1179,7 +1248,8 @@
     if (!(el instanceof Element)) return false;
     const cs = getComputedStyle(el);
     const oy = cs.overflowY;
-    const scrollableStyle = oy === 'auto' || oy === 'scroll' || oy === 'overlay';
+    const scrollableStyle =
+      oy === 'auto' || oy === 'scroll' || oy === 'overlay';
     return scrollableStyle && el.scrollHeight > el.clientHeight + 4;
   }
 
@@ -1199,7 +1269,12 @@
     if (/^(...|···|…)/.test(s)) return true;
     if (/^(당신|너는|그는|그녀는)\s/.test(s)) return true;
     if (/[.!?"']$/.test(s)) return true;
-    if (/[가-힣]{2,}(은|는|이|가|을|를|으로|로|에게|에서|하며|면서|라고)\s/.test(s)) return true;
+    if (
+      /[가-힣]{2,}(은|는|이|가|을|를|으로|로|에게|에서|하며|면서|라고)\s/.test(
+        s,
+      )
+    )
+      return true;
     if (s.includes(' ')) {
       const words = s.split(/\s+/);
       if (words.length >= 4) return true;
@@ -1237,7 +1312,11 @@
         '.flex-1.min-h-0.overflow-y-auto',
         'main [class*="overflow-y"]',
       ],
-      messageRoot: ['[data-message-id]', '[role="listitem"][data-id]', '[data-testid="message-wrapper"]'],
+      messageRoot: [
+        '[data-message-id]',
+        '[role="listitem"][data-id]',
+        '[data-testid="message-wrapper"]',
+      ],
       infoCode: ['code.language-INFO', 'pre code.language-INFO'],
       playerScopes: [
         '[data-role="user"]',
@@ -1258,20 +1337,28 @@
         '[data-username]',
         '.text-sm.text-muted-foreground.mb-1.ml-1',
       ],
-      npcBubble: ['.p-4.rounded-xl.bg-background p', '.markdown-content:not(.text-right)'],
-      narrationBlocks: ['.markdown-content.text-muted-foreground', '.text-muted-foreground.text-sm'],
+      npcBubble: [
+        '.p-4.rounded-xl.bg-background p',
+        '.markdown-content:not(.text-right)',
+      ],
+      narrationBlocks: [
+        '.markdown-content.text-muted-foreground',
+        '.text-muted-foreground.text-sm',
+      ],
       panelAnchor: ['[data-testid="app-root"]', '#__next', '#root', 'main'],
       playerNameHints: [
         '[data-role="user"] [data-username]',
         '[data-profile-name]',
         '[data-user-name]',
         '[data-testid="profile-name"]',
-        'header [data-username]'
+        'header [data-username]',
       ],
       textHints: ['메시지', '채팅', '대화'],
     };
 
-    const playerScopeSelector = selectors.playerScopes.filter(Boolean).join(',');
+    const playerScopeSelector = selectors.playerScopes
+      .filter(Boolean)
+      .join(',');
     const npcScopeSelector = selectors.npcGroups.filter(Boolean).join(',');
 
     const collectAll = (selList, root = document) => {
@@ -1339,12 +1426,14 @@
     const findByTextHint = (root = document) => {
       const hints = selectors.textHints || [];
       if (!hints.length) return null;
-      const nodes = collectAll(['main', 'section', 'article'], root).filter((node) => {
-        if (!node || node.childElementCount < 3) return false;
-        const text = (node.textContent || '').trim();
-        if (!text || text.length > 400) return false;
-        return hints.some((hint) => text.includes(hint));
-      });
+      const nodes = collectAll(['main', 'section', 'article'], root).filter(
+        (node) => {
+          if (!node || node.childElementCount < 3) return false;
+          const text = (node.textContent || '').trim();
+          if (!text || text.length > 400) return false;
+          return hints.some((hint) => text.includes(hint));
+        },
+      );
       return nodes.find((node) => isScrollable(node));
     };
 
@@ -1412,7 +1501,8 @@
 
     const extractNameFromGroup = (group) => {
       const nameNode = firstMatch(selectors.npcName, group);
-      let name = nameNode?.getAttribute?.('data-author-name') || nameNode?.textContent;
+      let name =
+        nameNode?.getAttribute?.('data-author-name') || nameNode?.textContent;
       if (!name) {
         name =
           group.getAttribute('data-author') ||
@@ -1465,7 +1555,11 @@
       collectAll(selectors.playerNameHints).forEach((node) => {
         const text = node?.textContent?.trim();
         if (text) results.add(stripQuotes(text));
-        const attrNames = ['data-username', 'data-user-name', 'data-display-name'];
+        const attrNames = [
+          'data-username',
+          'data-user-name',
+          'data-display-name',
+        ];
         for (const attr of attrNames) {
           const val = node.getAttribute?.(attr);
           if (val) results.add(stripQuotes(val));
@@ -1506,7 +1600,9 @@
   GMH.Core.adapters = [GMH.Adapters.genit];
 
   GMH.Core.pickAdapter = function pickAdapter(loc = location, doc = document) {
-    const candidates = Array.isArray(GMH.Core.adapters) ? GMH.Core.adapters : [];
+    const candidates = Array.isArray(GMH.Core.adapters)
+      ? GMH.Core.adapters
+      : [];
     for (const adapter of candidates) {
       try {
         if (adapter?.match?.(loc, doc)) return adapter;
@@ -1529,6 +1625,288 @@
   let STATUS_ELEMENT = null;
   let PROFILE_SELECT_ELEMENT = null;
   let PRIVACY_SELECT_ELEMENT = null;
+
+  const PanelVisibility = (() => {
+    const COLLAPSED_CLASS = 'gmh-collapsed';
+    const OPEN_CLASS = 'gmh-panel-open';
+    const AUTO_HIDE_DELAY = 10000;
+    const STORAGE_KEY = 'gmh_panel_collapsed';
+    let panelEl = null;
+    let fabEl = null;
+    let modernMode = false;
+    let idleTimer = null;
+    let stateUnsubscribe = null;
+    let outsidePointerHandler = null;
+    let escapeKeyHandler = null;
+    let panelListenersBound = false;
+    let currentState = GMH_STATE.IDLE;
+    let userCollapsed = false;
+    let persistedPreference = null;
+
+    const loadPersistedCollapsed = () => {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw === '1') return true;
+        if (raw === '0') return false;
+      } catch (err) {
+        console.warn('[GMH] failed to read panel state', err);
+      }
+      return null;
+    };
+
+    const persistCollapsed = (value) => {
+      persistedPreference = value;
+      try {
+        if (value === null) localStorage.removeItem(STORAGE_KEY);
+        else localStorage.setItem(STORAGE_KEY, value ? '1' : '0');
+      } catch (err) {
+        console.warn('[GMH] failed to persist panel state', err);
+      }
+    };
+
+    const getRoot = () => document.documentElement;
+
+    const isModernActive = () => modernMode && !!panelEl;
+
+    const isCollapsed = () => {
+      if (!isModernActive()) return false;
+      return getRoot().classList.contains(COLLAPSED_CLASS);
+    };
+
+    const clearIdleTimer = () => {
+      if (idleTimer) {
+        clearTimeout(idleTimer);
+        idleTimer = null;
+      }
+    };
+
+    const applyRootState = (collapsed) => {
+      const root = getRoot();
+      if (!modernMode) {
+        root.classList.remove(COLLAPSED_CLASS);
+        root.classList.remove(OPEN_CLASS);
+        return;
+      }
+      if (collapsed) {
+        root.classList.add(COLLAPSED_CLASS);
+        root.classList.remove(OPEN_CLASS);
+      } else {
+        root.classList.add(OPEN_CLASS);
+        root.classList.remove(COLLAPSED_CLASS);
+      }
+    };
+
+    const syncAria = (collapsed) => {
+      if (!panelEl) return;
+      panelEl.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
+      if (fabEl)
+        fabEl.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    };
+
+    const scheduleIdleClose = () => {
+      if (!isModernActive()) return;
+      clearIdleTimer();
+      if (isCollapsed()) return;
+      if (currentState !== GMH_STATE.IDLE) return;
+      idleTimer = window.setTimeout(() => {
+        if (!isModernActive()) return;
+        if (currentState !== GMH_STATE.IDLE) return;
+        close('idle');
+      }, AUTO_HIDE_DELAY);
+    };
+
+    const resetIdleTimer = () => {
+      if (!isModernActive()) return;
+      if (isCollapsed()) return;
+      scheduleIdleClose();
+    };
+
+    const ensureFab = () => {
+      if (!modernMode) return null;
+      if (!fabEl || !fabEl.isConnected) {
+        fabEl = document.getElementById('gmh-fab');
+      }
+      if (!fabEl || !fabEl.isConnected) {
+        fabEl = document.createElement('button');
+        fabEl.id = 'gmh-fab';
+        fabEl.type = 'button';
+        fabEl.textContent = 'GMH';
+        fabEl.setAttribute('aria-label', 'Genit Memory Helper 토글');
+        fabEl.setAttribute('aria-controls', 'genit-memory-helper-panel');
+        document.body.appendChild(fabEl);
+      }
+      fabEl.onclick = (event) => {
+        event.preventDefault();
+        toggle();
+      };
+      fabEl.setAttribute('aria-expanded', isCollapsed() ? 'false' : 'true');
+      return fabEl;
+    };
+
+    const attachPanelListeners = () => {
+      if (!isModernActive() || panelListenersBound) return;
+      const passiveReset = () => resetIdleTimer();
+      panelEl.addEventListener('pointerdown', passiveReset, { passive: true });
+      panelEl.addEventListener('pointermove', passiveReset, { passive: true });
+      panelEl.addEventListener('wheel', passiveReset, { passive: true });
+      panelEl.addEventListener('touchstart', passiveReset, { passive: true });
+      panelEl.addEventListener('keydown', resetIdleTimer);
+      panelEl.addEventListener('focusin', resetIdleTimer);
+      panelListenersBound = true;
+    };
+
+    const ensureOutsideHandler = () => {
+      if (outsidePointerHandler) return;
+      outsidePointerHandler = (event) => {
+        if (!isModernActive()) return;
+        if (isCollapsed()) return;
+        const target = event.target;
+        if (panelEl && panelEl.contains(target)) return;
+        if (fabEl && fabEl.contains(target)) return;
+        if (GMH.UI.Modal?.isOpen?.()) return;
+        close('user');
+      };
+      document.addEventListener('pointerdown', outsidePointerHandler);
+    };
+
+    const ensureEscapeHandler = () => {
+      if (escapeKeyHandler) return;
+      escapeKeyHandler = (event) => {
+        if (!isModernActive()) return;
+        if (
+          event.key !== 'Escape' ||
+          event.altKey ||
+          event.ctrlKey ||
+          event.metaKey
+        )
+          return;
+        if (GMH.UI.Modal?.isOpen?.()) return;
+        if (isCollapsed()) return;
+        close('user');
+        event.preventDefault();
+      };
+      window.addEventListener('keydown', escapeKeyHandler);
+    };
+
+    const ensureStateSubscription = () => {
+      if (stateUnsubscribe || typeof GMH?.Core?.State?.subscribe !== 'function')
+        return;
+      stateUnsubscribe = GMH.Core.State.subscribe((next) => {
+        currentState = next || GMH_STATE.IDLE;
+        if (!modernMode) return;
+        if (currentState !== GMH_STATE.IDLE) {
+          if (!userCollapsed) open({ focus: false });
+          clearIdleTimer();
+        } else {
+          userCollapsed = false;
+          scheduleIdleClose();
+        }
+      });
+    };
+
+    const open = ({ focus = false, persist = false } = {}) => {
+      if (!panelEl) return false;
+      if (!modernMode) {
+        if (focus && typeof panelEl.focus === 'function') {
+          requestAnimationFrame(() => panelEl.focus({ preventScroll: true }));
+        }
+        return true;
+      }
+      const wasCollapsed = isCollapsed();
+      applyRootState(false);
+      syncAria(false);
+      if (persist) persistCollapsed(false);
+      userCollapsed = false;
+      if (focus && typeof panelEl.focus === 'function') {
+        requestAnimationFrame(() => panelEl.focus({ preventScroll: true }));
+      }
+      if (currentState === GMH_STATE.IDLE) scheduleIdleClose();
+      else clearIdleTimer();
+      return wasCollapsed;
+    };
+
+    const close = (reason = 'user') => {
+      if (!panelEl || !modernMode) return false;
+      if (isCollapsed()) return false;
+      applyRootState(true);
+      syncAria(true);
+      clearIdleTimer();
+      if (reason === 'user') {
+        userCollapsed = true;
+        persistCollapsed(true);
+      }
+      if (reason === 'idle') userCollapsed = false;
+      return true;
+    };
+
+    const toggle = () => {
+      if (!panelEl || !modernMode) return false;
+      if (isCollapsed()) {
+        open({ focus: true, persist: true });
+        return true;
+      }
+      close('user');
+      return false;
+    };
+
+    const bind = (panel, { modern } = {}) => {
+      panelEl = panel || null;
+      panelListenersBound = false;
+      modernMode = !!modern && !!panelEl;
+      if (!panelEl) return;
+      if (!modernMode) {
+        if (fabEl && fabEl.isConnected) {
+          fabEl.remove();
+          fabEl = null;
+        }
+        applyRootState(false);
+        syncAria(false);
+        return;
+      }
+      ensureStateSubscription();
+      currentState =
+        normalizeState(GMH.Core.State?.getState?.()) || GMH_STATE.IDLE;
+      ensureFab();
+      attachPanelListeners();
+      ensureOutsideHandler();
+      ensureEscapeHandler();
+      persistedPreference = loadPersistedCollapsed();
+      const shouldCollapse = (() => {
+        if (typeof persistedPreference === 'boolean')
+          return persistedPreference;
+        const mq = window.matchMedia?.('(max-width: 768px)');
+        if (mq?.matches) return true;
+        if (typeof window.innerWidth === 'number')
+          return window.innerWidth <= 768;
+        return false;
+      })();
+      applyRootState(shouldCollapse);
+      syncAria(shouldCollapse);
+      userCollapsed = shouldCollapse;
+      if (!shouldCollapse) scheduleIdleClose();
+    };
+
+    const onStatusUpdate = ({ tone } = {}) => {
+      if (!isModernActive()) return;
+      if (
+        tone &&
+        ['error', 'warning', 'progress'].includes(tone) &&
+        isCollapsed()
+      ) {
+        open({ focus: false });
+      }
+      if (!isCollapsed()) scheduleIdleClose();
+    };
+
+    return {
+      bind,
+      open,
+      close,
+      toggle,
+      isCollapsed,
+      onStatusUpdate,
+    };
+  })();
 
   const STATUS_TONES = {
     success: { color: '#34d399', icon: '✅' },
@@ -1568,6 +1946,7 @@
     STATUS_ELEMENT.style.color = color;
     if (tone) STATUS_ELEMENT.dataset.tone = tone;
     else delete STATUS_ELEMENT.dataset.tone;
+    PanelVisibility.onStatusUpdate({ tone });
   }
 
   const STATE_PRESETS = {
@@ -1686,9 +2065,24 @@
   }
 
   const AUTO_PROFILES = {
-    default: { cycleDelayMs: 700, settleTimeoutMs: 2000, maxStableRounds: 3, guardLimit: 60 },
-    stability: { cycleDelayMs: 1200, settleTimeoutMs: 2600, maxStableRounds: 5, guardLimit: 140 },
-    fast: { cycleDelayMs: 350, settleTimeoutMs: 900, maxStableRounds: 2, guardLimit: 40 },
+    default: {
+      cycleDelayMs: 700,
+      settleTimeoutMs: 2000,
+      maxStableRounds: 3,
+      guardLimit: 60,
+    },
+    stability: {
+      cycleDelayMs: 1200,
+      settleTimeoutMs: 2600,
+      maxStableRounds: 5,
+      guardLimit: 140,
+    },
+    fast: {
+      cycleDelayMs: 350,
+      settleTimeoutMs: 900,
+      maxStableRounds: 2,
+      guardLimit: 40,
+    },
   };
 
   const AUTO_CFG = {
@@ -1713,7 +2107,8 @@
     while (current && depth < 5) {
       let part = current.tagName.toLowerCase();
       if (current.id) part += `#${current.id}`;
-      if (current.classList?.length) part += `.${Array.from(current.classList).slice(0, 3).join('.')}`;
+      if (current.classList?.length)
+        part += `.${Array.from(current.classList).slice(0, 3).join('.')}`;
       parts.unshift(part);
       current = current.parentElement;
       depth += 1;
@@ -1744,7 +2139,10 @@
       setPanelStatus('DOM 스냅샷이 저장되었습니다.', 'success');
     } catch (error) {
       console.error('[GMH] snapshot error', error);
-      setPanelStatus(`스냅샷 실패: ${(error && error.message) || error}`, 'error');
+      setPanelStatus(
+        `스냅샷 실패: ${(error && error.message) || error}`,
+        'error',
+      );
     }
   }
 
@@ -1758,7 +2156,9 @@
         return null;
       }
       if (opts.profile) {
-        AUTO_CFG.profile = AUTO_PROFILES[opts.profile] ? opts.profile : 'default';
+        AUTO_CFG.profile = AUTO_PROFILES[opts.profile]
+          ? opts.profile
+          : 'default';
         syncProfileSelect();
       }
       this.lastMode = mode;
@@ -1776,7 +2176,9 @@
         }
         if (mode === 'turns') {
           const numericTarget = Number(target);
-          const goal = Number.isFinite(numericTarget) ? numericTarget : Number(target) || 0;
+          const goal = Number.isFinite(numericTarget)
+            ? numericTarget
+            : Number(target) || 0;
           if (!goal || goal <= 0) {
             setPanelStatus('플레이어 턴 목표가 올바르지 않습니다.', 'error');
             return null;
@@ -1833,11 +2235,18 @@
   }
 
   const PLAYER_NAMES = Array.from(
-    new Set([...PLAYER_NAME_FALLBACKS, ...guessPlayerNamesFromDOM()].filter(Boolean))
+    new Set(
+      [...PLAYER_NAME_FALLBACKS, ...guessPlayerNamesFromDOM()].filter(Boolean),
+    ),
   );
 
   const PLAYER_ALIASES = new Set(
-    PLAYER_NAMES.map((n) => n.toLowerCase()).concat(['player', '플레이어', '유저', '나'])
+    PLAYER_NAMES.map((n) => n.toLowerCase()).concat([
+      'player',
+      '플레이어',
+      '유저',
+      '나',
+    ]),
   );
 
   function normalizeSpeakerName(name) {
@@ -1987,7 +2396,11 @@
             j += 1;
             continue;
           }
-          if (HEADER_RE.test(peek) || stripBrackets(peek).toUpperCase() === 'INFO') break;
+          if (
+            HEADER_RE.test(peek) ||
+            stripBrackets(peek).toUpperCase() === 'INFO'
+          )
+            break;
           if (isMetaLine(peek)) break;
           if (peekForced) break;
           if (looksLikeName(peek) || /^@[^@]+@/.test(peek)) break;
@@ -1996,7 +2409,11 @@
           if (!/["”]$/.test(peek)) break;
         }
         if (textBuf.length) {
-          pushTurn(speaker, stripQuotes(textBuf.join(' ')), roleForSpeaker(speaker));
+          pushTurn(
+            speaker,
+            stripQuotes(textBuf.join(' ')),
+            roleForSpeaker(speaker),
+          );
           pendingSpeaker = speaker;
           i = j - 1;
           continue;
@@ -2006,7 +2423,11 @@
       }
 
       if (pendingSpeaker) {
-        pushTurn(pendingSpeaker, stripQuotes(line), roleForSpeaker(pendingSpeaker));
+        pushTurn(
+          pendingSpeaker,
+          stripQuotes(line),
+          roleForSpeaker(pendingSpeaker),
+        );
         continue;
       }
 
@@ -2081,7 +2502,8 @@
       if (session.meta.title) lines.push(`# TITLE: ${session.meta.title}`);
       if (session.meta.date) lines.push(`# DATE: ${session.meta.date}`);
       if (session.meta.place) lines.push(`# PLACE: ${session.meta.place}`);
-      if (session.meta.actors?.length) lines.push(`# ACTORS: ${session.meta.actors.join(', ')}`);
+      if (session.meta.actors?.length)
+        lines.push(`# ACTORS: ${session.meta.actors.join(', ')}`);
       lines.push('');
     }
     for (const t of turns) {
@@ -2207,7 +2629,9 @@
         ancestor = ancestor.parentElement;
       }
     }
-    return document.scrollingElement || document.documentElement || document.body;
+    return (
+      document.scrollingElement || document.documentElement || document.body
+    );
   }
 
   function waitForGrowth(el, startHeight, timeout) {
@@ -2234,7 +2658,11 @@
     if (!container) return { grew: false, before: 0, after: 0 };
     const before = container.scrollHeight;
     container.scrollTop = 0;
-    const grew = await waitForGrowth(container, before, profile.settleTimeoutMs);
+    const grew = await waitForGrowth(
+      container,
+      before,
+      profile.settleTimeoutMs,
+    );
     return { grew, before, after: container.scrollHeight };
   }
 
@@ -2243,7 +2671,9 @@
       const raw = readTranscriptText();
       const normalized = normalizeTranscript(raw);
       const session = buildSession(normalized);
-      const playerTurns = session.turns.filter((t) => t.role === 'player').length;
+      const playerTurns = session.turns.filter(
+        (t) => t.role === 'player',
+      ).length;
       return {
         session,
         playerTurns,
@@ -2363,13 +2793,18 @@
       if (!grew || delta < 6) stableRounds += 1;
       else stableRounds = 0;
 
-      stagnantRounds = stats.playerTurns === prevPlayerTurns ? stagnantRounds + 1 : 0;
+      stagnantRounds =
+        stats.playerTurns === prevPlayerTurns ? stagnantRounds + 1 : 0;
       prevPlayerTurns = stats.playerTurns;
 
-      if (stableRounds >= profile.maxStableRounds || stagnantRounds >= profile.guardLimit) {
+      if (
+        stableRounds >= profile.maxStableRounds ||
+        stagnantRounds >= profile.guardLimit
+      ) {
         GMH.Core.State.setState(GMH.Core.STATE.DONE, {
           label: '자동 로딩 종료',
-          message: '추가 데이터를 불러오지 못했습니다. 더 이상 기록이 없거나 막혀있습니다.',
+          message:
+            '추가 데이터를 불러오지 못했습니다. 더 이상 기록이 없거나 막혀있습니다.',
           tone: 'warning',
           progress: { value: ratio },
         });
@@ -2390,7 +2825,8 @@
       return finalStats;
     }
     if (GMH.Core.State.getState() === GMH.Core.STATE.SCANNING) {
-      const ratio = target > 0 ? Math.min(1, finalStats.playerTurns / target) : 0;
+      const ratio =
+        target > 0 ? Math.min(1, finalStats.playerTurns / target) : 0;
       GMH.Core.State.setState(GMH.Core.STATE.DONE, {
         label: '자동 로딩 종료',
         message: `플레이어 턴 ${finalStats.playerTurns}/${target}`,
@@ -2511,7 +2947,8 @@
 
     const wrap = document.createElement('div');
     wrap.id = 'gmh-autoload-controls';
-    wrap.style.cssText = 'display:grid; gap:6px; border-top:1px solid #1f2937; padding-top:6px;';
+    wrap.style.cssText =
+      'display:grid; gap:6px; border-top:1px solid #1f2937; padding-top:6px;';
     wrap.innerHTML = `
       <div style="display:flex; gap:8px;">
         <button id="gmh-autoload-all" style="flex:1; background:#38bdf8; border:0; color:#041; border-radius:8px; padding:6px; cursor:pointer;">위로 끝까지 로딩</button>
@@ -2561,7 +2998,10 @@
       try {
         const stats = await autoLoader.start('turns', target);
         if (stats && !stats.error) {
-          setPanelStatus(`현재 플레이어 턴 ${stats.playerTurns}개 확보.`, 'success');
+          setPanelStatus(
+            `현재 플레이어 턴 ${stats.playerTurns}개 확보.`,
+            'success',
+          );
         }
       } finally {
         toggleControls(false);
@@ -2650,7 +3090,8 @@
 
     const actions = document.createElement('div');
     actions.id = 'gmh-status-actions';
-    actions.style.cssText = 'display:grid; gap:6px; border-top:1px solid rgba(148,163,184,0.25); padding-top:6px;';
+    actions.style.cssText =
+      'display:grid; gap:6px; border-top:1px solid rgba(148,163,184,0.25); padding-top:6px;';
     actions.innerHTML = `
       <div style="display:flex; gap:6px; align-items:center;">
         <label for="gmh-profile-select" style="font-size:11px; color:#94a3b8;">프로파일</label>
@@ -2707,6 +3148,7 @@
   }
 
   function setupPanelInteractions(panel, { modern = false } = {}) {
+    PanelVisibility.bind(panel, { modern });
     PRIVACY_SELECT_ELEMENT = panel.querySelector('#gmh-privacy-profile');
     if (PRIVACY_SELECT_ELEMENT) {
       PRIVACY_SELECT_ELEMENT.value = PRIVACY_CFG.profile;
@@ -2715,7 +3157,7 @@
         setPrivacyProfile(value);
         setPanelStatus(
           `프라이버시 프로필이 ${PRIVACY_PROFILES[value]?.label || value}로 설정되었습니다.`,
-          'info'
+          'info',
         );
       };
     }
@@ -2740,7 +3182,8 @@
 
     if (modern && !PAGE_WINDOW.__GMHShortcutsBound) {
       const shortcutHandler = (event) => {
-        if (!event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
+        if (!event.altKey || event.ctrlKey || event.metaKey || event.repeat)
+          return;
         const target = event.target;
         if (target instanceof HTMLElement) {
           const tag = target.tagName.toLowerCase();
@@ -2752,12 +3195,18 @@
         switch (key) {
           case 'g':
             event.preventDefault();
-            panel.focus();
+            PanelVisibility.open({ focus: true, persist: true });
+            break;
+          case 'm':
+            event.preventDefault();
+            PanelVisibility.toggle();
             break;
           case 's':
             event.preventDefault();
             if (!AUTO_STATE.running)
-              autoLoader.start('all').catch((error) => console.warn('[GMH] auto shortcut', error));
+              autoLoader
+                .start('all')
+                .catch((error) => console.warn('[GMH] auto shortcut', error));
             break;
           case 'p':
             event.preventDefault();
@@ -2804,14 +3253,17 @@
           alert('미성년자 성적 맥락이 감지되어 작업을 중단했습니다.');
           GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
             label: '작업 차단',
-            message: blockedStatusMessage || '미성년자 민감 맥락으로 작업이 차단되었습니다.',
+            message:
+              blockedStatusMessage ||
+              '미성년자 민감 맥락으로 작업이 차단되었습니다.',
             tone: 'error',
             progress: { value: 1 },
           });
           return null;
         }
         const stats = collectSessionStats(privacy.sanitizedSession);
-        const previewTurns = privacy.sanitizedSession.turns.slice(-PREVIEW_TURN_LIMIT);
+        const previewTurns =
+          privacy.sanitizedSession.turns.slice(-PREVIEW_TURN_LIMIT);
         GMH.Core.State.setState(GMH.Core.STATE.PREVIEW, {
           label: '미리보기 준비 완료',
           message: '레다크션 결과를 검토하세요.',
@@ -2859,7 +3311,12 @@
         });
         const { privacy, stats } = prepared;
         const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const bundle = buildExportBundle(privacy.sanitizedSession, privacy.sanitizedRaw, format, stamp);
+        const bundle = buildExportBundle(
+          privacy.sanitizedSession,
+          privacy.sanitizedRaw,
+          format,
+          stamp,
+        );
         const fileBlob = new Blob([bundle.content], { type: bundle.mime });
         triggerDownload(fileBlob, bundle.filename);
 
@@ -2878,7 +3335,8 @@
         triggerDownload(manifestBlob, manifestName);
 
         const summary = formatRedactionCounts(privacy.counts);
-        const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
+        const profileLabel =
+          PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
         const message = `${format.toUpperCase()} 내보내기 완료 · 플레이어 턴 ${stats.playerTurns}개 · ${profileLabel} · ${summary}`;
         GMH.Core.State.setState(GMH.Core.STATE.DONE, {
           label: '내보내기 완료',
@@ -2926,7 +3384,8 @@
           });
           GM_setClipboard(md, { type: 'text', mimetype: 'text/plain' });
           const summary = formatRedactionCounts(privacy.counts);
-          const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
+          const profileLabel =
+            PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
           const message = `최근 15턴 복사 완료 · 플레이어 턴 ${stats.playerTurns}개 · ${profileLabel} · ${summary}`;
           GMH.Core.State.setState(GMH.Core.STATE.DONE, {
             label: '복사 완료',
@@ -2968,7 +3427,8 @@
           const md = toMarkdownExport(privacy.sanitizedSession);
           GM_setClipboard(md, { type: 'text', mimetype: 'text/plain' });
           const summary = formatRedactionCounts(privacy.counts);
-          const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
+          const profileLabel =
+            PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
           const message = `전체 Markdown 복사 완료 · 플레이어 턴 ${stats.playerTurns}개 · ${profileLabel} · ${summary}`;
           GMH.Core.State.setState(GMH.Core.STATE.DONE, {
             label: '복사 완료',
@@ -2997,7 +3457,8 @@
         const prepared = await prepareShare({
           confirmLabel: '내보내기 진행',
           cancelStatusMessage: '내보내기를 취소했습니다.',
-          blockedStatusMessage: '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
+          blockedStatusMessage:
+            '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
         });
         if (!prepared) return;
         await performExport(prepared, format);
@@ -3025,7 +3486,8 @@
           const prepared = await prepareShare({
             confirmLabel: `${format.toUpperCase()} 내보내기`,
             cancelStatusMessage: '내보내기를 취소했습니다.',
-            blockedStatusMessage: '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
+            blockedStatusMessage:
+              '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
           });
           if (!prepared) return;
           await performExport(prepared, format);
@@ -3055,10 +3517,15 @@
             progress: { indeterminate: true },
           });
           const { session, raw } = parseAll();
-          const privacy = applyPrivacyPipeline(session, raw, PRIVACY_CFG.profile);
+          const privacy = applyPrivacyPipeline(
+            session,
+            raw,
+            PRIVACY_CFG.profile,
+          );
           const stats = collectSessionStats(privacy.sanitizedSession);
           const summary = formatRedactionCounts(privacy.counts);
-          const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
+          const profileLabel =
+            PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
           const extra = privacy.blocked ? ' · ⚠️ 미성년자 맥락 감지' : '';
           const message = `재파싱 완료 · 플레이어 턴 ${stats.playerTurns}개 · 경고 ${privacy.sanitizedSession.warnings.length}건 · ${profileLabel} · ${summary}${extra}`;
           GMH.Core.State.setState(GMH.Core.STATE.DONE, {
@@ -3124,7 +3591,10 @@
 - 길이는 1200~1800자.
 `;
         GM_setClipboard(prompt, { type: 'text', mimetype: 'text/plain' });
-        setPanelStatus('재요약 프롬프트가 클립보드에 복사되었습니다.', 'success');
+        setPanelStatus(
+          '재요약 프롬프트가 클립보드에 복사되었습니다.',
+          'success',
+        );
       };
     }
   }
@@ -3198,7 +3668,7 @@
       </section>
     `;
     const adapter = getActiveAdapter();
-    const anchor = (adapter?.getPanelAnchor?.(document)) || document.body;
+    const anchor = adapter?.getPanelAnchor?.(document) || document.body;
     anchor.appendChild(panel);
 
     const statusEl = panel.querySelector('#gmh-status');
@@ -3258,7 +3728,7 @@
       <div id="gmh-status" style="opacity:.85"></div>
     `;
     const adapter = getActiveAdapter();
-    const anchor = (adapter?.getPanelAnchor?.(document)) || document.body;
+    const anchor = adapter?.getPanelAnchor?.(document) || document.body;
     anchor.appendChild(panel);
 
     const statusEl = panel.querySelector('#gmh-status');
@@ -3272,7 +3742,8 @@
     if (isModernUIActive) {
       mountPanelModern();
     } else {
-      if (Flags.killSwitch) console.info('[GMH] modern UI disabled by kill switch');
+      if (Flags.killSwitch)
+        console.info('[GMH] modern UI disabled by kill switch');
       mountPanelLegacy();
     }
   }
@@ -3288,7 +3759,10 @@
     }
   }
 
-  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  if (
+    document.readyState === 'complete' ||
+    document.readyState === 'interactive'
+  ) {
     setTimeout(boot, 1200);
   } else {
     window.addEventListener('DOMContentLoaded', () => setTimeout(boot, 1200));
@@ -3362,6 +3836,10 @@
     mountPanel,
     setPanelStatus,
     configurePrivacyLists,
+    openPanel: (options) => PanelVisibility.open(options),
+    closePanel: (reason) => PanelVisibility.close(reason),
+    togglePanel: () => PanelVisibility.toggle(),
+    isPanelCollapsed: () => PanelVisibility.isCollapsed(),
   });
 
   Object.assign(GMH.Core, {
