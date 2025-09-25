@@ -23,6 +23,8 @@ test.describe('GMH mock smoke (offline)', () => {
 
     const panel = page.locator('#genit-memory-helper-panel');
     await expect(panel).toBeVisible({ timeout: 10_000 });
+    await expect(panel.locator('#gmh-panel-drag-handle')).toBeVisible();
+    await expect(panel.locator('#gmh-panel-resize-handle')).toBeVisible();
     await expect(panel).toHaveAttribute('role', 'region');
     await expect(panel).toHaveAttribute('aria-label', /Genit Memory Helper/);
 
@@ -112,3 +114,55 @@ test.describe('GMH mock smoke (offline)', () => {
     );
   });
 });
+
+  test('collapsed panel restores focus and allows background interaction', async ({ page }) => {
+    test.setTimeout(90_000);
+    await page.addInitScript(() => {
+      window.localStorage.setItem('gmh_flag_newUI', '1');
+      window.localStorage.removeItem('gmh_kill');
+    });
+    const userScript = await readFile(distPath, 'utf8');
+    await page.addInitScript(userScript);
+
+    await page.goto('file://' + mockPath);
+
+    const panel = page.locator('#genit-memory-helper-panel');
+    await expect(panel).toBeVisible({ timeout: 10_000 });
+
+    await page.evaluate(() => {
+      const input = document.createElement('input');
+      input.id = 'gmh-focus-probe';
+      input.type = 'text';
+      input.style.position = 'fixed';
+      input.style.left = '24px';
+      input.style.bottom = '24px';
+      input.style.zIndex = '1';
+      document.body.appendChild(input);
+
+      const button = document.createElement('button');
+      button.id = 'gmh-click-probe';
+      button.textContent = 'Underlay';
+      button.dataset.clicked = '0';
+      button.style.position = 'fixed';
+      button.style.right = '120px';
+      button.style.bottom = '80px';
+      button.style.zIndex = '1';
+      button.addEventListener('click', () => {
+        button.dataset.clicked = '1';
+      });
+      document.body.appendChild(button);
+    });
+
+    await page.locator('#gmh-focus-probe').focus();
+    await expect(page.locator('#gmh-focus-probe')).toBeFocused();
+
+    await page.keyboard.press('Alt+G');
+    await expect(panel).toBeFocused();
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#gmh-focus-probe')).toBeFocused();
+    await expect(page.locator('html')).toHaveClass(/gmh-collapsed/);
+
+    await page.locator('#gmh-click-probe').click();
+    await expect(page.locator('#gmh-click-probe')).toHaveAttribute('data-clicked', '1');
+  });

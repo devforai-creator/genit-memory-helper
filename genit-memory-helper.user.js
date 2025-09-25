@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Genit Memory Helper
 // @namespace    local.dev
-// @version      1.1.0
+// @version      1.2.0
 // @description  Genit 대화로그 JSON/TXT/MD 추출 + 요약/재요약 프롬프트 복사 기능
 // @author       devforai-creator
 // @match        https://genit.ai/*
@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '1.1.0';
+  const SCRIPT_VERSION = '1.2.0';
 
   try {
     const killSwitchEnabled = localStorage.getItem('gmh_kill') === '1';
@@ -38,6 +38,132 @@
     UI: {},
     Core: {},
     Adapters: {},
+  };
+
+  const clone = (value) => {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch (err) {
+      return value;
+    }
+  };
+
+  const deepMerge = (target, patch) => {
+    const base = Array.isArray(target) ? [...target] : { ...target };
+    if (!patch || typeof patch !== 'object') return base;
+    Object.entries(patch).forEach(([key, value]) => {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        const current =
+          base[key] && typeof base[key] === 'object' && !Array.isArray(base[key])
+            ? base[key]
+            : {};
+        base[key] = deepMerge(current, value);
+      } else {
+        base[key] = value;
+      }
+    });
+    return base;
+  };
+
+  const PanelSettings = (() => {
+    const STORAGE_KEY = 'gmh_panel_settings_v1';
+    const DEFAULTS = {
+      layout: {
+        anchor: 'right',
+        offset: 16,
+        bottom: 16,
+        width: null,
+        height: null,
+      },
+      behavior: {
+        autoHideEnabled: true,
+        autoHideDelayMs: 10000,
+        collapseOnOutside: true,
+        collapseOnFocus: false,
+        allowDrag: true,
+        allowResize: true,
+      },
+    };
+
+    let settings = clone(DEFAULTS);
+
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        settings = deepMerge(clone(DEFAULTS), parsed);
+      }
+    } catch (err) {
+      console.warn('[GMH] failed to load panel settings', err);
+      settings = clone(DEFAULTS);
+    }
+
+    const listeners = new Set();
+
+    const persist = () => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      } catch (err) {
+        console.warn('[GMH] failed to persist panel settings', err);
+      }
+    };
+
+    const notify = () => {
+      const snapshot = clone(settings);
+      listeners.forEach((listener) => {
+        try {
+          listener(snapshot);
+        } catch (err) {
+          console.warn('[GMH] panel settings listener failed', err);
+        }
+      });
+    };
+
+    return {
+      STORAGE_KEY,
+      defaults: clone(DEFAULTS),
+      get() {
+        return clone(settings);
+      },
+      update(patch) {
+        if (!patch || typeof patch !== 'object') return clone(settings);
+        const nextSettings = deepMerge(settings, patch);
+        const before = JSON.stringify(settings);
+        const after = JSON.stringify(nextSettings);
+        if (after === before) return clone(settings);
+        settings = nextSettings;
+        persist();
+        notify();
+        return clone(settings);
+      },
+      reset() {
+        const before = JSON.stringify(settings);
+        const defaultsString = JSON.stringify(DEFAULTS);
+        if (before === defaultsString) {
+          settings = clone(DEFAULTS);
+          return clone(settings);
+        }
+        settings = clone(DEFAULTS);
+        persist();
+        notify();
+        return clone(settings);
+      },
+      onChange(listener) {
+        if (typeof listener !== 'function') return () => {};
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    };
+  })();
+
+  GMH.Settings = {
+    panel: {
+      get: () => PanelSettings.get(),
+      update: (patch) => PanelSettings.update(patch),
+      reset: () => PanelSettings.reset(),
+      defaults: PanelSettings.defaults,
+      STORAGE_KEY: PanelSettings.STORAGE_KEY,
+    },
   };
 
   const Flags = (() => {
@@ -583,14 +709,33 @@
 .gmh-turn-list__speaker{font-weight:600;color:var(--gmh-accent-soft);margin-bottom:4px;font-size:12px;}
 .gmh-turn-list__text{color:var(--gmh-fg);font-size:13px;line-height:1.45;white-space:pre-wrap;word-break:break-word;}
 .gmh-turn-list__empty{color:var(--gmh-muted);text-align:center;}
-.gmh-panel{position:fixed;right:16px;bottom:16px;z-index:2147483000;background:var(--gmh-bg);color:var(--gmh-fg);padding:16px;border-radius:18px;box-shadow:var(--gmh-panel-shadow);display:grid;gap:14px;width:min(320px,92vw);font:var(--gmh-font);max-height:70vh;overflow:auto;transform:translateY(0);opacity:1;visibility:visible;transition:transform 0.2s ease,opacity 0.15s ease,visibility 0.15s ease;will-change:transform,opacity;}
+.gmh-panel{position:fixed;right:16px;bottom:16px;z-index:2147483000;background:var(--gmh-bg);color:var(--gmh-fg);padding:16px 16px 22px;border-radius:18px;box-shadow:var(--gmh-panel-shadow);display:grid;gap:14px;width:min(320px,92vw);font:var(--gmh-font);max-height:70vh;overflow:auto;transform:translateY(0);opacity:1;visibility:visible;transition:transform 0.2s ease,opacity 0.15s ease,visibility 0.15s ease;will-change:transform,opacity;}
+.
+.gmh-panel--dragging,.gmh-panel--resizing{transition:none !important;cursor:grabbing;}
+.gmh-panel__header{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;}
+.gmh-panel__headline{display:flex;flex-direction:column;gap:2px;}
+.gmh-panel__drag-handle{border:0;background:transparent;color:var(--gmh-muted);padding:6px 8px;border-radius:var(--gmh-radius-sm);cursor:grab;display:grid;place-items:center;font-size:16px;transition:background 0.15s ease,color 0.15s ease;}
+.gmh-panel__drag-handle:hover{background:rgba(148,163,184,0.18);color:var(--gmh-accent);}
+.gmh-panel__drag-handle:focus-visible{outline:2px solid var(--gmh-accent);outline-offset:2px;}
+.gmh-panel__drag-handle[aria-disabled="true"]{cursor:not-allowed;opacity:0.5;}
+.gmh-panel__drag-icon{pointer-events:none;line-height:1;}
+.gmh-panel__resize-handle{position:absolute;width:18px;height:18px;bottom:6px;right:10px;cursor:nwse-resize;border-radius:6px;opacity:0.7;}
+.gmh-panel__resize-handle::after{content:'';position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,transparent 40%,rgba(148,163,184,0.35) 40%,rgba(148,163,184,0.8));}
+.gmh-panel__resize-handle:hover{opacity:1;}
+.gmh-panel__resize-handle[style*="none"]{display:none !important;}
+.gmh-settings-grid{display:grid;gap:12px;}
+.gmh-settings-row{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:var(--gmh-radius-sm);border:1px solid rgba(148,163,184,0.25);background:var(--gmh-surface-alt);}
+.gmh-settings-row__main{display:flex;flex-direction:column;gap:4px;}
+.gmh-settings-row__label{font-weight:600;font-size:13px;color:var(--gmh-fg);}
+.gmh-settings-row__description{font-size:12px;color:var(--gmh-muted);}
+.gmh-settings-row input[type="checkbox"]{width:18px;height:18px;accent-color:var(--gmh-accent);}
+.gmh-settings-row input[type="number"]{width:88px;background:#0f172a;border:1px solid var(--gmh-border);color:var(--gmh-fg);border-radius:8px;padding:6px 8px;}
 html.gmh-collapsed #genit-memory-helper-panel{transform:translateY(calc(100% + 24px));opacity:0;visibility:hidden;pointer-events:none;}
 html.gmh-panel-open #genit-memory-helper-panel{pointer-events:auto;}
 #gmh-fab{position:fixed;right:16px;bottom:16px;width:52px;height:52px;border-radius:50%;border:0;display:grid;place-items:center;font:700 13px/1 var(--gmh-font);background:var(--gmh-accent);color:#041016;cursor:pointer;box-shadow:0 10px 28px rgba(8,15,30,0.45);z-index:2147483001;transition:transform 0.2s ease,box-shadow 0.2s ease,opacity 0.15s ease;touch-action:manipulation;}
 #gmh-fab:hover{box-shadow:0 14px 32px rgba(8,15,30,0.55);transform:translateY(-2px);}
 #gmh-fab:active{transform:translateY(0);box-shadow:0 6px 18px rgba(8,15,30,0.45);}
 html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px rgba(8,15,30,0.5);}
-.gmh-panel__header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;}
 .gmh-panel__title{font-size:15px;font-weight:600;margin:0;}
 .gmh-panel__tag{font-size:11px;color:var(--gmh-muted);margin-top:2px;}
 .gmh-panel__section{border-top:1px solid var(--gmh-border);padding-top:12px;display:grid;gap:10px;}
@@ -624,6 +769,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 .gmh-status-line{font-size:12px;color:var(--gmh-muted);}
 .gmh-subtext{font-size:12px;color:var(--gmh-muted);line-height:1.5;}
 @media (max-width:480px){.gmh-modal{width:100%;border-radius:12px;}.gmh-modal__actions{flex-direction:column;}.gmh-panel{right:12px;left:12px;bottom:12px;width:auto;max-height:76vh;}.gmh-panel::-webkit-scrollbar{width:6px;}.gmh-panel::-webkit-scrollbar-thumb{background:rgba(148,163,184,0.35);border-radius:999px;}#gmh-fab{width:48px;height:48px;right:12px;bottom:12px;font-size:12px;}}
+@media (prefers-reduced-motion:reduce){.gmh-panel,.gmh-modal,.gmh-progress__fill,#gmh-fab{transition:none !important;animation-duration:0.001s !important;}}
 `;
     document.head.appendChild(style);
   }
@@ -1199,6 +1345,201 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     return configurePrivacyListsLegacy();
   }
 
+  async function openPanelSettings() {
+    ensureDesignSystemStyles();
+    let keepOpen = true;
+    while (keepOpen) {
+      keepOpen = false;
+      const settings = PanelSettings.get();
+      const behavior = {
+        autoHideEnabled: settings.behavior?.autoHideEnabled !== false,
+        autoHideDelayMs:
+          Number(settings.behavior?.autoHideDelayMs) &&
+          Number(settings.behavior?.autoHideDelayMs) > 0
+            ? Math.round(Number(settings.behavior.autoHideDelayMs))
+            : 10000,
+        collapseOnOutside: settings.behavior?.collapseOnOutside !== false,
+        collapseOnFocus: settings.behavior?.collapseOnFocus === true,
+        allowDrag: settings.behavior?.allowDrag !== false,
+        allowResize: settings.behavior?.allowResize !== false,
+      };
+
+      const grid = document.createElement('div');
+      grid.className = 'gmh-settings-grid';
+
+      const buildRow = ({
+        id,
+        label,
+        description,
+        control,
+      }) => {
+        const row = document.createElement('div');
+        row.className = 'gmh-settings-row';
+        const main = document.createElement('div');
+        main.className = 'gmh-settings-row__main';
+        const labelEl = document.createElement('div');
+        labelEl.className = 'gmh-settings-row__label';
+        labelEl.textContent = label;
+        main.appendChild(labelEl);
+        if (description) {
+          const desc = document.createElement('div');
+          desc.className = 'gmh-settings-row__description';
+          desc.textContent = description;
+          main.appendChild(desc);
+        }
+        row.appendChild(main);
+        control.id = id;
+        const controls = document.createElement('div');
+        controls.style.display = 'flex';
+        controls.style.alignItems = 'center';
+        controls.style.gap = '8px';
+        controls.appendChild(control);
+        row.appendChild(controls);
+        return { row, control, controls };
+      };
+
+      const autoHideToggle = document.createElement('input');
+      autoHideToggle.type = 'checkbox';
+      autoHideToggle.checked = behavior.autoHideEnabled;
+      const autoHideDelay = document.createElement('input');
+      autoHideDelay.type = 'number';
+      autoHideDelay.min = '5';
+      autoHideDelay.max = '60';
+      autoHideDelay.step = '1';
+      autoHideDelay.value = `${Math.round(behavior.autoHideDelayMs / 1000)}`;
+      autoHideDelay.disabled = !behavior.autoHideEnabled;
+      const delayUnit = document.createElement('span');
+      delayUnit.textContent = '초';
+      delayUnit.style.fontSize = '12px';
+      delayUnit.style.color = 'var(--gmh-muted)';
+
+      autoHideToggle.addEventListener('change', () => {
+        autoHideDelay.disabled = !autoHideToggle.checked;
+      });
+
+      const autoHideRow = buildRow({
+        id: 'gmh-settings-autohide',
+        label: '자동 접힘',
+        description: '패널이 유휴 상태로 유지되면 자동으로 접습니다.',
+        control: autoHideToggle,
+      });
+      autoHideRow.controls.appendChild(autoHideDelay);
+      autoHideRow.controls.appendChild(delayUnit);
+      grid.appendChild(autoHideRow.row);
+
+      const collapseOutsideToggle = document.createElement('input');
+      collapseOutsideToggle.type = 'checkbox';
+      collapseOutsideToggle.checked = behavior.collapseOnOutside;
+      grid.appendChild(
+        buildRow({
+          id: 'gmh-settings-collapse-outside',
+          label: '밖을 클릭하면 접기',
+          description: '패널 외부를 클릭하면 곧바로 접습니다.',
+          control: collapseOutsideToggle,
+        }).row,
+      );
+
+      const focusModeToggle = document.createElement('input');
+      focusModeToggle.type = 'checkbox';
+      focusModeToggle.checked = behavior.collapseOnFocus;
+      grid.appendChild(
+        buildRow({
+          id: 'gmh-settings-focus-collapse',
+          label: '집중 모드',
+          description: '입력 필드나 버튼에 포커스가 이동하면 패널을 접습니다.',
+          control: focusModeToggle,
+        }).row,
+      );
+
+      const dragToggle = document.createElement('input');
+      dragToggle.type = 'checkbox';
+      dragToggle.checked = behavior.allowDrag;
+      grid.appendChild(
+        buildRow({
+          id: 'gmh-settings-drag',
+          label: '드래그 이동',
+          description: '상단 그립으로 패널 위치를 조정할 수 있습니다.',
+          control: dragToggle,
+        }).row,
+      );
+
+      const resizeToggle = document.createElement('input');
+      resizeToggle.type = 'checkbox';
+      resizeToggle.checked = behavior.allowResize;
+      grid.appendChild(
+        buildRow({
+          id: 'gmh-settings-resize',
+          label: '크기 조절',
+          description: '우측 하단 손잡이로 패널 크기를 바꿉니다.',
+          control: resizeToggle,
+        }).row,
+      );
+
+      const modalResult = await GMH.UI.Modal.open({
+        title: 'GMH 설정',
+        size: 'large',
+        content: grid,
+        initialFocus: '#gmh-settings-autohide',
+        actions: [
+          {
+            id: 'privacy',
+            label: '민감어 관리',
+            variant: 'secondary',
+            value: 'privacy',
+          },
+          {
+            id: 'reset',
+            label: '기본값 복원',
+            variant: 'secondary',
+            value: 'reset',
+          },
+          {
+            id: 'save',
+            label: '저장',
+            variant: 'primary',
+            value: 'save',
+          },
+        ],
+      });
+
+      if (!modalResult) {
+        setPanelStatus('패널 설정 변경을 취소했습니다.', 'muted');
+        return;
+      }
+
+      if (modalResult === 'privacy') {
+        await configurePrivacyLists();
+        keepOpen = true;
+        continue;
+      }
+
+      if (modalResult === 'reset') {
+        PanelSettings.reset();
+        setPanelStatus('패널 설정을 기본값으로 되돌렸습니다.', 'success');
+        keepOpen = true;
+        continue;
+      }
+
+      const delaySeconds = Number(autoHideDelay.value);
+      const safeDelay = Number.isFinite(delaySeconds)
+        ? Math.min(Math.max(5, Math.round(delaySeconds)), 120)
+        : 10;
+
+      PanelSettings.update({
+        behavior: {
+          autoHideEnabled: autoHideToggle.checked,
+          autoHideDelayMs: safeDelay * 1000,
+          collapseOnOutside: collapseOutsideToggle.checked,
+          collapseOnFocus: focusModeToggle.checked,
+          allowDrag: dragToggle.checked,
+          allowResize: resizeToggle.checked,
+        },
+      });
+
+      setPanelStatus('패널 설정을 저장했습니다.', 'success');
+    }
+  }
+
   function normNL(s) {
     return String(s ?? '').replace(/\r\n?|\u2028|\u2029/g, '\n');
   }
@@ -1641,19 +1982,151 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   const PanelVisibility = (() => {
     const COLLAPSED_CLASS = 'gmh-collapsed';
     const OPEN_CLASS = 'gmh-panel-open';
-    const AUTO_HIDE_DELAY = 10000;
     const STORAGE_KEY = 'gmh_panel_collapsed';
+    const MIN_GAP = 12;
+
+    const DEFAULT_LAYOUT = (() => {
+      const layout = PanelSettings.defaults?.layout || {};
+      return {
+        anchor: layout.anchor === 'left' ? 'left' : 'right',
+        offset:
+          Number.isFinite(Number(layout.offset)) && Number(layout.offset) > 0
+            ? Math.max(MIN_GAP, Math.round(Number(layout.offset)))
+            : 16,
+        bottom:
+          Number.isFinite(Number(layout.bottom)) && Number(layout.bottom) > 0
+            ? Math.max(MIN_GAP, Math.round(Number(layout.bottom)))
+            : 16,
+        width: Number.isFinite(Number(layout.width))
+          ? Math.round(Number(layout.width))
+          : null,
+        height: Number.isFinite(Number(layout.height))
+          ? Math.round(Number(layout.height))
+          : null,
+      };
+    })();
+
+    const DEFAULT_BEHAVIOR = (() => {
+      const behavior = PanelSettings.defaults?.behavior || {};
+      return {
+        autoHideEnabled:
+          typeof behavior.autoHideEnabled === 'boolean'
+            ? behavior.autoHideEnabled
+            : true,
+        autoHideDelayMs: Number.isFinite(Number(behavior.autoHideDelayMs))
+          ? Math.max(2000, Math.round(Number(behavior.autoHideDelayMs)))
+          : 10000,
+        collapseOnOutside:
+          typeof behavior.collapseOnOutside === 'boolean'
+            ? behavior.collapseOnOutside
+            : true,
+        collapseOnFocus:
+          typeof behavior.collapseOnFocus === 'boolean'
+            ? behavior.collapseOnFocus
+            : false,
+        allowDrag:
+          typeof behavior.allowDrag === 'boolean' ? behavior.allowDrag : true,
+        allowResize:
+          typeof behavior.allowResize === 'boolean'
+            ? behavior.allowResize
+            : true,
+      };
+    })();
+
+    const coerceLayout = (input = {}) => {
+      const layout = { ...DEFAULT_LAYOUT, ...(input || {}) };
+      return {
+        anchor: layout.anchor === 'left' ? 'left' : 'right',
+        offset: Number.isFinite(Number(layout.offset))
+          ? Math.max(MIN_GAP, Math.round(Number(layout.offset)))
+          : DEFAULT_LAYOUT.offset,
+        bottom: Number.isFinite(Number(layout.bottom))
+          ? Math.max(MIN_GAP, Math.round(Number(layout.bottom)))
+          : DEFAULT_LAYOUT.bottom,
+        width: Number.isFinite(Number(layout.width))
+          ? Math.max(240, Math.round(Number(layout.width)))
+          : null,
+        height: Number.isFinite(Number(layout.height))
+          ? Math.max(220, Math.round(Number(layout.height)))
+          : null,
+      };
+    };
+
+    const coerceBehavior = (input = {}) => {
+      const behavior = { ...DEFAULT_BEHAVIOR, ...(input || {}) };
+      behavior.autoHideEnabled =
+        typeof behavior.autoHideEnabled === 'boolean'
+          ? behavior.autoHideEnabled
+          : DEFAULT_BEHAVIOR.autoHideEnabled;
+      behavior.autoHideDelayMs = Number.isFinite(Number(behavior.autoHideDelayMs))
+        ? Math.max(2000, Math.round(Number(behavior.autoHideDelayMs)))
+        : DEFAULT_BEHAVIOR.autoHideDelayMs;
+      behavior.collapseOnOutside =
+        typeof behavior.collapseOnOutside === 'boolean'
+          ? behavior.collapseOnOutside
+          : DEFAULT_BEHAVIOR.collapseOnOutside;
+      behavior.collapseOnFocus =
+        typeof behavior.collapseOnFocus === 'boolean'
+          ? behavior.collapseOnFocus
+          : DEFAULT_BEHAVIOR.collapseOnFocus;
+      behavior.allowDrag =
+        typeof behavior.allowDrag === 'boolean'
+          ? behavior.allowDrag
+          : DEFAULT_BEHAVIOR.allowDrag;
+      behavior.allowResize =
+        typeof behavior.allowResize === 'boolean'
+          ? behavior.allowResize
+          : DEFAULT_BEHAVIOR.allowResize;
+      return behavior;
+    };
+
     let panelEl = null;
     let fabEl = null;
+    let dragHandle = null;
+    let resizeHandle = null;
     let modernMode = false;
     let idleTimer = null;
     let stateUnsubscribe = null;
     let outsidePointerHandler = null;
+    let focusCollapseHandler = null;
     let escapeKeyHandler = null;
     let panelListenersBound = false;
+    let resizeScheduled = false;
     let currentState = GMH_STATE.IDLE;
     let userCollapsed = false;
     let persistedPreference = null;
+    let lastFocusTarget = null;
+    let dragSession = null;
+    let resizeSession = null;
+    let applyingSettings = false;
+
+    let currentSettings = PanelSettings.get();
+    let currentLayout = coerceLayout(currentSettings.layout);
+    let currentBehavior = coerceBehavior(currentSettings.behavior);
+
+    PanelSettings.onChange((next) => {
+      currentSettings = next;
+      currentLayout = coerceLayout(next.layout);
+      currentBehavior = coerceBehavior(next.behavior);
+      if (panelEl && modernMode) {
+        applyingSettings = true;
+        try {
+          applyLayout();
+          refreshBehavior();
+        } finally {
+          applyingSettings = false;
+        }
+      }
+    });
+
+    const getRoot = () => document.documentElement;
+
+    const isModernActive = () => modernMode && !!panelEl;
+
+    const isCollapsed = () => {
+      if (!isModernActive()) return false;
+      return getRoot().classList.contains(COLLAPSED_CLASS);
+    };
 
     const loadPersistedCollapsed = () => {
       try {
@@ -1676,13 +2149,44 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       }
     };
 
-    const getRoot = () => document.documentElement;
+    const rememberFocus = () => {
+      const active = document.activeElement;
+      if (!active || active === document.body) return;
+      if (panelEl && panelEl.contains(active)) return;
+      lastFocusTarget = active;
+    };
 
-    const isModernActive = () => modernMode && !!panelEl;
+    const clearFocusMemory = () => {
+      lastFocusTarget = null;
+    };
 
-    const isCollapsed = () => {
-      if (!isModernActive()) return false;
-      return getRoot().classList.contains(COLLAPSED_CLASS);
+    const restoreFocus = () => {
+      const target = lastFocusTarget;
+      if (!target) return;
+      lastFocusTarget = null;
+      requestAnimationFrame(() => {
+        try {
+          if (typeof target.focus === 'function')
+            target.focus({ preventScroll: true });
+        } catch (err) {
+          console.warn('[GMH] focus restore failed', err);
+        }
+      });
+    };
+
+    const focusPanelElement = () => {
+      if (!panelEl || typeof panelEl.focus !== 'function') return;
+      const attempt = () => {
+        try {
+          panelEl.focus({ preventScroll: true });
+        } catch (err) {
+          /* noop */
+        }
+      };
+      attempt();
+      requestAnimationFrame(attempt);
+      setTimeout(attempt, 0);
+      setTimeout(attempt, 50);
     };
 
     const clearIdleTimer = () => {
@@ -1690,6 +2194,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         clearTimeout(idleTimer);
         idleTimer = null;
       }
+    };
+
+    const getAutoHideDelay = () => {
+      if (!currentBehavior.autoHideEnabled) return null;
+      return currentBehavior.autoHideDelayMs || 10000;
     };
 
     const applyRootState = (collapsed) => {
@@ -1720,11 +2229,13 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       clearIdleTimer();
       if (isCollapsed()) return;
       if (currentState !== GMH_STATE.IDLE) return;
+      const delay = getAutoHideDelay();
+      if (!delay) return;
       idleTimer = window.setTimeout(() => {
         if (!isModernActive()) return;
         if (currentState !== GMH_STATE.IDLE) return;
         close('idle');
-      }, AUTO_HIDE_DELAY);
+      }, delay);
     };
 
     const resetIdleTimer = () => {
@@ -1732,6 +2243,145 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       if (isCollapsed()) return;
       scheduleIdleClose();
     };
+
+    const applyLayout = () => {
+      if (!panelEl) return;
+      const layout = coerceLayout(currentLayout);
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1280;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720;
+
+      const maxWidth = Math.max(MIN_GAP, viewportWidth - MIN_GAP * 2);
+      const maxHeight = Math.max(MIN_GAP, viewportHeight - MIN_GAP * 2);
+
+      const width = layout.width
+        ? Math.min(Math.max(260, layout.width), maxWidth)
+        : null;
+      const height = layout.height
+        ? Math.min(Math.max(240, layout.height), maxHeight)
+        : null;
+
+      if (width) panelEl.style.width = `${width}px`;
+      else panelEl.style.width = '';
+
+      if (height) {
+        panelEl.style.height = `${height}px`;
+        panelEl.style.maxHeight = `${height}px`;
+      } else {
+        panelEl.style.height = '';
+        panelEl.style.maxHeight = '70vh';
+      }
+
+      // Re-measure after size adjustments
+      const rect = panelEl.getBoundingClientRect();
+      const effectiveHeight = height || rect.height || 320;
+
+      const bottomLimit = Math.max(
+        MIN_GAP,
+        viewportHeight - effectiveHeight - MIN_GAP,
+      );
+      const bottom = Math.min(
+        Math.max(MIN_GAP, layout.bottom),
+        bottomLimit,
+      );
+
+      const horizontalLimit = Math.max(MIN_GAP, viewportWidth - MIN_GAP - 160);
+      const offset = Math.min(
+        Math.max(MIN_GAP, layout.offset),
+        horizontalLimit,
+      );
+
+      if (layout.anchor === 'left') {
+        panelEl.style.left = `${offset}px`;
+        panelEl.style.right = 'auto';
+      } else {
+        panelEl.style.left = 'auto';
+        panelEl.style.right = `${offset}px`;
+      }
+      panelEl.style.bottom = `${bottom}px`;
+      panelEl.style.top = 'auto';
+
+      const finalLayout = { ...layout, offset, bottom, width, height };
+      const changed =
+        finalLayout.anchor !== currentLayout.anchor ||
+        finalLayout.offset !== currentLayout.offset ||
+        finalLayout.bottom !== currentLayout.bottom ||
+        finalLayout.width !== currentLayout.width ||
+        finalLayout.height !== currentLayout.height;
+      currentLayout = finalLayout;
+      if (changed && !applyingSettings) {
+        PanelSettings.update({ layout: finalLayout });
+      }
+    };
+
+    const refreshOutsideHandler = () => {
+      if (outsidePointerHandler) {
+        document.removeEventListener('pointerdown', outsidePointerHandler);
+        outsidePointerHandler = null;
+      }
+      if (!currentBehavior.collapseOnOutside) return;
+      outsidePointerHandler = (event) => {
+        if (!isModernActive()) return;
+        if (isCollapsed()) return;
+        const target = event.target;
+        if (panelEl && panelEl.contains(target)) return;
+        if (fabEl && fabEl.contains(target)) return;
+        if (GMH.UI.Modal?.isOpen?.()) return;
+        clearFocusMemory();
+        close('user');
+      };
+      document.addEventListener('pointerdown', outsidePointerHandler);
+    };
+
+    const refreshFocusCollapseHandler = () => {
+      if (focusCollapseHandler) {
+        document.removeEventListener('focusin', focusCollapseHandler, true);
+        focusCollapseHandler = null;
+      }
+      if (!currentBehavior.collapseOnFocus) return;
+      focusCollapseHandler = (event) => {
+        if (!isModernActive() || isCollapsed()) return;
+        const target = event.target;
+        if (!target) return;
+        if (panelEl && panelEl.contains(target)) return;
+        if (fabEl && fabEl.contains(target)) return;
+        if (GMH.UI.Modal?.isOpen?.()) return;
+        close('focus');
+      };
+      document.addEventListener('focusin', focusCollapseHandler, true);
+    };
+
+    const updateHandleAccessibility = () => {
+      if (dragHandle) {
+        dragHandle.disabled = !currentBehavior.allowDrag;
+        dragHandle.setAttribute(
+          'aria-disabled',
+          currentBehavior.allowDrag ? 'false' : 'true',
+        );
+      }
+      if (resizeHandle) {
+        resizeHandle.style.display = currentBehavior.allowResize ? '' : 'none';
+      }
+    };
+
+    const refreshBehavior = () => {
+      if (!panelEl || !modernMode) return;
+      refreshOutsideHandler();
+      refreshFocusCollapseHandler();
+      updateHandleAccessibility();
+      if (!isCollapsed()) scheduleIdleClose();
+    };
+
+    const handleViewportResize = () => {
+      if (!panelEl || !modernMode) return;
+      if (resizeScheduled) return;
+      resizeScheduled = true;
+      requestAnimationFrame(() => {
+        resizeScheduled = false;
+        applyLayout();
+      });
+    };
+
+    window.addEventListener('resize', handleViewportResize);
 
     const ensureFab = () => {
       if (!modernMode) return null;
@@ -1765,20 +2415,6 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       panelEl.addEventListener('keydown', resetIdleTimer);
       panelEl.addEventListener('focusin', resetIdleTimer);
       panelListenersBound = true;
-    };
-
-    const ensureOutsideHandler = () => {
-      if (outsidePointerHandler) return;
-      outsidePointerHandler = (event) => {
-        if (!isModernActive()) return;
-        if (isCollapsed()) return;
-        const target = event.target;
-        if (panelEl && panelEl.contains(target)) return;
-        if (fabEl && fabEl.contains(target)) return;
-        if (GMH.UI.Modal?.isOpen?.()) return;
-        close('user');
-      };
-      document.addEventListener('pointerdown', outsidePointerHandler);
     };
 
     const ensureEscapeHandler = () => {
@@ -1816,6 +2452,208 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       });
     };
 
+    const bindHandles = () => {
+      if (!panelEl) return;
+      const nextDragHandle = panelEl.querySelector('#gmh-panel-drag-handle');
+      if (dragHandle && dragHandle !== nextDragHandle)
+        dragHandle.removeEventListener('pointerdown', handleDragStart);
+      dragHandle = nextDragHandle;
+      if (dragHandle)
+        dragHandle.addEventListener('pointerdown', handleDragStart);
+
+      const nextResizeHandle = panelEl.querySelector('#gmh-panel-resize-handle');
+      if (resizeHandle && resizeHandle !== nextResizeHandle)
+        resizeHandle.removeEventListener('pointerdown', handleResizeStart);
+      resizeHandle = nextResizeHandle;
+      if (resizeHandle)
+        resizeHandle.addEventListener('pointerdown', handleResizeStart);
+
+      updateHandleAccessibility();
+    };
+
+    const stopDragTracking = () => {
+      if (!dragSession) return;
+      window.removeEventListener('pointermove', handleDragMove);
+      window.removeEventListener('pointerup', handleDragEnd);
+      window.removeEventListener('pointercancel', handleDragCancel);
+      if (dragHandle && dragSession.pointerId !== undefined) {
+        try {
+          dragHandle.releasePointerCapture(dragSession.pointerId);
+        } catch (err) {
+          /* noop */
+        }
+      }
+      panelEl?.classList.remove('gmh-panel--dragging');
+      dragSession = null;
+    };
+
+    const handleDragStart = (event) => {
+      if (!panelEl || !modernMode) return;
+      if (!currentBehavior.allowDrag) return;
+      if (event.button && event.button !== 0) return;
+      event.preventDefault();
+      dragSession = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        rect: panelEl.getBoundingClientRect(),
+      };
+      panelEl.classList.add('gmh-panel--dragging');
+      clearIdleTimer();
+      try {
+        dragHandle?.setPointerCapture(event.pointerId);
+      } catch (err) {
+        /* noop */
+      }
+      window.addEventListener('pointermove', handleDragMove);
+      window.addEventListener('pointerup', handleDragEnd);
+      window.addEventListener('pointercancel', handleDragCancel);
+    };
+
+    const handleDragMove = (event) => {
+      if (!dragSession || !panelEl) return;
+      const dx = event.clientX - dragSession.startX;
+      const dy = event.clientY - dragSession.startY;
+      const rect = dragSession.rect;
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1280;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720;
+
+      let nextLeft = rect.left + dx;
+      let nextTop = rect.top + dy;
+      const maxLeft = viewportWidth - rect.width - MIN_GAP;
+      const maxTop = viewportHeight - rect.height - MIN_GAP;
+      nextLeft = Math.min(Math.max(MIN_GAP, nextLeft), Math.max(MIN_GAP, maxLeft));
+      nextTop = Math.min(Math.max(MIN_GAP, nextTop), Math.max(MIN_GAP, maxTop));
+
+      panelEl.style.left = `${Math.round(nextLeft)}px`;
+      panelEl.style.top = `${Math.round(nextTop)}px`;
+      panelEl.style.right = 'auto';
+      panelEl.style.bottom = 'auto';
+    };
+
+    const finalizeDragLayout = () => {
+      if (!panelEl) return;
+      const rect = panelEl.getBoundingClientRect();
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1280;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720;
+      const anchor = rect.left + rect.width / 2 <= viewportWidth / 2 ? 'left' : 'right';
+      const offset = anchor === 'left'
+        ? Math.round(Math.max(MIN_GAP, rect.left))
+        : Math.round(Math.max(MIN_GAP, viewportWidth - rect.right));
+      const bottom = Math.round(
+        Math.max(MIN_GAP, viewportHeight - rect.bottom),
+      );
+      PanelSettings.update({ layout: { anchor, offset, bottom } });
+    };
+
+    const handleDragEnd = () => {
+      if (!dragSession) return;
+      stopDragTracking();
+      finalizeDragLayout();
+    };
+
+    const handleDragCancel = () => {
+      stopDragTracking();
+      applyLayout();
+    };
+
+    const stopResizeTracking = () => {
+      if (!resizeSession) return;
+      window.removeEventListener('pointermove', handleResizeMove);
+      window.removeEventListener('pointerup', handleResizeEnd);
+      window.removeEventListener('pointercancel', handleResizeCancel);
+      if (resizeHandle && resizeSession.pointerId !== undefined) {
+        try {
+          resizeHandle.releasePointerCapture(resizeSession.pointerId);
+        } catch (err) {
+          /* noop */
+        }
+      }
+      panelEl?.classList.remove('gmh-panel--resizing');
+      resizeSession = null;
+    };
+
+    const handleResizeStart = (event) => {
+      if (!panelEl || !modernMode) return;
+      if (!currentBehavior.allowResize) return;
+      if (event.button && event.button !== 0) return;
+      event.preventDefault();
+      const rect = panelEl.getBoundingClientRect();
+      resizeSession = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        width: rect.width,
+        height: rect.height,
+        nextWidth: rect.width,
+        nextHeight: rect.height,
+      };
+      panelEl.classList.add('gmh-panel--resizing');
+      clearIdleTimer();
+      try {
+        resizeHandle?.setPointerCapture(event.pointerId);
+      } catch (err) {
+        /* noop */
+      }
+      window.addEventListener('pointermove', handleResizeMove);
+      window.addEventListener('pointerup', handleResizeEnd);
+      window.addEventListener('pointercancel', handleResizeCancel);
+    };
+
+    const handleResizeMove = (event) => {
+      if (!resizeSession || !panelEl) return;
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1280;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720;
+
+      const dx = event.clientX - resizeSession.startX;
+      const dy = event.clientY - resizeSession.startY;
+
+      const horizontalRoom = Math.max(
+        MIN_GAP,
+        viewportWidth - currentLayout.offset - MIN_GAP,
+      );
+      const verticalRoom = Math.max(
+        MIN_GAP,
+        viewportHeight - currentLayout.bottom - MIN_GAP,
+      );
+
+      let nextWidth = resizeSession.width + dx;
+      let nextHeight = resizeSession.height + dy;
+
+      nextWidth = Math.min(
+        Math.max(260, nextWidth),
+        horizontalRoom,
+      );
+      nextHeight = Math.min(
+        Math.max(240, nextHeight),
+        verticalRoom,
+      );
+
+      resizeSession.nextWidth = Math.round(nextWidth);
+      resizeSession.nextHeight = Math.round(nextHeight);
+
+      panelEl.style.width = `${resizeSession.nextWidth}px`;
+      panelEl.style.height = `${resizeSession.nextHeight}px`;
+      panelEl.style.maxHeight = `${resizeSession.nextHeight}px`;
+    };
+
+    const handleResizeEnd = () => {
+      if (!resizeSession) return;
+      const { nextWidth, nextHeight } = resizeSession;
+      stopResizeTracking();
+      PanelSettings.update({
+        layout: {
+          width: nextWidth,
+          height: nextHeight,
+        },
+      });
+    };
+
+    const handleResizeCancel = () => {
+      stopResizeTracking();
+      applyLayout();
+    };
+
     const open = ({ focus = false, persist = false } = {}) => {
       if (!panelEl) return false;
       if (!modernMode) {
@@ -1827,10 +2665,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const wasCollapsed = isCollapsed();
       applyRootState(false);
       syncAria(false);
+      fabEl && fabEl.setAttribute('aria-expanded', 'true');
       if (persist) persistCollapsed(false);
       userCollapsed = false;
-      if (focus && typeof panelEl.focus === 'function') {
-        requestAnimationFrame(() => panelEl.focus({ preventScroll: true }));
+      applyLayout();
+      refreshBehavior();
+      if (focus) {
+        rememberFocus();
+        focusPanelElement();
       }
       if (currentState === GMH_STATE.IDLE) scheduleIdleClose();
       else clearIdleTimer();
@@ -1842,12 +2684,15 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       if (isCollapsed()) return false;
       applyRootState(true);
       syncAria(true);
+      fabEl && fabEl.setAttribute('aria-expanded', 'false');
       clearIdleTimer();
       if (reason === 'user') {
         userCollapsed = true;
         persistCollapsed(true);
+        if (lastFocusTarget) restoreFocus();
       }
       if (reason === 'idle') userCollapsed = false;
+      if (reason !== 'user') clearFocusMemory();
       return true;
     };
 
@@ -1880,8 +2725,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         normalizeState(GMH.Core.State?.getState?.()) || GMH_STATE.IDLE;
       ensureFab();
       attachPanelListeners();
-      ensureOutsideHandler();
       ensureEscapeHandler();
+      bindHandles();
       persistedPreference = loadPersistedCollapsed();
       const shouldCollapse = (() => {
         if (typeof persistedPreference === 'boolean')
@@ -1892,9 +2737,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           return window.innerWidth <= 768;
         return false;
       })();
+      if (!shouldCollapse) applyLayout();
       applyRootState(shouldCollapse);
       syncAria(shouldCollapse);
       userCollapsed = shouldCollapse;
+      refreshBehavior();
       if (!shouldCollapse) scheduleIdleClose();
     };
 
@@ -3181,7 +4028,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     const settingsBtn = panel.querySelector('#gmh-panel-settings');
     if (settingsBtn) {
-      settingsBtn.onclick = () => configurePrivacyLists();
+      settingsBtn.onclick = () => openPanelSettings();
     }
 
     if (modern) {
@@ -3196,14 +4043,16 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const shortcutHandler = (event) => {
         if (!event.altKey || event.ctrlKey || event.metaKey || event.repeat)
           return;
+        const key = event.key?.toLowerCase();
         const target = event.target;
         if (target instanceof HTMLElement) {
           const tag = target.tagName.toLowerCase();
-          if (['input', 'textarea', 'select'].includes(tag)) return;
-          if (target.isContentEditable) return;
+          const isInputLike =
+            ['input', 'textarea', 'select'].includes(tag) ||
+            target.isContentEditable;
+          if (isInputLike && !['g', 'm'].includes(key)) return;
         }
         if (GMH.UI.Modal?.isOpen?.()) return;
-        const key = event.key?.toLowerCase();
         switch (key) {
           case 'g':
             event.preventDefault();
@@ -3625,7 +4474,16 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     panel.tabIndex = -1;
     panel.innerHTML = `
       <div class="gmh-panel__header">
-        <div>
+        <button
+          id="gmh-panel-drag-handle"
+          class="gmh-panel__drag-handle"
+          type="button"
+          aria-label="패널 이동"
+          title="패널 끌어서 이동"
+        >
+          <span class="gmh-panel__drag-icon" aria-hidden="true">⋮⋮</span>
+        </button>
+        <div class="gmh-panel__headline">
           <div class="gmh-panel__title">Genit Memory Helper</div>
           <div class="gmh-panel__tag">v${SCRIPT_VERSION}</div>
         </div>
@@ -3678,6 +4536,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         </div>
         <div id="gmh-status-actions"></div>
       </section>
+      <div id="gmh-panel-resize-handle" class="gmh-panel__resize-handle" aria-hidden="true"></div>
     `;
     const adapter = getActiveAdapter();
     const anchor = adapter?.getPanelAnchor?.(document) || document.body;
@@ -3848,6 +4707,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     mountPanel,
     setPanelStatus,
     configurePrivacyLists,
+    openPanelSettings,
     openPanel: (options) => PanelVisibility.open(options),
     closePanel: (reason) => PanelVisibility.close(reason),
     togglePanel: () => PanelVisibility.toggle(),
