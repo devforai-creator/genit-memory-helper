@@ -11,10 +11,6 @@ const builds = [
     source: 'genit-memory-helper.user.js',
     target: path.join('dist', 'genit-memory-helper.user.js'),
   },
-  {
-    source: 'genit-memory-helper.beta.user.js',
-    target: path.join('dist', 'genit-memory-helper.beta.user.js'),
-  },
 ];
 
 async function build() {

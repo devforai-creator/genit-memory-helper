@@ -10,7 +10,6 @@ Genit 대화 로그를 정형화된 JSON으로 추출하고, LLM 요약 프롬�
 2. 아래 버튼을 클릭해 스크립트를 설치하세요:
 
 👉 [**최신 버전 다운로드**](https://github.com/devforai-creator/genit-memory-helper/raw/main/genit-memory-helper.user.js)
-👉 [**베타 버전 다운로드**](https://github.com/devforai-creator/genit-memory-helper/releases/download/v1.0.1-beta.1/genit-memory-helper.beta.user.js)
 
 3. 브라우저가 `.user.js` 파일을 다운로드하면, Tampermonkey가 자동으로 설치 화면을 띄워줍니다.  
    "Install" 버튼을 눌러주면 완료됩니다 ✅
@@ -20,8 +19,7 @@ Genit 대화 로그를 정형화된 JSON으로 추출하고, LLM 요약 프롬�
 ### 🔄 업데이트
 - 새 버전이 나오면 위의 Raw 페이지에 올라갑니다.  
 - 기존 유저는 Tampermonkey가 자동으로 업데이트를 체크합니다.  
-- 최신 UI/UX 개편은 **기능 플래그**로 옵트인할 수 있습니다(아래 “Beta UI 플래그” 참고).  
-- 릴리스는 **Stable**과 **Beta** 두 채널로 나뉩니다. Stable은 기본 설치용, Beta는 새 UI를 시험해보고 싶을 때만 설치하세요.  
+- 최신 UI/UX 개편은 이제 기본값입니다. 문제가 생기면 아래 “새 UI 킬스위치”를 참고해 임시로 기존 패널로 되돌릴 수 있습니다.  
 - **v1.0.0**: GitHub Actions CI/릴리스 파이프라인과 Playwright 스모크 테스트를 추가해 DOM 변화 감시 및 자동 배포를 지원합니다.  
 - **v0.93**: GMH 네임스페이스/어댑터 스캐폴드로 내부 구조를 분리하고, 프라이버시 미리보기·톤 별 상태 피드백·원클릭 내보내기 등 UX를 개선했습니다.  
 - **v0.92**: SAFE/STANDARD/RESEARCH 프라이버시 프로필, 자동 레다크션 + 내보내기 전 확인창, manifest(감사 로그)와 커스텀 블랙/화이트리스트 지원.  
@@ -59,22 +57,19 @@ Genit Memory Helper는 **현재 화면에 로드된 대화만** JSON으로 내�
 👉 즉, 스크롤을 어디까지 올리느냐가 곧 “요약 범위 선택”이 됩니다.  
 이 단순한 제스처 덕분에 사용자는 "어디까지 기억을 정리할지"를 직접 컨트롤할 수 있습니다.
 
-### 🧪 Beta UI 플래그 & 킬스위치
-차세대 모달/상태 패널은 기본적으로 꺼져 있으며, 아래 명령으로 원하는 환경에서만 켜고 끌 수 있습니다.
+### 🧪 새 UI 킬스위치 & 초기화
+차세대 모달/상태 패널은 기본적으로 활성화되어 있습니다. 드물게 문제가 생길 경우 아래 명령으로 즉시 롤백하거나 플래그를 초기화할 수 있습니다.
 
 ```js
 // 콘솔에서 실행 (브라우저 F12)
-localStorage.setItem('gmh_flag_newUI', '1');   // 새 UI 켜기
-localStorage.removeItem('gmh_flag_newUI');     // 새 UI 끄기
-localStorage.setItem('gmh_kill', '1');         // 긴급 킬스위치 (새 UI 강제 중지)
-localStorage.removeItem('gmh_kill');           // 킬스위치 해제
+localStorage.setItem('gmh_kill', '1');         // 긴급 킬스위치 (새 UI 임시 비활성화)
+localStorage.removeItem('gmh_kill');           // 킬스위치 해제 (새 UI 복구)
+localStorage.removeItem('gmh_flag_newUI');     // 플래그 초기화 (다음 로드 시 자동 재설정)
 ```
 
-- 주소 뒤에 `?gmhBeta`를 붙여 접속하면, 해당 탭에서만 일시적으로 새 UI가 활성화됩니다.
-- 플래그를 꺼두면 기존(레이아웃이 단순한) 패널이 그대로 동작합니다.
-- 킬스위치(`gmh_kill`)가 켜져 있으면 새 UI가 완전히 우회되므로, 급한 롤백이 필요할 때 바로 활용하세요.
-- README/CHANGELOG에 안내된 베타 릴리스(`vX.Y.Z-beta.N`)는 새 UI가 기본 ON 상태이니 평가용으로만 설치하세요.
-- Stable과 Beta는 각각 별도 `.user.js` 파일을 배포합니다. Stable을 기본으로 설치하되, 새 UI를 경험하고 싶다면 Beta 스크립트를 추가 설치한 뒤 플래그를 켜세요.
+- 킬스위치(`gmh_kill`)가 켜져 있으면 새 UI가 완전히 우회됩니다. 급한 롤백이 필요할 때만 사용한 뒤, 문제가 해결되면 꼭 해제하세요.
+- 킬스위치를 비활성화하고 페이지를 새로고침하면 새 UI가 자동으로 복구됩니다.
+- 주소 뒤에 `?gmhBeta`를 붙이는 임시 플래그는 여전히 동작하지만, 기본적으로는 사용할 필요가 없습니다.
 
 ## 개발 & 테스트
 - `npm install`

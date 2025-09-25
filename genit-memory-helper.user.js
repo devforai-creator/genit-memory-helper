@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Genit Memory Helper
 // @namespace    local.dev
-// @version      1.0.2
+// @version      1.1.0
 // @description  Genit 대화로그 JSON/TXT/MD 추출 + 요약/재요약 프롬프트 복사 기능
 // @author       devforai-creator
 // @match        https://genit.ai/*
@@ -16,7 +16,19 @@
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '1.0.2';
+  const SCRIPT_VERSION = '1.1.0';
+
+  try {
+    const killSwitchEnabled = localStorage.getItem('gmh_kill') === '1';
+    if (!killSwitchEnabled) {
+      const currentValue = localStorage.getItem('gmh_flag_newUI');
+      if (currentValue !== '1') {
+        localStorage.setItem('gmh_flag_newUI', '1');
+      }
+    }
+  } catch (err) {
+    console.warn('[GMH] failed to set default UI flag', err);
+  }
 
   const GMH = {
     VERSION: SCRIPT_VERSION,
@@ -64,7 +76,7 @@
   const isModernUIActive = Flags.newUI && !Flags.killSwitch;
 
   const dbg = (...args) => {
-    if (isModernUIActive) console.debug('[GMHβ]', ...args);
+    if (isModernUIActive) console.debug('[GMH]', ...args);
   };
 
   const GMH_STATE = {
