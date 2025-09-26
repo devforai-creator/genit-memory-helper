@@ -260,6 +260,20 @@
     },
   };
 
+  /**
+   * ExportRange tracks the optional player-turn window that should be exported.
+   *
+   * Internally it keeps two counters:
+   * - `player`: number of turns spoken by the player in the current session.
+   * - `all`: total message entries (player + npc + narration).
+   *
+   * Public helpers:
+   * - `setTotals({ player, all })`: establish the latest counts (player turns drive selection).
+   * - `setStart / setEnd / setRange / clear`: mutate the requested player-turn span (1-based).
+   * - `describe()`: snapshot showing the resolved span, counts, and corresponding entry indices.
+   * - `apply(turns)`: slice the provided `session.turns` array so only the selected player-turn
+   *   range (plus the interleaving NPC/narration entries) is returned.
+   */
   const ExportRange = (() => {
     let range = { start: null, end: null };
     let totals = { player: 0, all: 0 };
