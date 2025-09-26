@@ -29,6 +29,7 @@
 - Write imperative, concise commit messages (`feat: add actor guessing fallback`, `fix: handle 메시지 이미지 blocks`); avoid underscores used in older history.
 - For pull requests, include: a short summary, before/after notes or screenshots of the Tampermonkey panel, reproduction steps on Genit, and links to any related issues.
 - Keep PRs focused—separate formatting-only changes from feature or bug fixes so reviewers can reason about the diff quickly.
+- Always commit or stash your work as soon as a logical chunk is complete. Do **not** rely on uncommitted buffers; never run `git checkout`, `git reset`, or similar destructive commands on tracked files unless the latest changes are safely committed or explicitly stashed.
 
 ## Security & Privacy Considerations
 - Revisit `PRIVACY.md` when exposing additional data; highlight any new sensitive fields in the PR description.

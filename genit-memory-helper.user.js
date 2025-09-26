@@ -149,6 +149,16 @@
         '.flex.flex-col.items-end .markdown-content:not(.text-muted-foreground)',
         '.markdown-content.text-right',
         '.p-4.rounded-xl.bg-background p',
+        '[data-role="user"] .markdown-content.text-muted-foreground',
+        '[data-author-role="user"] .markdown-content.text-muted-foreground',
+        '.flex.w-full.justify-end .markdown-content.text-muted-foreground',
+        '.flex.flex-col.items-end .markdown-content.text-muted-foreground',
+        '.flex.justify-end .text-muted-foreground.text-sm',
+        '.flex.justify-end .text-muted-foreground',
+        '.flex.flex-col.items-end .text-muted-foreground',
+        '.p-3.rounded-lg.bg-muted\\/50 p',
+        '.flex.justify-end .p-3.rounded-lg.bg-muted\\/50 p',
+        '.flex.flex-col.items-end .p-3.rounded-lg.bg-muted\\/50 p',
       ],
       npcGroups: ['[data-role="assistant"]', '.flex.flex-col.w-full.group'],
       npcName: [
@@ -2746,12 +2756,19 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const targets = textNodes.length ? textNodes : scopeList;
       const filteredTargets = targets.filter((node) => {
         if (!(node instanceof Element)) return true;
-        if (matchesSelectorList(node, selectors.narrationBlocks)) return false;
-        if (closestMatchInList(node, selectors.narrationBlocks)) return false;
+        const playerScope =
+          closestMatchInList(node, selectors.playerScopes) ||
+          (playerScopeSelector && node.closest?.(playerScopeSelector));
+        const withinPlayer = Boolean(playerScope || scopeList.includes(node));
+        if (!withinPlayer && scopeList.length) return false;
+        if (
+          matchesSelectorList(node, selectors.narrationBlocks) ||
+          closestMatchInList(node, selectors.narrationBlocks)
+        ) {
+          if (!withinPlayer) return false;
+        }
         if (matchesSelectorList(node, selectors.npcGroups)) return false;
         if (closestMatchInList(node, selectors.npcGroups)) return false;
-        const playerScope = closestMatchInList(node, selectors.playerScopes);
-        if (!playerScope && scopeList.length) return false;
         if (matchesSelectorList(node, selectors.infoCode)) return false;
         if (containsSelector(node, selectors.infoCode)) return false;
         return true;
