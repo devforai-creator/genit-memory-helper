@@ -4654,133 +4654,153 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           return;
         }
 
-        let targetIndex = null;
-        let directOrdinal = null;
-        let targetMessageId = null;
+        const selectBlockByIndex = (idx) => {
+          if (!Number.isFinite(Number(idx))) return null;
+          try {
+            return document.querySelector(
+              `[data-gmh-message-index="${idx}"]`,
+            );
+          } catch (err) {
+            return null;
+          }
+        };
+
+        const selectBlockByMessageId = (messageId) => {
+          if (!messageId) return null;
+          try {
+            const selector = CSS?.escape
+              ? `[data-gmh-message-id="${CSS.escape(messageId)}"]`
+              : `[data-gmh-message-id="${messageId.replace(/"/g, '\\"')}"]`;
+            return document.querySelector(selector);
+          } catch (err) {
+            return null;
+          }
+        };
+
+        const resolvePlayerContext = (seedIndex, seedMessageId) => {
+          let block = null;
+          if (Number.isFinite(Number(seedIndex))) {
+            block = selectBlockByIndex(seedIndex);
+          }
+          if (!block && seedMessageId) {
+            block = selectBlockByMessageId(seedMessageId);
+          }
+
+          const walkBackward = (node) => {
+            let current = node;
+            while (current) {
+              if (
+                current instanceof Element &&
+                current.hasAttribute('data-gmh-message')
+              ) {
+                return current;
+              }
+              current = current.previousElementSibling;
+            }
+            return null;
+          };
+
+          let playerBlock = block;
+          if (!playerBlock || !playerBlock.getAttribute('data-gmh-player-turn')) {
+            playerBlock = walkBackward(playerBlock);
+            while (
+              playerBlock &&
+              !playerBlock.getAttribute('data-gmh-player-turn')
+            ) {
+              playerBlock = walkBackward(playerBlock?.previousElementSibling || null);
+            }
+          }
+
+          if (!playerBlock || !playerBlock.getAttribute('data-gmh-player-turn')) {
+            const fallbackIdx = playerIndices[playerIndices.length - 1];
+            if (Number.isFinite(fallbackIdx)) {
+              playerBlock = selectBlockByIndex(fallbackIdx);
+            }
+          }
+
+          if (!playerBlock || !playerBlock.getAttribute('data-gmh-player-turn')) {
+            return null;
+          }
+
+          const idxAttr = playerBlock.getAttribute('data-gmh-message-index');
+          const ordAttr = playerBlock.getAttribute('data-gmh-player-turn');
+          const msgAttr =
+            playerBlock.getAttribute('data-gmh-message-id') ||
+            playerBlock.getAttribute('data-message-id') ||
+            null;
+          const idx = Number(idxAttr);
+          const pos = playerIndices.indexOf(idx);
+          const ordinal = Number.isFinite(Number(ordAttr))
+            ? Number(ordAttr)
+            : pos === -1
+              ? playerIndices.length
+              : playerIndices.length - pos;
+          return {
+            index: Number.isFinite(idx) ? idx : playerIndices[playerIndices.length - 1] ?? 0,
+            ordinal,
+            messageId: msgAttr,
+          };
+        };
 
         const bookmarkCandidate = GMH.Core.TurnBookmarks.get();
+        let context = null;
         if (bookmarkCandidate) {
-          targetIndex = bookmarkCandidate.index;
-          directOrdinal = bookmarkCandidate.ordinal;
-          targetMessageId = bookmarkCandidate.messageId;
+          context = resolvePlayerContext(
+            bookmarkCandidate.index,
+            bookmarkCandidate.messageId,
+          );
         }
 
-        if (targetMessageId) {
-          try {
-            const escapedId = CSS?.escape
-              ? CSS.escape(targetMessageId)
-              : targetMessageId.replace(/"/g, '\\"');
-            const selector = `[data-gmh-message-id="${escapedId}"]`;
-            const block = document.querySelector(selector);
-            if (block instanceof Element) {
-              const attrIndex = block.getAttribute('data-gmh-message-index');
-              if (attrIndex !== null) {
-                const numeric = Number(attrIndex);
-                if (Number.isFinite(numeric)) targetIndex = numeric;
-              }
-              const attrOrdinal = block.getAttribute('data-gmh-player-turn');
-              if (attrOrdinal !== null) {
-                const numericOrdinal = Number(attrOrdinal);
-                if (Number.isFinite(numericOrdinal)) directOrdinal = numericOrdinal;
-              }
-            }
-          } catch (err) {
-            /* noop */
-          }
-        }
-
-        if (targetIndex === null && directOrdinal === null) {
+        if (!context) {
+          let seedIndex = null;
+          let seedMessageId = null;
           try {
             const current = document.activeElement;
             if (current && panel.contains(current)) {
-              const block = current.closest('[data-turn-index], [data-message-id]');
+              const block = current.closest('[data-gmh-message-index],[data-turn-index],[data-message-id]');
               if (block) {
-                const attrIndex = block.getAttribute('data-turn-index');
-                if (attrIndex !== null) {
-                  const numeric = Number(attrIndex);
-                  if (Number.isFinite(numeric)) targetIndex = numeric;
-                }
-                const attrOrdinal = block.getAttribute('data-player-turn');
-                if (attrOrdinal !== null) {
-                  const numericOrdinal = Number(attrOrdinal);
-                  if (Number.isFinite(numericOrdinal)) directOrdinal = numericOrdinal;
-                }
-                const attrMessageId =
-                  block.getAttribute('data-message-id') ||
-                  block.getAttribute('data-gmh-message-id');
-                if (attrMessageId) targetMessageId = attrMessageId;
+                const indexAttr = block.getAttribute('data-gmh-message-index');
+                const turnAttr = block.getAttribute('data-turn-index');
+                if (indexAttr !== null) seedIndex = Number(indexAttr);
+                else if (turnAttr !== null) seedIndex = Number(turnAttr);
+                const idAttr =
+                  block.getAttribute('data-gmh-message-id') ||
+                  block.getAttribute('data-message-id');
+                if (idAttr) seedMessageId = idAttr;
               }
             }
           } catch (err) {
             /* noop */
           }
+          context = resolvePlayerContext(seedIndex, seedMessageId);
         }
 
-        if (typeof directOrdinal === 'number' && directOrdinal > 0) {
-          if (mode === 'start') {
-            GMH.Core.ExportRange.setStart(directOrdinal);
-            setPanelStatus(`플레이어 턴 ${directOrdinal}을 시작으로 지정했습니다.`, 'info');
-            rangeStartInput.value = String(directOrdinal);
-          } else {
-            GMH.Core.ExportRange.setEnd(directOrdinal);
-            setPanelStatus(`플레이어 턴 ${directOrdinal}을 끝으로 지정했습니다.`, 'info');
-            rangeEndInput.value = String(directOrdinal);
-          }
-          GMH.Core.TurnBookmarks.record(
-            targetIndex ?? -1,
-            directOrdinal,
-            targetMessageId || null,
-          );
+        if (!context) {
+          const fallbackIdx = playerIndices[playerIndices.length - 1];
+          context = resolvePlayerContext(fallbackIdx, null);
+        }
+
+        if (!context) {
+          setPanelStatus('플레이어 턴을 찾을 수 없습니다.', 'warning');
           return;
         }
 
-        if (targetIndex === null) {
-          const last = playerIndices[playerIndices.length - 1];
-          targetIndex = last ?? 0;
-        }
+        const targetIndex = context.index;
+        const resolvedOrdinal = context.ordinal;
+        const targetMessageId = context.messageId;
 
-        const playerOrder = playerIndices.indexOf(targetIndex);
-        if (playerOrder === -1) {
-          const nextPlayer = playerIndices.find((idx) => idx >= targetIndex);
-          const fallbackIndex = nextPlayer ?? playerIndices[playerIndices.length - 1];
-          const fallbackOrder = playerIndices.indexOf(fallbackIndex);
-          if (fallbackOrder === -1) {
-            setPanelStatus('플레이어 턴을 찾을 수 없습니다.', 'warning');
-            return;
-          }
-          targetIndex = fallbackIndex;
-          try {
-            const blockFromFallback = document.querySelector(
-              `[data-gmh-message-index="${fallbackIndex}"]`,
-            );
-            if (blockFromFallback instanceof Element) {
-              const attrMessageId =
-                blockFromFallback.getAttribute('data-gmh-message-id') ||
-                blockFromFallback.getAttribute('data-message-id');
-              if (attrMessageId) targetMessageId = attrMessageId;
-            }
-          } catch (err) {
-            /* ignore */
-          }
-        }
-
-        const ordinal = (() => {
-          const pos = playerIndices.indexOf(targetIndex);
-          if (pos === -1) return playerIndices.length;
-          return playerIndices.length - pos;
-        })();
         if (mode === 'start') {
-          GMH.Core.ExportRange.setStart(ordinal);
-          setPanelStatus(`플레이어 턴 ${ordinal}을 시작으로 지정했습니다.`, 'info');
-          rangeStartInput.value = String(ordinal);
+          GMH.Core.ExportRange.setStart(resolvedOrdinal);
+          setPanelStatus(`플레이어 턴 ${resolvedOrdinal}을 시작으로 지정했습니다.`, 'info');
+          rangeStartInput.value = String(resolvedOrdinal);
         } else {
-          GMH.Core.ExportRange.setEnd(ordinal);
-          setPanelStatus(`플레이어 턴 ${ordinal}을 끝으로 지정했습니다.`, 'info');
-          rangeEndInput.value = String(ordinal);
+          GMH.Core.ExportRange.setEnd(resolvedOrdinal);
+          setPanelStatus(`플레이어 턴 ${resolvedOrdinal}을 끝으로 지정했습니다.`, 'info');
+          rangeEndInput.value = String(resolvedOrdinal);
         }
         GMH.Core.TurnBookmarks.record(
           targetIndex,
-          ordinal,
+          resolvedOrdinal,
           targetMessageId || null,
         );
       };
