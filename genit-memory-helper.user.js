@@ -17,7 +17,17 @@
   'use strict';
 
   const PAGE_WINDOW = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-  const SCRIPT_VERSION = '1.2.1';
+  const detectScriptVersion = () => {
+    if (typeof GM_info !== 'undefined') {
+      const version = GM_info?.script?.version;
+      if (typeof version === 'string' && version.trim()) {
+        return version.trim();
+      }
+    }
+    return '0.0.0-dev';
+  };
+
+  const scriptVersion = detectScriptVersion();
 
   try {
     const killSwitchEnabled = localStorage.getItem('gmh_kill') === '1';
@@ -32,7 +42,7 @@
   }
 
   const GMH = {
-    VERSION: SCRIPT_VERSION,
+    VERSION: scriptVersion,
     Util: {},
     Privacy: {},
     Export: {},
@@ -1761,7 +1771,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   }) {
     return {
       tool: 'Genit Memory Helper',
-      version: SCRIPT_VERSION,
+      version: GMH.VERSION,
       generated_at: new Date().toISOString(),
       profile,
       counts,
@@ -5441,7 +5451,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         </button>
         <div class="gmh-panel__headline">
           <div class="gmh-panel__title">Genit Memory Helper</div>
-          <div class="gmh-panel__tag">v${SCRIPT_VERSION}</div>
+          <div class="gmh-panel__tag">v${GMH.VERSION}</div>
         </div>
         <button id="gmh-panel-settings" class="gmh-small-btn gmh-small-btn--muted" title="설정">⚙</button>
       </div>
