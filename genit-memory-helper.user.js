@@ -145,6 +145,7 @@
         '[data-role="user"] .markdown-content',
         '.markdown-content.text-right',
         '.p-4.rounded-xl.bg-background p',
+        '.space-y-3.mb-6 .markdown-content',
       ],
       npcGroups: ['[data-role="assistant"]', '.flex.flex-col.w-full.group'],
       npcName: [
@@ -289,7 +290,7 @@
    *   range (plus the interleaving NPC/narration entries) is returned.
    */
   const ExportRange = (() => {
-    let range = { start: null, end: null };
+    const requested = { start: null, end: null };
     let totals = { player: 0, all: 0 };
     const listeners = new Set();
 
@@ -300,39 +301,40 @@
     };
 
     const resolveBounds = (totalPlayers = totals.player) => {
-      if (!totalPlayers || totalPlayers < 1)
+      const total = Number.isFinite(totalPlayers) && totalPlayers > 0 ? totalPlayers : 0;
+      if (!total)
         return {
           active: false,
           start: null,
           end: null,
           count: 0,
-          total: totalPlayers || 0,
+          total,
           all: totals.all || 0,
         };
-      let start = range.start
-        ? Math.max(1, Math.min(range.start, totalPlayers))
-        : 1;
-      let end = range.end
-        ? Math.max(1, Math.min(range.end, totalPlayers))
-        : totalPlayers;
+      let start = requested.start ?? 1;
+      let end = requested.end ?? total;
+      start = Math.max(1, Math.min(total, start));
+      end = Math.max(1, Math.min(total, end));
       if (end < start) end = start;
-      const active = Boolean(range.start || range.end);
+      const active = Boolean(requested.start || requested.end);
       const count = Math.max(0, end - start + 1);
       return {
         active,
         start,
         end,
         count,
-        total: totalPlayers,
+        total,
         all: totals.all || 0,
       };
     };
 
-    const snapshot = () => ({
-      range: { ...range },
-      totals: { ...totals },
-      bounds: resolveBounds(),
-    });
+   const snapshot = () => {
+      return {
+        range: { ...requested },
+        totals: { ...totals },
+        bounds: resolveBounds(),
+      };
+    };
 
     const notify = () => {
       const current = snapshot();
@@ -345,44 +347,9 @@
       });
     };
 
-    const syncRange = (startValue, endValue) => {
-      let changed = false;
-      const nextStart = normalizeValue(startValue);
-      const nextEnd = normalizeValue(endValue);
-      if (range.start !== nextStart) {
-        range.start = nextStart;
-        changed = true;
-      }
-      if (range.end !== nextEnd) {
-        range.end = nextEnd;
-        changed = true;
-      }
-      if (totals.player > 0) {
-        if (range.start && range.start > totals.player) {
-          range.start = totals.player;
-          changed = true;
-        }
-        if (range.end && range.end > totals.player) {
-          range.end = totals.player;
-          changed = true;
-        }
-        if (range.start && range.end && range.end < range.start) {
-          range.end = range.start;
-          changed = true;
-        }
-      }
-      if (!totals.player && (range.start || range.end)) {
-        range.start = null;
-        range.end = null;
-        changed = true;
-      }
-      if (changed) notify();
-      return snapshot();
-    };
-
     return {
       getRange() {
-        return { ...range };
+        return { ...requested };
       },
       getTotals() {
         return { ...totals };
@@ -486,17 +453,41 @@
         };
       },
       setStart(value) {
-        return syncRange(value, range.end);
+        const next = normalizeValue(value);
+        if (requested.start === next) return snapshot();
+        requested.start = next;
+        if (requested.start && requested.end && requested.end < requested.start) {
+          requested.end = requested.start;
+        }
+        notify();
+        return snapshot();
       },
       setEnd(value) {
-        return syncRange(range.start, value);
+        const next = normalizeValue(value);
+        if (requested.end === next) return snapshot();
+        requested.end = next;
+        if (requested.start && requested.end && requested.end < requested.start) {
+          requested.start = requested.end;
+        }
+        notify();
+        return snapshot();
       },
       setRange(startValue, endValue) {
-        return syncRange(startValue, endValue);
+        const nextStart = normalizeValue(startValue);
+        const nextEnd = normalizeValue(endValue);
+        if (requested.start === nextStart && requested.end === nextEnd) return snapshot();
+        requested.start = nextStart;
+        requested.end = nextEnd;
+        if (requested.start && requested.end && requested.end < requested.start) {
+          requested.end = requested.start;
+        }
+        notify();
+        return snapshot();
       },
       clear() {
-        if (range.start === null && range.end === null) return snapshot();
-        range = { start: null, end: null };
+        if (requested.start === null && requested.end === null) return snapshot();
+        requested.start = null;
+        requested.end = null;
         notify();
         return snapshot();
       },
@@ -508,13 +499,17 @@
           ? Math.max(0, Math.floor(Number(input.all)))
           : 0;
         const changed = totals.player !== nextPlayer || totals.all !== nextAll;
+        if (!changed) {
+          totals = { player: nextPlayer, all: nextAll };
+          return snapshot();
+        }
+
         totals = { player: nextPlayer, all: nextAll };
         if (!nextPlayer) {
-          range = { start: null, end: null };
-        } else {
-          syncRange(range.start, range.end);
+          requested.start = null;
+          requested.end = null;
         }
-        if (changed) notify();
+        notify();
         return snapshot();
       },
       subscribe(listener) {
@@ -560,9 +555,13 @@
       record(index, ordinal, messageId) {
         if (!Number.isFinite(Number(index))) return null;
         const normalizedIndex = Number(index);
-        const normalizedOrdinal = Number.isFinite(Number(ordinal))
-          ? Number(ordinal)
-          : null;
+        let normalizedOrdinal = null;
+        if (ordinal !== null && ordinal !== undefined) {
+          const numericOrdinal = Number(ordinal);
+          if (Number.isFinite(numericOrdinal) && numericOrdinal > 0) {
+            normalizedOrdinal = numericOrdinal;
+          }
+        }
         const normalizedId =
           typeof messageId === 'string' && messageId ? messageId : null;
         const key = makeKey(normalizedIndex, normalizedId);
@@ -2429,6 +2428,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       if (!selList?.length) return out;
       for (const sel of selList) {
         if (!sel) continue;
+        if (root instanceof Element && root.matches(sel) && !seen.has(root)) {
+          seen.add(root);
+          out.push(root);
+        }
         let nodes;
         try {
           nodes = root.querySelectorAll(sel);
@@ -2547,10 +2550,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     const emitPlayerLines = (block, pushLine) => {
       const scopes = collectAll(selectors.playerScopes, block);
-      if (!scopes.length) return;
+      const scopeList = scopes.length ? [...scopes] : [];
+      if (playerScopeSelector && block.matches?.(playerScopeSelector)) {
+        if (!scopeList.includes(block)) scopeList.unshift(block);
+      }
+      if (!scopeList.length) scopeList.push(block);
       const textNodes = [];
       const nodeSeen = new Set();
-      for (const scope of scopes) {
+      for (const scope of scopeList) {
         collectAll(selectors.playerText, scope).forEach((node) => {
           if (!nodeSeen.has(node)) {
             nodeSeen.add(node);
@@ -2558,7 +2565,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           }
         });
       }
-      const targets = textNodes.length ? textNodes : scopes;
+      const targets = textNodes.length ? textNodes : scopeList;
       const seenSegments = new Set();
       targets.forEach((node) => {
         textSegmentsFromNode(node).forEach((seg) => {
@@ -4279,13 +4286,13 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const raw = readTranscriptText();
       const normalized = normalizeTranscript(raw);
       const session = buildSession(normalized);
-      const playerTurns = session.turns.filter(
-        (t) => t.role === 'player',
-      ).length;
-      GMH.Core.ExportRange.setTotals({
-        player: playerTurns,
-        all: session.turns.length,
-      });
+     const playerTurns = session.turns.filter(
+       (t) => t.role === 'player',
+     ).length;
+     GMH.Core.ExportRange.setTotals({
+       player: playerTurns,
+       all: session.turns.length,
+     });
       return {
         session,
         playerTurns,
@@ -4804,6 +4811,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     let rangeUnsubscribe = null;
     let selectedBookmarkKey = '';
+    let bookmarkSelectionPinned = false;
 
     const syncBookmarkSelect = (entries = []) => {
       if (!rangeBookmarkSelect) return;
@@ -4829,10 +4837,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         rangeBookmarkSelect.appendChild(option);
       });
       let nextValue = '';
-      if (entries.some((entry) => entry.key === previous)) {
+      if (bookmarkSelectionPinned && entries.some((entry) => entry.key === previous)) {
         nextValue = previous;
       } else if (entries.length) {
         nextValue = entries[0].key;
+        bookmarkSelectionPinned = false;
       }
       rangeBookmarkSelect.value = nextValue;
       selectedBookmarkKey = nextValue || '';
@@ -4848,6 +4857,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       rangeBookmarkSelect.dataset.gmhBookmarksReady = 'true';
       rangeBookmarkSelect.addEventListener('change', () => {
         selectedBookmarkKey = rangeBookmarkSelect.value || '';
+        if (!selectedBookmarkKey) bookmarkSelectionPinned = false;
+        else bookmarkSelectionPinned = true;
       });
       if (typeof GMH.Core?.TurnBookmarks?.subscribe === 'function') {
         GMH.Core.TurnBookmarks.subscribe(syncBookmarkSelect);
@@ -4861,17 +4872,21 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     const syncRangeControls = (snapshot) => {
       if (!snapshot) return;
-      const { range, bounds, totals } = snapshot;
+      const { bounds, totals, range } = snapshot;
       const totalPlayers = totals?.player ?? bounds.total ?? 0;
+      const resolvedStart = bounds.active ? bounds.start : null;
+      const resolvedEnd = bounds.active ? bounds.end : null;
       if (rangeStartInput) {
         if (totalPlayers) rangeStartInput.max = String(totalPlayers);
         else rangeStartInput.removeAttribute('max');
-        rangeStartInput.value = range.start ? String(range.start) : '';
+        rangeStartInput.value = resolvedStart ? String(resolvedStart) : '';
+        rangeStartInput.dataset.gmhRequested = range.start ? String(range.start) : '';
       }
       if (rangeEndInput) {
         if (totalPlayers) rangeEndInput.max = String(totalPlayers);
         else rangeEndInput.removeAttribute('max');
-        rangeEndInput.value = range.end ? String(range.end) : '';
+        rangeEndInput.value = resolvedEnd ? String(resolvedEnd) : '';
+        rangeEndInput.dataset.gmhRequested = range.end ? String(range.end) : '';
       }
       if (rangeSummary) {
         if (!bounds.total) {
@@ -4926,6 +4941,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           GMH.Core.ExportRange.clear();
           GMH.Core.TurnBookmarks.clear();
           selectedBookmarkKey = '';
+          bookmarkSelectionPinned = false;
           if (rangeBookmarkSelect) rangeBookmarkSelect.value = '';
         });
       }
@@ -5135,10 +5151,20 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         }
 
         if (!context) {
+          const existingRange = GMH.Core.ExportRange.getRange();
+          const hasCustomRange = existingRange.start || existingRange.end;
           const totalPlayers = playerIndices.length;
           if (!totalPlayers) {
             setPanelStatus('플레이어 턴을 찾을 수 없습니다.', 'warning');
             GMH.Core.TurnBookmarks.clear();
+            return;
+          }
+
+          if (hasCustomRange) {
+            setPanelStatus(
+              '플레이어 턴을 찾지 못해 현재 지정된 범위를 유지합니다.',
+              'warning',
+            );
             return;
           }
 
@@ -5158,6 +5184,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             );
             if (recorded?.key) {
               selectedBookmarkKey = recorded.key;
+              bookmarkSelectionPinned = false;
               if (rangeBookmarkSelect) rangeBookmarkSelect.value = recorded.key;
             }
             setPanelStatus(
@@ -5180,6 +5207,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             );
             if (recorded?.key) {
               selectedBookmarkKey = recorded.key;
+              bookmarkSelectionPinned = false;
               if (rangeBookmarkSelect) rangeBookmarkSelect.value = recorded.key;
             }
             setPanelStatus(
@@ -5216,6 +5244,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         );
         if (finalBookmark?.key) {
           selectedBookmarkKey = finalBookmark.key;
+          bookmarkSelectionPinned = false;
           if (rangeBookmarkSelect)
             rangeBookmarkSelect.value = finalBookmark.key;
         }
@@ -5319,6 +5348,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           });
           return null;
         }
+        const requestedRange = GMH.Core.ExportRange.getRange();
         const sanitizedPlayerCount = privacy.sanitizedSession.turns.filter(
           (turn) => turn.role === 'player',
         ).length;
@@ -5326,6 +5356,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           player: sanitizedPlayerCount,
           all: privacy.sanitizedSession.turns.length,
         });
+        if (requestedRange.start || requestedRange.end) {
+          GMH.Core.ExportRange.setRange(
+            requestedRange.start,
+            requestedRange.end,
+          );
+        }
         const selection = GMH.Core.ExportRange.apply(
           privacy.sanitizedSession.turns,
         );

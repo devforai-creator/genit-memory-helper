@@ -100,6 +100,14 @@ describe('GMH.Core.ExportRange', () => {
     ]);
   });
 
+  it('respects explicit start/end selections when totals are unchanged', () => {
+    ExportRange.setTotals({ player: 7, all: 10 });
+    ExportRange.setStart(1);
+    ExportRange.setEnd(7);
+    const snapshot = ExportRange.describe();
+    expect(snapshot).toMatchObject({ start: 1, end: 7, total: 7, active: true });
+  });
+
   it('clears custom range when totals reset to zero', () => {
     ExportRange.setTotals({ player: 2, all: sampleTurns.length });
     ExportRange.setRange(1, 1);
