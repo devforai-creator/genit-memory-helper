@@ -31,6 +31,7 @@
 - Keep PRs focused—separate formatting-only changes from feature or bug fixes so reviewers can reason about the diff quickly.
 - Always commit or stash your work as soon as a logical chunk is complete. Do **not** rely on uncommitted buffers; never run `git checkout`, `git reset`, or similar destructive commands on tracked files unless the latest changes are safely committed or explicitly stashed.
 - When responding to new instructions, restate or summarize the request to confirm understanding (e.g., “제가 이해한 요구사항은 A와 B입니다, 맞나요?”). Do not proceed if interpretation is ambiguous or unconfirmed.
+- Any time the role classification/parsing heuristics are modified (e.g., adjusting `detectRole`, `emit*Lines`, `parseTurns` logic), update `docs/role-classification-heuristics.md` in the same change to reflect the new behavior and note any known issues.
 
 ## Security & Privacy Considerations
 - Revisit `PRIVACY.md` when exposing additional data; highlight any new sensitive fields in the PR description.
