@@ -63,19 +63,6 @@ test.describe('GMH mock smoke (offline)', () => {
     const rangeSummary = panel.locator('#gmh-range-summary');
     await expect(rangeSummary).toBeVisible();
 
-    const rangeInfo = await page.evaluate(() => {
-      try {
-        return window.GMH?.Core?.ExportRange?.describe?.();
-      } catch (err) {
-        return null;
-      }
-    });
-
-    if (rangeInfo?.total && rangeInfo.total > 0) {
-      const startValue = rangeInfo.total >= 2 ? 2 : 1;
-      const endValue =
-        rangeInfo.total >= startValue + 1 ? startValue + 1 : startValue;
-
     const markStartBtn = panel.locator('#gmh-range-mark-start');
     const markEndBtn = panel.locator('#gmh-range-mark-end');
     await expect(markStartBtn).toBeVisible();
@@ -87,13 +74,22 @@ test.describe('GMH mock smoke (offline)', () => {
     await markEndBtn.click();
     await expect(rangeEnd).not.toHaveValue('');
 
-    const startValue = totalTurns >= 2 ? 2 : 1;
-    const endValue = totalTurns >= startValue + 1 ? startValue + 1 : startValue;
+    const rangeInfo = await page.evaluate(() => {
+      try {
+        return window.GMH?.Core?.ExportRange?.describe?.();
+      } catch (err) {
+        return null;
+      }
+    });
 
-    await rangeStart.fill(String(startValue));
-    await rangeStart.blur();
-    await rangeEnd.fill(String(endValue));
-    await rangeEnd.blur();
+    if (rangeInfo?.total && rangeInfo.total > 0) {
+      const startValue = 1;
+      const endValue = rangeInfo.total >= 2 ? 2 : 1;
+
+      await rangeStart.fill(String(startValue));
+      await rangeStart.blur();
+      await rangeEnd.fill(String(endValue));
+      await rangeEnd.blur();
 
       await expect(rangeSummary).toContainText(
         new RegExp(`플레이어 턴 ${startValue}-${endValue}`),

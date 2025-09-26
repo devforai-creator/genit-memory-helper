@@ -73,18 +73,18 @@ describe('GMH.Core.ExportRange', () => {
     });
     expect(selection.turns).toHaveLength(sampleTurns.length);
     expect(selection.indices).toEqual([0, 1, 2, 3, 4]);
-    expect(selection.ordinals).toEqual([null, 1, null, 2, null]);
+    expect(selection.ordinals).toEqual([null, 2, null, 1, null]);
   });
 
   it('slices using player-turn boundaries while keeping surrounding entries', () => {
     ExportRange.setTotals({ player: 2, all: sampleTurns.length });
-    ExportRange.setRange(2, 2);
+    ExportRange.setRange(1, 1);
     const selection = ExportRange.apply(sampleTurns);
 
     expect(selection.info).toMatchObject({
       active: true,
-      start: 2,
-      end: 2,
+      start: 1,
+      end: 1,
       count: 1,
       total: 2,
       all: sampleTurns.length,
@@ -92,7 +92,7 @@ describe('GMH.Core.ExportRange', () => {
     expect(selection.info.startIndex).toBe(3);
     expect(selection.info.endIndex).toBe(4);
     expect(selection.indices).toEqual([3, 4]);
-    expect(selection.ordinals).toEqual([2, null]);
+    expect(selection.ordinals).toEqual([1, null]);
 
     expect(selection.turns.map((t) => t.text)).toEqual([
       '준비됐다',

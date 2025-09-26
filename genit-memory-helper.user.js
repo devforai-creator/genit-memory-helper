@@ -16,6 +16,7 @@
 (function () {
   'use strict';
 
+  const PAGE_WINDOW = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
   const SCRIPT_VERSION = '1.2.1';
 
   try {
@@ -393,12 +394,24 @@
         });
         const totalPlayers = playerIndices.length;
         const info = resolveBounds(totalPlayers);
+        const ordinalMap = new Map();
+        playerIndices.forEach((idx, pos) => {
+          const bottomOrdinal = totalPlayers - pos;
+          ordinalMap.set(idx, bottomOrdinal);
+        });
+
+        const bottomStart = info.active ? info.start : 1;
+        const bottomEnd = info.active ? info.end : totalPlayers;
+        const topStartOrdinal = info.active
+          ? Math.max(1, Math.min(totalPlayers, totalPlayers - bottomEnd + 1))
+          : 1;
+        const topEndOrdinal = info.active
+          ? Math.max(1, Math.min(totalPlayers, totalPlayers - bottomStart + 1))
+          : totalPlayers;
+
         if (!totalPlayers || !info.count || !info.active) {
           const indices = list.map((_, idx) => idx);
-          const ordinals = indices.map((idx) => {
-            const pos = playerIndices.indexOf(idx);
-            return pos === -1 ? null : pos + 1;
-          });
+          const ordinals = indices.map((idx) => ordinalMap.get(idx) || null);
           return {
             turns: [...list],
             indices,
@@ -413,8 +426,8 @@
           };
         }
 
-        const startIndex = playerIndices[Math.max(0, info.start - 1)] ?? 0;
-        const nextPlayer = playerIndices[Math.min(playerIndices.length, info.end)];
+        const startIndex = playerIndices[Math.max(0, topStartOrdinal - 1)] ?? 0;
+        const nextPlayer = playerIndices[Math.min(playerIndices.length, topEndOrdinal)];
         const endExclusive = Number.isFinite(nextPlayer) ? nextPlayer : list.length;
         const includedIndices = [];
         for (let idx = startIndex; idx < endExclusive; idx += 1) {
@@ -422,10 +435,7 @@
         }
         if (!includedIndices.length) includedIndices.push(startIndex);
         const sliced = includedIndices.map((idx) => list[idx]);
-        const ordinals = includedIndices.map((idx) => {
-          const pos = playerIndices.indexOf(idx);
-          return pos === -1 ? null : pos + 1;
-        });
+        const ordinals = includedIndices.map((idx) => ordinalMap.get(idx) || null);
         return {
           turns: sliced,
           indices: includedIndices,
@@ -489,11 +499,12 @@
   const TurnBookmarks = (() => {
     let candidate = null;
     return {
-      record(index, ordinal) {
+      record(index, ordinal, messageId) {
         if (!Number.isFinite(Number(index))) return;
         candidate = {
           index: Number(index),
           ordinal: Number.isFinite(Number(ordinal)) ? Number(ordinal) : null,
+          messageId: typeof messageId === 'string' ? messageId : null,
           timestamp: Date.now(),
         };
       },
@@ -507,6 +518,32 @@
   })();
 
   GMH.Core.TurnBookmarks = TurnBookmarks;
+
+  const handleBookmarkCandidate = (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const message = target.closest('[data-gmh-message-index], [data-turn-index]');
+    if (!message) return;
+    const indexAttr =
+      message.getAttribute('data-gmh-message-index') ||
+      message.getAttribute('data-turn-index');
+    if (indexAttr === null) return;
+    const ordinalAttr =
+      message.getAttribute('data-gmh-player-turn') ||
+      message.getAttribute('data-player-turn');
+    const messageIdAttr =
+      message.getAttribute('data-gmh-message-id') ||
+      message.getAttribute('data-message-id');
+    const index = Number(indexAttr);
+    const ordinal = ordinalAttr !== null ? Number(ordinalAttr) : null;
+    if (!Number.isFinite(index)) return;
+    GMH.Core.TurnBookmarks.record(index, ordinal, messageIdAttr || null);
+  };
+
+  if (!PAGE_WINDOW.__GMHBookmarkListener) {
+    document.addEventListener('click', handleBookmarkCandidate, true);
+    PAGE_WINDOW.__GMHBookmarkListener = true;
+  }
 
   const Flags = (() => {
     let betaQuery = false;
@@ -626,8 +663,6 @@
   // -------------------------------
   // 0) Constants & utils
   // -------------------------------
-  const PAGE_WINDOW =
-    typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
   const PLAYER_MARK = '⟦PLAYER⟧ ';
   const HEADER_RE =
     /^(\d+월\s*\d+일.*?\d{1,2}:\d{2})\s*\|\s*([^|]+?)\s*\|\s*📍\s*([^|]+)\s*\|?(.*)$/;
@@ -3991,21 +4026,33 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const adapter = getActiveAdapter();
       try {
         const container = adapter?.findContainer?.(document) || document;
-        const blocks = adapter?.listMessageBlocks?.(container) || [];
-        let playerOrdinal = 0;
-        Array.from(blocks).forEach((block, idx) => {
-          if (!(block instanceof Element)) return;
+        const blockNodes = adapter?.listMessageBlocks?.(container) || [];
+        const blocks = Array.from(blockNodes).filter((node) => node instanceof Element);
+
+        blocks.forEach((block, idx) => {
           block.setAttribute('data-gmh-message', '1');
           block.setAttribute('data-gmh-message-index', String(idx));
+          const messageId =
+            block.getAttribute('data-gmh-message-id') ||
+            block.getAttribute('data-message-id') ||
+            block.getAttribute('data-id') ||
+            null;
+          if (messageId) block.setAttribute('data-gmh-message-id', messageId);
+          else block.removeAttribute('data-gmh-message-id');
           const role = adapter?.detectRole?.(block) || 'unknown';
           block.setAttribute('data-gmh-message-role', role);
-          if (role === 'player') {
-            playerOrdinal += 1;
-            block.setAttribute('data-gmh-player-turn', String(playerOrdinal));
-          } else {
-            block.removeAttribute('data-gmh-player-turn');
-          }
+          if (role !== 'player') block.removeAttribute('data-gmh-player-turn');
         });
+
+        let ordinal = 0;
+        for (let i = blocks.length - 1; i >= 0; i -= 1) {
+          const block = blocks[i];
+          if (!block) continue;
+          if (block.getAttribute('data-gmh-message-role') === 'player') {
+            ordinal += 1;
+            block.setAttribute('data-gmh-player-turn', String(ordinal));
+          }
+        }
       } catch (err) {
         /* ignore tagging errors */
       }
@@ -4541,9 +4588,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         if (!bounds.total) {
           rangeSummary.textContent = '로드된 플레이어 턴이 없습니다.';
         } else if (!bounds.active) {
-          rangeSummary.textContent = `전체 내보내기 · 플레이어 턴 ${bounds.total}개`;
+          rangeSummary.textContent = `최근 플레이어 턴 ${bounds.total}개 전체`;
         } else {
-          rangeSummary.textContent = `플레이어 턴 ${bounds.start}-${bounds.end} · ${bounds.count}개 / 전체 ${bounds.total}개`;
+          rangeSummary.textContent = `최근 플레이어 턴 ${bounds.start}-${bounds.end} · ${bounds.count}개 / 전체 ${bounds.total}개`;
         }
       }
     };
@@ -4588,6 +4635,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       if (rangeClearBtn) {
         rangeClearBtn.addEventListener('click', () => {
           GMH.Core.ExportRange.clear();
+          GMH.Core.TurnBookmarks.clear();
         });
       }
       const doBookmark = async (mode) => {
@@ -4608,12 +4656,40 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
         let targetIndex = null;
         let directOrdinal = null;
+        let targetMessageId = null;
 
         const bookmarkCandidate = GMH.Core.TurnBookmarks.get();
         if (bookmarkCandidate) {
           targetIndex = bookmarkCandidate.index;
           directOrdinal = bookmarkCandidate.ordinal;
-        } else {
+          targetMessageId = bookmarkCandidate.messageId;
+        }
+
+        if (targetMessageId) {
+          try {
+            const escapedId = CSS?.escape
+              ? CSS.escape(targetMessageId)
+              : targetMessageId.replace(/"/g, '\\"');
+            const selector = `[data-gmh-message-id="${escapedId}"]`;
+            const block = document.querySelector(selector);
+            if (block instanceof Element) {
+              const attrIndex = block.getAttribute('data-gmh-message-index');
+              if (attrIndex !== null) {
+                const numeric = Number(attrIndex);
+                if (Number.isFinite(numeric)) targetIndex = numeric;
+              }
+              const attrOrdinal = block.getAttribute('data-gmh-player-turn');
+              if (attrOrdinal !== null) {
+                const numericOrdinal = Number(attrOrdinal);
+                if (Number.isFinite(numericOrdinal)) directOrdinal = numericOrdinal;
+              }
+            }
+          } catch (err) {
+            /* noop */
+          }
+        }
+
+        if (targetIndex === null && directOrdinal === null) {
           try {
             const current = document.activeElement;
             if (current && panel.contains(current)) {
@@ -4629,6 +4705,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
                   const numericOrdinal = Number(attrOrdinal);
                   if (Number.isFinite(numericOrdinal)) directOrdinal = numericOrdinal;
                 }
+                const attrMessageId =
+                  block.getAttribute('data-message-id') ||
+                  block.getAttribute('data-gmh-message-id');
+                if (attrMessageId) targetMessageId = attrMessageId;
               }
             }
           } catch (err) {
@@ -4646,7 +4726,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             setPanelStatus(`플레이어 턴 ${directOrdinal}을 끝으로 지정했습니다.`, 'info');
             rangeEndInput.value = String(directOrdinal);
           }
-          GMH.Core.TurnBookmarks.record(targetIndex ?? -1, directOrdinal);
+          GMH.Core.TurnBookmarks.record(
+            targetIndex ?? -1,
+            directOrdinal,
+            targetMessageId || null,
+          );
           return;
         }
 
@@ -4665,10 +4749,26 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             return;
           }
           targetIndex = fallbackIndex;
+          try {
+            const blockFromFallback = document.querySelector(
+              `[data-gmh-message-index="${fallbackIndex}"]`,
+            );
+            if (blockFromFallback instanceof Element) {
+              const attrMessageId =
+                blockFromFallback.getAttribute('data-gmh-message-id') ||
+                blockFromFallback.getAttribute('data-message-id');
+              if (attrMessageId) targetMessageId = attrMessageId;
+            }
+          } catch (err) {
+            /* ignore */
+          }
         }
 
-        const ordinal =
-          playerIndices.indexOf(targetIndex) + 1 || playerIndices.length;
+        const ordinal = (() => {
+          const pos = playerIndices.indexOf(targetIndex);
+          if (pos === -1) return playerIndices.length;
+          return playerIndices.length - pos;
+        })();
         if (mode === 'start') {
           GMH.Core.ExportRange.setStart(ordinal);
           setPanelStatus(`플레이어 턴 ${ordinal}을 시작으로 지정했습니다.`, 'info');
@@ -4678,7 +4778,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           setPanelStatus(`플레이어 턴 ${ordinal}을 끝으로 지정했습니다.`, 'info');
           rangeEndInput.value = String(ordinal);
         }
-        GMH.Core.TurnBookmarks.record(targetIndex, ordinal);
+        GMH.Core.TurnBookmarks.record(
+          targetIndex,
+          ordinal,
+          targetMessageId || null,
+        );
       };
 
       if (rangeMarkStartBtn) {
