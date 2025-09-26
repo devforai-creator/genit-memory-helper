@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Genit Memory Helper
 // @namespace    local.dev
-// @version      1.3.4
+// @version      1.3.5
 // @description  Genit 대화로그 JSON/TXT/MD 추출 + 요약/재요약 프롬프트 복사 기능
 // @author       devforai-creator
 // @match        https://genit.ai/*
@@ -296,16 +296,72 @@
     const requested = { start: null, end: null };
     let totals = { player: 0, all: 0 };
     const listeners = new Set();
+    let lastWarnTs = 0;
 
-    const normalizeValue = (value) => {
+    const toPositiveInt = (value) => {
       const num = Number(value);
       if (!Number.isFinite(num) || num <= 0) return null;
       return Math.floor(num);
     };
 
+    const emitRangeWarning = (message, data) => {
+      const now = Date.now();
+      if (now - lastWarnTs < 500) return;
+      lastWarnTs = now;
+      console.warn('[GMH] export range adjusted:', message, data);
+    };
+
+    const normalizeRequestedOrder = () => {
+      if (
+        requested.start !== null &&
+        requested.end !== null &&
+        requested.start > requested.end
+      ) {
+        emitRangeWarning('start > end; swapping values', {
+          start: requested.start,
+          end: requested.end,
+        });
+        const originalStart = requested.start;
+        requested.start = requested.end;
+        requested.end = originalStart;
+      }
+    };
+
+    const clampRequestedToTotal = (totalPlayers) => {
+      const total = Number.isFinite(totalPlayers) ? Math.max(0, totalPlayers) : 0;
+      if (!total) {
+        if (requested.start !== null || requested.end !== null) {
+          emitRangeWarning('clearing range because no players detected', {
+            start: requested.start,
+            end: requested.end,
+          });
+        }
+        requested.start = null;
+        requested.end = null;
+        return;
+      }
+      if (requested.start !== null && requested.start > total) {
+        emitRangeWarning('start exceeds total; clamping', {
+          start: requested.start,
+          total,
+        });
+        requested.start = total;
+      }
+      if (requested.end !== null && requested.end > total) {
+        emitRangeWarning('end exceeds total; clamping', {
+          end: requested.end,
+          total,
+        });
+        requested.end = total;
+      }
+      normalizeRequestedOrder();
+    };
+
     const resolveBounds = (totalPlayers = totals.player) => {
-      const total = Number.isFinite(totalPlayers) && totalPlayers > 0 ? totalPlayers : 0;
-      if (!total)
+      const total = Number.isFinite(totalPlayers)
+        ? Math.max(0, Math.floor(totalPlayers))
+        : 0;
+      if (!total) {
         return {
           active: false,
           start: null,
@@ -314,30 +370,32 @@
           total,
           all: totals.all || 0,
         };
-      let start = requested.start ?? 1;
-      let end = requested.end ?? total;
-      start = Math.max(1, Math.min(total, start));
-      end = Math.max(1, Math.min(total, end));
-      if (end < start) end = start;
+      }
+      const clamp = (value, fallback) => {
+        if (!Number.isFinite(value)) return fallback;
+        return Math.max(1, Math.min(total, Math.floor(value)));
+      };
+      const start = clamp(requested.start ?? 1, 1);
+      const end = clamp(requested.end ?? total, total);
       const active = Boolean(requested.start || requested.end);
-      const count = Math.max(0, end - start + 1);
+      const normalizedStart = Math.min(start, end);
+      const normalizedEnd = Math.max(start, end);
+      const count = Math.max(0, normalizedEnd - normalizedStart + 1);
       return {
         active,
-        start,
-        end,
+        start: normalizedStart,
+        end: normalizedEnd,
         count,
         total,
         all: totals.all || 0,
       };
     };
 
-   const snapshot = () => {
-      return {
-        range: { ...requested },
-        totals: { ...totals },
-        bounds: resolveBounds(),
-      };
-    };
+    const snapshot = () => ({
+      range: { ...requested },
+      totals: { ...totals },
+      bounds: resolveBounds(),
+    });
 
     const notify = () => {
       const current = snapshot();
@@ -385,105 +443,107 @@
         });
         const totalPlayers = playerIndices.length;
         const info = resolveBounds(totalPlayers);
+
         const ordinalMap = new Map();
         playerIndices.forEach((idx, pos) => {
-          const bottomOrdinal = totalPlayers - pos;
-          ordinalMap.set(idx, bottomOrdinal);
+          const ordinalFromLatest = totalPlayers - pos;
+          ordinalMap.set(idx, ordinalFromLatest);
         });
 
-        const bottomStart = info.active ? info.start : 1;
-        const bottomEnd = info.active ? info.end : totalPlayers;
-        const topStartOrdinal = info.active
-          ? Math.max(1, Math.min(totalPlayers, totalPlayers - bottomEnd + 1))
-          : 1;
-        const topEndOrdinal = info.active
-          ? Math.max(1, Math.min(totalPlayers, totalPlayers - bottomStart + 1))
-          : totalPlayers;
+        const buildResult = (startIndex, endIndex) => {
+          const base = [];
+          for (let i = startIndex; i <= endIndex; i += 1) base.push(i);
+          includeIndices.forEach((idx) => base.push(idx));
+          const uniqueIndices = Array.from(new Set(base))
+            .filter((idx) => idx >= 0 && idx < list.length)
+            .sort((a, b) => a - b);
+          const turnsOut = uniqueIndices
+            .map((idx) => list[idx] ?? null)
+            .filter(Boolean);
+          return {
+            turns: turnsOut,
+            indices: uniqueIndices,
+            ordinals: uniqueIndices.map((idx) => ordinalMap.get(idx) || null),
+          };
+        };
 
         if (!totalPlayers || !info.count || !info.active) {
-          const indices = list.map((_, idx) => idx);
-          includeIndices.forEach((idx) => indices.push(idx));
-          const uniqueIndices = Array.from(new Set(indices)).sort(
-            (a, b) => a - b,
+          const { turns: turnsOut, indices, ordinals } = buildResult(
+            0,
+            list.length ? list.length - 1 : -1,
           );
-          const ordinals = indices.map((idx) => ordinalMap.get(idx) || null);
           return {
-            turns: uniqueIndices
-              .map((idx) => list[idx] ?? null)
-              .filter(Boolean),
-            indices: uniqueIndices,
+            turns: turnsOut,
+            indices,
             ordinals,
             info: {
               ...info,
               total: totalPlayers,
               all: list.length,
-              startIndex: 0,
-              endIndex: list.length ? list.length - 1 : -1,
+              startIndex: indices.length ? indices[0] : -1,
+              endIndex: indices.length ? indices[indices.length - 1] : -1,
             },
           };
         }
 
-        const startIndex = playerIndices[Math.max(0, topStartOrdinal - 1)] ?? 0;
-        const nextPlayer =
-          playerIndices[Math.min(playerIndices.length, topEndOrdinal)];
-        const endExclusive = Number.isFinite(nextPlayer)
-          ? nextPlayer
-          : list.length;
-        const includedIndices = [];
-        for (let idx = startIndex; idx < endExclusive; idx += 1) {
-          includedIndices.push(idx);
-        }
-        includeIndices.forEach((idx) => includedIndices.push(idx));
-        const uniqueIncluded = Array.from(new Set(includedIndices))
-          .filter((idx) => idx >= 0 && idx < list.length)
-          .sort((a, b) => a - b);
-        if (!uniqueIncluded.length) uniqueIncluded.push(startIndex);
-        const sliced = uniqueIncluded.map((idx) => list[idx]);
-        const ordinals = includedIndices.map(
-          (idx) => ordinalMap.get(idx) || null,
+        const startPos = Math.max(0, totalPlayers - info.end);
+        const endPos = Math.max(startPos, totalPlayers - info.start);
+        const startIndex = playerIndices[startPos] ?? playerIndices[0] ?? 0;
+        const endPlayerIndex =
+          playerIndices[Math.min(endPos, playerIndices.length - 1)];
+        const nextPlayerIndex = playerIndices[endPos + 1];
+        const lastIndex = list.length ? list.length - 1 : startIndex;
+        const trailingEnd = Number.isFinite(nextPlayerIndex)
+          ? nextPlayerIndex - 1
+          : lastIndex;
+        const baseEnd = Number.isFinite(endPlayerIndex)
+          ? endPlayerIndex
+          : startIndex;
+        const resolvedEndIndex = Math.max(
+          startIndex,
+          Math.min(lastIndex, Math.max(baseEnd, trailingEnd)),
+        );
+        const { turns: turnsOut, indices, ordinals } = buildResult(
+          startIndex,
+          resolvedEndIndex,
         );
         return {
-          turns: sliced,
-          indices: uniqueIncluded,
-          ordinals: uniqueIncluded.map((idx) => ordinalMap.get(idx) || null),
+          turns: turnsOut,
+          indices,
+          ordinals,
           info: {
             ...info,
             total: totalPlayers,
             all: list.length,
             startIndex,
-            endIndex: endExclusive > 0 ? endExclusive - 1 : -1,
+            endIndex: resolvedEndIndex,
           },
         };
       },
       setStart(value) {
-        const next = normalizeValue(value);
+        const next = toPositiveInt(value);
         if (requested.start === next) return snapshot();
         requested.start = next;
-        if (requested.start && requested.end && requested.end < requested.start) {
-          requested.end = requested.start;
-        }
+        normalizeRequestedOrder();
         notify();
         return snapshot();
       },
       setEnd(value) {
-        const next = normalizeValue(value);
+        const next = toPositiveInt(value);
         if (requested.end === next) return snapshot();
         requested.end = next;
-        if (requested.start && requested.end && requested.end < requested.start) {
-          requested.start = requested.end;
-        }
+        normalizeRequestedOrder();
         notify();
         return snapshot();
       },
       setRange(startValue, endValue) {
-        const nextStart = normalizeValue(startValue);
-        const nextEnd = normalizeValue(endValue);
-        if (requested.start === nextStart && requested.end === nextEnd) return snapshot();
+        const nextStart = toPositiveInt(startValue);
+        const nextEnd = toPositiveInt(endValue);
+        if (requested.start === nextStart && requested.end === nextEnd)
+          return snapshot();
         requested.start = nextStart;
         requested.end = nextEnd;
-        if (requested.start && requested.end && requested.end < requested.start) {
-          requested.end = requested.start;
-        }
+        normalizeRequestedOrder();
         notify();
         return snapshot();
       },
@@ -501,17 +561,11 @@
         const nextAll = Number.isFinite(Number(input.all))
           ? Math.max(0, Math.floor(Number(input.all)))
           : 0;
-        const changed = totals.player !== nextPlayer || totals.all !== nextAll;
-        if (!changed) {
-          totals = { player: nextPlayer, all: nextAll };
+        if (totals.player === nextPlayer && totals.all === nextAll) {
           return snapshot();
         }
-
         totals = { player: nextPlayer, all: nextAll };
-        if (!nextPlayer) {
-          requested.start = null;
-          requested.end = null;
-        }
+        clampRequestedToTotal(nextPlayer);
         notify();
         return snapshot();
       },
@@ -709,11 +763,12 @@
       if (scheduled) return;
       scheduled = true;
       const runner = () => {
-        scheduled = false;
         try {
           indexMessages();
         } catch (err) {
           console.warn('[GMH] message indexing failed', err);
+        } finally {
+          scheduled = false;
         }
       };
       if (typeof requestAnimationFrame === 'function') {
@@ -736,6 +791,10 @@
 
     return {
       start() {
+        if (active) {
+          schedule();
+          return;
+        }
         active = true;
         ensureObserver();
         try {
@@ -750,6 +809,7 @@
           observer.disconnect();
           observer = null;
         }
+        scheduled = false;
       },
       refresh(options = {}) {
         const immediate = Boolean(options?.immediate);
@@ -775,32 +835,62 @@
 
   GMH.Core.MessageIndexer = MessageIndexer;
 
-  const handleBookmarkCandidate = (event) => {
-    const target = event.target;
-    if (!(target instanceof Element)) return;
-    const message = target.closest(
-      '[data-gmh-message-index], [data-turn-index]',
-    );
-    if (!message) return;
-    const indexAttr =
-      message.getAttribute('data-gmh-message-index') ||
-      message.getAttribute('data-turn-index');
-    if (indexAttr === null) return;
-    const ordinalAttr =
-      message.getAttribute('data-gmh-player-turn') ||
-      message.getAttribute('data-player-turn');
-    const messageIdAttr =
-      message.getAttribute('data-gmh-message-id') ||
-      message.getAttribute('data-message-id');
-    const index = Number(indexAttr);
-    const ordinal = ordinalAttr !== null ? Number(ordinalAttr) : null;
-    if (!Number.isFinite(index)) return;
-    GMH.Core.TurnBookmarks.record(index, ordinal, messageIdAttr || null);
-  };
+  const BookmarkListener = (() => {
+    let active = false;
+
+    const handleBookmarkCandidate = (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const message = target.closest(
+        '[data-gmh-message-index], [data-turn-index]',
+      );
+      if (!message) return;
+      const indexAttr =
+        message.getAttribute('data-gmh-message-index') ||
+        message.getAttribute('data-turn-index');
+      if (indexAttr === null) return;
+      const ordinalAttr =
+        message.getAttribute('data-gmh-player-turn') ||
+        message.getAttribute('data-player-turn');
+      const messageIdAttr =
+        message.getAttribute('data-gmh-message-id') ||
+        message.getAttribute('data-message-id');
+      const index = Number(indexAttr);
+      const ordinal = ordinalAttr !== null ? Number(ordinalAttr) : null;
+      if (!Number.isFinite(index)) return;
+      GMH.Core.TurnBookmarks.record(index, ordinal, messageIdAttr || null);
+    };
+
+    return {
+      start() {
+        if (active) return;
+        document.addEventListener('click', handleBookmarkCandidate, true);
+        active = true;
+      },
+      stop() {
+        if (!active) return;
+        document.removeEventListener('click', handleBookmarkCandidate, true);
+        active = false;
+      },
+      isActive() {
+        return active;
+      },
+    };
+  })();
+
+  BookmarkListener.start();
+  GMH.Core.BookmarkListener = BookmarkListener;
 
   if (!PAGE_WINDOW.__GMHBookmarkListener) {
-    document.addEventListener('click', handleBookmarkCandidate, true);
-    PAGE_WINDOW.__GMHBookmarkListener = true;
+    try {
+      Object.defineProperty(PAGE_WINDOW, '__GMHBookmarkListener', {
+        value: BookmarkListener,
+        writable: false,
+        configurable: false,
+      });
+    } catch (err) {
+      PAGE_WINDOW.__GMHBookmarkListener = BookmarkListener;
+    }
   }
 
   const Flags = (() => {
@@ -1430,6 +1520,30 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     let activeModal = null;
     let modalIdCounter = 0;
 
+    const sanitizeMarkupFragment = (markup) => {
+      const template = document.createElement('template');
+      template.innerHTML = String(markup ?? '');
+      template.content
+        .querySelectorAll('script, style, iframe, object, embed, link, meta')
+        .forEach((node) => node.remove());
+      template.content.querySelectorAll('*').forEach((element) => {
+        Array.from(element.attributes).forEach((attr) => {
+          const name = attr.name.toLowerCase();
+          const value = String(attr.value || '');
+          if (name.startsWith('on')) {
+            element.removeAttribute(attr.name);
+            return;
+          }
+          if (/(javascript:|data:text\/html)/i.test(value)) {
+            element.removeAttribute(attr.name);
+            return;
+          }
+          if (name === 'srcdoc') element.removeAttribute(attr.name);
+        });
+      });
+      return template.content;
+    };
+
     const focusableSelector = [
       'a[href]',
       'area[href]',
@@ -1517,7 +1631,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           closeBtn.type = 'button';
           closeBtn.className = 'gmh-modal__close';
           closeBtn.setAttribute('aria-label', '닫기');
-          closeBtn.innerHTML = '&times;';
+          closeBtn.textContent = '×';
           headerRow.appendChild(closeBtn);
         }
 
@@ -1542,7 +1656,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         if (options.content instanceof Node) {
           body.appendChild(options.content);
         } else if (typeof options.content === 'string') {
-          body.innerHTML = options.content;
+          body.appendChild(sanitizeMarkupFragment(options.content));
         }
 
         const footer = document.createElement('div');
@@ -1684,7 +1798,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     const header = document.createElement('div');
     header.className = 'gmh-preview-header';
-    header.innerHTML = `<span>${heading}</span>`;
+    const headerLabel = document.createElement('span');
+    headerLabel.textContent = heading;
+    header.appendChild(headerLabel);
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
     closeBtn.className = 'gmh-preview-close';
@@ -1697,25 +1813,31 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     body.className = 'gmh-preview-body';
     const summaryBox = document.createElement('div');
     summaryBox.className = 'gmh-preview-summary';
-    const rowProfile = document.createElement('div');
-    rowProfile.innerHTML = `<strong>프로필</strong><span>${profileLabel}</span>`;
-    const rowTurns = document.createElement('div');
+    const createSummaryRow = (labelText, valueText) => {
+      const row = document.createElement('div');
+      const strong = document.createElement('strong');
+      strong.textContent = labelText;
+      const value = document.createElement('span');
+      value.textContent = valueText;
+      row.appendChild(strong);
+      row.appendChild(value);
+      return row;
+    };
+
     const turnsLabel = overallStats
       ? `플레이어 ${stats.playerTurns}/${overallStats.playerTurns} · 전체 메시지 ${stats.totalTurns}/${overallStats.totalTurns}`
       : `플레이어 ${stats.playerTurns} · 전체 메시지 ${stats.totalTurns}`;
-    rowTurns.innerHTML = `<strong>턴 수</strong><span>${turnsLabel}</span>`;
-    const rowCounts = document.createElement('div');
-    rowCounts.innerHTML = `<strong>레다크션</strong><span>${summary}</span>`;
-    summaryBox.appendChild(rowProfile);
-    summaryBox.appendChild(rowTurns);
-    summaryBox.appendChild(rowCounts);
+    const summaryRows = [
+      createSummaryRow('프로필', profileLabel),
+      createSummaryRow('턴 수', turnsLabel),
+      createSummaryRow('레다크션', summary),
+    ];
+    summaryRows.forEach((row) => summaryBox.appendChild(row));
     if (rangeInfo?.total) {
-      const rowRange = document.createElement('div');
       const rangeText = rangeInfo.active
         ? `플레이어 ${rangeInfo.start}-${rangeInfo.end} · ${rangeInfo.count}/${rangeInfo.total}`
         : `플레이어 ${rangeInfo.total}개 전체`;
-      rowRange.innerHTML = `<strong>범위</strong><span>${rangeText}</span>`;
-      summaryBox.appendChild(rowRange);
+      summaryBox.appendChild(createSummaryRow('범위', rangeText));
     }
     body.appendChild(summaryBox);
 
@@ -1863,29 +1985,33 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const summaryBox = document.createElement('div');
     summaryBox.className = 'gmh-privacy-summary';
 
-    const rowProfile = document.createElement('div');
-    rowProfile.className = 'gmh-privacy-summary__row';
-    rowProfile.innerHTML = `<span class="gmh-privacy-summary__label">프로필</span><span>${profileLabel}</span>`;
-    const rowTurns = document.createElement('div');
-    rowTurns.className = 'gmh-privacy-summary__row';
+    const createPrivacyRow = (labelText, valueText) => {
+      const row = document.createElement('div');
+      row.className = 'gmh-privacy-summary__row';
+      const labelEl = document.createElement('span');
+      labelEl.className = 'gmh-privacy-summary__label';
+      labelEl.textContent = labelText;
+      const valueEl = document.createElement('span');
+      valueEl.textContent = valueText;
+      row.appendChild(labelEl);
+      row.appendChild(valueEl);
+      return row;
+    };
+
     const turnsLabel = overallStats
       ? `플레이어 ${stats.playerTurns}/${overallStats.playerTurns} · 전체 메시지 ${stats.totalTurns}/${overallStats.totalTurns}`
       : `플레이어 ${stats.playerTurns} · 전체 메시지 ${stats.totalTurns}`;
-    rowTurns.innerHTML = `<span class="gmh-privacy-summary__label">턴 수</span><span>${turnsLabel}</span>`;
-    const rowCounts = document.createElement('div');
-    rowCounts.className = 'gmh-privacy-summary__row';
-    rowCounts.innerHTML = `<span class="gmh-privacy-summary__label">레다크션</span><span>${summary}</span>`;
-    summaryBox.appendChild(rowProfile);
-    summaryBox.appendChild(rowTurns);
-    summaryBox.appendChild(rowCounts);
+    const privacyRows = [
+      createPrivacyRow('프로필', profileLabel),
+      createPrivacyRow('턴 수', turnsLabel),
+      createPrivacyRow('레다크션', summary),
+    ];
+    privacyRows.forEach((row) => summaryBox.appendChild(row));
     if (rangeInfo?.total) {
-      const rowRange = document.createElement('div');
-      rowRange.className = 'gmh-privacy-summary__row';
       const rangeText = rangeInfo.active
         ? `플레이어 ${rangeInfo.start}-${rangeInfo.end} · ${rangeInfo.count}/${rangeInfo.total}`
         : `플레이어 ${rangeInfo.total}개 전체`;
-      rowRange.innerHTML = `<span class="gmh-privacy-summary__label">범위</span><span>${rangeText}</span>`;
-      summaryBox.appendChild(rowRange);
+      summaryBox.appendChild(createPrivacyRow('범위', rangeText));
     }
     stack.appendChild(summaryBox);
 
@@ -6077,6 +6203,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     try {
       mountPanel();
       GMH.Core.MessageIndexer.start();
+      BookmarkListener.start();
     } catch (e) {
       console.error('[GMH] mount error', e);
     }
@@ -6089,6 +6216,24 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     setTimeout(boot, 1200);
   } else {
     window.addEventListener('DOMContentLoaded', () => setTimeout(boot, 1200));
+  }
+
+  if (!PAGE_WINDOW.__GMHTeardownHook) {
+    const teardown = () => {
+      try {
+        BookmarkListener.stop();
+      } catch (err) {
+        console.warn('[GMH] bookmark listener cleanup failed', err);
+      }
+      try {
+        MessageIndexer.stop();
+      } catch (err) {
+        console.warn('[GMH] message indexer cleanup failed', err);
+      }
+    };
+    window.addEventListener('pagehide', teardown);
+    window.addEventListener('beforeunload', teardown);
+    PAGE_WINDOW.__GMHTeardownHook = true;
   }
 
   let moScheduled = false;
@@ -6175,6 +6320,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     collectSessionStats,
     autoLoader,
     MessageIndexer,
+    BookmarkListener,
   });
 
   if (!PAGE_WINDOW.GMH) {
