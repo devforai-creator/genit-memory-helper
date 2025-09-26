@@ -11,11 +11,11 @@ const repoRoot = path.resolve(__dirname, '../../');
 const distPath = path.join(repoRoot, 'dist', 'genit-memory-helper.user.js');
 
 const sampleTurns = [
-  { role: 'npc', speaker: '조력자', text: '안녕' },
-  { role: 'player', speaker: '플레이어', text: '도와줘' },
-  { role: 'narration', text: '긴장감이 흐른다' },
-  { role: 'player', speaker: '플레이어', text: '준비됐다' },
-  { role: 'npc', speaker: '조력자', text: '좋아' },
+  { role: 'npc', speaker: '조력자', text: '안녕', id: 'npc-0' },
+  { role: 'player', speaker: '플레이어', text: '도와줘', id: 'plr-1' },
+  { role: 'narration', text: '긴장감이 흐른다', id: 'nar-2' },
+  { role: 'player', speaker: '플레이어', text: '준비됐다', id: 'plr-3' },
+  { role: 'npc', speaker: '조력자', text: '좋아', id: 'npc-4' },
 ];
 
 const createGMH = () => {
@@ -72,6 +72,8 @@ describe('GMH.Core.ExportRange', () => {
       all: sampleTurns.length,
     });
     expect(selection.turns).toHaveLength(sampleTurns.length);
+    expect(selection.indices).toEqual([0, 1, 2, 3, 4]);
+    expect(selection.ordinals).toEqual([null, 1, null, 2, null]);
   });
 
   it('slices using player-turn boundaries while keeping surrounding entries', () => {
@@ -89,6 +91,8 @@ describe('GMH.Core.ExportRange', () => {
     });
     expect(selection.info.startIndex).toBe(3);
     expect(selection.info.endIndex).toBe(4);
+    expect(selection.indices).toEqual([3, 4]);
+    expect(selection.ordinals).toEqual([2, null]);
 
     expect(selection.turns.map((t) => t.text)).toEqual([
       '준비됐다',

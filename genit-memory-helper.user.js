@@ -381,6 +381,8 @@
         if (!list.length) {
           return {
             turns: [],
+            indices: [],
+            ordinals: [],
             info: resolveBounds(0),
           };
         }
@@ -392,8 +394,15 @@
         const totalPlayers = playerIndices.length;
         const info = resolveBounds(totalPlayers);
         if (!totalPlayers || !info.count || !info.active) {
+          const indices = list.map((_, idx) => idx);
+          const ordinals = indices.map((idx) => {
+            const pos = playerIndices.indexOf(idx);
+            return pos === -1 ? null : pos + 1;
+          });
           return {
             turns: [...list],
+            indices,
+            ordinals,
             info: {
               ...info,
               total: totalPlayers,
@@ -407,9 +416,20 @@
         const startIndex = playerIndices[Math.max(0, info.start - 1)] ?? 0;
         const nextPlayer = playerIndices[Math.min(playerIndices.length, info.end)];
         const endExclusive = Number.isFinite(nextPlayer) ? nextPlayer : list.length;
-        const sliced = list.slice(startIndex, endExclusive);
+        const includedIndices = [];
+        for (let idx = startIndex; idx < endExclusive; idx += 1) {
+          includedIndices.push(idx);
+        }
+        if (!includedIndices.length) includedIndices.push(startIndex);
+        const sliced = includedIndices.map((idx) => list[idx]);
+        const ordinals = includedIndices.map((idx) => {
+          const pos = playerIndices.indexOf(idx);
+          return pos === -1 ? null : pos + 1;
+        });
         return {
           turns: sliced,
+          indices: includedIndices,
+          ordinals,
           info: {
             ...info,
             total: totalPlayers,
@@ -465,6 +485,28 @@
   })();
 
   GMH.Core.ExportRange = ExportRange;
+
+  const TurnBookmarks = (() => {
+    let candidate = null;
+    return {
+      record(index, ordinal) {
+        if (!Number.isFinite(Number(index))) return;
+        candidate = {
+          index: Number(index),
+          ordinal: Number.isFinite(Number(ordinal)) ? Number(ordinal) : null,
+          timestamp: Date.now(),
+        };
+      },
+      clear() {
+        candidate = null;
+      },
+      get() {
+        return candidate;
+      },
+    };
+  })();
+
+  GMH.Core.TurnBookmarks = TurnBookmarks;
 
   const Flags = (() => {
     let betaQuery = false;
@@ -941,7 +983,7 @@
 
   const PREVIEW_TURN_LIMIT = 5;
 
-  const LEGACY_PREVIEW_CSS = `
+const LEGACY_PREVIEW_CSS = `
 .gmh-preview-overlay{position:fixed;inset:0;background:rgba(15,23,42,0.72);z-index:9999999;display:flex;align-items:center;justify-content:center;padding:24px;}
 .gmh-preview-card{background:#0f172a;color:#e2e8f0;border-radius:14px;box-shadow:0 18px 48px rgba(8,15,30,0.55);width:min(520px,94vw);max-height:94vh;display:flex;flex-direction:column;overflow:hidden;font:13px/1.5 'Inter',system-ui,sans-serif;}
 .gmh-preview-header{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid rgba(148,163,184,0.25);font-weight:600;}
@@ -951,6 +993,8 @@
 .gmh-preview-summary strong{color:#bfdbfe;}
 .gmh-preview-turns{list-style:none;margin:0;padding:0;display:grid;gap:10px;}
 .gmh-preview-turn{background:rgba(30,41,59,0.55);border-radius:10px;padding:10px 12px;border:1px solid rgba(59,130,246,0.12);}
+.gmh-preview-turn--selected{border-color:rgba(56,189,248,0.45);background:rgba(56,189,248,0.12);}
+.gmh-turn-list__badge{display:inline-flex;align-items:center;gap:4px;margin-left:8px;font-size:11px;color:#38bdf8;background:rgba(56,189,248,0.12);padding:0 8px;border-radius:999px;}
 .gmh-preview-turn-speaker{font-weight:600;color:#c4b5fd;margin-bottom:4px;}
 .gmh-preview-turn-text{color:#e2e8f0;}
 .gmh-preview-footnote{font-size:12px;color:#94a3b8;}
@@ -1004,7 +1048,9 @@
 .gmh-section-title{font-weight:600;color:#cbd5f5;font-size:13px;}
 .gmh-turn-list{list-style:none;margin:0;padding:0;display:grid;gap:10px;}
 .gmh-turn-list__item{background:var(--gmh-surface-alt);border-radius:var(--gmh-radius-sm);padding:10px 12px;border:1px solid rgba(59,130,246,0.18);}
+.gmh-turn-list__item--selected{border-color:rgba(56,189,248,0.45);background:rgba(56,189,248,0.12);}
 .gmh-turn-list__speaker{font-weight:600;color:var(--gmh-accent-soft);margin-bottom:4px;font-size:12px;}
+.gmh-turn-list__badge{display:inline-flex;align-items:center;gap:4px;margin-left:8px;font-size:11px;color:var(--gmh-accent);background:rgba(56,189,248,0.12);padding:0 8px;border-radius:999px;}
 .gmh-turn-list__text{color:var(--gmh-fg);font-size:13px;line-height:1.45;white-space:pre-wrap;word-break:break-word;}
 .gmh-turn-list__empty{color:var(--gmh-muted);text-align:center;}
 .gmh-panel{position:fixed;right:16px;bottom:16px;z-index:2147483000;background:var(--gmh-bg);color:var(--gmh-fg);padding:16px 16px 22px;border-radius:18px;box-shadow:var(--gmh-panel-shadow);display:grid;gap:14px;width:min(320px,92vw);font:var(--gmh-font);max-height:70vh;overflow:auto;transform:translateY(0);opacity:1;visibility:visible;transition:transform 0.2s ease,opacity 0.15s ease,visibility 0.15s ease;will-change:transform,opacity;}
@@ -1043,7 +1089,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 .gmh-field-row--wrap{flex-wrap:wrap;align-items:flex-start;}
 .gmh-field-label{font-size:12px;font-weight:600;color:var(--gmh-muted);}
 .gmh-helper-text{font-size:11px;color:var(--gmh-muted);line-height:1.4;}
-.gmh-range-controls{display:flex;align-items:center;gap:8px;flex:1;min-width:0;}
+.gmh-range-controls{display:flex;align-items:center;gap:8px;flex:1;min-width:0;flex-wrap:wrap;}
+.gmh-bookmark-controls{display:flex;gap:6px;flex-wrap:wrap;}
 .gmh-range-sep{color:var(--gmh-muted);}
 .gmh-input,.gmh-select{flex:1;background:#111827;color:var(--gmh-fg);border:1px solid var(--gmh-border);border-radius:var(--gmh-radius-sm);padding:8px 10px;font:inherit;}
 .gmh-input--compact{flex:0;min-width:72px;width:72px;}
@@ -1324,6 +1371,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     stats,
     overallStats = null,
     rangeInfo = null,
+    selectedIndices = [],
+    selectedOrdinals = [],
     previewTurns = [],
     actionLabel = '계속',
     heading = '공유 전 확인',
@@ -1383,13 +1432,53 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     const turnList = document.createElement('ul');
     turnList.className = 'gmh-preview-turns';
+    const highlightActive = rangeInfo?.active;
+    const selectedIndexSet = new Set(selectedIndices || []);
+    const ordinalLookup = new Map();
+    (selectedIndices || []).forEach((idx, i) => {
+      const ord = selectedOrdinals?.[i] ?? null;
+      ordinalLookup.set(idx, ord);
+    });
+
     previewTurns.slice(-PREVIEW_TURN_LIMIT).forEach((turn) => {
       if (!turn) return;
       const item = document.createElement('li');
       item.className = 'gmh-preview-turn';
+      item.tabIndex = 0;
+
+      const sourceIndex =
+        typeof turn.__gmhIndex === 'number' ? turn.__gmhIndex : null;
+      if (sourceIndex !== null) item.dataset.turnIndex = String(sourceIndex);
+
+      const playerOrdinal = (() => {
+        if (typeof turn.__gmhOrdinal === 'number') return turn.__gmhOrdinal;
+        if (sourceIndex !== null && ordinalLookup.has(sourceIndex))
+          return ordinalLookup.get(sourceIndex);
+        return null;
+      })();
+      if (typeof playerOrdinal === 'number') {
+        item.dataset.playerTurn = String(playerOrdinal);
+      }
+
+      if (
+        highlightActive &&
+        sourceIndex !== null &&
+        selectedIndexSet.has(sourceIndex)
+      ) {
+        item.classList.add('gmh-preview-turn--selected');
+      }
+
       const speaker = document.createElement('div');
       speaker.className = 'gmh-preview-turn-speaker';
-      speaker.textContent = `${turn.speaker || '??'} · ${turn.role}`;
+      const speakerLabel = document.createElement('span');
+      speakerLabel.textContent = `${turn.speaker || '??'} · ${turn.role}`;
+      speaker.appendChild(speakerLabel);
+      if (typeof playerOrdinal === 'number' && playerOrdinal > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'gmh-turn-list__badge';
+        speaker.appendChild(badge);
+        badge.textContent = `턴 ${playerOrdinal}`;
+      }
       const text = document.createElement('div');
       text.className = 'gmh-preview-turn-text';
       text.textContent = truncateText(turn.text || '');
@@ -1462,6 +1551,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     stats,
     overallStats = null,
     rangeInfo = null,
+    selectedIndices = [],
+    selectedOrdinals = [],
     previewTurns = [],
     actionLabel = '계속',
     heading = '공유 전 확인',
@@ -1510,13 +1601,54 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     const turnList = document.createElement('ul');
     turnList.className = 'gmh-turn-list';
+    const highlightActive = rangeInfo?.active;
+    const selectedIndexSet = new Set(selectedIndices || []);
+    const ordinalLookup = new Map();
+    (selectedIndices || []).forEach((idx, i) => {
+      const ord = selectedOrdinals?.[i] ?? null;
+      ordinalLookup.set(idx, ord);
+    });
+
     previewTurns.slice(-PREVIEW_TURN_LIMIT).forEach((turn) => {
       if (!turn) return;
       const item = document.createElement('li');
       item.className = 'gmh-turn-list__item';
+      item.tabIndex = 0;
+
+      const sourceIndex =
+        typeof turn.__gmhIndex === 'number' ? turn.__gmhIndex : null;
+      if (sourceIndex !== null) item.dataset.turnIndex = String(sourceIndex);
+
+      const playerOrdinal = (() => {
+        if (typeof turn.__gmhOrdinal === 'number') return turn.__gmhOrdinal;
+        if (sourceIndex !== null && ordinalLookup.has(sourceIndex))
+          return ordinalLookup.get(sourceIndex);
+        return null;
+      })();
+      if (typeof playerOrdinal === 'number') {
+        item.dataset.playerTurn = String(playerOrdinal);
+      }
+
+      if (
+        highlightActive &&
+        sourceIndex !== null &&
+        selectedIndexSet.has(sourceIndex)
+      ) {
+        item.classList.add('gmh-turn-list__item--selected');
+      }
+
       const speaker = document.createElement('div');
       speaker.className = 'gmh-turn-list__speaker';
-      speaker.textContent = `${turn.speaker || '??'} · ${turn.role}`;
+      const speakerLabel = document.createElement('span');
+      speakerLabel.textContent = `${turn.speaker || '??'} · ${turn.role}`;
+      speaker.appendChild(speakerLabel);
+      if (typeof playerOrdinal === 'number' && playerOrdinal > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'gmh-turn-list__badge';
+        badge.textContent = `턴 ${playerOrdinal}`;
+        speaker.appendChild(badge);
+      }
+
       const text = document.createElement('div');
       text.className = 'gmh-turn-list__text';
       text.textContent = truncateText(turn.text || '');
@@ -2109,6 +2241,15 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       return [];
     };
 
+    const detectRole = (block) => {
+      if (!block) return 'unknown';
+      const hasPlayer = collectAll(selectors.playerScopes, block).length > 0;
+      if (hasPlayer) return 'player';
+      const hasNpc = collectAll(selectors.npcGroups, block).length > 0;
+      if (hasNpc) return 'npc';
+      return 'narration';
+    };
+
     const emitInfo = (block, pushLine) => {
       const infoNode = firstMatch(selectors.infoCode, block);
       if (!infoNode) return;
@@ -2233,6 +2374,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       findContainer: (doc = document) => getChatContainer(doc),
       listMessageBlocks: (root) => getMessageBlocks(root),
       emitTranscriptLines,
+      detectRole,
       guessPlayerNames,
       getPanelAnchor,
       dumpSelectors: () => clone(selectors),
@@ -3846,6 +3988,27 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         player: playerTurns,
         all: session.turns.length,
       });
+      const adapter = getActiveAdapter();
+      try {
+        const container = adapter?.findContainer?.(document) || document;
+        const blocks = adapter?.listMessageBlocks?.(container) || [];
+        let playerOrdinal = 0;
+        Array.from(blocks).forEach((block, idx) => {
+          if (!(block instanceof Element)) return;
+          block.setAttribute('data-gmh-message', '1');
+          block.setAttribute('data-gmh-message-index', String(idx));
+          const role = adapter?.detectRole?.(block) || 'unknown';
+          block.setAttribute('data-gmh-message-role', role);
+          if (role === 'player') {
+            playerOrdinal += 1;
+            block.setAttribute('data-gmh-player-turn', String(playerOrdinal));
+          } else {
+            block.removeAttribute('data-gmh-player-turn');
+          }
+        });
+      } catch (err) {
+        /* ignore tagging errors */
+      }
       return {
         session,
         playerTurns,
@@ -4352,22 +4515,25 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       mountStatusActionsLegacy(panel);
     }
 
-    const rangeStartInput = panel.querySelector('#gmh-range-start');
-    const rangeEndInput = panel.querySelector('#gmh-range-end');
-    const rangeClearBtn = panel.querySelector('#gmh-range-clear');
-    const rangeSummary = panel.querySelector('#gmh-range-summary');
+  const rangeStartInput = panel.querySelector('#gmh-range-start');
+  const rangeEndInput = panel.querySelector('#gmh-range-end');
+  const rangeClearBtn = panel.querySelector('#gmh-range-clear');
+  const rangeMarkStartBtn = panel.querySelector('#gmh-range-mark-start');
+  const rangeMarkEndBtn = panel.querySelector('#gmh-range-mark-end');
+  const rangeSummary = panel.querySelector('#gmh-range-summary');
     let rangeUnsubscribe = null;
 
     const syncRangeControls = (snapshot) => {
       if (!snapshot) return;
-      const { range, bounds, totalTurns } = snapshot;
+      const { range, bounds, totals } = snapshot;
+      const totalPlayers = totals?.player ?? bounds.total ?? 0;
       if (rangeStartInput) {
-        if (totalTurns) rangeStartInput.max = String(totalTurns);
+        if (totalPlayers) rangeStartInput.max = String(totalPlayers);
         else rangeStartInput.removeAttribute('max');
         rangeStartInput.value = range.start ? String(range.start) : '';
       }
       if (rangeEndInput) {
-        if (totalTurns) rangeEndInput.max = String(totalTurns);
+        if (totalPlayers) rangeEndInput.max = String(totalPlayers);
         else rangeEndInput.removeAttribute('max');
         rangeEndInput.value = range.end ? String(range.end) : '';
       }
@@ -4382,7 +4548,13 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       }
     };
 
-    if (rangeStartInput || rangeEndInput || rangeSummary) {
+    if (
+      rangeStartInput ||
+      rangeEndInput ||
+      rangeSummary ||
+      rangeMarkStartBtn ||
+      rangeMarkEndBtn
+    ) {
       rangeUnsubscribe = GMH.Core.ExportRange.subscribe(syncRangeControls);
 
       const handleStartChange = () => {
@@ -4417,6 +4589,103 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         rangeClearBtn.addEventListener('click', () => {
           GMH.Core.ExportRange.clear();
         });
+      }
+      const doBookmark = async (mode) => {
+        const stats = collectTurnStats();
+        if (stats.error || !stats.session?.turns?.length) {
+          setPanelStatus('현재 대화에서 턴 정보를 찾을 수 없습니다.', 'warning');
+          return;
+        }
+        const turns = stats.session.turns;
+        const playerIndices = [];
+        turns.forEach((turn, idx) => {
+          if (turn?.role === 'player') playerIndices.push(idx);
+        });
+        if (!playerIndices.length) {
+          setPanelStatus('플레이어 턴이 없어 범위를 지정할 수 없습니다.', 'warning');
+          return;
+        }
+
+        let targetIndex = null;
+        let directOrdinal = null;
+
+        const bookmarkCandidate = GMH.Core.TurnBookmarks.get();
+        if (bookmarkCandidate) {
+          targetIndex = bookmarkCandidate.index;
+          directOrdinal = bookmarkCandidate.ordinal;
+        } else {
+          try {
+            const current = document.activeElement;
+            if (current && panel.contains(current)) {
+              const block = current.closest('[data-turn-index], [data-message-id]');
+              if (block) {
+                const attrIndex = block.getAttribute('data-turn-index');
+                if (attrIndex !== null) {
+                  const numeric = Number(attrIndex);
+                  if (Number.isFinite(numeric)) targetIndex = numeric;
+                }
+                const attrOrdinal = block.getAttribute('data-player-turn');
+                if (attrOrdinal !== null) {
+                  const numericOrdinal = Number(attrOrdinal);
+                  if (Number.isFinite(numericOrdinal)) directOrdinal = numericOrdinal;
+                }
+              }
+            }
+          } catch (err) {
+            /* noop */
+          }
+        }
+
+        if (typeof directOrdinal === 'number' && directOrdinal > 0) {
+          if (mode === 'start') {
+            GMH.Core.ExportRange.setStart(directOrdinal);
+            setPanelStatus(`플레이어 턴 ${directOrdinal}을 시작으로 지정했습니다.`, 'info');
+            rangeStartInput.value = String(directOrdinal);
+          } else {
+            GMH.Core.ExportRange.setEnd(directOrdinal);
+            setPanelStatus(`플레이어 턴 ${directOrdinal}을 끝으로 지정했습니다.`, 'info');
+            rangeEndInput.value = String(directOrdinal);
+          }
+          GMH.Core.TurnBookmarks.record(targetIndex ?? -1, directOrdinal);
+          return;
+        }
+
+        if (targetIndex === null) {
+          const last = playerIndices[playerIndices.length - 1];
+          targetIndex = last ?? 0;
+        }
+
+        const playerOrder = playerIndices.indexOf(targetIndex);
+        if (playerOrder === -1) {
+          const nextPlayer = playerIndices.find((idx) => idx >= targetIndex);
+          const fallbackIndex = nextPlayer ?? playerIndices[playerIndices.length - 1];
+          const fallbackOrder = playerIndices.indexOf(fallbackIndex);
+          if (fallbackOrder === -1) {
+            setPanelStatus('플레이어 턴을 찾을 수 없습니다.', 'warning');
+            return;
+          }
+          targetIndex = fallbackIndex;
+        }
+
+        const ordinal =
+          playerIndices.indexOf(targetIndex) + 1 || playerIndices.length;
+        if (mode === 'start') {
+          GMH.Core.ExportRange.setStart(ordinal);
+          setPanelStatus(`플레이어 턴 ${ordinal}을 시작으로 지정했습니다.`, 'info');
+          rangeStartInput.value = String(ordinal);
+        } else {
+          GMH.Core.ExportRange.setEnd(ordinal);
+          setPanelStatus(`플레이어 턴 ${ordinal}을 끝으로 지정했습니다.`, 'info');
+          rangeEndInput.value = String(ordinal);
+        }
+        GMH.Core.TurnBookmarks.record(targetIndex, ordinal);
+      };
+
+      if (rangeMarkStartBtn) {
+        rangeMarkStartBtn.addEventListener('click', () => doBookmark('start'));
+      }
+      if (rangeMarkEndBtn) {
+        rangeMarkEndBtn.addEventListener('click', () => doBookmark('end'));
       }
     }
 
@@ -4520,7 +4789,35 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           privacy.sanitizedSession.turns,
         );
         const exportSession = cloneSession(privacy.sanitizedSession);
-        exportSession.turns = selection.turns.map((turn) => ({ ...turn }));
+
+        const ordinalMap = new Map();
+        let ordinalCounter = 0;
+        privacy.sanitizedSession.turns.forEach((turn, idx) => {
+          if (turn?.role === 'player') {
+            ordinalCounter += 1;
+            ordinalMap.set(idx, ordinalCounter);
+          }
+        });
+
+        const selectedIndices = selection.indices?.length
+          ? selection.indices
+          : privacy.sanitizedSession.turns.map((_, idx) => idx);
+
+        exportSession.turns = selectedIndices.map((index, localIndex) => {
+          const original = privacy.sanitizedSession.turns[index] || {};
+          const clone = { ...original };
+          Object.defineProperty(clone, '__gmhIndex', {
+            value: index,
+            enumerable: false,
+          });
+          Object.defineProperty(clone, '__gmhOrdinal', {
+            value: selection.ordinals?.[localIndex] ?? ordinalMap.get(index) ?? null,
+            enumerable: false,
+          });
+          return clone;
+        });
+
+        const selectedIndexSet = new Set(selectedIndices);
         exportSession.meta = {
           ...(exportSession.meta || {}),
           turn_range: {
@@ -4532,6 +4829,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             entry_start_index: selection.info.startIndex,
             entry_end_index: selection.info.endIndex,
             entry_total: selection.info.all,
+            player_ordinals: selection.ordinals || [],
+            entry_indices: selectedIndices,
           },
         };
         const stats = collectSessionStats(exportSession);
@@ -4548,6 +4847,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           counts: privacy.counts,
           stats,
           overallStats,
+          selectedIndices: Array.from(selectedIndexSet),
+          selectedOrdinals: selection.ordinals || [],
           rangeInfo: selection.info,
           previewTurns,
           actionLabel: confirmLabel || '계속',
@@ -4968,13 +5269,13 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           <button id="gmh-copy-recent" class="gmh-panel-btn gmh-panel-btn--neutral">최근 15턴 복사</button>
           <button id="gmh-copy-all" class="gmh-panel-btn gmh-panel-btn--neutral">전체 MD 복사</button>
         </div>
-        <div class="gmh-field-row gmh-field-row--wrap">
-          <label for="gmh-range-start" class="gmh-field-label">턴 범위</label>
-          <div class="gmh-range-controls">
-            <input
-              id="gmh-range-start"
-              class="gmh-input gmh-input--compact"
-              type="number"
+      <div class="gmh-field-row gmh-field-row--wrap">
+        <label for="gmh-range-start" class="gmh-field-label">턴 범위</label>
+        <div class="gmh-range-controls">
+          <input
+            id="gmh-range-start"
+            class="gmh-input gmh-input--compact"
+            type="number"
               min="1"
               inputmode="numeric"
               pattern="[0-9]*"
@@ -4987,12 +5288,16 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
               type="number"
               min="1"
               inputmode="numeric"
-              pattern="[0-9]*"
-              placeholder="끝"
-            />
-            <button id="gmh-range-clear" type="button" class="gmh-small-btn gmh-small-btn--muted">전체</button>
+            pattern="[0-9]*"
+            placeholder="끝"
+          />
+          <div class="gmh-bookmark-controls">
+            <button id="gmh-range-mark-start" type="button" class="gmh-small-btn gmh-small-btn--muted" title="현재 플레이어 턴을 시작으로 지정">시작지정</button>
+            <button id="gmh-range-mark-end" type="button" class="gmh-small-btn gmh-small-btn--muted" title="현재 플레이어 턴을 끝으로 지정">끝지정</button>
           </div>
+          <button id="gmh-range-clear" type="button" class="gmh-small-btn gmh-small-btn--muted">전체</button>
         </div>
+      </div>
         <div id="gmh-range-summary" class="gmh-helper-text">플레이어 턴 전체 내보내기</div>
         <div class="gmh-field-row">
           <select id="gmh-export-format" class="gmh-select">
@@ -5061,6 +5366,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           <input id="gmh-range-start" type="number" min="1" inputmode="numeric" pattern="[0-9]*" placeholder="시작" style="width:70px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;" />
           <span style="color:#94a3b8;">~</span>
           <input id="gmh-range-end" type="number" min="1" inputmode="numeric" pattern="[0-9]*" placeholder="끝" style="width:70px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;" />
+          <button id="gmh-range-mark-start" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;">시작지정</button>
+          <button id="gmh-range-mark-end" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;">끝지정</button>
           <button id="gmh-range-clear" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;">전체</button>
         </div>
       </div>

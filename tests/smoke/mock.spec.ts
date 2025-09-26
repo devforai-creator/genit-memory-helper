@@ -76,10 +76,24 @@ test.describe('GMH mock smoke (offline)', () => {
       const endValue =
         rangeInfo.total >= startValue + 1 ? startValue + 1 : startValue;
 
-      await rangeStart.fill(String(startValue));
-      await rangeStart.blur();
-      await rangeEnd.fill(String(endValue));
-      await rangeEnd.blur();
+    const markStartBtn = panel.locator('#gmh-range-mark-start');
+    const markEndBtn = panel.locator('#gmh-range-mark-end');
+    await expect(markStartBtn).toBeVisible();
+    await expect(markEndBtn).toBeVisible();
+
+    await markStartBtn.click();
+    await expect(rangeStart).not.toHaveValue('');
+
+    await markEndBtn.click();
+    await expect(rangeEnd).not.toHaveValue('');
+
+    const startValue = totalTurns >= 2 ? 2 : 1;
+    const endValue = totalTurns >= startValue + 1 ? startValue + 1 : startValue;
+
+    await rangeStart.fill(String(startValue));
+    await rangeStart.blur();
+    await rangeEnd.fill(String(endValue));
+    await rangeEnd.blur();
 
       await expect(rangeSummary).toContainText(
         new RegExp(`플레이어 턴 ${startValue}-${endValue}`),
