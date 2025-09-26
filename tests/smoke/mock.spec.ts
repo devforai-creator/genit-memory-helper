@@ -9,17 +9,24 @@ const repoRoot = path.resolve(__dirname, '../../');
 const distPath = path.join(repoRoot, 'dist', 'genit-memory-helper.user.js');
 const mockPath = path.join(repoRoot, 'tests/mock/infinite-scroll.html');
 
-test.describe('GMH mock smoke (offline)', () => {
-  test('panel loads and auto-scroll completes on mock chat', async ({ page }) => {
-    test.setTimeout(90_000);
-    await page.addInitScript(() => {
-      window.localStorage.setItem('gmh_flag_newUI', '1');
-      window.localStorage.removeItem('gmh_kill');
-    });
-    const userScript = await readFile(distPath, 'utf8');
-    await page.addInitScript(userScript);
+async function bootstrapModernUI(page) {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('gmh_flag_newUI', '1');
+    window.localStorage.removeItem('gmh_kill');
+  });
+  const userScript = await readFile(distPath, 'utf8');
+  await page.addInitScript(userScript);
+  await page.goto('file://' + mockPath);
+}
 
-    await page.goto('file://' + mockPath);
+test.describe('GMH mock smoke (offline)', () => {
+  test.describe.configure({ timeout: 90_000 });
+
+  test.beforeEach(async ({ page }) => {
+    await bootstrapModernUI(page);
+  });
+
+  test('panel loads and auto-scroll completes on mock chat', async ({ page }) => {
 
     const panel = page.locator('#genit-memory-helper-panel');
     await expect(panel).toBeVisible({ timeout: 10_000 });
@@ -51,6 +58,49 @@ test.describe('GMH mock smoke (offline)', () => {
       { timeout: 30_000 }
     );
 
+    const rangeStart = panel.locator('#gmh-range-start');
+    const rangeEnd = panel.locator('#gmh-range-end');
+    const rangeSummary = panel.locator('#gmh-range-summary');
+    await expect(rangeSummary).toBeVisible();
+
+    const rangeInfo = await page.evaluate(() => {
+      try {
+        return window.GMH?.Core?.ExportRange?.describe?.();
+      } catch (err) {
+        return null;
+      }
+    });
+
+    if (rangeInfo?.total && rangeInfo.total > 0) {
+      const startValue = rangeInfo.total >= 2 ? 2 : 1;
+      const endValue =
+        rangeInfo.total >= startValue + 1 ? startValue + 1 : startValue;
+
+      await rangeStart.fill(String(startValue));
+      await rangeStart.blur();
+      await rangeEnd.fill(String(endValue));
+      await rangeEnd.blur();
+
+      await expect(rangeSummary).toContainText(
+        new RegExp(`플레이어 턴 ${startValue}-${endValue}`),
+      );
+
+      const rangeSnapshot = await page.evaluate(() => {
+        try {
+          return window.GMH?.Core?.ExportRange?.describe?.();
+        } catch (err) {
+          return null;
+        }
+      });
+      expect(rangeSnapshot?.start).toBe(startValue);
+      expect(rangeSnapshot?.end).toBe(endValue);
+
+      await panel.locator('#gmh-range-clear').click();
+      await expect(rangeSummary).toContainText(/플레이어 턴/);
+    } else {
+      await expect(rangeSummary).toContainText(/플레이어 턴/);
+    }
+
     await panel.locator('#gmh-export').click();
 
     const modernConfirm = page.locator('button[data-action="confirm"]').first();
@@ -77,16 +127,6 @@ test.describe('GMH mock smoke (offline)', () => {
   });
 
   test('keyboard shortcuts focus panel and open modals', async ({ page }) => {
-    test.setTimeout(90_000);
-    await page.addInitScript(() => {
-      window.localStorage.setItem('gmh_flag_newUI', '1');
-      window.localStorage.removeItem('gmh_kill');
-    });
-    const userScript = await readFile(distPath, 'utf8');
-    await page.addInitScript(userScript);
-
-    await page.goto('file://' + mockPath);
-
     const panel = page.locator('#genit-memory-helper-panel');
     await expect(panel).toBeVisible({ timeout: 10_000 });
 
@@ -113,19 +153,8 @@ test.describe('GMH mock smoke (offline)', () => {
       { timeout: 30_000 }
     );
   });
-});
 
   test('collapsed panel restores focus and allows background interaction', async ({ page }) => {
-    test.setTimeout(90_000);
-    await page.addInitScript(() => {
-      window.localStorage.setItem('gmh_flag_newUI', '1');
-      window.localStorage.removeItem('gmh_kill');
-    });
-    const userScript = await readFile(distPath, 'utf8');
-    await page.addInitScript(userScript);
-
-    await page.goto('file://' + mockPath);
-
     const panel = page.locator('#genit-memory-helper-panel');
     await expect(panel).toBeVisible({ timeout: 10_000 });
 
@@ -165,4 +194,9 @@ test.describe('GMH mock smoke (offline)', () => {
 
     await page.locator('#gmh-click-probe').click();
     await expect(page.locator('#gmh-click-probe')).toHaveAttribute('data-clicked', '1');
+
+    await page.keyboard.press('Alt+G');
+    await expect(page.locator('html')).not.toHaveClass(/gmh-collapsed/);
+    await expect(panel).toBeFocused();
   });
+});

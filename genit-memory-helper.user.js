@@ -65,6 +65,100 @@
     return base;
   };
 
+  GMH.Adapters.Registry = (() => {
+    const configs = new Map();
+    return {
+      register(name, config) {
+        if (!name) return;
+        configs.set(name, {
+          selectors: config?.selectors || {},
+          metadata: config?.metadata || {},
+        });
+      },
+      get(name) {
+        return configs.get(name) || { selectors: {}, metadata: {} };
+      },
+      list() {
+        return Array.from(configs.keys());
+      },
+    };
+  })();
+
+  GMH.Adapters.register = function registerAdapter(name, config) {
+    GMH.Adapters.Registry.register(name, config);
+  };
+
+  GMH.Adapters.getSelectors = function getSelectors(name) {
+    const config = GMH.Adapters.Registry.get(name);
+    return clone(config.selectors || {});
+  };
+
+  GMH.Adapters.getMetadata = function getMetadata(name) {
+    const config = GMH.Adapters.Registry.get(name);
+    return clone(config.metadata || {});
+  };
+
+  GMH.Adapters.list = function listAdapters() {
+    return GMH.Adapters.Registry.list();
+  };
+
+  GMH.Adapters.register('genit', {
+    selectors: {
+      chatContainers: [
+        '[data-chat-container]',
+        '[data-testid="chat-scroll-region"]',
+        '[data-testid="conversation-scroll"]',
+        '[data-testid="chat-container"]',
+        '[data-role="conversation"]',
+        '[data-overlayscrollbars]',
+        '.flex-1.min-h-0.overflow-y-auto',
+        'main [class*="overflow-y"]',
+      ],
+      messageRoot: [
+        '[data-message-id]',
+        '[role="listitem"][data-id]',
+        '[data-testid="message-wrapper"]',
+      ],
+      infoCode: ['code.language-INFO', 'pre code.language-INFO'],
+      playerScopes: [
+        '[data-role="user"]',
+        '[data-from-user="true"]',
+        '[data-author-role="user"]',
+        '.flex.w-full.justify-end',
+        '.flex.flex-col.items-end',
+      ],
+      playerText: [
+        '[data-role="user"] .markdown-content',
+        '.markdown-content.text-right',
+        '.p-4.rounded-xl.bg-background p',
+      ],
+      npcGroups: ['[data-role="assistant"]', '.flex.flex-col.w-full.group'],
+      npcName: [
+        '[data-author-name]',
+        '[data-author]',
+        '[data-username]',
+        '.text-sm.text-muted-foreground.mb-1.ml-1',
+      ],
+      npcBubble: [
+        '.p-4.rounded-xl.bg-background p',
+        '.markdown-content:not(.text-right)',
+      ],
+      narrationBlocks: [
+        '.markdown-content.text-muted-foreground',
+        '.text-muted-foreground.text-sm',
+      ],
+      panelAnchor: ['[data-testid="app-root"]', '#__next', '#root', 'main'],
+      playerNameHints: [
+        '[data-role="user"] [data-username]',
+        '[data-profile-name]',
+        '[data-user-name]',
+        '[data-testid="profile-name"]',
+        'header [data-username]',
+      ],
+      textHints: ['메시지', '채팅', '대화'],
+    },
+  });
+
   const PanelSettings = (() => {
     const STORAGE_KEY = 'gmh_panel_settings_v1';
     const DEFAULTS = {
@@ -165,6 +259,198 @@
       STORAGE_KEY: PanelSettings.STORAGE_KEY,
     },
   };
+
+  const ExportRange = (() => {
+    let range = { start: null, end: null };
+    let totals = { player: 0, all: 0 };
+    const listeners = new Set();
+
+    const normalizeValue = (value) => {
+      const num = Number(value);
+      if (!Number.isFinite(num) || num <= 0) return null;
+      return Math.floor(num);
+    };
+
+    const resolveBounds = (totalPlayers = totals.player) => {
+      if (!totalPlayers || totalPlayers < 1)
+        return {
+          active: false,
+          start: null,
+          end: null,
+          count: 0,
+          total: totalPlayers || 0,
+          all: totals.all || 0,
+        };
+      let start = range.start
+        ? Math.max(1, Math.min(range.start, totalPlayers))
+        : 1;
+      let end = range.end
+        ? Math.max(1, Math.min(range.end, totalPlayers))
+        : totalPlayers;
+      if (end < start) end = start;
+      const active = Boolean(range.start || range.end);
+      const count = Math.max(0, end - start + 1);
+      return {
+        active,
+        start,
+        end,
+        count,
+        total: totalPlayers,
+        all: totals.all || 0,
+      };
+    };
+
+    const snapshot = () => ({
+      range: { ...range },
+      totals: { ...totals },
+      bounds: resolveBounds(),
+    });
+
+    const notify = () => {
+      const current = snapshot();
+      listeners.forEach((listener) => {
+        try {
+          listener(current);
+        } catch (err) {
+          console.warn('[GMH] range listener failed', err);
+        }
+      });
+    };
+
+    const syncRange = (startValue, endValue) => {
+      let changed = false;
+      const nextStart = normalizeValue(startValue);
+      const nextEnd = normalizeValue(endValue);
+      if (range.start !== nextStart) {
+        range.start = nextStart;
+        changed = true;
+      }
+      if (range.end !== nextEnd) {
+        range.end = nextEnd;
+        changed = true;
+      }
+      if (totals.player > 0) {
+        if (range.start && range.start > totals.player) {
+          range.start = totals.player;
+          changed = true;
+        }
+        if (range.end && range.end > totals.player) {
+          range.end = totals.player;
+          changed = true;
+        }
+        if (range.start && range.end && range.end < range.start) {
+          range.end = range.start;
+          changed = true;
+        }
+      }
+      if (!totals.player && (range.start || range.end)) {
+        range.start = null;
+        range.end = null;
+        changed = true;
+      }
+      if (changed) notify();
+      return snapshot();
+    };
+
+    return {
+      getRange() {
+        return { ...range };
+      },
+      getTotals() {
+        return { ...totals };
+      },
+      describe(totalPlayers = totals.player) {
+        return resolveBounds(totalPlayers);
+      },
+      apply(turns = []) {
+        const list = Array.isArray(turns) ? turns : [];
+        if (!list.length) {
+          return {
+            turns: [],
+            info: resolveBounds(0),
+          };
+        }
+
+        const playerIndices = [];
+        list.forEach((turn, idx) => {
+          if (turn?.role === 'player') playerIndices.push(idx);
+        });
+        const totalPlayers = playerIndices.length;
+        const info = resolveBounds(totalPlayers);
+        if (!totalPlayers || !info.count || !info.active) {
+          return {
+            turns: [...list],
+            info: {
+              ...info,
+              total: totalPlayers,
+              all: list.length,
+              startIndex: 0,
+              endIndex: list.length ? list.length - 1 : -1,
+            },
+          };
+        }
+
+        const startIndex = playerIndices[Math.max(0, info.start - 1)] ?? 0;
+        const nextPlayer = playerIndices[Math.min(playerIndices.length, info.end)];
+        const endExclusive = Number.isFinite(nextPlayer) ? nextPlayer : list.length;
+        const sliced = list.slice(startIndex, endExclusive);
+        return {
+          turns: sliced,
+          info: {
+            ...info,
+            total: totalPlayers,
+            all: list.length,
+            startIndex,
+            endIndex: endExclusive > 0 ? endExclusive - 1 : -1,
+          },
+        };
+      },
+      setStart(value) {
+        return syncRange(value, range.end);
+      },
+      setEnd(value) {
+        return syncRange(range.start, value);
+      },
+      setRange(startValue, endValue) {
+        return syncRange(startValue, endValue);
+      },
+      clear() {
+        if (range.start === null && range.end === null) return snapshot();
+        range = { start: null, end: null };
+        notify();
+        return snapshot();
+      },
+      setTotals(input = {}) {
+        const nextPlayer = Number.isFinite(Number(input.player))
+          ? Math.max(0, Math.floor(Number(input.player)))
+          : 0;
+        const nextAll = Number.isFinite(Number(input.all))
+          ? Math.max(0, Math.floor(Number(input.all)))
+          : 0;
+        const changed = totals.player !== nextPlayer || totals.all !== nextAll;
+        totals = { player: nextPlayer, all: nextAll };
+        if (!nextPlayer) {
+          range = { start: null, end: null };
+        } else {
+          syncRange(range.start, range.end);
+        }
+        if (changed) notify();
+        return snapshot();
+      },
+      subscribe(listener) {
+        if (typeof listener !== 'function') return () => {};
+        listeners.add(listener);
+        try {
+          listener(snapshot());
+        } catch (err) {
+          console.warn('[GMH] range subscriber failed', err);
+        }
+        return () => listeners.delete(listener);
+      },
+    };
+  })();
+
+  GMH.Core.ExportRange = ExportRange;
 
   const Flags = (() => {
     let betaQuery = false;
@@ -742,7 +1028,13 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 .gmh-panel__section:first-of-type{border-top:none;padding-top:0;}
 .gmh-panel__section-title{font-size:12px;color:var(--gmh-muted);font-weight:600;letter-spacing:0.08em;text-transform:uppercase;}
 .gmh-field-row{display:flex;gap:10px;align-items:center;width:100%;}
+.gmh-field-row--wrap{flex-wrap:wrap;align-items:flex-start;}
+.gmh-field-label{font-size:12px;font-weight:600;color:var(--gmh-muted);}
+.gmh-helper-text{font-size:11px;color:var(--gmh-muted);line-height:1.4;}
+.gmh-range-controls{display:flex;align-items:center;gap:8px;flex:1;min-width:0;}
+.gmh-range-sep{color:var(--gmh-muted);}
 .gmh-input,.gmh-select{flex:1;background:#111827;color:var(--gmh-fg);border:1px solid var(--gmh-border);border-radius:var(--gmh-radius-sm);padding:8px 10px;font:inherit;}
+.gmh-input--compact{flex:0;min-width:72px;width:72px;}
 .gmh-textarea{width:100%;min-height:96px;background:#111827;color:var(--gmh-fg);border:1px solid var(--gmh-border);border-radius:var(--gmh-radius-sm);padding:10px;font:inherit;resize:vertical;}
 .gmh-small-btn{padding:8px 10px;border-radius:var(--gmh-radius-sm);border:1px solid transparent;cursor:pointer;font-weight:600;font-size:12px;background:rgba(15,23,42,0.65);color:var(--gmh-muted);transition:background 0.15s ease,color 0.15s ease,border 0.15s ease;}
 .gmh-small-btn--accent{background:var(--gmh-accent);color:#041016;}
@@ -1012,6 +1304,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     profile,
     counts,
     stats,
+    overallStats = null,
+    rangeInfo = null,
     previewTurns = [],
     actionLabel = '계속',
     heading = '공유 전 확인',
@@ -1044,12 +1338,23 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const rowProfile = document.createElement('div');
     rowProfile.innerHTML = `<strong>프로필</strong><span>${profileLabel}</span>`;
     const rowTurns = document.createElement('div');
-    rowTurns.innerHTML = `<strong>턴 수</strong><span>플레이어 ${stats.playerTurns} / 전체 ${stats.totalTurns}</span>`;
+    const turnsLabel = overallStats
+      ? `플레이어 ${stats.playerTurns}/${overallStats.playerTurns} · 전체 메시지 ${stats.totalTurns}/${overallStats.totalTurns}`
+      : `플레이어 ${stats.playerTurns} · 전체 메시지 ${stats.totalTurns}`;
+    rowTurns.innerHTML = `<strong>턴 수</strong><span>${turnsLabel}</span>`;
     const rowCounts = document.createElement('div');
     rowCounts.innerHTML = `<strong>레다크션</strong><span>${summary}</span>`;
     summaryBox.appendChild(rowProfile);
     summaryBox.appendChild(rowTurns);
     summaryBox.appendChild(rowCounts);
+    if (rangeInfo?.total) {
+      const rowRange = document.createElement('div');
+      const rangeText = rangeInfo.active
+        ? `플레이어 ${rangeInfo.start}-${rangeInfo.end} · ${rangeInfo.count}/${rangeInfo.total}`
+        : `플레이어 ${rangeInfo.total}개 전체`;
+      rowRange.innerHTML = `<strong>범위</strong><span>${rangeText}</span>`;
+      summaryBox.appendChild(rowRange);
+    }
     body.appendChild(summaryBox);
 
     const previewTitle = document.createElement('div');
@@ -1137,6 +1442,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     profile,
     counts,
     stats,
+    overallStats = null,
+    rangeInfo = null,
     previewTurns = [],
     actionLabel = '계속',
     heading = '공유 전 확인',
@@ -1157,13 +1464,25 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     rowProfile.innerHTML = `<span class="gmh-privacy-summary__label">프로필</span><span>${profileLabel}</span>`;
     const rowTurns = document.createElement('div');
     rowTurns.className = 'gmh-privacy-summary__row';
-    rowTurns.innerHTML = `<span class="gmh-privacy-summary__label">턴 수</span><span>플레이어 ${stats.playerTurns} / 전체 ${stats.totalTurns}</span>`;
+    const turnsLabel = overallStats
+      ? `플레이어 ${stats.playerTurns}/${overallStats.playerTurns} · 전체 메시지 ${stats.totalTurns}/${overallStats.totalTurns}`
+      : `플레이어 ${stats.playerTurns} · 전체 메시지 ${stats.totalTurns}`;
+    rowTurns.innerHTML = `<span class="gmh-privacy-summary__label">턴 수</span><span>${turnsLabel}</span>`;
     const rowCounts = document.createElement('div');
     rowCounts.className = 'gmh-privacy-summary__row';
     rowCounts.innerHTML = `<span class="gmh-privacy-summary__label">레다크션</span><span>${summary}</span>`;
     summaryBox.appendChild(rowProfile);
     summaryBox.appendChild(rowTurns);
     summaryBox.appendChild(rowCounts);
+    if (rangeInfo?.total) {
+      const rowRange = document.createElement('div');
+      rowRange.className = 'gmh-privacy-summary__row';
+      const rangeText = rangeInfo.active
+        ? `플레이어 ${rangeInfo.start}-${rangeInfo.end} · ${rangeInfo.count}/${rangeInfo.total}`
+        : `플레이어 ${rangeInfo.total}개 전체`;
+      rowRange.innerHTML = `<span class="gmh-privacy-summary__label">범위</span><span>${rangeText}</span>`;
+      summaryBox.appendChild(rowRange);
+    }
     stack.appendChild(summaryBox);
 
     const previewTitle = document.createElement('div');
@@ -1235,9 +1554,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     profile,
     counts,
     stats,
+    overallStats,
     format,
     warnings,
     source,
+    range,
   }) {
     return {
       tool: 'Genit Memory Helper',
@@ -1246,6 +1567,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       profile,
       counts,
       stats,
+      overall_stats: overallStats,
+      range,
       format,
       warnings,
       source,
@@ -1654,60 +1977,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   }
 
   GMH.Adapters.genit = (() => {
-    const selectors = {
-      chatContainers: [
-        '[data-chat-container]',
-        '[data-testid="chat-scroll-region"]',
-        '[data-testid="conversation-scroll"]',
-        '[data-testid="chat-container"]',
-        '[data-role="conversation"]',
-        '[data-overlayscrollbars]',
-        '.flex-1.min-h-0.overflow-y-auto',
-        'main [class*="overflow-y"]',
-      ],
-      messageRoot: [
-        '[data-message-id]',
-        '[role="listitem"][data-id]',
-        '[data-testid="message-wrapper"]',
-      ],
-      infoCode: ['code.language-INFO', 'pre code.language-INFO'],
-      playerScopes: [
-        '[data-role="user"]',
-        '[data-from-user="true"]',
-        '[data-author-role="user"]',
-        '.flex.w-full.justify-end',
-        '.flex.flex-col.items-end',
-      ],
-      playerText: [
-        '[data-role="user"] .markdown-content',
-        '.markdown-content.text-right',
-        '.p-4.rounded-xl.bg-background p',
-      ],
-      npcGroups: ['[data-role="assistant"]', '.flex.flex-col.w-full.group'],
-      npcName: [
-        '[data-author-name]',
-        '[data-author]',
-        '[data-username]',
-        '.text-sm.text-muted-foreground.mb-1.ml-1',
-      ],
-      npcBubble: [
-        '.p-4.rounded-xl.bg-background p',
-        '.markdown-content:not(.text-right)',
-      ],
-      narrationBlocks: [
-        '.markdown-content.text-muted-foreground',
-        '.text-muted-foreground.text-sm',
-      ],
-      panelAnchor: ['[data-testid="app-root"]', '#__next', '#root', 'main'],
-      playerNameHints: [
-        '[data-role="user"] [data-username]',
-        '[data-profile-name]',
-        '[data-user-name]',
-        '[data-testid="profile-name"]',
-        'header [data-username]',
-      ],
-      textHints: ['메시지', '채팅', '대화'],
-    };
+    const adapterConfig = GMH.Adapters.Registry.get('genit');
+    const selectors = adapterConfig.selectors || {};
 
     const playerScopeSelector = selectors.playerScopes
       .filter(Boolean)
@@ -1946,7 +2217,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       emitTranscriptLines,
       guessPlayerNames,
       getPanelAnchor,
-      dumpSelectors: () => selectors,
+      dumpSelectors: () => clone(selectors),
     };
   })();
 
@@ -3553,6 +3824,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const playerTurns = session.turns.filter(
         (t) => t.role === 'player',
       ).length;
+      GMH.Core.ExportRange.setTotals({
+        player: playerTurns,
+        all: session.turns.length,
+      });
       return {
         session,
         playerTurns,
@@ -4059,6 +4334,74 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       mountStatusActionsLegacy(panel);
     }
 
+    const rangeStartInput = panel.querySelector('#gmh-range-start');
+    const rangeEndInput = panel.querySelector('#gmh-range-end');
+    const rangeClearBtn = panel.querySelector('#gmh-range-clear');
+    const rangeSummary = panel.querySelector('#gmh-range-summary');
+    let rangeUnsubscribe = null;
+
+    const syncRangeControls = (snapshot) => {
+      if (!snapshot) return;
+      const { range, bounds, totalTurns } = snapshot;
+      if (rangeStartInput) {
+        if (totalTurns) rangeStartInput.max = String(totalTurns);
+        else rangeStartInput.removeAttribute('max');
+        rangeStartInput.value = range.start ? String(range.start) : '';
+      }
+      if (rangeEndInput) {
+        if (totalTurns) rangeEndInput.max = String(totalTurns);
+        else rangeEndInput.removeAttribute('max');
+        rangeEndInput.value = range.end ? String(range.end) : '';
+      }
+      if (rangeSummary) {
+        if (!bounds.total) {
+          rangeSummary.textContent = '로드된 플레이어 턴이 없습니다.';
+        } else if (!bounds.active) {
+          rangeSummary.textContent = `전체 내보내기 · 플레이어 턴 ${bounds.total}개`;
+        } else {
+          rangeSummary.textContent = `플레이어 턴 ${bounds.start}-${bounds.end} · ${bounds.count}개 / 전체 ${bounds.total}개`;
+        }
+      }
+    };
+
+    if (rangeStartInput || rangeEndInput || rangeSummary) {
+      rangeUnsubscribe = GMH.Core.ExportRange.subscribe(syncRangeControls);
+
+      const handleStartChange = () => {
+        const value = Number(rangeStartInput.value);
+        if (Number.isFinite(value) && value > 0) {
+          GMH.Core.ExportRange.setStart(value);
+        } else {
+          GMH.Core.ExportRange.setStart(null);
+          rangeStartInput.value = '';
+        }
+      };
+
+      const handleEndChange = () => {
+        const value = Number(rangeEndInput.value);
+        if (Number.isFinite(value) && value > 0) {
+          GMH.Core.ExportRange.setEnd(value);
+        } else {
+          GMH.Core.ExportRange.setEnd(null);
+          rangeEndInput.value = '';
+        }
+      };
+
+      if (rangeStartInput) {
+        rangeStartInput.addEventListener('change', handleStartChange);
+        rangeStartInput.addEventListener('blur', handleStartChange);
+      }
+      if (rangeEndInput) {
+        rangeEndInput.addEventListener('change', handleEndChange);
+        rangeEndInput.addEventListener('blur', handleEndChange);
+      }
+      if (rangeClearBtn) {
+        rangeClearBtn.addEventListener('click', () => {
+          GMH.Core.ExportRange.clear();
+        });
+      }
+    }
+
     if (modern && !PAGE_WINDOW.__GMHShortcutsBound) {
       const shortcutHandler = (event) => {
         if (!event.altKey || event.ctrlKey || event.metaKey || event.repeat)
@@ -4110,6 +4453,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const normalized = normalizeTranscript(raw);
       const session = buildSession(normalized);
       if (!session.turns.length) throw new Error('대화 턴을 찾을 수 없습니다.');
+      const playerCount = session.turns.filter((turn) => turn.role === 'player')
+        .length;
+      GMH.Core.ExportRange.setTotals({
+        player: playerCount,
+        all: session.turns.length,
+      });
       return { session, raw: normalized };
     };
 
@@ -4142,9 +4491,34 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           });
           return null;
         }
-        const stats = collectSessionStats(privacy.sanitizedSession);
-        const previewTurns =
-          privacy.sanitizedSession.turns.slice(-PREVIEW_TURN_LIMIT);
+        const sanitizedPlayerCount = privacy.sanitizedSession.turns.filter(
+          (turn) => turn.role === 'player',
+        ).length;
+        GMH.Core.ExportRange.setTotals({
+          player: sanitizedPlayerCount,
+          all: privacy.sanitizedSession.turns.length,
+        });
+        const selection = GMH.Core.ExportRange.apply(
+          privacy.sanitizedSession.turns,
+        );
+        const exportSession = cloneSession(privacy.sanitizedSession);
+        exportSession.turns = selection.turns.map((turn) => ({ ...turn }));
+        exportSession.meta = {
+          ...(exportSession.meta || {}),
+          turn_range: {
+            active: selection.info.active,
+            player_start: selection.info.start,
+            player_end: selection.info.end,
+            player_count: selection.info.count,
+            player_total: selection.info.total,
+            entry_start_index: selection.info.startIndex,
+            entry_end_index: selection.info.endIndex,
+            entry_total: selection.info.all,
+          },
+        };
+        const stats = collectSessionStats(exportSession);
+        const overallStats = collectSessionStats(privacy.sanitizedSession);
+        const previewTurns = exportSession.turns.slice(-PREVIEW_TURN_LIMIT);
         GMH.Core.State.setState(GMH.Core.STATE.PREVIEW, {
           label: '미리보기 준비 완료',
           message: '레다크션 결과를 검토하세요.',
@@ -4155,6 +4529,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           profile: privacy.profile,
           counts: privacy.counts,
           stats,
+          overallStats,
+          rangeInfo: selection.info,
           previewTurns,
           actionLabel: confirmLabel || '계속',
         });
@@ -4168,7 +4544,15 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           if (cancelStatusMessage) setPanelStatus(cancelStatusMessage, 'muted');
           return null;
         }
-        return { session, raw, privacy, stats };
+        return {
+          session,
+          raw,
+          privacy,
+          stats,
+          overallStats,
+          selection,
+          exportSession,
+        };
       } catch (error) {
         alert(`오류: ${(error && error.message) || error}`);
         GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
@@ -4190,11 +4574,31 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           tone: 'progress',
           progress: { indeterminate: true },
         });
-        const { privacy, stats } = prepared;
+        const {
+          privacy,
+          stats,
+          exportSession,
+          selection,
+          overallStats,
+        } = prepared;
         const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const sessionForExport = exportSession || privacy.sanitizedSession;
+        const rangeInfo = selection?.info || GMH.Core.ExportRange.describe();
+        const hasCustomRange = Boolean(rangeInfo?.active);
+        const selectionRaw = hasCustomRange
+          ? sessionForExport.turns
+              .map((turn) => {
+                const label =
+                  turn.role === 'narration'
+                    ? '내레이션'
+                    : turn.speaker || turn.role || '턴';
+                return `${label}: ${turn.text}`;
+              })
+              .join('\n')
+          : privacy.sanitizedRaw;
         const bundle = buildExportBundle(
-          privacy.sanitizedSession,
-          privacy.sanitizedRaw,
+          sessionForExport,
+          selectionRaw,
           format,
           stamp,
         );
@@ -4205,9 +4609,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           profile: privacy.profile,
           counts: { ...privacy.counts },
           stats,
+          overallStats,
           format,
           warnings: privacy.sanitizedSession.warnings,
           source: privacy.sanitizedSession.source,
+          range: sessionForExport.meta?.turn_range || rangeInfo,
         });
         const manifestBlob = new Blob([JSON.stringify(manifest, null, 2)], {
           type: 'application/json',
@@ -4218,7 +4624,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         const summary = formatRedactionCounts(privacy.counts);
         const profileLabel =
           PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
-        const message = `${format.toUpperCase()} 내보내기 완료 · 플레이어 턴 ${stats.playerTurns}개 · ${profileLabel} · ${summary}`;
+        const totalPlayersAvailable =
+          rangeInfo?.total || overallStats?.playerTurns || stats.playerTurns;
+        const rangeNote = hasCustomRange
+          ? ` · 플레이어 턴 ${rangeInfo.start}-${rangeInfo.end}/${totalPlayersAvailable}`
+          : ` · 플레이어 턴 총 ${totalPlayersAvailable}개`;
+        const message = `${format.toUpperCase()} 내보내기 완료 · 플레이어 턴 ${stats.playerTurns}개${rangeNote} · ${profileLabel} · ${summary}`;
         GMH.Core.State.setState(GMH.Core.STATE.DONE, {
           label: '내보내기 완료',
           message,
@@ -4256,7 +4667,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             tone: 'progress',
             progress: { indeterminate: true },
           });
-          const { privacy, stats } = prepared;
+          const { privacy, overallStats, stats } = prepared;
+          const effectiveStats = overallStats || stats;
           const turns = privacy.sanitizedSession.turns.slice(-15);
           const md = toMarkdownExport(privacy.sanitizedSession, {
             turns,
@@ -4267,7 +4679,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           const summary = formatRedactionCounts(privacy.counts);
           const profileLabel =
             PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
-          const message = `최근 15턴 복사 완료 · 플레이어 턴 ${stats.playerTurns}개 · ${profileLabel} · ${summary}`;
+          const message = `최근 15턴 복사 완료 · 플레이어 턴 ${effectiveStats.playerTurns}개 · ${profileLabel} · ${summary}`;
           GMH.Core.State.setState(GMH.Core.STATE.DONE, {
             label: '복사 완료',
             message,
@@ -4304,13 +4716,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             tone: 'progress',
             progress: { indeterminate: true },
           });
-          const { privacy, stats } = prepared;
+          const { privacy, overallStats, stats } = prepared;
+          const effectiveStats = overallStats || stats;
           const md = toMarkdownExport(privacy.sanitizedSession);
           GM_setClipboard(md, { type: 'text', mimetype: 'text/plain' });
           const summary = formatRedactionCounts(privacy.counts);
           const profileLabel =
             PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
-          const message = `전체 Markdown 복사 완료 · 플레이어 턴 ${stats.playerTurns}개 · ${profileLabel} · ${summary}`;
+          const message = `전체 Markdown 복사 완료 · 플레이어 턴 ${effectiveStats.playerTurns}개 · ${profileLabel} · ${summary}`;
           GMH.Core.State.setState(GMH.Core.STATE.DONE, {
             label: '복사 완료',
             message,
@@ -4537,6 +4950,32 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           <button id="gmh-copy-recent" class="gmh-panel-btn gmh-panel-btn--neutral">최근 15턴 복사</button>
           <button id="gmh-copy-all" class="gmh-panel-btn gmh-panel-btn--neutral">전체 MD 복사</button>
         </div>
+        <div class="gmh-field-row gmh-field-row--wrap">
+          <label for="gmh-range-start" class="gmh-field-label">턴 범위</label>
+          <div class="gmh-range-controls">
+            <input
+              id="gmh-range-start"
+              class="gmh-input gmh-input--compact"
+              type="number"
+              min="1"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              placeholder="시작"
+            />
+            <span class="gmh-range-sep" aria-hidden="true">~</span>
+            <input
+              id="gmh-range-end"
+              class="gmh-input gmh-input--compact"
+              type="number"
+              min="1"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              placeholder="끝"
+            />
+            <button id="gmh-range-clear" type="button" class="gmh-small-btn gmh-small-btn--muted">전체</button>
+          </div>
+        </div>
+        <div id="gmh-range-summary" class="gmh-helper-text">플레이어 턴 전체 내보내기</div>
         <div class="gmh-field-row">
           <select id="gmh-export-format" class="gmh-select">
             <option value="json">JSON (.json)</option>
@@ -4598,6 +5037,16 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         <button id="gmh-copy-recent" style="flex:1; background:#22c55e; border:0; color:#051; border-radius:8px; padding:8px; cursor:pointer;">최근 15턴 복사</button>
         <button id="gmh-copy-all" style="flex:1; background:#60a5fa; border:0; color:#031; border-radius:8px; padding:8px; cursor:pointer;">전체 MD 복사</button>
       </div>
+      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+        <label for="gmh-range-start" style="font-size:11px; color:#94a3b8; font-weight:600;">턴 범위</label>
+        <div style="display:flex; gap:6px; align-items:center; flex:1;">
+          <input id="gmh-range-start" type="number" min="1" inputmode="numeric" pattern="[0-9]*" placeholder="시작" style="width:70px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;" />
+          <span style="color:#94a3b8;">~</span>
+          <input id="gmh-range-end" type="number" min="1" inputmode="numeric" pattern="[0-9]*" placeholder="끝" style="width:70px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;" />
+          <button id="gmh-range-clear" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;">전체</button>
+        </div>
+      </div>
+      <div id="gmh-range-summary" style="font-size:11px; color:#94a3b8;">플레이어 턴 전체 내보내기</div>
       <div style="display:flex; gap:8px; align-items:center;">
         <select id="gmh-export-format" style="flex:1; background:#111827; color:#f1f5f9; border:1px solid #1f2937; border-radius:8px; padding:8px;">
           <option value="json">JSON (.json)</option>
