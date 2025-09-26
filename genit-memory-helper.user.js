@@ -16,7 +16,8 @@
 (function () {
   'use strict';
 
-  const PAGE_WINDOW = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+  const PAGE_WINDOW =
+    typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
   const detectScriptVersion = () => {
     if (typeof GM_info !== 'undefined') {
       const version = GM_info?.script?.version;
@@ -65,7 +66,9 @@
     Object.entries(patch).forEach(([key, value]) => {
       if (value && typeof value === 'object' && !Array.isArray(value)) {
         const current =
-          base[key] && typeof base[key] === 'object' && !Array.isArray(base[key])
+          base[key] &&
+          typeof base[key] === 'object' &&
+          !Array.isArray(base[key])
             ? base[key]
             : {};
         base[key] = deepMerge(current, value);
@@ -430,10 +433,14 @@
         if (!totalPlayers || !info.count || !info.active) {
           const indices = list.map((_, idx) => idx);
           includeIndices.forEach((idx) => indices.push(idx));
-          const uniqueIndices = Array.from(new Set(indices)).sort((a, b) => a - b);
+          const uniqueIndices = Array.from(new Set(indices)).sort(
+            (a, b) => a - b,
+          );
           const ordinals = indices.map((idx) => ordinalMap.get(idx) || null);
           return {
-            turns: uniqueIndices.map((idx) => list[idx] ?? null).filter(Boolean),
+            turns: uniqueIndices
+              .map((idx) => list[idx] ?? null)
+              .filter(Boolean),
             indices: uniqueIndices,
             ordinals,
             info: {
@@ -447,8 +454,11 @@
         }
 
         const startIndex = playerIndices[Math.max(0, topStartOrdinal - 1)] ?? 0;
-        const nextPlayer = playerIndices[Math.min(playerIndices.length, topEndOrdinal)];
-        const endExclusive = Number.isFinite(nextPlayer) ? nextPlayer : list.length;
+        const nextPlayer =
+          playerIndices[Math.min(playerIndices.length, topEndOrdinal)];
+        const endExclusive = Number.isFinite(nextPlayer)
+          ? nextPlayer
+          : list.length;
         const includedIndices = [];
         for (let idx = startIndex; idx < endExclusive; idx += 1) {
           includedIndices.push(idx);
@@ -459,7 +469,9 @@
           .sort((a, b) => a - b);
         if (!uniqueIncluded.length) uniqueIncluded.push(startIndex);
         const sliced = uniqueIncluded.map((idx) => list[idx]);
-        const ordinals = includedIndices.map((idx) => ordinalMap.get(idx) || null);
+        const ordinals = includedIndices.map(
+          (idx) => ordinalMap.get(idx) || null,
+        );
         return {
           turns: sliced,
           indices: uniqueIncluded,
@@ -521,32 +533,252 @@
   GMH.Core.ExportRange = ExportRange;
 
   const TurnBookmarks = (() => {
-    let candidate = null;
+    const HISTORY_LIMIT = 5;
+    const history = [];
+    const listeners = new Set();
+
+    const cloneEntry = (entry) => ({ ...entry });
+
+    const makeKey = (index, messageId) => {
+      if (typeof messageId === 'string' && messageId) return `id:${messageId}`;
+      if (Number.isFinite(Number(index))) return `idx:${Number(index)}`;
+      return `tmp:${Date.now()}`;
+    };
+
+    const emit = () => {
+      const snapshot = history.map(cloneEntry);
+      listeners.forEach((listener) => {
+        try {
+          listener(snapshot);
+        } catch (err) {
+          console.warn('[GMH] bookmark listener failed', err);
+        }
+      });
+    };
+
     return {
       record(index, ordinal, messageId) {
-        if (!Number.isFinite(Number(index))) return;
-        candidate = {
-          index: Number(index),
-          ordinal: Number.isFinite(Number(ordinal)) ? Number(ordinal) : null,
-          messageId: typeof messageId === 'string' ? messageId : null,
+        if (!Number.isFinite(Number(index))) return null;
+        const normalizedIndex = Number(index);
+        const normalizedOrdinal = Number.isFinite(Number(ordinal))
+          ? Number(ordinal)
+          : null;
+        const normalizedId =
+          typeof messageId === 'string' && messageId ? messageId : null;
+        const key = makeKey(normalizedIndex, normalizedId);
+        const entry = {
+          key,
+          index: normalizedIndex,
+          ordinal: normalizedOrdinal,
+          messageId: normalizedId,
           timestamp: Date.now(),
         };
+        const existing = history.findIndex((item) => item.key === key);
+        if (existing !== -1) history.splice(existing, 1);
+        history.unshift(entry);
+        if (history.length > HISTORY_LIMIT) history.length = HISTORY_LIMIT;
+        emit();
+        return cloneEntry(entry);
       },
       clear() {
-        candidate = null;
+        if (!history.length) return;
+        history.length = 0;
+        emit();
+      },
+      remove(key) {
+        if (!key) return;
+        const next = history.findIndex((item) => item.key === key);
+        if (next === -1) return;
+        history.splice(next, 1);
+        emit();
       },
       get() {
-        return candidate;
+        return history[0] ? cloneEntry(history[0]) : null;
+      },
+      latest() {
+        return history[0] ? cloneEntry(history[0]) : null;
+      },
+      pick(key) {
+        if (!key) return null;
+        const found = history.find((item) => item.key === key);
+        return found ? cloneEntry(found) : null;
+      },
+      list() {
+        return history.map(cloneEntry);
+      },
+      subscribe(listener) {
+        if (typeof listener !== 'function') return () => {};
+        listeners.add(listener);
+        try {
+          listener(history.map(cloneEntry));
+        } catch (err) {
+          console.warn('[GMH] bookmark subscriber failed', err);
+        }
+        return () => listeners.delete(listener);
       },
     };
   })();
 
   GMH.Core.TurnBookmarks = TurnBookmarks;
 
+  const MessageIndexer = (() => {
+    let observer = null;
+    let scheduled = false;
+    let active = false;
+    let lastSummary = {
+      totalMessages: 0,
+      playerMessages: 0,
+      containerPresent: false,
+      timestamp: 0,
+    };
+    const listeners = new Set();
+
+    const cloneSummary = (summary) => ({ ...summary });
+
+    const notify = () => {
+      const snapshot = cloneSummary(lastSummary);
+      listeners.forEach((listener) => {
+        try {
+          listener(snapshot);
+        } catch (err) {
+          console.warn('[GMH] index listener failed', err);
+        }
+      });
+    };
+
+    const indexMessages = () => {
+      const adapter = getActiveAdapter();
+      const container = adapter?.findContainer?.(document);
+      const blockNodes =
+        adapter?.listMessageBlocks?.(container || document) || [];
+      const blocks = Array.from(blockNodes).filter(
+        (node) => node instanceof Element,
+      );
+
+      let playerCount = 0;
+
+      blocks.forEach((block, idx) => {
+        try {
+          block.setAttribute('data-gmh-message', '1');
+          block.setAttribute('data-gmh-message-index', String(idx));
+          const messageId =
+            block.getAttribute('data-gmh-message-id') ||
+            block.getAttribute('data-message-id') ||
+            block.getAttribute('data-id') ||
+            null;
+          if (messageId) block.setAttribute('data-gmh-message-id', messageId);
+          else block.removeAttribute('data-gmh-message-id');
+          const role = adapter?.detectRole?.(block) || 'unknown';
+          block.setAttribute('data-gmh-message-role', role);
+          if (role === 'player') playerCount += 1;
+          else block.removeAttribute('data-gmh-player-turn');
+        } catch (err) {
+          /* ignore per-node errors */
+        }
+      });
+
+      let ordinal = 0;
+      for (let i = blocks.length - 1; i >= 0; i -= 1) {
+        const block = blocks[i];
+        if (!block) continue;
+        if (block.getAttribute('data-gmh-message-role') === 'player') {
+          ordinal += 1;
+          block.setAttribute('data-gmh-player-turn', String(ordinal));
+        }
+      }
+
+      lastSummary = {
+        totalMessages: blocks.length,
+        playerMessages: ordinal,
+        containerPresent: Boolean(container),
+        timestamp: Date.now(),
+      };
+
+      GMH.Core.ExportRange.setTotals({
+        player: ordinal,
+        all: blocks.length,
+      });
+
+      notify();
+      return lastSummary;
+    };
+
+    const schedule = () => {
+      if (scheduled) return;
+      scheduled = true;
+      const runner = () => {
+        scheduled = false;
+        try {
+          indexMessages();
+        } catch (err) {
+          console.warn('[GMH] message indexing failed', err);
+        }
+      };
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(runner);
+      } else {
+        setTimeout(runner, 16);
+      }
+    };
+
+    const ensureObserver = () => {
+      if (observer || typeof MutationObserver === 'undefined') return;
+      const target = document.body || document.documentElement;
+      if (!target) return;
+      observer = new MutationObserver(() => {
+        if (!active) return;
+        schedule();
+      });
+      observer.observe(target, { childList: true, subtree: true });
+    };
+
+    return {
+      start() {
+        active = true;
+        ensureObserver();
+        try {
+          indexMessages();
+        } catch (err) {
+          console.warn('[GMH] initial message indexing failed', err);
+        }
+      },
+      stop() {
+        active = false;
+        if (observer) {
+          observer.disconnect();
+          observer = null;
+        }
+      },
+      refresh(options = {}) {
+        const immediate = Boolean(options?.immediate);
+        if (immediate) return indexMessages();
+        schedule();
+        return cloneSummary(lastSummary);
+      },
+      getSummary() {
+        return cloneSummary(lastSummary);
+      },
+      subscribe(listener) {
+        if (typeof listener !== 'function') return () => {};
+        listeners.add(listener);
+        try {
+          listener(cloneSummary(lastSummary));
+        } catch (err) {
+          console.warn('[GMH] index subscriber failed', err);
+        }
+        return () => listeners.delete(listener);
+      },
+    };
+  })();
+
+  GMH.Core.MessageIndexer = MessageIndexer;
+
   const handleBookmarkCandidate = (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
-    const message = target.closest('[data-gmh-message-index], [data-turn-index]');
+    const message = target.closest(
+      '[data-gmh-message-index], [data-turn-index]',
+    );
     if (!message) return;
     const indexAttr =
       message.getAttribute('data-gmh-message-index') ||
@@ -1042,7 +1274,7 @@
 
   const PREVIEW_TURN_LIMIT = 5;
 
-const LEGACY_PREVIEW_CSS = `
+  const LEGACY_PREVIEW_CSS = `
 .gmh-preview-overlay{position:fixed;inset:0;background:rgba(15,23,42,0.72);z-index:9999999;display:flex;align-items:center;justify-content:center;padding:24px;}
 .gmh-preview-card{background:#0f172a;color:#e2e8f0;border-radius:14px;box-shadow:0 18px 48px rgba(8,15,30,0.55);width:min(520px,94vw);max-height:94vh;display:flex;flex-direction:column;overflow:hidden;font:13px/1.5 'Inter',system-ui,sans-serif;}
 .gmh-preview-header{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid rgba(148,163,184,0.25);font-weight:600;}
@@ -1152,6 +1384,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 .gmh-bookmark-controls{display:flex;gap:6px;flex-wrap:wrap;}
 .gmh-range-sep{color:var(--gmh-muted);}
 .gmh-input,.gmh-select{flex:1;background:#111827;color:var(--gmh-fg);border:1px solid var(--gmh-border);border-radius:var(--gmh-radius-sm);padding:8px 10px;font:inherit;}
+.gmh-select--compact{padding:6px 8px;}
+.gmh-bookmark-select{flex:1;display:flex;align-items:center;gap:8px;}
 .gmh-input--compact{flex:0;min-width:72px;width:72px;}
 .gmh-textarea{width:100%;min-height:96px;background:#111827;color:var(--gmh-fg);border:1px solid var(--gmh-border);border-radius:var(--gmh-radius-sm);padding:10px;font:inherit;resize:vertical;}
 .gmh-small-btn{padding:8px 10px;border-radius:var(--gmh-radius-sm);border:1px solid transparent;cursor:pointer;font-weight:600;font-size:12px;background:rgba(15,23,42,0.65);color:var(--gmh-muted);transition:background 0.15s ease,color 0.15s ease,border 0.15s ease;}
@@ -1899,12 +2133,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const grid = document.createElement('div');
       grid.className = 'gmh-settings-grid';
 
-      const buildRow = ({
-        id,
-        label,
-        description,
-        control,
-      }) => {
+      const buildRow = ({ id, label, description, control }) => {
         const row = document.createElement('div');
         row.className = 'gmh-settings-row';
         const main = document.createElement('div');
@@ -2548,7 +2777,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         typeof behavior.autoHideEnabled === 'boolean'
           ? behavior.autoHideEnabled
           : DEFAULT_BEHAVIOR.autoHideEnabled;
-      behavior.autoHideDelayMs = Number.isFinite(Number(behavior.autoHideDelayMs))
+      behavior.autoHideDelayMs = Number.isFinite(
+        Number(behavior.autoHideDelayMs),
+      )
         ? Math.max(2000, Math.round(Number(behavior.autoHideDelayMs)))
         : DEFAULT_BEHAVIOR.autoHideDelayMs;
       behavior.collapseOnOutside =
@@ -2692,10 +2923,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         focusAnimationFrame = null;
         attempt();
       });
-      focusTimeouts = [
-        setTimeout(attempt, 0),
-        setTimeout(attempt, 50),
-      ];
+      focusTimeouts = [setTimeout(attempt, 0), setTimeout(attempt, 50)];
     };
 
     const clearIdleTimer = () => {
@@ -2756,8 +2984,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const applyLayout = () => {
       if (!panelEl) return;
       const layout = coerceLayout(currentLayout);
-      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1280;
-      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720;
+      const viewportWidth =
+        window.innerWidth || document.documentElement.clientWidth || 1280;
+      const viewportHeight =
+        window.innerHeight || document.documentElement.clientHeight || 720;
 
       const maxWidth = Math.max(MIN_GAP, viewportWidth - MIN_GAP * 2);
       const maxHeight = Math.max(MIN_GAP, viewportHeight - MIN_GAP * 2);
@@ -2788,10 +3018,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         MIN_GAP,
         viewportHeight - effectiveHeight - MIN_GAP,
       );
-      const bottom = Math.min(
-        Math.max(MIN_GAP, layout.bottom),
-        bottomLimit,
-      );
+      const bottom = Math.min(Math.max(MIN_GAP, layout.bottom), bottomLimit);
 
       const horizontalLimit = Math.max(MIN_GAP, viewportWidth - MIN_GAP - 160);
       const offset = Math.min(
@@ -2970,7 +3197,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       if (dragHandle)
         dragHandle.addEventListener('pointerdown', handleDragStart);
 
-      const nextResizeHandle = panelEl.querySelector('#gmh-panel-resize-handle');
+      const nextResizeHandle = panelEl.querySelector(
+        '#gmh-panel-resize-handle',
+      );
       if (resizeHandle && resizeHandle !== nextResizeHandle)
         resizeHandle.removeEventListener('pointerdown', handleResizeStart);
       resizeHandle = nextResizeHandle;
@@ -3024,14 +3253,19 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const dx = event.clientX - dragSession.startX;
       const dy = event.clientY - dragSession.startY;
       const rect = dragSession.rect;
-      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1280;
-      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720;
+      const viewportWidth =
+        window.innerWidth || document.documentElement.clientWidth || 1280;
+      const viewportHeight =
+        window.innerHeight || document.documentElement.clientHeight || 720;
 
       let nextLeft = rect.left + dx;
       let nextTop = rect.top + dy;
       const maxLeft = viewportWidth - rect.width - MIN_GAP;
       const maxTop = viewportHeight - rect.height - MIN_GAP;
-      nextLeft = Math.min(Math.max(MIN_GAP, nextLeft), Math.max(MIN_GAP, maxLeft));
+      nextLeft = Math.min(
+        Math.max(MIN_GAP, nextLeft),
+        Math.max(MIN_GAP, maxLeft),
+      );
       nextTop = Math.min(Math.max(MIN_GAP, nextTop), Math.max(MIN_GAP, maxTop));
 
       panelEl.style.left = `${Math.round(nextLeft)}px`;
@@ -3043,12 +3277,16 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const finalizeDragLayout = () => {
       if (!panelEl) return;
       const rect = panelEl.getBoundingClientRect();
-      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1280;
-      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720;
-      const anchor = rect.left + rect.width / 2 <= viewportWidth / 2 ? 'left' : 'right';
-      const offset = anchor === 'left'
-        ? Math.round(Math.max(MIN_GAP, rect.left))
-        : Math.round(Math.max(MIN_GAP, viewportWidth - rect.right));
+      const viewportWidth =
+        window.innerWidth || document.documentElement.clientWidth || 1280;
+      const viewportHeight =
+        window.innerHeight || document.documentElement.clientHeight || 720;
+      const anchor =
+        rect.left + rect.width / 2 <= viewportWidth / 2 ? 'left' : 'right';
+      const offset =
+        anchor === 'left'
+          ? Math.round(Math.max(MIN_GAP, rect.left))
+          : Math.round(Math.max(MIN_GAP, viewportWidth - rect.right));
       const bottom = Math.round(
         Math.max(MIN_GAP, viewportHeight - rect.bottom),
       );
@@ -3111,8 +3349,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     const handleResizeMove = (event) => {
       if (!resizeSession || !panelEl) return;
-      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1280;
-      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720;
+      const viewportWidth =
+        window.innerWidth || document.documentElement.clientWidth || 1280;
+      const viewportHeight =
+        window.innerHeight || document.documentElement.clientHeight || 720;
 
       const dx = event.clientX - resizeSession.startX;
       const dy = event.clientY - resizeSession.startY;
@@ -3129,14 +3369,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       let nextWidth = resizeSession.width + dx;
       let nextHeight = resizeSession.height + dy;
 
-      nextWidth = Math.min(
-        Math.max(260, nextWidth),
-        horizontalRoom,
-      );
-      nextHeight = Math.min(
-        Math.max(240, nextHeight),
-        verticalRoom,
-      );
+      nextWidth = Math.min(Math.max(260, nextWidth), horizontalRoom);
+      nextHeight = Math.min(Math.max(240, nextHeight), verticalRoom);
 
       resizeSession.nextWidth = Math.round(nextWidth);
       resizeSession.nextHeight = Math.round(nextHeight);
@@ -4037,6 +4271,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
   function collectTurnStats() {
     try {
+      try {
+        GMH.Core.MessageIndexer.refresh({ immediate: true });
+      } catch (err) {
+        console.warn('[GMH] message indexing before stats failed', err);
+      }
       const raw = readTranscriptText();
       const normalized = normalizeTranscript(raw);
       const session = buildSession(normalized);
@@ -4047,39 +4286,6 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         player: playerTurns,
         all: session.turns.length,
       });
-      const adapter = getActiveAdapter();
-      try {
-        const container = adapter?.findContainer?.(document) || document;
-        const blockNodes = adapter?.listMessageBlocks?.(container) || [];
-        const blocks = Array.from(blockNodes).filter((node) => node instanceof Element);
-
-        blocks.forEach((block, idx) => {
-          block.setAttribute('data-gmh-message', '1');
-          block.setAttribute('data-gmh-message-index', String(idx));
-          const messageId =
-            block.getAttribute('data-gmh-message-id') ||
-            block.getAttribute('data-message-id') ||
-            block.getAttribute('data-id') ||
-            null;
-          if (messageId) block.setAttribute('data-gmh-message-id', messageId);
-          else block.removeAttribute('data-gmh-message-id');
-          const role = adapter?.detectRole?.(block) || 'unknown';
-          block.setAttribute('data-gmh-message-role', role);
-          if (role !== 'player') block.removeAttribute('data-gmh-player-turn');
-        });
-
-        let ordinal = 0;
-        for (let i = blocks.length - 1; i >= 0; i -= 1) {
-          const block = blocks[i];
-          if (!block) continue;
-          if (block.getAttribute('data-gmh-message-role') === 'player') {
-            ordinal += 1;
-            block.setAttribute('data-gmh-player-turn', String(ordinal));
-          }
-        }
-      } catch (err) {
-        /* ignore tagging errors */
-      }
       return {
         session,
         playerTurns,
@@ -4586,13 +4792,72 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       mountStatusActionsLegacy(panel);
     }
 
-  const rangeStartInput = panel.querySelector('#gmh-range-start');
-  const rangeEndInput = panel.querySelector('#gmh-range-end');
-  const rangeClearBtn = panel.querySelector('#gmh-range-clear');
-  const rangeMarkStartBtn = panel.querySelector('#gmh-range-mark-start');
-  const rangeMarkEndBtn = panel.querySelector('#gmh-range-mark-end');
-  const rangeSummary = panel.querySelector('#gmh-range-summary');
+    const rangeStartInput = panel.querySelector('#gmh-range-start');
+    const rangeEndInput = panel.querySelector('#gmh-range-end');
+    const rangeClearBtn = panel.querySelector('#gmh-range-clear');
+    const rangeMarkStartBtn = panel.querySelector('#gmh-range-mark-start');
+    const rangeMarkEndBtn = panel.querySelector('#gmh-range-mark-end');
+    const rangeSummary = panel.querySelector('#gmh-range-summary');
+    const rangeBookmarkSelect = panel.querySelector(
+      '#gmh-range-bookmark-select',
+    );
+
     let rangeUnsubscribe = null;
+    let selectedBookmarkKey = '';
+
+    const syncBookmarkSelect = (entries = []) => {
+      if (!rangeBookmarkSelect) return;
+      const previous = selectedBookmarkKey || rangeBookmarkSelect.value || '';
+      rangeBookmarkSelect.innerHTML = '';
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = entries.length
+        ? '최근 클릭한 메시지를 선택하세요'
+        : '최근 클릭한 메시지가 없습니다';
+      rangeBookmarkSelect.appendChild(placeholder);
+      entries.forEach((entry) => {
+        const option = document.createElement('option');
+        option.value = entry.key;
+        const ordinalText = Number.isFinite(entry.ordinal)
+          ? `턴 ${entry.ordinal}`
+          : '턴 ?';
+        const idText = entry.messageId
+          ? entry.messageId
+          : `index ${entry.index}`;
+        option.textContent = `${ordinalText} · ${idText}`;
+        option.dataset.index = String(entry.index);
+        rangeBookmarkSelect.appendChild(option);
+      });
+      let nextValue = '';
+      if (entries.some((entry) => entry.key === previous)) {
+        nextValue = previous;
+      } else if (entries.length) {
+        nextValue = entries[0].key;
+      }
+      rangeBookmarkSelect.value = nextValue;
+      selectedBookmarkKey = nextValue || '';
+      if (!nextValue && !entries.length) {
+        rangeBookmarkSelect.selectedIndex = 0;
+      }
+    };
+
+    if (
+      rangeBookmarkSelect &&
+      rangeBookmarkSelect.dataset.gmhBookmarksReady !== 'true'
+    ) {
+      rangeBookmarkSelect.dataset.gmhBookmarksReady = 'true';
+      rangeBookmarkSelect.addEventListener('change', () => {
+        selectedBookmarkKey = rangeBookmarkSelect.value || '';
+      });
+      if (typeof GMH.Core?.TurnBookmarks?.subscribe === 'function') {
+        GMH.Core.TurnBookmarks.subscribe(syncBookmarkSelect);
+      }
+    } else if (
+      rangeBookmarkSelect &&
+      typeof GMH.Core?.TurnBookmarks?.list === 'function'
+    ) {
+      syncBookmarkSelect(GMH.Core.TurnBookmarks.list());
+    }
 
     const syncRangeControls = (snapshot) => {
       if (!snapshot) return;
@@ -4660,25 +4925,34 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         rangeClearBtn.addEventListener('click', () => {
           GMH.Core.ExportRange.clear();
           GMH.Core.TurnBookmarks.clear();
+          selectedBookmarkKey = '';
+          if (rangeBookmarkSelect) rangeBookmarkSelect.value = '';
         });
       }
       const doBookmark = async (mode) => {
         const stats = collectTurnStats();
         if (stats.error || !stats.session?.turns?.length) {
-          setPanelStatus('현재 대화에서 턴 정보를 찾을 수 없습니다.', 'warning');
+          setPanelStatus(
+            '현재 대화에서 턴 정보를 찾을 수 없습니다.',
+            'warning',
+          );
           return;
         }
         const adapter = getActiveAdapter();
         const container = adapter?.findContainer?.(document);
-        const blockNodes = adapter?.listMessageBlocks?.(container || document) || [];
-        const blocks = Array.from(blockNodes).filter((node) => node instanceof Element);
+        const blockNodes =
+          adapter?.listMessageBlocks?.(container || document) || [];
+        const blocks = Array.from(blockNodes).filter(
+          (node) => node instanceof Element,
+        );
         const playerIndices = [];
         let highestOrdinal = 0;
         blocks.forEach((block, idx) => {
           if (block?.getAttribute?.('data-gmh-message-role') === 'player') {
             playerIndices.push(idx);
             const ordAttr = Number(block.getAttribute('data-gmh-player-turn'));
-            if (Number.isFinite(ordAttr)) highestOrdinal = Math.max(highestOrdinal, ordAttr);
+            if (Number.isFinite(ordAttr))
+              highestOrdinal = Math.max(highestOrdinal, ordAttr);
           }
         });
 
@@ -4689,16 +4963,17 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         );
 
         if (!totalPlayers || !playerIndices.length) {
-          setPanelStatus('플레이어 턴이 없어 범위를 지정할 수 없습니다.', 'warning');
+          setPanelStatus(
+            '플레이어 턴이 없어 범위를 지정할 수 없습니다.',
+            'warning',
+          );
           return;
         }
 
         const selectBlockByIndex = (idx) => {
           if (!Number.isFinite(Number(idx))) return null;
           try {
-            return document.querySelector(
-              `[data-gmh-message-index="${idx}"]`,
-            );
+            return document.querySelector(`[data-gmh-message-index="${idx}"]`);
           } catch (err) {
             return null;
           }
@@ -4758,24 +5033,35 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           };
 
           let playerBlock = block;
-          if (!playerBlock || !playerBlock.getAttribute('data-gmh-player-turn')) {
+          if (
+            !playerBlock ||
+            !playerBlock.getAttribute('data-gmh-player-turn')
+          ) {
             playerBlock = walkBackward(playerBlock);
             while (
               playerBlock &&
               !playerBlock.getAttribute('data-gmh-player-turn')
             ) {
-              playerBlock = walkBackward(playerBlock?.previousElementSibling || null);
+              playerBlock = walkBackward(
+                playerBlock?.previousElementSibling || null,
+              );
             }
           }
 
-          if (!playerBlock || !playerBlock.getAttribute('data-gmh-player-turn')) {
+          if (
+            !playerBlock ||
+            !playerBlock.getAttribute('data-gmh-player-turn')
+          ) {
             const fallbackIdx = findNearestPlayerIndex(seedIndex);
             if (Number.isFinite(fallbackIdx)) {
               playerBlock = selectBlockByIndex(fallbackIdx);
             }
           }
 
-          if (!playerBlock || !playerBlock.getAttribute('data-gmh-player-turn')) {
+          if (
+            !playerBlock ||
+            !playerBlock.getAttribute('data-gmh-player-turn')
+          ) {
             return null;
           }
 
@@ -4788,17 +5074,32 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           const idx = Number(idxAttr);
           const pos = playerIndices.indexOf(idx);
           const ordinalFromPos = pos === -1 ? null : totalPlayers - pos;
-          let ordinal = Number.isFinite(Number(ordAttr)) ? Number(ordAttr) : ordinalFromPos;
+          let ordinal = Number.isFinite(Number(ordAttr))
+            ? Number(ordAttr)
+            : ordinalFromPos;
           if (!Number.isFinite(ordinal)) ordinal = totalPlayers;
           ordinal = Math.max(1, Math.min(totalPlayers, ordinal));
           return {
-            index: Number.isFinite(idx) ? idx : playerIndices[playerIndices.length - 1] ?? 0,
+            index: Number.isFinite(idx)
+              ? idx
+              : (playerIndices[playerIndices.length - 1] ?? 0),
             ordinal,
             messageId: msgAttr,
           };
         };
 
-        const bookmarkCandidate = GMH.Core.TurnBookmarks.get();
+        const getActiveBookmark = () => {
+          if (rangeBookmarkSelect) {
+            const key = rangeBookmarkSelect.value || selectedBookmarkKey || '';
+            if (key) {
+              const picked = GMH.Core.TurnBookmarks.pick(key);
+              if (picked) return picked;
+            }
+          }
+          return GMH.Core.TurnBookmarks.latest();
+        };
+
+        const bookmarkCandidate = getActiveBookmark();
         let context = null;
         if (bookmarkCandidate) {
           context = resolvePlayerContext(
@@ -4813,7 +5114,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           try {
             const current = document.activeElement;
             if (current && panel.contains(current)) {
-              const block = current.closest('[data-gmh-message-index],[data-turn-index],[data-message-id]');
+              const block = current.closest(
+                '[data-gmh-message-index],[data-turn-index],[data-message-id]',
+              );
               if (block) {
                 const indexAttr = block.getAttribute('data-gmh-message-index');
                 const turnAttr = block.getAttribute('data-turn-index');
@@ -4848,11 +5151,15 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
               null;
             GMH.Core.ExportRange.setStart(totalPlayers);
             if (rangeStartInput) rangeStartInput.value = String(totalPlayers);
-            GMH.Core.TurnBookmarks.record(
+            const recorded = GMH.Core.TurnBookmarks.record(
               fallbackIdx,
               totalPlayers,
               messageId,
             );
+            if (recorded?.key) {
+              selectedBookmarkKey = recorded.key;
+              if (rangeBookmarkSelect) rangeBookmarkSelect.value = recorded.key;
+            }
             setPanelStatus(
               '플레이어 턴을 찾지 못해 가장 오래된 턴을 시작으로 지정했습니다.',
               'warning',
@@ -4866,7 +5173,15 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
               null;
             GMH.Core.ExportRange.setEnd(1);
             if (rangeEndInput) rangeEndInput.value = '1';
-            GMH.Core.TurnBookmarks.record(fallbackIdx, 1, messageId);
+            const recorded = GMH.Core.TurnBookmarks.record(
+              fallbackIdx,
+              1,
+              messageId,
+            );
+            if (recorded?.key) {
+              selectedBookmarkKey = recorded.key;
+              if (rangeBookmarkSelect) rangeBookmarkSelect.value = recorded.key;
+            }
             setPanelStatus(
               '플레이어 턴을 찾지 못해 최신 턴을 끝으로 지정했습니다.',
               'warning',
@@ -4881,18 +5196,29 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
         if (mode === 'start') {
           GMH.Core.ExportRange.setStart(resolvedOrdinal);
-          setPanelStatus(`플레이어 턴 ${resolvedOrdinal}을 시작으로 지정했습니다.`, 'info');
-          rangeStartInput.value = String(resolvedOrdinal);
+          setPanelStatus(
+            `플레이어 턴 ${resolvedOrdinal}을 시작으로 지정했습니다.`,
+            'info',
+          );
+          if (rangeStartInput) rangeStartInput.value = String(resolvedOrdinal);
         } else {
           GMH.Core.ExportRange.setEnd(resolvedOrdinal);
-          setPanelStatus(`플레이어 턴 ${resolvedOrdinal}을 끝으로 지정했습니다.`, 'info');
-          rangeEndInput.value = String(resolvedOrdinal);
+          setPanelStatus(
+            `플레이어 턴 ${resolvedOrdinal}을 끝으로 지정했습니다.`,
+            'info',
+          );
+          if (rangeEndInput) rangeEndInput.value = String(resolvedOrdinal);
         }
-        GMH.Core.TurnBookmarks.record(
+        const finalBookmark = GMH.Core.TurnBookmarks.record(
           targetIndex,
           resolvedOrdinal,
           targetMessageId || null,
         );
+        if (finalBookmark?.key) {
+          selectedBookmarkKey = finalBookmark.key;
+          if (rangeBookmarkSelect)
+            rangeBookmarkSelect.value = finalBookmark.key;
+        }
       };
 
       if (rangeMarkStartBtn) {
@@ -4954,8 +5280,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const normalized = normalizeTranscript(raw);
       const session = buildSession(normalized);
       if (!session.turns.length) throw new Error('대화 턴을 찾을 수 없습니다.');
-      const playerCount = session.turns.filter((turn) => turn.role === 'player')
-        .length;
+      const playerCount = session.turns.filter(
+        (turn) => turn.role === 'player',
+      ).length;
       GMH.Core.ExportRange.setTotals({
         player: playerCount,
         all: session.turns.length,
@@ -5025,7 +5352,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             enumerable: false,
           });
           Object.defineProperty(clone, '__gmhOrdinal', {
-            value: selection.ordinals?.[localIndex] ?? ordinalMap.get(index) ?? null,
+            value:
+              selection.ordinals?.[localIndex] ?? ordinalMap.get(index) ?? null,
             enumerable: false,
           });
           return clone;
@@ -5107,13 +5435,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           tone: 'progress',
           progress: { indeterminate: true },
         });
-        const {
-          privacy,
-          stats,
-          exportSession,
-          selection,
-          overallStats,
-        } = prepared;
+        const { privacy, stats, exportSession, selection, overallStats } =
+          prepared;
         const stamp = new Date().toISOString().replace(/[:.]/g, '-');
         const sessionForExport = exportSession || privacy.sanitizedSession;
         const rangeInfo = selection?.info || GMH.Core.ExportRange.describe();
@@ -5512,6 +5835,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           <button id="gmh-range-clear" type="button" class="gmh-small-btn gmh-small-btn--muted">전체</button>
         </div>
       </div>
+      <div class="gmh-field-row gmh-field-row--wrap">
+        <label for="gmh-range-bookmark-select" class="gmh-field-label">최근 북마크</label>
+        <div class="gmh-bookmark-select">
+          <select id="gmh-range-bookmark-select" class="gmh-select gmh-select--compact">
+            <option value="">최근 클릭한 메시지가 없습니다</option>
+          </select>
+        </div>
+      </div>
         <div id="gmh-range-summary" class="gmh-helper-text">플레이어 턴 전체 내보내기</div>
         <div class="gmh-field-row">
           <select id="gmh-export-format" class="gmh-select">
@@ -5585,6 +5916,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           <button id="gmh-range-clear" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;">전체</button>
         </div>
       </div>
+      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+        <label for="gmh-range-bookmark-select" style="font-size:11px; color:#94a3b8; font-weight:600;">최근 북마크</label>
+        <select id="gmh-range-bookmark-select" style="flex:1; min-width:160px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;">
+          <option value="">최근 클릭한 메시지가 없습니다</option>
+        </select>
+      </div>
       <div id="gmh-range-summary" style="font-size:11px; color:#94a3b8;">플레이어 턴 전체 내보내기</div>
       <div style="display:flex; gap:8px; align-items:center;">
         <select id="gmh-export-format" style="flex:1; background:#111827; color:#f1f5f9; border:1px solid #1f2937; border-radius:8px; padding:8px;">
@@ -5633,6 +5970,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   function boot() {
     try {
       mountPanel();
+      GMH.Core.MessageIndexer.start();
     } catch (e) {
       console.error('[GMH] mount error', e);
     }
@@ -5730,6 +6068,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     buildSession,
     collectSessionStats,
     autoLoader,
+    MessageIndexer,
   });
 
   if (!PAGE_WINDOW.GMH) {
