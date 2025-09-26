@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Genit Memory Helper
 // @namespace    local.dev
-// @version      1.2.1
+// @version      1.3.0
 // @description  Genit 대화로그 JSON/TXT/MD 추출 + 요약/재요약 프롬프트 복사 기능
 // @author       devforai-creator
 // @match        https://genit.ai/*
@@ -377,7 +377,7 @@
       describe(totalPlayers = totals.player) {
         return resolveBounds(totalPlayers);
       },
-      apply(turns = []) {
+      apply(turns = [], options = {}) {
         const list = Array.isArray(turns) ? turns : [];
         if (!list.length) {
           return {
@@ -386,6 +386,14 @@
             ordinals: [],
             info: resolveBounds(0),
           };
+        }
+
+        const includeIndices = new Set();
+        if (Array.isArray(options.includeIndices)) {
+          options.includeIndices
+            .map((value) => Number(value))
+            .filter((value) => Number.isFinite(value) && value >= 0)
+            .forEach((value) => includeIndices.add(value));
         }
 
         const playerIndices = [];
@@ -411,10 +419,12 @@
 
         if (!totalPlayers || !info.count || !info.active) {
           const indices = list.map((_, idx) => idx);
+          includeIndices.forEach((idx) => indices.push(idx));
+          const uniqueIndices = Array.from(new Set(indices)).sort((a, b) => a - b);
           const ordinals = indices.map((idx) => ordinalMap.get(idx) || null);
           return {
-            turns: [...list],
-            indices,
+            turns: uniqueIndices.map((idx) => list[idx] ?? null).filter(Boolean),
+            indices: uniqueIndices,
             ordinals,
             info: {
               ...info,
@@ -433,13 +443,17 @@
         for (let idx = startIndex; idx < endExclusive; idx += 1) {
           includedIndices.push(idx);
         }
-        if (!includedIndices.length) includedIndices.push(startIndex);
-        const sliced = includedIndices.map((idx) => list[idx]);
+        includeIndices.forEach((idx) => includedIndices.push(idx));
+        const uniqueIncluded = Array.from(new Set(includedIndices))
+          .filter((idx) => idx >= 0 && idx < list.length)
+          .sort((a, b) => a - b);
+        if (!uniqueIncluded.length) uniqueIncluded.push(startIndex);
+        const sliced = uniqueIncluded.map((idx) => list[idx]);
         const ordinals = includedIndices.map((idx) => ordinalMap.get(idx) || null);
         return {
           turns: sliced,
-          indices: includedIndices,
-          ordinals,
+          indices: uniqueIncluded,
+          ordinals: uniqueIncluded.map((idx) => ordinalMap.get(idx) || null),
           info: {
             ...info,
             total: totalPlayers,
@@ -4644,12 +4658,27 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           setPanelStatus('현재 대화에서 턴 정보를 찾을 수 없습니다.', 'warning');
           return;
         }
-        const turns = stats.session.turns;
+        const adapter = getActiveAdapter();
+        const container = adapter?.findContainer?.(document);
+        const blockNodes = adapter?.listMessageBlocks?.(container || document) || [];
+        const blocks = Array.from(blockNodes).filter((node) => node instanceof Element);
         const playerIndices = [];
-        turns.forEach((turn, idx) => {
-          if (turn?.role === 'player') playerIndices.push(idx);
+        let highestOrdinal = 0;
+        blocks.forEach((block, idx) => {
+          if (block?.getAttribute?.('data-gmh-message-role') === 'player') {
+            playerIndices.push(idx);
+            const ordAttr = Number(block.getAttribute('data-gmh-player-turn'));
+            if (Number.isFinite(ordAttr)) highestOrdinal = Math.max(highestOrdinal, ordAttr);
+          }
         });
-        if (!playerIndices.length) {
+
+        const totalPlayers = Math.max(
+          highestOrdinal,
+          Number(stats.playerTurns) || 0,
+          playerIndices.length,
+        );
+
+        if (!totalPlayers || !playerIndices.length) {
           setPanelStatus('플레이어 턴이 없어 범위를 지정할 수 없습니다.', 'warning');
           return;
         }
@@ -4678,6 +4707,24 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         };
 
         const resolvePlayerContext = (seedIndex, seedMessageId) => {
+          const findNearestPlayerIndex = (targetIndex) => {
+            if (!playerIndices.length) return null;
+            const target = Number(targetIndex);
+            if (!Number.isFinite(target)) {
+              return playerIndices[playerIndices.length - 1];
+            }
+            let nearest = playerIndices[0];
+            let bestDiff = Math.abs(playerIndices[0] - target);
+            for (let i = 1; i < playerIndices.length; i += 1) {
+              const diff = Math.abs(playerIndices[i] - target);
+              if (diff < bestDiff) {
+                nearest = playerIndices[i];
+                bestDiff = diff;
+              }
+            }
+            return nearest;
+          };
+
           let block = null;
           if (Number.isFinite(Number(seedIndex))) {
             block = selectBlockByIndex(seedIndex);
@@ -4712,7 +4759,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           }
 
           if (!playerBlock || !playerBlock.getAttribute('data-gmh-player-turn')) {
-            const fallbackIdx = playerIndices[playerIndices.length - 1];
+            const fallbackIdx = findNearestPlayerIndex(seedIndex);
             if (Number.isFinite(fallbackIdx)) {
               playerBlock = selectBlockByIndex(fallbackIdx);
             }
@@ -4730,11 +4777,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             null;
           const idx = Number(idxAttr);
           const pos = playerIndices.indexOf(idx);
-          const ordinal = Number.isFinite(Number(ordAttr))
-            ? Number(ordAttr)
-            : pos === -1
-              ? playerIndices.length
-              : playerIndices.length - pos;
+          const ordinalFromPos = pos === -1 ? null : totalPlayers - pos;
+          let ordinal = Number.isFinite(Number(ordAttr)) ? Number(ordAttr) : ordinalFromPos;
+          if (!Number.isFinite(ordinal)) ordinal = totalPlayers;
+          ordinal = Math.max(1, Math.min(totalPlayers, ordinal));
           return {
             index: Number.isFinite(idx) ? idx : playerIndices[playerIndices.length - 1] ?? 0,
             ordinal,
@@ -4776,12 +4822,46 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         }
 
         if (!context) {
-          const fallbackIdx = playerIndices[playerIndices.length - 1];
-          context = resolvePlayerContext(fallbackIdx, null);
-        }
+          const totalPlayers = playerIndices.length;
+          if (!totalPlayers) {
+            setPanelStatus('플레이어 턴을 찾을 수 없습니다.', 'warning');
+            GMH.Core.TurnBookmarks.clear();
+            return;
+          }
 
-        if (!context) {
-          setPanelStatus('플레이어 턴을 찾을 수 없습니다.', 'warning');
+          if (mode === 'start') {
+            const fallbackIdx = playerIndices[0] ?? 0;
+            const block = selectBlockByIndex(fallbackIdx);
+            const messageId =
+              block?.getAttribute?.('data-gmh-message-id') ||
+              block?.getAttribute?.('data-message-id') ||
+              null;
+            GMH.Core.ExportRange.setStart(totalPlayers);
+            if (rangeStartInput) rangeStartInput.value = String(totalPlayers);
+            GMH.Core.TurnBookmarks.record(
+              fallbackIdx,
+              totalPlayers,
+              messageId,
+            );
+            setPanelStatus(
+              '플레이어 턴을 찾지 못해 가장 오래된 턴을 시작으로 지정했습니다.',
+              'warning',
+            );
+          } else {
+            const fallbackIdx = playerIndices[playerIndices.length - 1] ?? 0;
+            const block = selectBlockByIndex(fallbackIdx);
+            const messageId =
+              block?.getAttribute?.('data-gmh-message-id') ||
+              block?.getAttribute?.('data-message-id') ||
+              null;
+            GMH.Core.ExportRange.setEnd(1);
+            if (rangeEndInput) rangeEndInput.value = '1';
+            GMH.Core.TurnBookmarks.record(fallbackIdx, 1, messageId);
+            setPanelStatus(
+              '플레이어 턴을 찾지 못해 최신 턴을 끝으로 지정했습니다.',
+              'warning',
+            );
+          }
           return;
         }
 
@@ -5416,8 +5496,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             placeholder="끝"
           />
           <div class="gmh-bookmark-controls">
-            <button id="gmh-range-mark-start" type="button" class="gmh-small-btn gmh-small-btn--muted" title="현재 플레이어 턴을 시작으로 지정">시작지정</button>
-            <button id="gmh-range-mark-end" type="button" class="gmh-small-btn gmh-small-btn--muted" title="현재 플레이어 턴을 끝으로 지정">끝지정</button>
+            <button id="gmh-range-mark-start" type="button" class="gmh-small-btn gmh-small-btn--muted" title="현재 플레이어 턴을 시작으로 지정 (실험 기능)">시작지정</button>
+            <button id="gmh-range-mark-end" type="button" class="gmh-small-btn gmh-small-btn--muted" title="현재 플레이어 턴을 끝으로 지정 (실험 기능)">끝지정</button>
           </div>
           <button id="gmh-range-clear" type="button" class="gmh-small-btn gmh-small-btn--muted">전체</button>
         </div>
@@ -5490,8 +5570,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           <input id="gmh-range-start" type="number" min="1" inputmode="numeric" pattern="[0-9]*" placeholder="시작" style="width:70px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;" />
           <span style="color:#94a3b8;">~</span>
           <input id="gmh-range-end" type="number" min="1" inputmode="numeric" pattern="[0-9]*" placeholder="끝" style="width:70px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;" />
-          <button id="gmh-range-mark-start" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;">시작지정</button>
-          <button id="gmh-range-mark-end" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;">끝지정</button>
+          <button id="gmh-range-mark-start" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;" title="현재 플레이어 턴을 시작으로 지정 (실험 기능)">시작지정</button>
+          <button id="gmh-range-mark-end" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;" title="현재 플레이어 턴을 끝으로 지정 (실험 기능)">끝지정</button>
           <button id="gmh-range-clear" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;">전체</button>
         </div>
       </div>
