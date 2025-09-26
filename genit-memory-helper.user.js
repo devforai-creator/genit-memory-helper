@@ -142,10 +142,13 @@
         '.flex.flex-col.items-end',
       ],
       playerText: [
-        '[data-role="user"] .markdown-content',
+        '.space-y-3.mb-6 > .markdown-content:nth-of-type(1)',
+        '[data-role="user"] .markdown-content:not(.text-muted-foreground)',
+        '[data-author-role="user"] .markdown-content:not(.text-muted-foreground)',
+        '.flex.w-full.justify-end .markdown-content:not(.text-muted-foreground)',
+        '.flex.flex-col.items-end .markdown-content:not(.text-muted-foreground)',
         '.markdown-content.text-right',
         '.p-4.rounded-xl.bg-background p',
-        '.space-y-3.mb-6 .markdown-content',
       ],
       npcGroups: ['[data-role="assistant"]', '.flex.flex-col.w-full.group'],
       npcName: [
@@ -2461,6 +2464,47 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       return null;
     };
 
+    const matchesSelectorList = (node, selList) => {
+      if (!(node instanceof Element)) return false;
+      if (!selList?.length) return false;
+      return selList.some((sel) => {
+        if (!sel) return false;
+        try {
+          return node.matches(sel);
+        } catch (err) {
+          return false;
+        }
+      });
+    };
+
+    const closestMatchInList = (node, selList) => {
+      if (!(node instanceof Element)) return null;
+      if (!selList?.length) return null;
+      for (const sel of selList) {
+        if (!sel) continue;
+        try {
+          const match = node.closest(sel);
+          if (match) return match;
+        } catch (err) {
+          continue;
+        }
+      }
+      return null;
+    };
+
+    const containsSelector = (root, selList) => {
+      if (!(root instanceof Element)) return false;
+      if (!selList?.length) return false;
+      return selList.some((sel) => {
+        if (!sel) return false;
+        try {
+          return Boolean(root.querySelector(sel));
+        } catch (err) {
+          return false;
+        }
+      });
+    };
+
     const textSegmentsFromNode = (node) => {
       if (!node) return [];
       const text = node.innerText ?? node.textContent ?? '';
@@ -2549,12 +2593,20 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     };
 
     const emitPlayerLines = (block, pushLine) => {
+      const blockRole =
+        block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
+      if (blockRole !== 'player') return;
       const scopes = collectAll(selectors.playerScopes, block);
       const scopeList = scopes.length ? [...scopes] : [];
       if (playerScopeSelector && block.matches?.(playerScopeSelector)) {
         if (!scopeList.includes(block)) scopeList.unshift(block);
       }
-      if (!scopeList.length) scopeList.push(block);
+      if (!scopeList.length) {
+        scopeList.push(block);
+      } else if (scopeList.length > 1) {
+        const rootIndex = scopeList.indexOf(block);
+        if (rootIndex >= 0) scopeList.splice(rootIndex, 1);
+      }
       const textNodes = [];
       const nodeSeen = new Set();
       for (const scope of scopeList) {
@@ -2566,8 +2618,21 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         });
       }
       const targets = textNodes.length ? textNodes : scopeList;
+      const filteredTargets = targets.filter((node) => {
+        if (!(node instanceof Element)) return true;
+        if (matchesSelectorList(node, selectors.narrationBlocks)) return false;
+        if (closestMatchInList(node, selectors.narrationBlocks)) return false;
+        if (matchesSelectorList(node, selectors.npcGroups)) return false;
+        if (closestMatchInList(node, selectors.npcGroups)) return false;
+        const playerScope = closestMatchInList(node, selectors.playerScopes);
+        if (!playerScope && scopeList.length) return false;
+        if (matchesSelectorList(node, selectors.infoCode)) return false;
+        if (containsSelector(node, selectors.infoCode)) return false;
+        return true;
+      });
+      const effectiveTargets = filteredTargets.length ? filteredTargets : targets;
       const seenSegments = new Set();
-      targets.forEach((node) => {
+      effectiveTargets.forEach((node) => {
         textSegmentsFromNode(node).forEach((seg) => {
           if (!seg) return;
           if (seenSegments.has(seg)) return;
@@ -2591,6 +2656,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     };
 
     const emitNpcLines = (block, pushLine) => {
+      const blockRole =
+        block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
+      if (blockRole !== 'npc') return;
       const groups = collectAll(selectors.npcGroups, block);
       if (!groups.length) return;
       groups.forEach((group) => {
@@ -2609,10 +2677,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     };
 
     const emitNarrationLines = (block, pushLine) => {
+      const blockRole =
+        block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
+      if (blockRole === 'player') return;
       const nodes = collectAll(selectors.narrationBlocks, block);
       if (!nodes.length) return;
       nodes.forEach((node) => {
-        if (playerScopeSelector && node.closest(playerScopeSelector)) return;
         if (npcScopeSelector && node.closest(npcScopeSelector)) return;
         textSegmentsFromNode(node).forEach((seg) => {
           if (!seg) return;
