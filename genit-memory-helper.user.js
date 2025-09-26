@@ -4098,7 +4098,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         currentSceneId += 1;
       }
       const last = turns[turns.length - 1];
-      if (last && last.speaker === speakerName && last.role === role) {
+      if (
+        last &&
+        last.speaker === speakerName &&
+        last.role === role &&
+        role !== 'narration'
+      ) {
         last.text = `${last.text} ${textClean}`.trim();
         return;
       }
@@ -4482,13 +4487,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const raw = readTranscriptText();
       const normalized = normalizeTranscript(raw);
       const session = buildSession(normalized);
-     const playerTurns = session.turns.filter(
-       (t) => t.role === 'player',
-     ).length;
-     GMH.Core.ExportRange.setTotals({
-       player: playerTurns,
-       all: session.turns.length,
-     });
+      const playerTurns = session.turns.filter((t) => t.role === 'player').length;
+      const previousTotals = GMH.Core.ExportRange.getTotals
+        ? GMH.Core.ExportRange.getTotals()
+        : { player: 0, all: 0 };
+      GMH.Core.ExportRange.setTotals({
+        player: Math.max(previousTotals.player || 0, playerTurns),
+        all: session.turns.length,
+      });
       return {
         session,
         playerTurns,
