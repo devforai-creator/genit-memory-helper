@@ -11,6 +11,10 @@
 - `npx prettier --check genit-memory-helper.user.js` verifies formatting before committing.
 - Automated build steps are unnecessary; reload the script in Tampermonkey to validate changes.
 
+### Versioning guardrail (for automation/agents)
+- Do **not** bump package or userscript versions (`package.json`, `package-lock.json`, `genit-memory-helper.user.js` metadata, tags) unless the maintainer explicitly instructs it. The maintainer runs `npm run bump:*` and handles publishing.
+- When documenting releases, only update human-facing notes (e.g., `README.md`, `CHANGELOG.md`) to the version number provided by the maintainer.
+
 ## Coding Style & Naming Conventions
 - Use 2-space indentation and single quotes, mirroring the current script style.
 - Prefer `camelCase` for functions and variables, `UPPER_SNAKE_CASE` for constants, and keep exported metadata keys (`@name`, `@version`, etc.) aligned with Tampermonkey requirements.
