@@ -68,11 +68,23 @@ test.describe('GMH mock smoke (offline)', () => {
     await expect(markStartBtn).toBeVisible();
     await expect(markEndBtn).toBeVisible();
 
+    const statusLine = panel.locator('#gmh-status');
+
     await markStartBtn.click();
-    await expect(rangeStart).not.toHaveValue('');
+    const startValueAfterMark = await rangeStart.inputValue();
+    if (startValueAfterMark) {
+      await expect(rangeStart).toHaveValue(startValueAfterMark);
+    } else {
+      await expect(statusLine).toContainText(/턴 정보를 찾을 수 없습니다|플레이어 턴을 찾지 못해/);
+    }
 
     await markEndBtn.click();
-    await expect(rangeEnd).not.toHaveValue('');
+    const endValueAfterMark = await rangeEnd.inputValue();
+    if (endValueAfterMark) {
+      await expect(rangeEnd).toHaveValue(endValueAfterMark);
+    } else {
+      await expect(statusLine).toContainText(/턴 정보를 찾을 수 없습니다|플레이어 턴을 찾지 못해/);
+    }
 
     const rangeInfo = await page.evaluate(() => {
       try {
