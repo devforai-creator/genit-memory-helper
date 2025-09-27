@@ -90,7 +90,7 @@ describe('GMH.Core.ExportRange', () => {
     expect(selection.ordinals).toEqual([null, 2, null, 1, null]);
   });
 
-  it('slices using player-turn boundaries while keeping surrounding entries', () => {
+  it('slices player range without extra entries by default', () => {
     ExportRange.setTotals({ player: 2, entry: sampleTurns.length });
     ExportRange.setRange(1, 1);
     const selection = ExportRange.apply(sampleTurns);
@@ -105,28 +105,35 @@ describe('GMH.Core.ExportRange', () => {
       playerTotal: 2,
       entryTotal: sampleTurns.length,
     });
-    expect(selection.info.startIndex).toBe(2);
-    expect(selection.info.endIndex).toBe(4);
-    expect(selection.indices).toEqual([2, 3, 4]);
-    expect(selection.ordinals).toEqual([null, 1, null]);
-
-    expect(selection.turns.map((t) => t.text)).toEqual([
-      '긴장감이 흐른다',
-      '준비됐다',
-      '좋아',
-    ]);
+    expect(selection.info.startIndex).toBe(3);
+    expect(selection.info.endIndex).toBe(3);
+    expect(selection.indices).toEqual([3]);
+    expect(selection.ordinals).toEqual([1]);
+    expect(selection.turns.map((t) => t.text)).toEqual(['준비됐다']);
   });
 
-  it('allows opting out of prologue expansion', () => {
+  it('can include previous narration when requested', () => {
     ExportRange.setTotals({ player: 2, entry: sampleTurns.length });
     ExportRange.setRange(1, 1);
     const selection = ExportRange.apply(sampleTurns, {
-      prologuePolicy: 'none',
+      prologuePolicy: 'upToPrevPlayer',
     });
 
-    expect(selection.info.startIndex).toBe(3);
+    expect(selection.info.startIndex).toBe(2);
+    expect(selection.indices).toEqual([2, 3]);
+    expect(selection.ordinals).toEqual([null, 1]);
+  });
+
+  it('can include following npc entries when enabled', () => {
+    ExportRange.setTotals({ player: 2, entry: sampleTurns.length });
+    ExportRange.setRange(1, 1);
+    const selection = ExportRange.apply(sampleTurns, {
+      includeTrailingNpc: true,
+    });
+
     expect(selection.indices).toEqual([3, 4]);
     expect(selection.ordinals).toEqual([1, null]);
+    expect(selection.turns.map((t) => t.text)).toEqual(['준비됐다', '좋아']);
   });
 
   it('can expand prologue all the way to the first entry', () => {
@@ -134,6 +141,7 @@ describe('GMH.Core.ExportRange', () => {
     ExportRange.setRange(1, 1);
     const selection = ExportRange.apply(sampleTurns, {
       prologuePolicy: 'toStart',
+      includeTrailingNpc: true,
     });
 
     expect(selection.info.startIndex).toBe(0);
