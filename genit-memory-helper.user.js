@@ -5378,18 +5378,19 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       };
 
       const doBookmark = (mode) => {
-        const resolveFromElement = (element) => {
+        const lookupOrdinalByIndex = GMH.Core.MessageIndexer.lookupOrdinalByIndex;
+        const lookupOrdinalByMessageId = GMH.Core.MessageIndexer.lookupOrdinalByMessageId;
+
+        const buildContextFromElement = (element) => {
           if (!(element instanceof Element)) return null;
           const messageEl = element.closest('[data-gmh-message-index]');
           if (!messageEl) return null;
           const indexAttr = messageEl.getAttribute('data-gmh-message-index');
-          const ordinalAttr = messageEl.getAttribute('data-gmh-message-ordinal');
           const messageIdAttr =
             messageEl.getAttribute('data-gmh-message-id') ||
             messageEl.getAttribute('data-message-id');
           const index = Number(indexAttr);
-          const lookupOrdinalByIndex = GMH.Core.MessageIndexer.lookupOrdinalByIndex;
-          const lookupOrdinalByMessageId = GMH.Core.MessageIndexer.lookupOrdinalByMessageId;
+
           const resolvedOrdinal = [
             Number.isFinite(index) && typeof lookupOrdinalByIndex === 'function'
               ? lookupOrdinalByIndex(index)
@@ -5397,8 +5398,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             messageIdAttr && typeof lookupOrdinalByMessageId === 'function'
               ? lookupOrdinalByMessageId(messageIdAttr)
               : null,
-            ordinalAttr !== null ? Number(ordinalAttr) : null,
+            Number(messageEl.getAttribute('data-gmh-message-ordinal')),
           ].find((value) => Number.isFinite(value) && value > 0);
+
           return {
             element: messageEl,
             index: Number.isFinite(index) ? index : null,
@@ -5407,26 +5409,64 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           };
         };
 
-        const safeQueryById = (messageId) => {
-          if (!messageId) return null;
+        const resolveFromElement = (element) => buildContextFromElement(element);
+
+        const escapeForAttr = (value) => {
+          if (typeof value !== 'string') return '';
+          if (typeof CSS?.escape === 'function') return CSS.escape(value);
+          return value.replace(/"/g, '\\"');
+        };
+
+        const listByMessageId = (messageId) => {
+          if (!messageId) return [];
           try {
-            if (CSS?.escape) {
-              return document.querySelector(`[data-gmh-message-id="${CSS.escape(messageId)}"]`);
-            }
-            const escaped = String(messageId).replace(/"/g, '\\"');
-            return document.querySelector(`[data-gmh-message-id="${escaped}"]`);
+            const selector = `[data-gmh-message-id="${escapeForAttr(messageId)}"]`;
+            return Array.from(document.querySelectorAll(selector));
           } catch (err) {
-            return null;
+            return [];
           }
+        };
+
+        const selectBestCandidate = (candidates, preferredIndex = null) => {
+          const elements = Array.from(new Set(candidates.filter((el) => el instanceof Element)));
+          if (!elements.length) return null;
+          if (Number.isFinite(preferredIndex)) {
+            const exact = elements.find(
+              (el) => Number(el.getAttribute('data-gmh-message-index')) === preferredIndex,
+            );
+            if (exact) return exact;
+          }
+          const withOrdinal = elements
+            .map((el) => ({
+              el,
+              ord: Number(el.getAttribute('data-gmh-message-ordinal')),
+              idx: Number(el.getAttribute('data-gmh-message-index')),
+            }))
+            .sort((a, b) => {
+              if (Number.isFinite(a.ord) && Number.isFinite(b.ord)) return a.ord - b.ord;
+              if (Number.isFinite(a.idx) && Number.isFinite(b.idx)) return b.idx - a.idx;
+              return 0;
+            });
+          return withOrdinal[0]?.el || elements[elements.length - 1];
+        };
+
+        const safeQueryById = (messageId, preferredIndex = null) => {
+          const candidates = listByMessageId(messageId);
+          return selectBestCandidate(candidates, preferredIndex);
         };
 
         const getCandidateContext = () => {
           const bookmark = getActiveBookmark();
           if (bookmark) {
             const fromBookmark =
-              safeQueryById(bookmark.messageId) ||
+              safeQueryById(bookmark.messageId, bookmark.index) ||
               (Number.isFinite(bookmark.index)
-                ? document.querySelector(`[data-gmh-message-index="${bookmark.index}"]`)
+                ? selectBestCandidate(
+                    Array.from(
+                      document.querySelectorAll(`[data-gmh-message-index="${bookmark.index}"]`),
+                    ),
+                    bookmark.index,
+                  )
                 : null);
             const resolvedBookmark = resolveFromElement(fromBookmark);
             if (resolvedBookmark) return resolvedBookmark;
@@ -5444,8 +5484,6 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           return;
         }
 
-        const lookupOrdinalByIndex = GMH.Core.MessageIndexer.lookupOrdinalByIndex;
-        const lookupOrdinalByMessageId = GMH.Core.MessageIndexer.lookupOrdinalByMessageId;
         const refreshIndexer = GMH.Core.MessageIndexer.refresh;
         if (typeof refreshIndexer === 'function') {
           try {
@@ -5456,17 +5494,23 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         }
 
         const reselectElement = () => {
-          const byId = context.messageId ? safeQueryById(context.messageId) : null;
-          if (byId) {
-            const resolved = resolveFromElement(byId);
-            if (resolved) return resolved;
+          if (context.element instanceof Element && context.element.isConnected) {
+            const current = buildContextFromElement(context.element);
+            if (current) return current;
+          }
+
+          const candidates = [];
+          if (context.messageId) {
+            candidates.push(...listByMessageId(context.messageId));
           }
           if (Number.isFinite(context.index)) {
-            const byIndex = document.querySelector(`[data-gmh-message-index="${context.index}"]`);
-            const resolved = resolveFromElement(byIndex);
-            if (resolved) return resolved;
+            candidates.push(
+              ...document.querySelectorAll(`[data-gmh-message-index="${context.index}"]`),
+            );
           }
-          return null;
+
+          const chosen = selectBestCandidate(candidates, context.index);
+          return chosen ? buildContextFromElement(chosen) : null;
         };
 
         const refreshedContext = reselectElement() || context;
