@@ -871,6 +871,8 @@
     let observer = null;
     let scheduled = false;
     let active = false;
+    const ordinalCacheByIndex = new Map();
+    const ordinalCacheById = new Map();
     let lastSummary = {
       totalMessages: 0,
       playerMessages: 0,
@@ -899,6 +901,8 @@
       const blocks = Array.from(blockNodes).filter((node) => node instanceof Element);
 
       let userMessageCount = 0;
+      ordinalCacheByIndex.clear();
+      ordinalCacheById.clear();
 
       blocks.forEach((block, idx) => {
         try {
@@ -937,6 +941,13 @@
         } else {
           block.removeAttribute('data-gmh-user-ordinal');
         }
+        const blockIdxAttr = block.getAttribute('data-gmh-message-index');
+        if (blockIdxAttr !== null) {
+          const numericIdx = Number(blockIdxAttr);
+          if (Number.isFinite(numericIdx)) ordinalCacheByIndex.set(numericIdx, messageOrdinal);
+        }
+        const blockMessageId = block.getAttribute('data-gmh-message-id');
+        if (blockMessageId) ordinalCacheById.set(blockMessageId, messageOrdinal);
       }
 
       lastSummary = {
@@ -1022,6 +1033,15 @@
       },
       getSummary() {
         return cloneSummary(lastSummary);
+      },
+      lookupOrdinalByIndex(index) {
+        const numericIndex = Number(index);
+        if (!Number.isFinite(numericIndex)) return null;
+        return ordinalCacheByIndex.has(numericIndex) ? ordinalCacheByIndex.get(numericIndex) : null;
+      },
+      lookupOrdinalByMessageId(messageId) {
+        if (typeof messageId !== 'string' || !messageId) return null;
+        return ordinalCacheById.has(messageId) ? ordinalCacheById.get(messageId) : null;
       },
       subscribe(listener) {
         if (typeof listener !== 'function') return () => {};
@@ -5394,24 +5414,44 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         };
 
         const context = getCandidateContext();
-        if (!context || !Number.isFinite(context.ordinal) || context.ordinal <= 0) {
+        if (!context) {
           setPanelStatus('메시지를 찾을 수 없습니다.', 'warning');
           return;
         }
 
+        const lookupOrdinalByIndex = GMH.Core.MessageIndexer.lookupOrdinalByIndex;
+        const lookupOrdinalByMessageId = GMH.Core.MessageIndexer.lookupOrdinalByMessageId;
+        const ordinalFromIndex =
+          Number.isFinite(context.index) && lookupOrdinalByIndex
+            ? lookupOrdinalByIndex(context.index)
+            : null;
+        const ordinalFromId =
+          context.messageId && lookupOrdinalByMessageId
+            ? lookupOrdinalByMessageId(context.messageId)
+            : null;
+        const resolvedOrdinal = [ordinalFromIndex, ordinalFromId, context.ordinal].find(
+          (value) => Number.isFinite(value) && value > 0,
+        );
+        if (!Number.isFinite(resolvedOrdinal) || resolvedOrdinal <= 0) {
+          setPanelStatus('메시지 순서를 찾을 수 없습니다. 화면을 새로고침해 주세요.', 'warning');
+          return;
+        }
+
+        const ordinalToUse = resolvedOrdinal;
+
         if (mode === 'start') {
-          GMH.Core.ExportRange.setStart(context.ordinal);
-          if (rangeStartInput) rangeStartInput.value = String(context.ordinal);
-          setPanelStatus(`메시지 ${context.ordinal}을 시작으로 지정했습니다.`, 'info');
+          GMH.Core.ExportRange.setStart(ordinalToUse);
+          if (rangeStartInput) rangeStartInput.value = String(ordinalToUse);
+          setPanelStatus(`메시지 ${ordinalToUse}을 시작으로 지정했습니다.`, 'info');
         } else {
-          GMH.Core.ExportRange.setEnd(context.ordinal);
-          if (rangeEndInput) rangeEndInput.value = String(context.ordinal);
-          setPanelStatus(`메시지 ${context.ordinal}을 끝으로 지정했습니다.`, 'info');
+          GMH.Core.ExportRange.setEnd(ordinalToUse);
+          if (rangeEndInput) rangeEndInput.value = String(ordinalToUse);
+          setPanelStatus(`메시지 ${ordinalToUse}을 끝으로 지정했습니다.`, 'info');
         }
 
         const recorded = GMH.Core.TurnBookmarks.record(
           context.index,
-          context.ordinal,
+          ordinalToUse,
           context.messageId,
           'message',
         );
