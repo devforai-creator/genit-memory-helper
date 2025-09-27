@@ -5421,6 +5421,15 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
         const lookupOrdinalByIndex = GMH.Core.MessageIndexer.lookupOrdinalByIndex;
         const lookupOrdinalByMessageId = GMH.Core.MessageIndexer.lookupOrdinalByMessageId;
+        const refreshIndexer = GMH.Core.MessageIndexer.refresh;
+        if (typeof refreshIndexer === 'function') {
+          try {
+            refreshIndexer({ immediate: true });
+          } catch (err) {
+            console.warn('[GMH] ordinal refresh failed', err);
+          }
+        }
+
         const ordinalFromIndex =
           Number.isFinite(context.index) && lookupOrdinalByIndex
             ? lookupOrdinalByIndex(context.index)
@@ -5429,7 +5438,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           context.messageId && lookupOrdinalByMessageId
             ? lookupOrdinalByMessageId(context.messageId)
             : null;
-        const resolvedOrdinal = [ordinalFromIndex, ordinalFromId, context.ordinal].find(
+        const ordinalFromAttr = Number(
+          context.element?.getAttribute?.('data-gmh-message-ordinal') ?? context.ordinal,
+        );
+        const resolvedOrdinal = [ordinalFromIndex, ordinalFromId, ordinalFromAttr].find(
           (value) => Number.isFinite(value) && value > 0,
         );
         if (!Number.isFinite(resolvedOrdinal) || resolvedOrdinal <= 0) {
