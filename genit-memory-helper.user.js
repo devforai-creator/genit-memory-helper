@@ -16,8 +16,7 @@
 (function () {
   'use strict';
 
-  const PAGE_WINDOW =
-    typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+  const PAGE_WINDOW = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
   const detectScriptVersion = () => {
     if (typeof GM_info !== 'undefined') {
       const version = GM_info?.script?.version;
@@ -66,11 +65,7 @@
     Object.entries(patch).forEach(([key, value]) => {
       if (value && typeof value === 'object' && !Array.isArray(value)) {
         const current =
-          base[key] &&
-          typeof base[key] === 'object' &&
-          !Array.isArray(base[key])
-            ? base[key]
-            : {};
+          base[key] && typeof base[key] === 'object' && !Array.isArray(base[key]) ? base[key] : {};
         base[key] = deepMerge(current, value);
       } else {
         base[key] = value;
@@ -167,10 +162,7 @@
         '[data-username]',
         '.text-sm.text-muted-foreground.mb-1.ml-1',
       ],
-      npcBubble: [
-        '.p-4.rounded-xl.bg-background p',
-        '.markdown-content:not(.text-right)',
-      ],
+      npcBubble: ['.p-4.rounded-xl.bg-background p', '.markdown-content:not(.text-right)'],
       narrationBlocks: [
         '.markdown-content.text-muted-foreground',
         '.text-muted-foreground.text-sm',
@@ -321,11 +313,7 @@
     };
 
     const normalizeRequestedOrder = () => {
-      if (
-        requested.start !== null &&
-        requested.end !== null &&
-        requested.start > requested.end
-      ) {
+      if (requested.start !== null && requested.end !== null && requested.start > requested.end) {
         emitRangeWarning('start > end; swapping values', {
           start: requested.start,
           end: requested.end,
@@ -369,9 +357,7 @@
     };
 
     const resolveBounds = (totalMessages = totals.message) => {
-      const total = Number.isFinite(totalMessages)
-        ? Math.max(0, Math.floor(totalMessages))
-        : 0;
+      const total = Number.isFinite(totalMessages) ? Math.max(0, Math.floor(totalMessages)) : 0;
       if (!total) {
         return {
           active: false,
@@ -431,9 +417,7 @@
 
       turns.forEach((turn, idx) => {
         const sourceBlocks = Array.isArray(turn?.__gmhSourceBlocks)
-          ? turn.__gmhSourceBlocks.filter(
-              (value) => Number.isInteger(value) && value >= 0,
-            )
+          ? turn.__gmhSourceBlocks.filter((value) => Number.isInteger(value) && value >= 0)
           : [];
         if (sourceBlocks.length) {
           sourceBlocks.forEach((blockIdx) => {
@@ -499,8 +483,7 @@
       },
       apply(turns = [], options = {}) {
         const list = Array.isArray(turns) ? turns : [];
-        const settings =
-          options && typeof options === 'object' ? options : {};
+        const settings = options && typeof options === 'object' ? options : {};
         if (!list.length) {
           return {
             turns: [],
@@ -518,8 +501,7 @@
             .forEach((value) => includeIndices.add(value));
         }
 
-        const { units, totalMessages, ordinalByTurnIndex } =
-          buildMessageUnits(list);
+        const { units, totalMessages, ordinalByTurnIndex } = buildMessageUnits(list);
         const bounds = resolveBounds(totalMessages);
 
         const collectIndicesInWindow = (startPos, endPos) => {
@@ -559,8 +541,12 @@
         };
 
         if (!bounds.count || !bounds.active) {
-          const { turns: turnsOut, indices, ordinals, rangeDetails } =
-            deriveSelection(0, units.length - 1);
+          const {
+            turns: turnsOut,
+            indices,
+            ordinals,
+            rangeDetails,
+          } = deriveSelection(0, units.length - 1);
           return {
             turns: turnsOut,
             indices,
@@ -577,8 +563,12 @@
 
         const startPos = Math.max(0, totalMessages - bounds.end);
         const endPos = Math.max(startPos, totalMessages - bounds.start);
-        const { turns: turnsOut, indices, ordinals, rangeDetails } =
-          deriveSelection(startPos, endPos);
+        const {
+          turns: turnsOut,
+          indices,
+          ordinals,
+          rangeDetails,
+        } = deriveSelection(startPos, endPos);
 
         if (settings.traceRange) {
           console.table({
@@ -624,8 +614,7 @@
       setRange(startValue, endValue) {
         const nextStart = toPositiveInt(startValue);
         const nextEnd = toPositiveInt(endValue);
-        if (requested.start === nextStart && requested.end === nextEnd)
-          return snapshot();
+        if (requested.start === nextStart && requested.end === nextEnd) return snapshot();
         requested.start = nextStart;
         requested.end = nextEnd;
         normalizeRequestedOrder();
@@ -684,7 +673,6 @@
     };
   })();
 
-
   GMH.Core.ExportRange = ExportRange;
   GMH.Core.getEntryOrigin = () => entryOrigin.slice();
 
@@ -738,8 +726,7 @@
             normalizedOrdinal = numericOrdinal;
           }
         }
-        const normalizedId =
-          typeof messageId === 'string' && messageId ? messageId : null;
+        const normalizedId = typeof messageId === 'string' && messageId ? messageId : null;
         if (axis && axis !== 'message') {
           console.warn('[GMH] non-message bookmark axis ignored', {
             axis,
@@ -832,11 +819,8 @@
     const indexMessages = () => {
       const adapter = getActiveAdapter();
       const container = adapter?.findContainer?.(document);
-      const blockNodes =
-        adapter?.listMessageBlocks?.(container || document) || [];
-      const blocks = Array.from(blockNodes).filter(
-        (node) => node instanceof Element,
-      );
+      const blockNodes = adapter?.listMessageBlocks?.(container || document) || [];
+      const blocks = Array.from(blockNodes).filter((node) => node instanceof Element);
 
       let userMessageCount = 0;
 
@@ -889,9 +873,7 @@
       const entryOriginIndices = Array.isArray(entryOrigin)
         ? entryOrigin.filter((idx) => Number.isInteger(idx) && idx >= 0)
         : [];
-      const uniqueEntryCount = entryOriginIndices.length
-        ? new Set(entryOriginIndices).size
-        : 0;
+      const uniqueEntryCount = entryOriginIndices.length ? new Set(entryOriginIndices).size : 0;
       const entryCount = blocks.length || uniqueEntryCount;
       GMH.Core.ExportRange.setTotals({
         message: blocks.length,
@@ -986,29 +968,20 @@
     const handleBookmarkCandidate = (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      const message = target.closest(
-        '[data-gmh-message-index], [data-turn-index]',
-      );
+      const message = target.closest('[data-gmh-message-index], [data-turn-index]');
       if (!message) return;
       const indexAttr =
-        message.getAttribute('data-gmh-message-index') ||
-        message.getAttribute('data-turn-index');
+        message.getAttribute('data-gmh-message-index') || message.getAttribute('data-turn-index');
       if (indexAttr === null) return;
       const ordinalAttr =
         message.getAttribute('data-gmh-message-ordinal') ||
         message.getAttribute('data-message-ordinal');
       const messageIdAttr =
-        message.getAttribute('data-gmh-message-id') ||
-        message.getAttribute('data-message-id');
+        message.getAttribute('data-gmh-message-id') || message.getAttribute('data-message-id');
       const index = Number(indexAttr);
       const ordinal = ordinalAttr !== null ? Number(ordinalAttr) : null;
       if (!Number.isFinite(index)) return;
-      GMH.Core.TurnBookmarks.record(
-        index,
-        ordinal,
-        messageIdAttr || null,
-        'message',
-      );
+      GMH.Core.TurnBookmarks.record(index, ordinal, messageIdAttr || null, 'message');
     };
 
     return {
@@ -1165,15 +1138,7 @@
   const HEADER_RE =
     /^(\d+월\s*\d+일.*?\d{1,2}:\d{2})\s*\|\s*([^|]+?)\s*\|\s*📍\s*([^|]+)\s*\|?(.*)$/;
   const CODE_RE = /^([A-J])\/(\d+)\/(\d+)\/(\d+)\/(\d+)$/i;
-  const META_KEYWORDS = [
-    '지도',
-    '등장',
-    'Actors',
-    '배우',
-    '기록코드',
-    'Codes',
-    'SCENE',
-  ];
+  const META_KEYWORDS = ['지도', '등장', 'Actors', '배우', '기록코드', 'Codes', 'SCENE'];
   const PLAYER_NAME_FALLBACKS = ['플레이어', '소중한코알라5299'];
   const STORAGE_KEYS = {
     privacyProfile: 'gmh_privacy_profile',
@@ -1258,9 +1223,7 @@
 
   function setCustomList(type, items) {
     if (!Array.isArray(items)) return;
-    const normalized = items
-      .map((item) => collapseSpaces(item))
-      .filter(Boolean);
+    const normalized = items.map((item) => collapseSpaces(item)).filter(Boolean);
     if (type === 'blacklist') PRIVACY_CFG.blacklist = normalized;
     if (type === 'whitelist') PRIVACY_CFG.whitelist = normalized;
     persistPrivacySettings();
@@ -1350,8 +1313,7 @@
   }
 
   function protectWhitelist(text, whitelist) {
-    if (!Array.isArray(whitelist) || !whitelist.length)
-      return { text, tokens: [] };
+    if (!Array.isArray(whitelist) || !whitelist.length) return { text, tokens: [] };
     let output = text;
     const tokens = [];
     whitelist.forEach((term, index) => {
@@ -1405,10 +1367,8 @@
     return output;
   }
 
-  const MINOR_KEYWORDS =
-    /(미성년|중학생|고등학생|나이\s*1[0-7]|소년|소녀|minor|under\s*18)/i;
-  const SEXUAL_KEYWORDS =
-    /(성관계|성적|섹스|sex|음란|선정|야한|야스|삽입|자위|강간|에로)/i;
+  const MINOR_KEYWORDS = /(미성년|중학생|고등학생|나이\s*1[0-7]|소년|소녀|minor|under\s*18)/i;
+  const SEXUAL_KEYWORDS = /(성관계|성적|섹스|sex|음란|선정|야한|야스|삽입|자위|강간|에로)/i;
 
   function hasMinorSexualContext(text) {
     if (!text) return false;
@@ -1473,8 +1433,7 @@
     sanitizedSession.turns = sanitizedSession.turns.map((turn) => {
       const next = { ...turn };
       next.text = redactText(turn.text, profile, counts);
-      if (next.speaker)
-        next.speaker = redactText(next.speaker, profile, counts);
+      if (next.speaker) next.speaker = redactText(next.speaker, profile, counts);
       if (Array.isArray(turn?.__gmhEntries)) {
         Object.defineProperty(next, '__gmhEntries', {
           value: turn.__gmhEntries.slice(),
@@ -1507,13 +1466,9 @@
     });
     sanitizedSession.meta = sanitizedMeta;
     sanitizedSession.warnings = sanitizedSession.warnings.map((warning) =>
-      typeof warning === 'string'
-        ? redactText(warning, profile, counts)
-        : warning,
+      typeof warning === 'string' ? redactText(warning, profile, counts) : warning,
     );
-    const sanitizedPlayers = PLAYER_NAMES.map((name) =>
-      redactText(name, profile, counts),
-    );
+    const sanitizedPlayers = PLAYER_NAMES.map((name) => redactText(name, profile, counts));
     sanitizedSession.player_names = sanitizedPlayers;
     const sanitizedRaw = redactText(rawText, profile, counts);
     const aggregatedCounts = counts;
@@ -1534,20 +1489,15 @@
   }
 
   function formatRedactionCounts(counts) {
-    const entries = Object.entries(counts || {}).filter(
-      ([, value]) => value > 0,
-    );
+    const entries = Object.entries(counts || {}).filter(([, value]) => value > 0);
     if (!entries.length) return '레다크션 없음';
     return entries.map(([key, value]) => `${key}:${value}`).join(', ');
   }
 
   function collectSessionStats(session) {
-    if (!session)
-      return { userMessages: 0, llmMessages: 0, totalMessages: 0, warnings: 0 };
-    const userMessages =
-      session.turns?.filter((turn) => turn.channel === 'user')?.length || 0;
-    const llmMessages =
-      session.turns?.filter((turn) => turn.channel === 'llm')?.length || 0;
+    if (!session) return { userMessages: 0, llmMessages: 0, totalMessages: 0, warnings: 0 };
+    const userMessages = session.turns?.filter((turn) => turn.channel === 'user')?.length || 0;
+    const llmMessages = session.turns?.filter((turn) => turn.channel === 'llm')?.length || 0;
     const totalMessages = session.turns?.length || 0;
     const warnings = session.warnings?.length || 0;
     return { userMessages, llmMessages, totalMessages, warnings };
@@ -1745,13 +1695,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     const getFocusable = (root) => {
       if (!root) return [];
-      return Array.from(root.querySelectorAll(focusableSelector)).filter(
-        (el) => {
-          if (!(el instanceof HTMLElement)) return false;
-          const style = window.getComputedStyle(el);
-          return style.visibility !== 'hidden' && style.display !== 'none';
-        },
-      );
+      return Array.from(root.querySelectorAll(focusableSelector)).filter((el) => {
+        if (!(el instanceof HTMLElement)) return false;
+        const style = window.getComputedStyle(el);
+        return style.visibility !== 'hidden' && style.display !== 'none';
+      });
     };
 
     function buildButton(action, finalize) {
@@ -1835,8 +1783,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         }
 
         dialog.setAttribute('aria-labelledby', titleId);
-        if (options.description)
-          dialog.setAttribute('aria-describedby', descId);
+        if (options.description) dialog.setAttribute('aria-describedby', descId);
         else dialog.removeAttribute('aria-describedby');
 
         const body = document.createElement('div');
@@ -1853,9 +1800,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         const actionsWrap = document.createElement('div');
         actionsWrap.className = 'gmh-modal__actions';
         const actions =
-          Array.isArray(options.actions) && options.actions.length
-            ? options.actions
-            : [];
+          Array.isArray(options.actions) && options.actions.length ? options.actions : [];
 
         const finalize = (result) => {
           cleanup(result);
@@ -1878,9 +1823,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         const bodyEl = document.body;
         const prevOverflow = bodyEl.style.overflow;
         const restoreTarget =
-          document.activeElement instanceof HTMLElement
-            ? document.activeElement
-            : null;
+          document.activeElement instanceof HTMLElement ? document.activeElement : null;
         bodyEl.style.overflow = 'hidden';
         bodyEl.appendChild(overlay);
         overlay.setAttribute('role', 'presentation');
@@ -1925,23 +1868,19 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           overlay.addEventListener('click', (event) => {
             if (event.target === overlay) cleanup(false);
           });
-          if (closeBtn)
-            closeBtn.addEventListener('click', () => cleanup(false));
+          if (closeBtn) closeBtn.addEventListener('click', () => cleanup(false));
         }
 
         document.addEventListener('keydown', onKeydown, true);
 
         const initialSelector = options.initialFocus || '.gmh-button--primary';
-        let focusTarget = initialSelector
-          ? dialog.querySelector(initialSelector)
-          : null;
+        let focusTarget = initialSelector ? dialog.querySelector(initialSelector) : null;
         if (!(focusTarget instanceof HTMLElement)) {
           const focusables = getFocusable(dialog);
           focusTarget = focusables[0] || closeBtn;
         }
         window.setTimeout(() => {
-          if (focusTarget && typeof focusTarget.focus === 'function')
-            focusTarget.focus();
+          if (focusTarget && typeof focusTarget.focus === 'function') focusTarget.focus();
         }, 20);
 
         activeModal = {
@@ -2028,10 +1967,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         ? `메시지 ${rangeInfo.start}-${rangeInfo.end} · ${rangeInfo.count}/${messageTotal}`
         : `메시지 ${messageTotal}개 전체`;
       const extraParts = [];
-      if (Number.isFinite(rangeInfo.userTotal))
-        extraParts.push(`유저 ${rangeInfo.userTotal}개`);
-      if (Number.isFinite(rangeInfo.llmTotal))
-        extraParts.push(`LLM ${rangeInfo.llmTotal}개`);
+      if (Number.isFinite(rangeInfo.userTotal)) extraParts.push(`유저 ${rangeInfo.userTotal}개`);
+      if (Number.isFinite(rangeInfo.llmTotal)) extraParts.push(`LLM ${rangeInfo.llmTotal}개`);
       const complement = extraParts.length ? ` · ${extraParts.join(' · ')}` : '';
       summaryBox.appendChild(createSummaryRow('범위', rangeText + complement));
     }
@@ -2059,8 +1996,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       item.className = 'gmh-preview-turn';
       item.tabIndex = 0;
 
-      const sourceIndex =
-        typeof turn.__gmhIndex === 'number' ? turn.__gmhIndex : null;
+      const sourceIndex = typeof turn.__gmhIndex === 'number' ? turn.__gmhIndex : null;
       if (sourceIndex !== null) item.dataset.turnIndex = String(sourceIndex);
 
       const playerOrdinal = (() => {
@@ -2073,11 +2009,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         item.dataset.playerTurn = String(playerOrdinal);
       }
 
-      if (
-        highlightActive &&
-        sourceIndex !== null &&
-        selectedIndexSet.has(sourceIndex)
-      ) {
+      if (highlightActive && sourceIndex !== null && selectedIndexSet.has(sourceIndex)) {
         item.classList.add('gmh-preview-turn--selected');
       }
 
@@ -2209,10 +2141,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         ? `메시지 ${rangeInfo.start}-${rangeInfo.end} · ${rangeInfo.count}/${messageTotal}`
         : `메시지 ${messageTotal}개 전체`;
       const extraParts = [];
-      if (Number.isFinite(rangeInfo.userTotal))
-        extraParts.push(`유저 ${rangeInfo.userTotal}개`);
-      if (Number.isFinite(rangeInfo.llmTotal))
-        extraParts.push(`LLM ${rangeInfo.llmTotal}개`);
+      if (Number.isFinite(rangeInfo.userTotal)) extraParts.push(`유저 ${rangeInfo.userTotal}개`);
+      if (Number.isFinite(rangeInfo.llmTotal)) extraParts.push(`LLM ${rangeInfo.llmTotal}개`);
       const complement = extraParts.length ? ` · ${extraParts.join(' · ')}` : '';
       summaryBox.appendChild(createPrivacyRow('범위', rangeText + complement));
     }
@@ -2239,8 +2169,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       item.className = 'gmh-turn-list__item';
       item.tabIndex = 0;
 
-      const sourceIndex =
-        typeof turn.__gmhIndex === 'number' ? turn.__gmhIndex : null;
+      const sourceIndex = typeof turn.__gmhIndex === 'number' ? turn.__gmhIndex : null;
       if (sourceIndex !== null) item.dataset.turnIndex = String(sourceIndex);
 
       const playerOrdinal = (() => {
@@ -2253,11 +2182,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         item.dataset.playerTurn = String(playerOrdinal);
       }
 
-      if (
-        highlightActive &&
-        sourceIndex !== null &&
-        selectedIndexSet.has(sourceIndex)
-      ) {
+      if (highlightActive && sourceIndex !== null && selectedIndexSet.has(sourceIndex)) {
         item.classList.add('gmh-turn-list__item--selected');
       }
 
@@ -2319,9 +2244,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   }
 
   function confirmPrivacyGate(options) {
-    return isModernUIActive
-      ? confirmPrivacyGateModern(options)
-      : confirmPrivacyGateLegacy(options);
+    return isModernUIActive ? confirmPrivacyGateModern(options) : confirmPrivacyGateLegacy(options);
   }
 
   function buildExportManifest({
@@ -2693,8 +2616,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     if (!(el instanceof Element)) return false;
     const cs = getComputedStyle(el);
     const oy = cs.overflowY;
-    const scrollableStyle =
-      oy === 'auto' || oy === 'scroll' || oy === 'overlay';
+    const scrollableStyle = oy === 'auto' || oy === 'scroll' || oy === 'overlay';
     return scrollableStyle && el.scrollHeight > el.clientHeight + 4;
   }
 
@@ -2714,12 +2636,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     if (/^(...|···|…)/.test(s)) return true;
     if (/^(당신|너는|그는|그녀는)\s/.test(s)) return true;
     if (/[.!?"']$/.test(s)) return true;
-    if (
-      /[가-힣]{2,}(은|는|이|가|을|를|으로|로|에게|에서|하며|면서|라고)\s/.test(
-        s,
-      )
-    )
-      return true;
+    if (/[가-힣]{2,}(은|는|이|가|을|를|으로|로|에게|에서|하며|면서|라고)\s/.test(s)) return true;
     if (s.includes(' ')) {
       const words = s.split(/\s+/);
       if (words.length >= 4) return true;
@@ -2749,9 +2666,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const adapterConfig = GMH.Adapters.Registry.get('genit');
     const selectors = adapterConfig.selectors || {};
 
-    const playerScopeSelector = selectors.playerScopes
-      .filter(Boolean)
-      .join(',');
+    const playerScopeSelector = selectors.playerScopes.filter(Boolean).join(',');
     const npcScopeSelector = selectors.npcGroups.filter(Boolean).join(',');
 
     const collectAll = (selList, root = document) => {
@@ -2864,14 +2779,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const findByTextHint = (root = document) => {
       const hints = selectors.textHints || [];
       if (!hints.length) return null;
-      const nodes = collectAll(['main', 'section', 'article'], root).filter(
-        (node) => {
-          if (!node || node.childElementCount < 3) return false;
-          const text = (node.textContent || '').trim();
-          if (!text || text.length > 400) return false;
-          return hints.some((hint) => text.includes(hint));
-        },
-      );
+      const nodes = collectAll(['main', 'section', 'article'], root).filter((node) => {
+        if (!node || node.childElementCount < 3) return false;
+        const text = (node.textContent || '').trim();
+        if (!text || text.length > 400) return false;
+        return hints.some((hint) => text.includes(hint));
+      });
       return nodes.find((node) => isScrollable(node));
     };
 
@@ -2922,8 +2835,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     };
 
     const emitPlayerLines = (block, pushLine) => {
-      const blockRole =
-        block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
+      const blockRole = block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
       if (blockRole !== 'player') return;
       const scopes = collectAll(selectors.playerScopes, block);
       const scopeList = scopes.length ? [...scopes] : [];
@@ -2966,9 +2878,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         if (containsSelector(node, selectors.infoCode)) return false;
         return true;
       });
-      const effectiveTargets = filteredTargets.length
-        ? filteredTargets
-        : targets;
+      const effectiveTargets = filteredTargets.length ? filteredTargets : targets;
       const seenSegments = new Set();
       effectiveTargets.forEach((node) => {
         textSegmentsFromNode(node).forEach((seg) => {
@@ -2982,8 +2892,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     const extractNameFromGroup = (group) => {
       const nameNode = firstMatch(selectors.npcName, group);
-      let name =
-        nameNode?.getAttribute?.('data-author-name') || nameNode?.textContent;
+      let name = nameNode?.getAttribute?.('data-author-name') || nameNode?.textContent;
       if (!name) {
         name =
           group.getAttribute('data-author') ||
@@ -2994,8 +2903,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     };
 
     const emitNpcLines = (block, pushLine) => {
-      const blockRole =
-        block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
+      const blockRole = block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
       if (blockRole !== 'npc') return;
       const groups = collectAll(selectors.npcGroups, block);
       if (!groups.length) return;
@@ -3015,8 +2923,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     };
 
     const emitNarrationLines = (block, pushLine) => {
-      const blockRole =
-        block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
+      const blockRole = block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
       if (blockRole === 'player') return;
       const nodes = collectAll(selectors.narrationBlocks, block);
       if (!nodes.length) return;
@@ -3029,11 +2936,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
               closestMatchInList(node, selectors.npcBubble) ||
               containsSelector(node, selectors.npcBubble);
             const mutedNarration =
-              node instanceof Element &&
-              node.classList?.contains('text-muted-foreground');
+              node instanceof Element && node.classList?.contains('text-muted-foreground');
             if (withinNpcBubble && !mutedNarration) {
-              const hostBlock =
-                node.closest('[data-gmh-message-index]') || block;
+              const hostBlock = node.closest('[data-gmh-message-index]') || block;
               if (!isPrologueBlock(hostBlock)) return;
             }
           }
@@ -3057,11 +2962,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       collectAll(selectors.playerNameHints).forEach((node) => {
         const text = node?.textContent?.trim();
         if (text) results.add(stripQuotes(text));
-        const attrNames = [
-          'data-username',
-          'data-user-name',
-          'data-display-name',
-        ];
+        const attrNames = ['data-username', 'data-user-name', 'data-display-name'];
         for (const attr of attrNames) {
           const val = node.getAttribute?.(attr);
           if (val) results.add(stripQuotes(val));
@@ -3103,9 +3004,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   GMH.Core.adapters = [GMH.Adapters.genit];
 
   GMH.Core.pickAdapter = function pickAdapter(loc = location, doc = document) {
-    const candidates = Array.isArray(GMH.Core.adapters)
-      ? GMH.Core.adapters
-      : [];
+    const candidates = Array.isArray(GMH.Core.adapters) ? GMH.Core.adapters : [];
     for (const adapter of candidates) {
       try {
         if (adapter?.match?.(loc, doc)) return adapter;
@@ -3147,12 +3046,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           Number.isFinite(Number(layout.bottom)) && Number(layout.bottom) > 0
             ? Math.max(MIN_GAP, Math.round(Number(layout.bottom)))
             : 16,
-        width: Number.isFinite(Number(layout.width))
-          ? Math.round(Number(layout.width))
-          : null,
-        height: Number.isFinite(Number(layout.height))
-          ? Math.round(Number(layout.height))
-          : null,
+        width: Number.isFinite(Number(layout.width)) ? Math.round(Number(layout.width)) : null,
+        height: Number.isFinite(Number(layout.height)) ? Math.round(Number(layout.height)) : null,
       };
     })();
 
@@ -3160,26 +3055,16 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const behavior = PanelSettings.defaults?.behavior || {};
       return {
         autoHideEnabled:
-          typeof behavior.autoHideEnabled === 'boolean'
-            ? behavior.autoHideEnabled
-            : true,
+          typeof behavior.autoHideEnabled === 'boolean' ? behavior.autoHideEnabled : true,
         autoHideDelayMs: Number.isFinite(Number(behavior.autoHideDelayMs))
           ? Math.max(2000, Math.round(Number(behavior.autoHideDelayMs)))
           : 10000,
         collapseOnOutside:
-          typeof behavior.collapseOnOutside === 'boolean'
-            ? behavior.collapseOnOutside
-            : true,
+          typeof behavior.collapseOnOutside === 'boolean' ? behavior.collapseOnOutside : true,
         collapseOnFocus:
-          typeof behavior.collapseOnFocus === 'boolean'
-            ? behavior.collapseOnFocus
-            : false,
-        allowDrag:
-          typeof behavior.allowDrag === 'boolean' ? behavior.allowDrag : true,
-        allowResize:
-          typeof behavior.allowResize === 'boolean'
-            ? behavior.allowResize
-            : true,
+          typeof behavior.collapseOnFocus === 'boolean' ? behavior.collapseOnFocus : false,
+        allowDrag: typeof behavior.allowDrag === 'boolean' ? behavior.allowDrag : true,
+        allowResize: typeof behavior.allowResize === 'boolean' ? behavior.allowResize : true,
       };
     })();
 
@@ -3208,9 +3093,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         typeof behavior.autoHideEnabled === 'boolean'
           ? behavior.autoHideEnabled
           : DEFAULT_BEHAVIOR.autoHideEnabled;
-      behavior.autoHideDelayMs = Number.isFinite(
-        Number(behavior.autoHideDelayMs),
-      )
+      behavior.autoHideDelayMs = Number.isFinite(Number(behavior.autoHideDelayMs))
         ? Math.max(2000, Math.round(Number(behavior.autoHideDelayMs)))
         : DEFAULT_BEHAVIOR.autoHideDelayMs;
       behavior.collapseOnOutside =
@@ -3222,9 +3105,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           ? behavior.collapseOnFocus
           : DEFAULT_BEHAVIOR.collapseOnFocus;
       behavior.allowDrag =
-        typeof behavior.allowDrag === 'boolean'
-          ? behavior.allowDrag
-          : DEFAULT_BEHAVIOR.allowDrag;
+        typeof behavior.allowDrag === 'boolean' ? behavior.allowDrag : DEFAULT_BEHAVIOR.allowDrag;
       behavior.allowResize =
         typeof behavior.allowResize === 'boolean'
           ? behavior.allowResize
@@ -3331,8 +3212,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       lastFocusTarget = null;
       requestAnimationFrame(() => {
         try {
-          if (typeof target.focus === 'function')
-            target.focus({ preventScroll: true });
+          if (typeof target.focus === 'function') target.focus({ preventScroll: true });
         } catch (err) {
           console.warn('[GMH] focus restore failed', err);
         }
@@ -3388,8 +3268,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const syncAria = (collapsed) => {
       if (!panelEl) return;
       panelEl.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
-      if (fabEl)
-        fabEl.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      if (fabEl) fabEl.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
     };
 
     const scheduleIdleClose = () => {
@@ -3415,20 +3294,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const applyLayout = () => {
       if (!panelEl) return;
       const layout = coerceLayout(currentLayout);
-      const viewportWidth =
-        window.innerWidth || document.documentElement.clientWidth || 1280;
-      const viewportHeight =
-        window.innerHeight || document.documentElement.clientHeight || 720;
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1280;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720;
 
       const maxWidth = Math.max(MIN_GAP, viewportWidth - MIN_GAP * 2);
       const maxHeight = Math.max(MIN_GAP, viewportHeight - MIN_GAP * 2);
 
-      const width = layout.width
-        ? Math.min(Math.max(260, layout.width), maxWidth)
-        : null;
-      const height = layout.height
-        ? Math.min(Math.max(240, layout.height), maxHeight)
-        : null;
+      const width = layout.width ? Math.min(Math.max(260, layout.width), maxWidth) : null;
+      const height = layout.height ? Math.min(Math.max(240, layout.height), maxHeight) : null;
 
       if (width) panelEl.style.width = `${width}px`;
       else panelEl.style.width = '';
@@ -3445,17 +3318,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const rect = panelEl.getBoundingClientRect();
       const effectiveHeight = height || rect.height || 320;
 
-      const bottomLimit = Math.max(
-        MIN_GAP,
-        viewportHeight - effectiveHeight - MIN_GAP,
-      );
+      const bottomLimit = Math.max(MIN_GAP, viewportHeight - effectiveHeight - MIN_GAP);
       const bottom = Math.min(Math.max(MIN_GAP, layout.bottom), bottomLimit);
 
       const horizontalLimit = Math.max(MIN_GAP, viewportWidth - MIN_GAP - 160);
-      const offset = Math.min(
-        Math.max(MIN_GAP, layout.offset),
-        horizontalLimit,
-      );
+      const offset = Math.min(Math.max(MIN_GAP, layout.offset), horizontalLimit);
 
       if (layout.anchor === 'left') {
         panelEl.style.left = `${offset}px`;
@@ -3520,10 +3387,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const updateHandleAccessibility = () => {
       if (dragHandle) {
         dragHandle.disabled = !currentBehavior.allowDrag;
-        dragHandle.setAttribute(
-          'aria-disabled',
-          currentBehavior.allowDrag ? 'false' : 'true',
-        );
+        dragHandle.setAttribute('aria-disabled', currentBehavior.allowDrag ? 'false' : 'true');
       }
       if (resizeHandle) {
         resizeHandle.style.display = currentBehavior.allowResize ? '' : 'none';
@@ -3588,13 +3452,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       if (escapeKeyHandler) return;
       escapeKeyHandler = (event) => {
         if (!isModernActive()) return;
-        if (
-          event.key !== 'Escape' ||
-          event.altKey ||
-          event.ctrlKey ||
-          event.metaKey
-        )
-          return;
+        if (event.key !== 'Escape' || event.altKey || event.ctrlKey || event.metaKey) return;
         if (GMH.UI.Modal?.isOpen?.()) return;
         if (isCollapsed()) return;
         close('user');
@@ -3604,8 +3462,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     };
 
     const ensureStateSubscription = () => {
-      if (stateUnsubscribe || typeof GMH?.Core?.State?.subscribe !== 'function')
-        return;
+      if (stateUnsubscribe || typeof GMH?.Core?.State?.subscribe !== 'function') return;
       stateUnsubscribe = GMH.Core.State.subscribe((next) => {
         currentState = next || GMH_STATE.IDLE;
         if (!modernMode) return;
@@ -3625,17 +3482,13 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       if (dragHandle && dragHandle !== nextDragHandle)
         dragHandle.removeEventListener('pointerdown', handleDragStart);
       dragHandle = nextDragHandle;
-      if (dragHandle)
-        dragHandle.addEventListener('pointerdown', handleDragStart);
+      if (dragHandle) dragHandle.addEventListener('pointerdown', handleDragStart);
 
-      const nextResizeHandle = panelEl.querySelector(
-        '#gmh-panel-resize-handle',
-      );
+      const nextResizeHandle = panelEl.querySelector('#gmh-panel-resize-handle');
       if (resizeHandle && resizeHandle !== nextResizeHandle)
         resizeHandle.removeEventListener('pointerdown', handleResizeStart);
       resizeHandle = nextResizeHandle;
-      if (resizeHandle)
-        resizeHandle.addEventListener('pointerdown', handleResizeStart);
+      if (resizeHandle) resizeHandle.addEventListener('pointerdown', handleResizeStart);
 
       updateHandleAccessibility();
     };
@@ -3684,19 +3537,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const dx = event.clientX - dragSession.startX;
       const dy = event.clientY - dragSession.startY;
       const rect = dragSession.rect;
-      const viewportWidth =
-        window.innerWidth || document.documentElement.clientWidth || 1280;
-      const viewportHeight =
-        window.innerHeight || document.documentElement.clientHeight || 720;
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1280;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720;
 
       let nextLeft = rect.left + dx;
       let nextTop = rect.top + dy;
       const maxLeft = viewportWidth - rect.width - MIN_GAP;
       const maxTop = viewportHeight - rect.height - MIN_GAP;
-      nextLeft = Math.min(
-        Math.max(MIN_GAP, nextLeft),
-        Math.max(MIN_GAP, maxLeft),
-      );
+      nextLeft = Math.min(Math.max(MIN_GAP, nextLeft), Math.max(MIN_GAP, maxLeft));
       nextTop = Math.min(Math.max(MIN_GAP, nextTop), Math.max(MIN_GAP, maxTop));
 
       panelEl.style.left = `${Math.round(nextLeft)}px`;
@@ -3708,19 +3556,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const finalizeDragLayout = () => {
       if (!panelEl) return;
       const rect = panelEl.getBoundingClientRect();
-      const viewportWidth =
-        window.innerWidth || document.documentElement.clientWidth || 1280;
-      const viewportHeight =
-        window.innerHeight || document.documentElement.clientHeight || 720;
-      const anchor =
-        rect.left + rect.width / 2 <= viewportWidth / 2 ? 'left' : 'right';
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1280;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720;
+      const anchor = rect.left + rect.width / 2 <= viewportWidth / 2 ? 'left' : 'right';
       const offset =
         anchor === 'left'
           ? Math.round(Math.max(MIN_GAP, rect.left))
           : Math.round(Math.max(MIN_GAP, viewportWidth - rect.right));
-      const bottom = Math.round(
-        Math.max(MIN_GAP, viewportHeight - rect.bottom),
-      );
+      const bottom = Math.round(Math.max(MIN_GAP, viewportHeight - rect.bottom));
       PanelSettings.update({ layout: { anchor, offset, bottom } });
     };
 
@@ -3780,22 +3623,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     const handleResizeMove = (event) => {
       if (!resizeSession || !panelEl) return;
-      const viewportWidth =
-        window.innerWidth || document.documentElement.clientWidth || 1280;
-      const viewportHeight =
-        window.innerHeight || document.documentElement.clientHeight || 720;
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1280;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720;
 
       const dx = event.clientX - resizeSession.startX;
       const dy = event.clientY - resizeSession.startY;
 
-      const horizontalRoom = Math.max(
-        MIN_GAP,
-        viewportWidth - currentLayout.offset - MIN_GAP,
-      );
-      const verticalRoom = Math.max(
-        MIN_GAP,
-        viewportHeight - currentLayout.bottom - MIN_GAP,
-      );
+      const horizontalRoom = Math.max(MIN_GAP, viewportWidth - currentLayout.offset - MIN_GAP);
+      const verticalRoom = Math.max(MIN_GAP, viewportHeight - currentLayout.bottom - MIN_GAP);
 
       let nextWidth = resizeSession.width + dx;
       let nextHeight = resizeSession.height + dy;
@@ -3896,20 +3731,17 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         return;
       }
       ensureStateSubscription();
-      currentState =
-        normalizeState(GMH.Core.State?.getState?.()) || GMH_STATE.IDLE;
+      currentState = normalizeState(GMH.Core.State?.getState?.()) || GMH_STATE.IDLE;
       ensureFab();
       attachPanelListeners();
       ensureEscapeHandler();
       bindHandles();
       persistedPreference = loadPersistedCollapsed();
       const shouldCollapse = (() => {
-        if (typeof persistedPreference === 'boolean')
-          return persistedPreference;
+        if (typeof persistedPreference === 'boolean') return persistedPreference;
         const mq = window.matchMedia?.('(max-width: 768px)');
         if (mq?.matches) return true;
-        if (typeof window.innerWidth === 'number')
-          return window.innerWidth <= 768;
+        if (typeof window.innerWidth === 'number') return window.innerWidth <= 768;
         return false;
       })();
       if (!shouldCollapse) applyLayout();
@@ -3922,11 +3754,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     const onStatusUpdate = ({ tone } = {}) => {
       if (!isModernActive()) return;
-      if (
-        tone &&
-        ['error', 'warning', 'progress'].includes(tone) &&
-        isCollapsed()
-      ) {
+      if (tone && ['error', 'warning', 'progress'].includes(tone) && isCollapsed()) {
         open({ focus: false });
       }
       if (!isCollapsed()) scheduleIdleClose();
@@ -4162,9 +3990,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         container_path: describeNode(container),
         block_count: blocks.length,
         selector_strategies: adapter?.dumpSelectors?.(),
-        container_html_sample: container
-          ? (container.innerHTML || '').slice(0, 40000)
-          : null,
+        container_html_sample: container ? (container.innerHTML || '').slice(0, 40000) : null,
       };
       const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
         type: 'application/json',
@@ -4173,10 +3999,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       setPanelStatus('DOM 스냅샷이 저장되었습니다.', 'success');
     } catch (error) {
       console.error('[GMH] snapshot error', error);
-      setPanelStatus(
-        `스냅샷 실패: ${(error && error.message) || error}`,
-        'error',
-      );
+      setPanelStatus(`스냅샷 실패: ${(error && error.message) || error}`, 'error');
     }
   }
 
@@ -4190,9 +4013,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         return null;
       }
       if (opts.profile) {
-        AUTO_CFG.profile = AUTO_PROFILES[opts.profile]
-          ? opts.profile
-          : 'default';
+        AUTO_CFG.profile = AUTO_PROFILES[opts.profile] ? opts.profile : 'default';
         syncProfileSelect();
       }
       this.lastMode = mode;
@@ -4210,9 +4031,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         }
         if (mode === 'turns') {
           const numericTarget = Number(target);
-          const goal = Number.isFinite(numericTarget)
-            ? numericTarget
-            : Number(target) || 0;
+          const goal = Number.isFinite(numericTarget) ? numericTarget : Number(target) || 0;
           if (!goal || goal <= 0) {
             setPanelStatus('유저 메시지 목표가 올바르지 않습니다.', 'error');
             return null;
@@ -4269,18 +4088,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   }
 
   const PLAYER_NAMES = Array.from(
-    new Set(
-      [...PLAYER_NAME_FALLBACKS, ...guessPlayerNamesFromDOM()].filter(Boolean),
-    ),
+    new Set([...PLAYER_NAME_FALLBACKS, ...guessPlayerNamesFromDOM()].filter(Boolean)),
   );
 
   const PLAYER_ALIASES = new Set(
-    PLAYER_NAMES.map((n) => n.toLowerCase()).concat([
-      'player',
-      '플레이어',
-      '유저',
-      '나',
-    ]),
+    PLAYER_NAMES.map((n) => n.toLowerCase()).concat(['player', '플레이어', '유저', '나']),
   );
 
   function normalizeSpeakerName(name) {
@@ -4328,12 +4140,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         ),
       );
       if (!normalized.length) return;
-      const existing = Array.isArray(turn.__gmhEntries)
-        ? turn.__gmhEntries.slice()
-        : [];
-      const merged = Array.from(new Set(existing.concat(normalized))).sort(
-        (a, b) => a - b,
-      );
+      const existing = Array.isArray(turn.__gmhEntries) ? turn.__gmhEntries.slice() : [];
+      const merged = Array.from(new Set(existing.concat(normalized))).sort((a, b) => a - b);
       Object.defineProperty(turn, '__gmhEntries', {
         value: merged,
         enumerable: false,
@@ -4362,12 +4170,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         currentSceneId += 1;
       }
       const last = turns[turns.length - 1];
-      if (
-        last &&
-        last.speaker === speakerName &&
-        last.role === role &&
-        role !== 'narration'
-      ) {
+      if (last && last.speaker === speakerName && last.role === role && role !== 'narration') {
         last.text = `${last.text} ${textClean}`.trim();
         addEntriesToTurn(last, lineIndexes);
         return;
@@ -4476,11 +4279,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             j += 1;
             continue;
           }
-          if (
-            HEADER_RE.test(peek) ||
-            stripBrackets(peek).toUpperCase() === 'INFO'
-          )
-            break;
+          if (HEADER_RE.test(peek) || stripBrackets(peek).toUpperCase() === 'INFO') break;
           if (isMetaLine(peek)) break;
           if (peekForced) break;
           if (looksLikeName(peek) || /^@[^@]+@/.test(peek)) break;
@@ -4490,12 +4289,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           if (!/["”]$/.test(peek)) break;
         }
         if (textBuf.length) {
-          pushTurn(
-            speaker,
-            stripQuotes(textBuf.join(' ')),
-            roleForSpeaker(speaker),
-            bufLines,
-          );
+          pushTurn(speaker, stripQuotes(textBuf.join(' ')), roleForSpeaker(speaker), bufLines);
           pendingSpeaker = speaker;
           i = j - 1;
           continue;
@@ -4505,12 +4299,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       }
 
       if (pendingSpeaker) {
-        pushTurn(
-          pendingSpeaker,
-          stripQuotes(line),
-          roleForSpeaker(pendingSpeaker),
-          [i],
-        );
+        pushTurn(pendingSpeaker, stripQuotes(line), roleForSpeaker(pendingSpeaker), [i]);
         continue;
       }
 
@@ -4592,8 +4381,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       if (session.meta.title) lines.push(`# TITLE: ${session.meta.title}`);
       if (session.meta.date) lines.push(`# DATE: ${session.meta.date}`);
       if (session.meta.place) lines.push(`# PLACE: ${session.meta.place}`);
-      if (session.meta.actors?.length)
-        lines.push(`# ACTORS: ${session.meta.actors.join(', ')}`);
+      if (session.meta.actors?.length) lines.push(`# ACTORS: ${session.meta.actors.join(', ')}`);
       lines.push('');
     }
     for (const t of turns) {
@@ -4668,8 +4456,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const adapter = getActiveAdapter();
     const container = adapter?.findContainer?.(document);
     const blocks = adapter?.listMessageBlocks?.(container || document) || [];
-    if (!container && !blocks.length)
-      throw new Error('채팅 컨테이너를 찾을 수 없습니다.');
+    if (!container && !blocks.length) throw new Error('채팅 컨테이너를 찾을 수 없습니다.');
     if (!blocks.length) return '';
 
     const seenLine = new Set();
@@ -4685,9 +4472,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     };
 
     for (const block of blocks) {
-      const domIndexAttr = Number(
-        block?.getAttribute?.('data-gmh-message-index'),
-      );
+      const domIndexAttr = Number(block?.getAttribute?.('data-gmh-message-index'));
       const originIndex = Number.isFinite(domIndexAttr) ? domIndexAttr : null;
       const before = out.length;
       adapter?.emitTranscriptLines?.(block, pushLine);
@@ -4752,9 +4537,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         ancestor = ancestor.parentElement;
       }
     }
-    return (
-      document.scrollingElement || document.documentElement || document.body
-    );
+    return document.scrollingElement || document.documentElement || document.body;
   }
 
   function waitForGrowth(el, startHeight, timeout) {
@@ -4781,11 +4564,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     if (!container) return { grew: false, before: 0, after: 0 };
     const before = container.scrollHeight;
     container.scrollTop = 0;
-    const grew = await waitForGrowth(
-      container,
-      before,
-      profile.settleTimeoutMs,
-    );
+    const grew = await waitForGrowth(container, before, profile.settleTimeoutMs);
     return { grew, before, after: container.scrollHeight };
   }
 
@@ -4799,20 +4578,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const raw = readTranscriptText();
       const normalized = normalizeTranscript(raw);
       const session = buildSession(normalized);
-      const userMessages = session.turns.filter(
-        (t) => t.channel === 'user',
-      ).length;
-      const llmMessages = session.turns.filter(
-        (t) => t.channel === 'llm',
-      ).length;
+      const userMessages = session.turns.filter((t) => t.channel === 'user').length;
+      const llmMessages = session.turns.filter((t) => t.channel === 'llm').length;
       const previousTotals = GMH.Core.ExportRange.getTotals
         ? GMH.Core.ExportRange.getTotals()
         : { message: 0, user: 0, llm: 0, entry: 0 };
       const blockSet = new Set();
       session.turns.forEach((turn) => {
-        const blocks = Array.isArray(turn?.__gmhSourceBlocks)
-          ? turn.__gmhSourceBlocks
-          : [];
+        const blocks = Array.isArray(turn?.__gmhSourceBlocks) ? turn.__gmhSourceBlocks : [];
         if (blocks.length) {
           blocks
             .filter((idx) => Number.isInteger(idx) && idx >= 0)
@@ -4952,18 +4725,13 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       if (!grew || delta < 6) stableRounds += 1;
       else stableRounds = 0;
 
-      stagnantRounds =
-        stats.userMessages === prevUserMessages ? stagnantRounds + 1 : 0;
+      stagnantRounds = stats.userMessages === prevUserMessages ? stagnantRounds + 1 : 0;
       prevUserMessages = stats.userMessages;
 
-      if (
-        stableRounds >= profile.maxStableRounds ||
-        stagnantRounds >= profile.guardLimit
-      ) {
+      if (stableRounds >= profile.maxStableRounds || stagnantRounds >= profile.guardLimit) {
         GMH.Core.State.setState(GMH.Core.STATE.DONE, {
           label: '자동 로딩 종료',
-          message:
-            '추가 데이터를 불러오지 못했습니다. 더 이상 기록이 없거나 막혀있습니다.',
+          message: '추가 데이터를 불러오지 못했습니다. 더 이상 기록이 없거나 막혀있습니다.',
           tone: 'warning',
           progress: { value: ratio },
         });
@@ -4984,8 +4752,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       return finalStats;
     }
     if (GMH.Core.State.getState() === GMH.Core.STATE.SCANNING) {
-      const ratio =
-        target > 0 ? Math.min(1, finalStats.userMessages / target) : 0;
+      const ratio = target > 0 ? Math.min(1, finalStats.userMessages / target) : 0;
       GMH.Core.State.setState(GMH.Core.STATE.DONE, {
         label: '자동 로딩 종료',
         message: `유저 메시지 ${finalStats.userMessages}/${target}`,
@@ -5012,7 +4779,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const render = () => {
       const stats = collectTurnStats();
       if (stats.error) {
-      meter.textContent = '메시지 측정 실패: DOM을 읽을 수 없습니다.';
+        meter.textContent = '메시지 측정 실패: DOM을 읽을 수 없습니다.';
         return;
       }
       meter.textContent = `메시지 현황 · 유저 ${stats.userMessages} · LLM ${stats.llmMessages}`;
@@ -5106,8 +4873,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     const wrap = document.createElement('div');
     wrap.id = 'gmh-autoload-controls';
-    wrap.style.cssText =
-      'display:grid; gap:6px; border-top:1px solid #1f2937; padding-top:6px;';
+    wrap.style.cssText = 'display:grid; gap:6px; border-top:1px solid #1f2937; padding-top:6px;';
     wrap.innerHTML = `
       <div style="display:flex; gap:8px;">
         <button id="gmh-autoload-all" style="flex:1; background:#38bdf8; border:0; color:#041; border-radius:8px; padding:6px; cursor:pointer;">위로 끝까지 로딩</button>
@@ -5157,10 +4923,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       try {
         const stats = await autoLoader.start('turns', target);
         if (stats && !stats.error) {
-          setPanelStatus(
-            `현재 유저 메시지 ${stats.userMessages}개 확보.`,
-            'success',
-          );
+          setPanelStatus(`현재 유저 메시지 ${stats.userMessages}개 확보.`, 'success');
         }
       } finally {
         toggleControls(false);
@@ -5345,9 +5108,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const rangeMarkStartBtn = panel.querySelector('#gmh-range-mark-start');
     const rangeMarkEndBtn = panel.querySelector('#gmh-range-mark-end');
     const rangeSummary = panel.querySelector('#gmh-range-summary');
-    const rangeBookmarkSelect = panel.querySelector(
-      '#gmh-range-bookmark-select',
-    );
+    const rangeBookmarkSelect = panel.querySelector('#gmh-range-bookmark-select');
 
     let rangeUnsubscribe = null;
     let selectedBookmarkKey = '';
@@ -5370,18 +5131,13 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         const ordinalText = Number.isFinite(entry.ordinal)
           ? `${axisLabel} ${entry.ordinal}`
           : `${axisLabel} ?`;
-        const idText = entry.messageId
-          ? entry.messageId
-          : `index ${entry.index}`;
+        const idText = entry.messageId ? entry.messageId : `index ${entry.index}`;
         option.textContent = `${ordinalText} · ${idText}`;
         option.dataset.index = String(entry.index);
         rangeBookmarkSelect.appendChild(option);
       });
       let nextValue = '';
-      if (
-        bookmarkSelectionPinned &&
-        entries.some((entry) => entry.key === previous)
-      ) {
+      if (bookmarkSelectionPinned && entries.some((entry) => entry.key === previous)) {
         nextValue = previous;
       } else if (entries.length) {
         nextValue = entries[0].key;
@@ -5394,10 +5150,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       }
     };
 
-    if (
-      rangeBookmarkSelect &&
-      rangeBookmarkSelect.dataset.gmhBookmarksReady !== 'true'
-    ) {
+    if (rangeBookmarkSelect && rangeBookmarkSelect.dataset.gmhBookmarksReady !== 'true') {
       rangeBookmarkSelect.dataset.gmhBookmarksReady = 'true';
       rangeBookmarkSelect.addEventListener('change', () => {
         selectedBookmarkKey = rangeBookmarkSelect.value || '';
@@ -5407,10 +5160,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       if (typeof GMH.Core?.TurnBookmarks?.subscribe === 'function') {
         GMH.Core.TurnBookmarks.subscribe(syncBookmarkSelect);
       }
-    } else if (
-      rangeBookmarkSelect &&
-      typeof GMH.Core?.TurnBookmarks?.list === 'function'
-    ) {
+    } else if (rangeBookmarkSelect && typeof GMH.Core?.TurnBookmarks?.list === 'function') {
       syncBookmarkSelect(GMH.Core.TurnBookmarks.list());
     }
 
@@ -5428,9 +5178,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         else rangeStartInput.removeAttribute('max');
         rangeStartInput.dataset.gmhAxis = 'message';
         rangeStartInput.value = resolvedStart ? String(resolvedStart) : '';
-        rangeStartInput.dataset.gmhRequested = range.start
-          ? String(range.start)
-          : '';
+        rangeStartInput.dataset.gmhRequested = range.start ? String(range.start) : '';
       }
       if (rangeEndInput) {
         if (messageTotal) rangeEndInput.max = String(messageTotal);
@@ -5467,13 +5215,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       }
     };
 
-    if (
-      rangeStartInput ||
-      rangeEndInput ||
-      rangeSummary ||
-      rangeMarkStartBtn ||
-      rangeMarkEndBtn
-    ) {
+    if (rangeStartInput || rangeEndInput || rangeSummary || rangeMarkStartBtn || rangeMarkEndBtn) {
       rangeUnsubscribe = GMH.Core.ExportRange.subscribe(syncRangeControls);
 
       const handleStartChange = () => {
@@ -5548,14 +5290,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           if (!messageId) return null;
           try {
             if (CSS?.escape) {
-              return document.querySelector(
-                `[data-gmh-message-id="${CSS.escape(messageId)}"]`,
-              );
+              return document.querySelector(`[data-gmh-message-id="${CSS.escape(messageId)}"]`);
             }
             const escaped = String(messageId).replace(/"/g, '\\"');
-            return document.querySelector(
-              `[data-gmh-message-id="${escaped}"]`,
-            );
+            return document.querySelector(`[data-gmh-message-id="${escaped}"]`);
           } catch (err) {
             return null;
           }
@@ -5567,9 +5305,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             const fromBookmark =
               safeQueryById(bookmark.messageId) ||
               (Number.isFinite(bookmark.index)
-                ? document.querySelector(
-                    `[data-gmh-message-index="${bookmark.index}"]`,
-                  )
+                ? document.querySelector(`[data-gmh-message-index="${bookmark.index}"]`)
                 : null);
             const resolvedBookmark = resolveFromElement(fromBookmark);
             if (resolvedBookmark) return resolvedBookmark;
@@ -5590,17 +5326,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         if (mode === 'start') {
           GMH.Core.ExportRange.setStart(context.ordinal);
           if (rangeStartInput) rangeStartInput.value = String(context.ordinal);
-          setPanelStatus(
-            `메시지 ${context.ordinal}을 시작으로 지정했습니다.`,
-            'info',
-          );
+          setPanelStatus(`메시지 ${context.ordinal}을 시작으로 지정했습니다.`, 'info');
         } else {
           GMH.Core.ExportRange.setEnd(context.ordinal);
           if (rangeEndInput) rangeEndInput.value = String(context.ordinal);
-          setPanelStatus(
-            `메시지 ${context.ordinal}을 끝으로 지정했습니다.`,
-            'info',
-          );
+          setPanelStatus(`메시지 ${context.ordinal}을 끝으로 지정했습니다.`, 'info');
         }
 
         const recorded = GMH.Core.TurnBookmarks.record(
@@ -5615,8 +5345,6 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           if (rangeBookmarkSelect) rangeBookmarkSelect.value = recorded.key;
         }
       };
-;
-
       if (rangeMarkStartBtn) {
         rangeMarkStartBtn.addEventListener('click', () => doBookmark('start'));
       }
@@ -5627,15 +5355,13 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     if (modern && !PAGE_WINDOW.__GMHShortcutsBound) {
       const shortcutHandler = (event) => {
-        if (!event.altKey || event.ctrlKey || event.metaKey || event.repeat)
-          return;
+        if (!event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
         const key = event.key?.toLowerCase();
         const target = event.target;
         if (target instanceof HTMLElement) {
           const tag = target.tagName.toLowerCase();
           const isInputLike =
-            ['input', 'textarea', 'select'].includes(tag) ||
-            target.isContentEditable;
+            ['input', 'textarea', 'select'].includes(tag) || target.isContentEditable;
           if (isInputLike && !['g', 'm'].includes(key)) return;
         }
         if (GMH.UI.Modal?.isOpen?.()) return;
@@ -5651,9 +5377,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           case 's':
             event.preventDefault();
             if (!AUTO_STATE.running)
-              autoLoader
-                .start('all')
-                .catch((error) => console.warn('[GMH] auto shortcut', error));
+              autoLoader.start('all').catch((error) => console.warn('[GMH] auto shortcut', error));
             break;
           case 'p':
             event.preventDefault();
@@ -5676,15 +5400,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const normalized = normalizeTranscript(raw);
       const session = buildSession(normalized);
       if (!session.turns.length) throw new Error('대화 메시지를 찾을 수 없습니다.');
-      const userCount = session.turns.filter(
-        (turn) => turn.channel === 'user',
-      ).length;
-      const llmCount = session.turns.filter(
-        (turn) => turn.channel === 'llm',
-      ).length;
+      const userCount = session.turns.filter((turn) => turn.channel === 'user').length;
+      const llmCount = session.turns.filter((turn) => turn.channel === 'llm').length;
       const entryCount = session.turns.reduce((sum, turn) => {
-        if (Array.isArray(turn?.__gmhEntries))
-          return sum + turn.__gmhEntries.length;
+        if (Array.isArray(turn?.__gmhEntries)) return sum + turn.__gmhEntries.length;
         return sum + 1;
       }, 0);
       GMH.Core.ExportRange.setTotals({
@@ -5699,11 +5418,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const exportFormatSelect = panel.querySelector('#gmh-export-format');
     const quickExportBtn = panel.querySelector('#gmh-quick-export');
 
-    async function prepareShare({
-      confirmLabel,
-      cancelStatusMessage,
-      blockedStatusMessage,
-    }) {
+    async function prepareShare({ confirmLabel, cancelStatusMessage, blockedStatusMessage }) {
       try {
         GMH.Core.State.setState(GMH.Core.STATE.REDACTING, {
           label: '민감정보 마스킹 중',
@@ -5717,9 +5432,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           alert('미성년자 성적 맥락이 감지되어 작업을 중단했습니다.');
           GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
             label: '작업 차단',
-            message:
-              blockedStatusMessage ||
-              '미성년자 민감 맥락으로 작업이 차단되었습니다.',
+            message: blockedStatusMessage || '미성년자 민감 맥락으로 작업이 차단되었습니다.',
             tone: 'error',
             progress: { value: 1 },
           });
@@ -5733,9 +5446,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           (turn) => turn.channel === 'llm',
         ).length;
         const sanitizedEntryCount = privacy.sanitizedSession.turns.reduce(
-          (sum, turn) =>
-            sum +
-            (Array.isArray(turn?.__gmhEntries) ? turn.__gmhEntries.length : 1),
+          (sum, turn) => sum + (Array.isArray(turn?.__gmhEntries) ? turn.__gmhEntries.length : 1),
           0,
         );
         GMH.Core.ExportRange.setTotals({
@@ -5745,14 +5456,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           entry: sanitizedEntryCount,
         });
         if (requestedRange.start || requestedRange.end) {
-          GMH.Core.ExportRange.setRange(
-            requestedRange.start,
-            requestedRange.end,
-          );
+          GMH.Core.ExportRange.setRange(requestedRange.start, requestedRange.end);
         }
-        const selection = GMH.Core.ExportRange.apply(
-          privacy.sanitizedSession.turns,
-        );
+        const selection = GMH.Core.ExportRange.apply(privacy.sanitizedSession.turns);
         const exportSession = cloneSession(privacy.sanitizedSession);
 
         const entryOrigin = GMH.Core.getEntryOrigin?.() || [];
@@ -5793,10 +5499,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             message_total: selection.info.messageTotal ?? selection.info.total,
             user_total: selection.info.userTotal ?? null,
             llm_total: selection.info.llmTotal ?? null,
-            message_start_index:
-              selection.info.messageStartIndex ?? selection.info.startIndex,
-            message_end_index:
-              selection.info.messageEndIndex ?? selection.info.endIndex,
+            message_start_index: selection.info.messageStartIndex ?? selection.info.startIndex,
+            message_end_index: selection.info.messageEndIndex ?? selection.info.endIndex,
             turn_start_index: selection.info.startIndex,
             turn_end_index: selection.info.endIndex,
             selected_ordinals: selection.ordinals || [],
@@ -5810,10 +5514,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             entry_end: null,
             entry_count: null,
             entry_total: selection.info.messageTotal ?? selection.info.total,
-            entry_start_index:
-              selection.info.messageStartIndex ?? selection.info.startIndex,
-            entry_end_index:
-              selection.info.messageEndIndex ?? selection.info.endIndex,
+            entry_start_index: selection.info.messageStartIndex ?? selection.info.startIndex,
+            entry_end_index: selection.info.messageEndIndex ?? selection.info.endIndex,
             entry_start_ordinal: selection.info.start,
             entry_end_ordinal: selection.info.end,
             turn_indices: selection.indices || [],
@@ -5879,8 +5581,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           tone: 'progress',
           progress: { indeterminate: true },
         });
-        const { privacy, stats, exportSession, selection, overallStats } =
-          prepared;
+        const { privacy, stats, exportSession, selection, overallStats } = prepared;
         const stamp = new Date().toISOString().replace(/[:.]/g, '-');
         const sessionForExport = exportSession || privacy.sanitizedSession;
         const rangeInfo = selection?.info || GMH.Core.ExportRange.describe();
@@ -5889,19 +5590,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           ? sessionForExport.turns
               .map((turn) => {
                 const label =
-                  turn.role === 'narration'
-                    ? '내레이션'
-                    : turn.speaker || turn.role || '메시지';
+                  turn.role === 'narration' ? '내레이션' : turn.speaker || turn.role || '메시지';
                 return `${label}: ${turn.text}`;
               })
               .join('\n')
           : privacy.sanitizedRaw;
-        const bundle = buildExportBundle(
-          sessionForExport,
-          selectionRaw,
-          format,
-          stamp,
-        );
+        const bundle = buildExportBundle(sessionForExport, selectionRaw, format, stamp);
         const fileBlob = new Blob([bundle.content], { type: bundle.mime });
         triggerDownload(fileBlob, bundle.filename);
 
@@ -5922,18 +5616,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         triggerDownload(manifestBlob, manifestName);
 
         const summary = formatRedactionCounts(privacy.counts);
-        const profileLabel =
-          PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
-        const messageTotalAvailable =
-          rangeInfo?.messageTotal || sessionForExport.turns.length;
+        const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
+        const messageTotalAvailable = rangeInfo?.messageTotal || sessionForExport.turns.length;
         const userTotalAvailable =
-          rangeInfo?.userTotal ||
-          overallStats?.userMessages ||
-          stats.userMessages;
+          rangeInfo?.userTotal || overallStats?.userMessages || stats.userMessages;
         const llmTotalAvailable =
-          rangeInfo?.llmTotal ||
-          overallStats?.llmMessages ||
-          stats.llmMessages;
+          rangeInfo?.llmTotal || overallStats?.llmMessages || stats.llmMessages;
         let rangeNote = hasCustomRange
           ? ` · (선택) 메시지 ${rangeInfo.start}-${rangeInfo.end}/${rangeInfo.total}`
           : ` · 전체 메시지 ${messageTotalAvailable}개`;
@@ -5991,8 +5679,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           });
           GM_setClipboard(md, { type: 'text', mimetype: 'text/plain' });
           const summary = formatRedactionCounts(privacy.counts);
-          const profileLabel =
-            PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
+          const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
           const message = `최근 15메시지 복사 완료 · 유저 ${effectiveStats.userMessages}개 · LLM ${effectiveStats.llmMessages}개 · ${profileLabel} · ${summary}`;
           GMH.Core.State.setState(GMH.Core.STATE.DONE, {
             label: '복사 완료',
@@ -6035,8 +5722,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           const md = toMarkdownExport(privacy.sanitizedSession);
           GM_setClipboard(md, { type: 'text', mimetype: 'text/plain' });
           const summary = formatRedactionCounts(privacy.counts);
-          const profileLabel =
-            PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
+          const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
           const message = `전체 Markdown 복사 완료 · 유저 ${effectiveStats.userMessages}개 · LLM ${effectiveStats.llmMessages}개 · ${profileLabel} · ${summary}`;
           GMH.Core.State.setState(GMH.Core.STATE.DONE, {
             label: '복사 완료',
@@ -6065,8 +5751,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         const prepared = await prepareShare({
           confirmLabel: '내보내기 진행',
           cancelStatusMessage: '내보내기를 취소했습니다.',
-          blockedStatusMessage:
-            '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
+          blockedStatusMessage: '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
         });
         if (!prepared) return;
         await performExport(prepared, format);
@@ -6094,8 +5779,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           const prepared = await prepareShare({
             confirmLabel: `${format.toUpperCase()} 내보내기`,
             cancelStatusMessage: '내보내기를 취소했습니다.',
-            blockedStatusMessage:
-              '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
+            blockedStatusMessage: '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
           });
           if (!prepared) return;
           await performExport(prepared, format);
@@ -6125,17 +5809,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             progress: { indeterminate: true },
           });
           const { session, raw } = parseAll();
-          const privacy = applyPrivacyPipeline(
-            session,
-            raw,
-            PRIVACY_CFG.profile,
-          );
+          const privacy = applyPrivacyPipeline(session, raw, PRIVACY_CFG.profile);
           const stats = collectSessionStats(privacy.sanitizedSession);
           const summary = formatRedactionCounts(privacy.counts);
-          const profileLabel =
-            PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
+          const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
           const extra = privacy.blocked ? ' · ⚠️ 미성년자 맥락 감지' : '';
-        const message = `재파싱 완료 · 유저 ${stats.userMessages}개 · LLM ${stats.llmMessages}개 · 경고 ${privacy.sanitizedSession.warnings.length}건 · ${profileLabel} · ${summary}${extra}`;
+          const message = `재파싱 완료 · 유저 ${stats.userMessages}개 · LLM ${stats.llmMessages}개 · 경고 ${privacy.sanitizedSession.warnings.length}건 · ${profileLabel} · ${summary}${extra}`;
           GMH.Core.State.setState(GMH.Core.STATE.DONE, {
             label: '재파싱 완료',
             message,
@@ -6199,10 +5878,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 - 길이는 1200~1800자.
 `;
         GM_setClipboard(prompt, { type: 'text', mimetype: 'text/plain' });
-        setPanelStatus(
-          '재요약 프롬프트가 클립보드에 복사되었습니다.',
-          'success',
-        );
+        setPanelStatus('재요약 프롬프트가 클립보드에 복사되었습니다.', 'success');
       };
     }
   }
@@ -6416,8 +6092,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     if (isModernUIActive) {
       mountPanelModern();
     } else {
-      if (Flags.killSwitch)
-        console.info('[GMH] modern UI disabled by kill switch');
+      if (Flags.killSwitch) console.info('[GMH] modern UI disabled by kill switch');
       mountPanelLegacy();
     }
   }
@@ -6435,10 +6110,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     }
   }
 
-  if (
-    document.readyState === 'complete' ||
-    document.readyState === 'interactive'
-  ) {
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
     setTimeout(boot, 1200);
   } else {
     window.addEventListener('DOMContentLoaded', () => setTimeout(boot, 1200));
