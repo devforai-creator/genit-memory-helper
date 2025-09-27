@@ -93,7 +93,7 @@ describe('Range bookmark integration', () => {
           `[data-gmh-message-id="${entry.messageId}"]`,
         );
         if (byId) {
-          const value = Number(byId.getAttribute('data-gmh-player-turn'));
+          const value = Number(byId.getAttribute('data-gmh-message-ordinal'));
           if (Number.isFinite(value)) return value;
         }
       }
@@ -102,7 +102,7 @@ describe('Range bookmark integration', () => {
           `[data-gmh-message-index="${entry.index}"]`,
         );
         if (byIndex) {
-          const value = Number(byIndex.getAttribute('data-gmh-player-turn'));
+          const value = Number(byIndex.getAttribute('data-gmh-message-ordinal'));
           if (Number.isFinite(value)) return value;
         }
       }
@@ -114,6 +114,7 @@ describe('Range bookmark integration', () => {
 
     const bounds = GMH.Core.ExportRange.describe();
     expect(bounds.active).toBe(true);
+    expect(bounds.axis).toBe('message');
     expect(bounds.start).toBe(resolvedOrdinal);
   });
 });

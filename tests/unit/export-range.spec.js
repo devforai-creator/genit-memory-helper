@@ -56,105 +56,87 @@ describe('GMH.Core.ExportRange', () => {
     const GMH = createGMH();
     ExportRange = GMH.Core.ExportRange;
     ExportRange.clear();
-    ExportRange.setAxis('player');
-    ExportRange.setTotals({ player: 0, entry: 0 });
+    const userCount = sampleTurns.filter((turn) => turn.role === 'player').length;
+    const llmCount = sampleTurns.length - userCount;
+    ExportRange.setTotals({
+      message: sampleTurns.length,
+      user: userCount,
+      llm: llmCount,
+      entry: sampleTurns.length,
+    });
   });
 
-  it('describes empty state when no player turns are recorded', () => {
+  it('describes empty state when totals are zero', () => {
+    ExportRange.clear();
+    ExportRange.setTotals({ message: 0, user: 0, llm: 0, entry: 0 });
     const snapshot = ExportRange.describe();
     expect(snapshot).toMatchObject({
-      axis: 'player',
+      axis: 'message',
       active: false,
       start: null,
       end: null,
       count: 0,
       total: 0,
-      playerTotal: 0,
-      entryTotal: 0,
+      messageTotal: 0,
+      userTotal: 0,
+      llmTotal: 0,
     });
     expect(snapshot.all).toBe(0);
   });
 
   it('applies full conversation when no range is set', () => {
-    ExportRange.setTotals({ player: 2, entry: sampleTurns.length });
     const selection = ExportRange.apply(sampleTurns);
     expect(selection.info).toMatchObject({
-      axis: 'player',
+      axis: 'message',
       active: false,
-      total: 2,
-      playerTotal: 2,
-      entryTotal: sampleTurns.length,
+      total: sampleTurns.length,
+      messageTotal: sampleTurns.length,
     });
     expect(selection.turns).toHaveLength(sampleTurns.length);
     expect(selection.indices).toEqual([0, 1, 2, 3, 4]);
-    expect(selection.ordinals).toEqual([null, 2, null, 1, null]);
+    expect(selection.ordinals).toEqual([5, 4, 3, 2, 1]);
   });
 
-  it('slices player range without extra entries by default', () => {
-    ExportRange.setTotals({ player: 2, entry: sampleTurns.length });
+  it('returns only the latest message when range is 1-1', () => {
     ExportRange.setRange(1, 1);
     const selection = ExportRange.apply(sampleTurns);
 
     expect(selection.info).toMatchObject({
-      axis: 'player',
+      axis: 'message',
       active: true,
       start: 1,
       end: 1,
       count: 1,
-      total: 2,
-      playerTotal: 2,
-      entryTotal: sampleTurns.length,
+      total: sampleTurns.length,
     });
-    expect(selection.info.startIndex).toBe(3);
-    expect(selection.info.endIndex).toBe(3);
-    expect(selection.indices).toEqual([3]);
+    expect(selection.info.startIndex).toBe(4);
+    expect(selection.info.endIndex).toBe(4);
+    expect(selection.indices).toEqual([4]);
     expect(selection.ordinals).toEqual([1]);
-    expect(selection.turns.map((t) => t.text)).toEqual(['준비됐다']);
+    expect(selection.turns.map((t) => t.text)).toEqual(['좋아']);
   });
 
-  it('can include previous narration when requested', () => {
-    ExportRange.setTotals({ player: 2, entry: sampleTurns.length });
-    ExportRange.setRange(1, 1);
-    const selection = ExportRange.apply(sampleTurns, {
-      prologuePolicy: 'upToPrevPlayer',
-    });
-
-    expect(selection.info.startIndex).toBe(2);
-    expect(selection.indices).toEqual([2, 3]);
-    expect(selection.ordinals).toEqual([null, 1]);
-  });
-
-  it('can include following npc entries when enabled', () => {
-    ExportRange.setTotals({ player: 2, entry: sampleTurns.length });
-    ExportRange.setRange(1, 1);
-    const selection = ExportRange.apply(sampleTurns, {
-      includeTrailingNpc: true,
-    });
-
-    expect(selection.indices).toEqual([3, 4]);
-    expect(selection.ordinals).toEqual([1, null]);
-    expect(selection.turns.map((t) => t.text)).toEqual(['준비됐다', '좋아']);
-  });
-
-  it('can expand prologue all the way to the first entry', () => {
-    ExportRange.setTotals({ player: 2, entry: sampleTurns.length });
-    ExportRange.setRange(1, 1);
-    const selection = ExportRange.apply(sampleTurns, {
-      prologuePolicy: 'toStart',
-      includeTrailingNpc: true,
-    });
-
+  it('selects oldest message when range is highest ordinal', () => {
+    ExportRange.setRange(sampleTurns.length, sampleTurns.length);
+    const selection = ExportRange.apply(sampleTurns);
     expect(selection.info.startIndex).toBe(0);
-    expect(selection.indices).toEqual([0, 1, 2, 3, 4]);
+    expect(selection.info.endIndex).toBe(0);
+    expect(selection.indices).toEqual([0]);
+    expect(selection.ordinals).toEqual([sampleTurns.length]);
   });
 
   it('respects explicit start/end selections when totals are unchanged', () => {
-    ExportRange.setTotals({ player: 7, entry: 10 });
+    ExportRange.setTotals({
+      message: 7,
+      user: 4,
+      llm: 3,
+      entry: 7,
+    });
     ExportRange.setStart(1);
     ExportRange.setEnd(7);
     const snapshot = ExportRange.describe();
     expect(snapshot).toMatchObject({
-      axis: 'player',
+      axis: 'message',
       start: 1,
       end: 7,
       total: 7,
@@ -163,41 +145,23 @@ describe('GMH.Core.ExportRange', () => {
   });
 
   it('clears custom range when totals reset to zero', () => {
-    ExportRange.setTotals({ player: 2, entry: sampleTurns.length });
     ExportRange.setRange(1, 1);
-    ExportRange.setTotals({ player: 0, entry: 0 });
+    ExportRange.setTotals({ message: 0, user: 0, llm: 0, entry: 0 });
     const snapshot = ExportRange.describe();
     expect(snapshot).toMatchObject({
-      axis: 'player',
+      axis: 'message',
       active: false,
       start: null,
       end: null,
       count: 0,
       total: 0,
-      playerTotal: 0,
-      entryTotal: 0,
+      messageTotal: 0,
     });
   });
 
-  it('supports selecting by entry axis ordinals', () => {
-    ExportRange.setTotals({ player: 2, entry: sampleTurns.length });
-    ExportRange.setAxis('entry');
-    const entrySnapshot = ExportRange.describe();
-    expect(entrySnapshot.axis).toBe('entry');
-    ExportRange.setRange(5, 5);
+  it('records ordinals from newest message backwards', () => {
     const selection = ExportRange.apply(sampleTurns);
-
-    expect(selection.info.axis).toBe('entry');
-    expect(selection.info.startIndex).toBe(0);
-    expect(selection.info.endIndex).toBe(0);
-    expect(selection.info.entryStartIndex).toBe(0);
-    expect(selection.info.entryEndIndex).toBe(0);
-    expect(selection.info.entryStartOrdinal).toBe(5);
-    expect(selection.info.entryEndOrdinal).toBe(5);
-    expect(selection.info.entryCount).toBe(1);
-    expect(selection.indices).toEqual([0]);
-    expect(selection.turns.map((t) => t.text)).toEqual(['안녕']);
-    expect(selection.info.entryTotal).toBe(sampleTurns.length);
-    expect(selection.info.playerTotal).toBe(2);
+    expect(selection.ordinals[0]).toBe(sampleTurns.length);
+    expect(selection.ordinals[selection.ordinals.length - 1]).toBe(1);
   });
 });

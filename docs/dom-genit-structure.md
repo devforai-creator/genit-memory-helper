@@ -69,7 +69,7 @@ Captured: browser console export (`GMH.Core` adapter) – 50 sequential message 
 - NPC/서술 블록에는 `img`, `span`, `pre code`(코드 블록) 등이 함께 등장하지만 플레이어 블록에도 동일하게 나타날 수 있음 → 구조만으로 역할을 판정하기 어려움.
 - `space-y-3 mb-6` 래퍼 내에서 `.markdown-content` 요소가 핵심 텍스트를 제공하며, 나레이션 후보 역시 동일한 경로에 위치.
 - 2025-XX-XX 패치: 플레이어 행동/내적 독백이 회색 말풍선(`.p-3.rounded-lg.bg-muted/50`)이나 muted 텍스트(`.text-muted-foreground`)로 출력되어도 `playerText` 셀렉터가 수집하도록 보강했음. `emitPlayerLines`는 이제 플레이어 스코프 내부의 muted 텍스트는 허용하고, NPC/narration 범위 밖일 때만 필터링함.
-- 여전히 오프닝 NPC/나레이션 섹션은 `playerTurn` 네이밍에 포함되지 않음 → 플레이어 턴 총합은 25가 정상. 향후 "오프닝 복수 블록 선택" 문제는 별도 이슈로 추적 필요.
+  - 캡처 당시에는 `playerTurn` 속성으로 표기했지만, 현재 빌드는 `messageOrdinal`과 `channel(user|llm)`로 통합 표기합니다. 오프닝/프롤로그 메시지를 포함하려면 스크롤로 먼저 로드해야 합니다.
 
 ## Action Items
 
@@ -88,7 +88,7 @@ Captured: browser console export (`GMH.Core` adapter) – 50 sequential message 
 - **Player 스코프 신호**
   - `selectors.playerScopes`: `[data-role="user"]`, `[data-author-role="user"]`, `.flex.justify-end`, `.flex.flex-col.items-end` 등.
   - muted 말풍선(`.p-3.rounded-lg.bg-muted/50`, `.text-muted-foreground`)도 플레이어 범위 내에서 나타나면 `playerText`로 분류.
-  - `data-gmh-player-turn` 속성이 붙으면 즉시 플레이어로 고정.
+  - `data-gmh-channel="user"`가 붙은 메시지는 유저 발화로 취급.
 - **NPC/나레이션 구분**
   - `selectors.npcGroups`: `[data-role="assistant"]`, `.flex.flex-col.w-full.group`.
   - `selectors.narrationBlocks`: `.markdown-content.text-muted-foreground`, `.text-muted-foreground.text-sm`.
@@ -97,4 +97,4 @@ Captured: browser console export (`GMH.Core` adapter) – 50 sequential message 
   - tie-breaker는 요약된 스코어(`player`, `npc`, `narration`)를 계산해 동점 시 `narration → player → npc` 순으로 안전하게 떨어뜨림.
   - 회색/정렬 기반 플레이어 텍스트를 허용하면서도 NPC 말풍선(`selectors.npcBubble`)과 INFO(`selectors.infoCode`)는 계속 제외.
 - **Known gap**
-  - 오프닝/프롤로그와 같은 NPC 나레이션 블록은 여전히 플레이어 턴 총계에 포함되지 않으므로 UI 상한이 25에서 멈추는 사례가 있음. 별도 이슈로 추적 예정.
+  - 오프닝/프롤로그와 같은 NPC 나레이션 블록도 `data-gmh-message-ordinal`에 포함되지만, 화면에 로드되지 않으면 범위 지정에서 누락될 수 있습니다.

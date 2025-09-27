@@ -43,7 +43,9 @@ test.describe('GMH mock smoke (offline)', () => {
 
     const status = panel.locator('#gmh-status');
     await status.waitFor({ state: 'attached', timeout: 5_000 });
-    await expect(status).toContainText(/추가 수집 중|플레이어 턴/, { timeout: 10_000 });
+    await expect(status).toContainText(/추가 수집 중|유저 메시지|메시지 확보/, {
+      timeout: 10_000,
+    });
 
     await page.evaluate(() => {
       try {
@@ -54,7 +56,7 @@ test.describe('GMH mock smoke (offline)', () => {
     });
 
     await expect(status).toContainText(
-      /자동 로딩을 중지했습니다|플레이어 턴|추가 데이터를 불러오지 못했습니다|스크롤 완료/,
+      /자동 로딩을 중지했습니다|유저 메시지|추가 데이터를 불러오지 못했습니다|스크롤 완료/,
       { timeout: 30_000 }
     );
 
@@ -75,7 +77,7 @@ test.describe('GMH mock smoke (offline)', () => {
     if (startValueAfterMark) {
       await expect(rangeStart).toHaveValue(startValueAfterMark);
     } else {
-      await expect(statusLine).toContainText(/턴 정보를 찾을 수 없습니다|플레이어 턴을 찾지 못해/);
+      await expect(statusLine).toContainText(/메시지를 찾을 수 없습니다|메시지 범위를 유지합니다/);
     }
 
     await markEndBtn.click();
@@ -83,7 +85,7 @@ test.describe('GMH mock smoke (offline)', () => {
     if (endValueAfterMark) {
       await expect(rangeEnd).toHaveValue(endValueAfterMark);
     } else {
-      await expect(statusLine).toContainText(/턴 정보를 찾을 수 없습니다|플레이어 턴을 찾지 못해/);
+      await expect(statusLine).toContainText(/메시지를 찾을 수 없습니다|메시지 범위를 유지합니다/);
     }
 
     const rangeInfo = await page.evaluate(() => {
@@ -104,7 +106,7 @@ test.describe('GMH mock smoke (offline)', () => {
       await rangeEnd.blur();
 
       await expect(rangeSummary).toContainText(
-        new RegExp(`플레이어 턴 ${startValue}-${endValue}`),
+        new RegExp(`메시지 ${startValue}-${endValue}`),
       );
 
       const rangeSnapshot = await page.evaluate(() => {
@@ -118,9 +120,9 @@ test.describe('GMH mock smoke (offline)', () => {
       expect(rangeSnapshot?.end).toBe(endValue);
 
       await panel.locator('#gmh-range-clear').click();
-      await expect(rangeSummary).toContainText(/플레이어 턴/);
+      await expect(rangeSummary).toContainText(/메시지/);
     } else {
-      await expect(rangeSummary).toContainText(/플레이어 턴/);
+      await expect(rangeSummary).toContainText(/메시지/);
     }
 
     await panel.locator('#gmh-export').click();
@@ -171,7 +173,7 @@ test.describe('GMH mock smoke (offline)', () => {
       }
     });
     await expect(panel.locator('#gmh-status')).toContainText(
-      /자동 로딩을 중지했습니다|플레이어 턴|추가 데이터를 불러오지 못했습니다|스크롤 완료/,
+      /자동 로딩을 중지했습니다|유저 메시지|추가 데이터를 불러오지 못했습니다|스크롤 완료/,
       { timeout: 30_000 }
     );
   });

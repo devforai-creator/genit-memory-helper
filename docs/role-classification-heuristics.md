@@ -9,7 +9,7 @@
    - `collectAll(selectors.playerScopes, block)`가 1개 이상이면 `player`.
    - 위가 아니고 `collectAll(selectors.npcGroups, block)`가 1개 이상이면 `npc`.
    - 그 외에는 `narration`.
-3. **DOM 주석**: `MessageIndexer`가 위 반환값을 `data-gmh-message-role`에 저장하고, 플레이어 블록에 한해 최신=1 방식의 `data-gmh-player-turn`을 부여합니다.
+3. **DOM 주석**: `MessageIndexer`가 위 반환값을 `data-gmh-message-role`과 `data-gmh-channel(user|llm)`에 저장하고, 모든 메시지 블록에 최신=1 방식의 `data-gmh-message-ordinal`을 부여합니다.
 
 > 현재 구현은 tie-breaker가 없고, 스코어링 역시 적용되지 않습니다. 플레이어 스코프/어시스턴트 그룹이 동시에 붙은 블록은 우선순위(플레이어 → NPC)에 따라 결정됩니다.
 
@@ -49,16 +49,16 @@
 ## 3. `parseTurns` 요약
 
 1. `readTranscriptText()`에서 HTML을 텍스트로 변환합니다.
-2. `parseTurns(raw)`가 줄 단위로 파싱하며 `pushTurn()`을 호출합니다.
+ 2. `parseTurns(raw)`가 줄 단위로 파싱하며 `pushTurn()`을 호출합니다.
    - 동일 화자·동일 역할이 연속이면 텍스트를 병합합니다 (내레이션도 병합 대상).
    - `PLAYER_MARK`가 붙은 경우 강제로 플레이어로 처리합니다.
-3. Meta/INFO/코드 라인은 `isMetaLine()` 등으로 걸러냅니다.
-4. 최종적으로 `session.turns` 배열과 `sceneId`, `metaHints` 등을 반환합니다.
+ 3. Meta/INFO/코드 라인은 `isMetaLine()` 등으로 걸러냅니다.
+  4. 최종적으로 `session.turns` 배열과 `sceneId`, `metaHints` 등을 반환하며, 각 턴에는 `role`(기존 호환용)과 별도로 `channel`(`user`/`llm`) 속성이 추가됩니다.
 
 ## 4. Known Issues & 후속 과제
 
 1. **회색 플레이어 행동/내적 독백**: `.text-muted-foreground`, `.bg-muted/50` 스타일 말풍선은 플레이어 텍스트로 수집되지 않습니다. → 플레이어 셀렉터/필터 보강 필요.
-2. **오프닝 NPC 블록**: 대화 초반의 내레이션/어시스턴트 블록은 `data-gmh-player-turn`에 포함되지 않으므로 플레이어 턴 총계가 최대 25까지입니다. 범위 선택 UI에서 26을 기대하면 값이 맞지 않습니다.
+2. **오프닝 NPC 블록**: 대화 초반의 내레이션/어시스턴트 블록도 `data-gmh-message-ordinal`에 포함되지만, 메시지 전체를 불러오지 않으면 범위 계산이 어긋날 수 있습니다. 범위 지정 전에 원하는 구간까지 스크롤하여 메시지를 로드하세요.
 3. **역할 중첩 해결 미흡**: 플레이어/어시스턴트 스코프가 중첩된 경우 tie-breaker가 없어 의도치 않은 분류가 발생할 수 있습니다.
 4. **파서 병합 규칙**: 내레이션도 동일 화자가 연속이면 병합되므로, 블록 단위 보존을 원한다면 추가 refactoring이 필요합니다.
 
@@ -71,4 +71,3 @@
 - `docs/dom-genit-structure.md`: DOM 구조 및 역할 힌트 요약
 
 필요 시 이 문서를 업데이트하고, 휴리스틱 변경 시 반드시 날짜와 근거를 기록해 주세요.
-

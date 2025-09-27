@@ -304,8 +304,8 @@
    *   while keeping NPC/narration entries that fall inside the resolved index window.
    */
   const ExportRange = (() => {
-    const requested = { start: null, end: null, axis: 'player' };
-    let totals = { player: 0, entry: 0 };
+    const requested = { start: null, end: null, axis: 'message' };
+    let totals = { message: 0, user: 0, llm: 0, entry: 0 };
     const listeners = new Set();
     let lastWarnTs = 0;
 
@@ -339,19 +339,13 @@
     };
 
     const clampRequestedToTotal = () => {
-      const axis = requested.axis === 'entry' ? 'entry' : 'player';
-      const totalPlayers = Number.isFinite(totals.player)
-        ? Math.max(0, totals.player)
+      const totalMessages = Number.isFinite(totals.message)
+        ? Math.max(0, Math.floor(totals.message))
         : 0;
-      const totalEntries = Number.isFinite(totals.entry)
-        ? Math.max(0, totals.entry)
-        : 0;
-      const total = axis === 'entry' ? totalEntries : totalPlayers;
-      const axisLabel = axis === 'entry' ? 'entries' : 'player turns';
-      if (!total) {
+      if (!totalMessages) {
         if (requested.start !== null || requested.end !== null) {
-          emitRangeWarning(`clearing range because no ${axisLabel} detected`, {
-            axis,
+          emitRangeWarning('clearing range because no messages detected', {
+            axis: 'message',
             start: requested.start,
             end: requested.end,
           });
@@ -360,45 +354,42 @@
         requested.end = null;
         return;
       }
-      if (requested.start !== null && requested.start > total) {
+      if (requested.start !== null && requested.start > totalMessages) {
         emitRangeWarning('start exceeds total; clamping', {
-          axis,
+          axis: 'message',
           start: requested.start,
-          total,
+          total: totalMessages,
         });
-        requested.start = total;
+        requested.start = totalMessages;
       }
-      if (requested.end !== null && requested.end > total) {
+      if (requested.end !== null && requested.end > totalMessages) {
         emitRangeWarning('end exceeds total; clamping', {
-          axis,
+          axis: 'message',
           end: requested.end,
-          total,
+          total: totalMessages,
         });
-        requested.end = total;
+        requested.end = totalMessages;
       }
       normalizeRequestedOrder();
     };
 
-    const resolveBounds = (
-      totalPlayers = totals.player,
-      totalEntries = totals.entry,
-    ) => {
-      const axis = requested.axis === 'entry' ? 'entry' : 'player';
-      const totalSource = axis === 'entry' ? totalEntries : totalPlayers;
-      const total = Number.isFinite(totalSource)
-        ? Math.max(0, Math.floor(totalSource))
+    const resolveBounds = (totalMessages = totals.message) => {
+      const total = Number.isFinite(totalMessages)
+        ? Math.max(0, Math.floor(totalMessages))
         : 0;
       if (!total) {
         return {
-          axis,
+          axis: 'message',
           active: false,
           start: null,
           end: null,
           count: 0,
           total,
-          playerTotal: totalPlayers,
-          entryTotal: totalEntries,
-          all: totalEntries,
+          messageTotal: totalMessages,
+          userTotal: totals.user,
+          llmTotal: totals.llm,
+          entryTotal: totals.entry,
+          all: totals.entry,
         };
       }
       const clamp = (value, fallback) => {
@@ -412,218 +403,77 @@
       const normalizedEnd = Math.max(start, end);
       const count = Math.max(0, normalizedEnd - normalizedStart + 1);
       return {
-        axis,
+        axis: 'message',
         active,
         start: normalizedStart,
         end: normalizedEnd,
         count,
         total,
-        playerTotal: totalPlayers,
-        entryTotal: totalEntries,
-        all: totalEntries,
+        messageTotal: totalMessages,
+        userTotal: totals.user,
+        llmTotal: totals.llm,
+        entryTotal: totals.entry,
+        all: totals.entry,
       };
     };
 
-    const resolveSelectionWindow = ({
-      list = [],
-      playerIndices = [],
-      info = {},
-      policy,
-      includeTrailingNpc = false,
-    }) => {
-      const windowInfo = info || {};
-      const axis = windowInfo.axis === 'entry' ? 'entry' : 'player';
-      const totalPlayers = Array.isArray(playerIndices)
-        ? playerIndices.length
-        : 0;
-      const totalTurns = Array.isArray(list) ? list.length : 0;
-      const entryMap = [];
-      const blockToTurns = new Map();
-      list.forEach((turn, idx) => {
-        const sourceBlocks = Array.isArray(turn?.__gmhSourceBlocks)
-          ? turn.__gmhSourceBlocks
-          : [];
-        sourceBlocks
-          .filter((blockIdx) => Number.isInteger(blockIdx) && blockIdx >= 0)
-          .forEach((blockIdx) => {
-            if (!blockToTurns.has(blockIdx)) {
-              blockToTurns.set(blockIdx, new Set());
-            }
-            blockToTurns.get(blockIdx).add(idx);
-          });
+    const buildMessageUnits = (turns = []) => {
+      const units = [];
+      const blockUnitMap = new Map();
 
-        const entries = Array.isArray(turn?.__gmhEntries)
-          ? turn.__gmhEntries
-          : [];
-        entries.forEach((entryIdx) => {
-          if (Number.isInteger(entryIdx) && entryIdx >= 0) {
-            entryMap.push({ entryIdx, turnIdx: idx });
-          }
-        });
-      });
-      entryMap.sort((a, b) => a.entryIdx - b.entryIdx);
-      const sortedBlockIndices = Array.from(blockToTurns.keys()).sort(
-        (a, b) => a - b,
-      );
-      const blockEntryMap = sortedBlockIndices.map((blockIdx) => ({
-        blockIdx,
-        turnIndices: Array.from(blockToTurns.get(blockIdx) || []),
-      }));
-      const totalBlockEntries = blockEntryMap.length;
-      const totalEntries = totalBlockEntries || entryMap.length;
-
-      const startOrdinal = Number.isFinite(windowInfo.start)
-        ? windowInfo.start
-        : 1;
-      const endOrdinal = Number.isFinite(windowInfo.end)
-        ? windowInfo.end
-        : startOrdinal;
-
-      if (axis === 'entry') {
-        if (!totalEntries) {
-          return {
-            axis,
-            startIndex: 0,
-            endIndex: list.length ? list.length - 1 : -1,
-            startOrdinal: 1,
-            endOrdinal: 1,
-            entryStartIndex: null,
-            entryEndIndex: null,
-            policy: 'direct',
-            totalPlayers,
-            totalEntries,
-          };
+      const ensureUnit = (blockIdx, fallbackOrder = null) => {
+        if (blockIdx !== null && blockUnitMap.has(blockIdx)) {
+          return blockUnitMap.get(blockIdx);
         }
-
-        const clampOrdinal = (value) =>
-          Math.max(1, Math.min(totalEntries, Math.floor(value)));
-        const normalizedStartOrdinal = clampOrdinal(startOrdinal);
-        const normalizedEndOrdinal = clampOrdinal(endOrdinal);
-        const startPos = Math.max(0, totalEntries - normalizedEndOrdinal);
-        const endPos = Math.max(
-          startPos,
-          totalEntries - normalizedStartOrdinal,
-        );
-
-        const selectedEntries = totalBlockEntries
-          ? blockEntryMap.slice(startPos, endPos + 1)
-          : entryMap.slice(startPos, endPos + 1);
-
-        const selectedTurnSet = new Set();
-        if (totalBlockEntries) {
-          selectedEntries.forEach((entry) => {
-            entry.turnIndices.forEach((turnIdx) =>
-              selectedTurnSet.add(turnIdx),
-            );
-          });
-        } else {
-          selectedEntries.forEach((entry) =>
-            selectedTurnSet.add(entry.turnIdx),
-          );
-        }
-
-        const selectedTurnIndices = Array.from(selectedTurnSet).sort(
-          (a, b) => a - b,
-        );
-        const startTurnIndex = selectedTurnIndices.length
-          ? selectedTurnIndices[0]
-          : 0;
-        const endTurnIndex = selectedTurnIndices.length
-          ? selectedTurnIndices[selectedTurnIndices.length - 1]
-          : startTurnIndex;
-
-        const entryIndices = selectedEntries.map((entry) =>
-          totalBlockEntries ? entry.blockIdx : entry.entryIdx,
-        );
-        const entryStartIndex = entryIndices.length ? entryIndices[0] : null;
-        const entryEndIndex = entryIndices.length
-          ? entryIndices[entryIndices.length - 1]
-          : null;
-
-        return {
-          axis,
-          startIndex: startTurnIndex,
-          endIndex: endTurnIndex,
-          startOrdinal: normalizedStartOrdinal,
-          endOrdinal: normalizedEndOrdinal,
-          entryStartIndex,
-          entryEndIndex,
-          entryStartOrdinal: normalizedStartOrdinal,
-          entryEndOrdinal: normalizedEndOrdinal,
-          entryCount: selectedEntries.length,
-          policy: 'direct',
-          totalPlayers,
-          totalEntries,
+        const unit = {
+          blockIdx,
+          turnIndices: new Set(),
+          order: units.length,
+          fallbackOrder,
         };
-      }
+        units.push(unit);
+        if (blockIdx !== null) blockUnitMap.set(blockIdx, unit);
+        return unit;
+      };
 
-      const allowedPolicies = ['none', 'toStart', 'upToPrevPlayer'];
-      const prologuePolicy = allowedPolicies.includes(policy) ? policy : 'none';
-
-      const startPos = Math.max(0, totalPlayers - endOrdinal);
-      const endPos = Math.max(startPos, totalPlayers - startOrdinal);
-      const fallbackStartIndex = Number.isFinite(playerIndices[0])
-        ? playerIndices[0]
-        : 0;
-      const candidateStartIndex = playerIndices[startPos];
-      const startPlayerIndex = Number.isFinite(candidateStartIndex)
-        ? candidateStartIndex
-        : fallbackStartIndex;
-      const lastPlayerPos = totalPlayers ? totalPlayers - 1 : 0;
-      const candidateEndIndex = playerIndices[Math.min(endPos, lastPlayerPos)];
-      const endPlayerIndex = Number.isFinite(candidateEndIndex)
-        ? candidateEndIndex
-        : null;
-      const prevPlayerIndex =
-        startPos > 0 ? playerIndices[startPos - 1] : undefined;
-      const nextPlayerIndex =
-        endPos + 1 < playerIndices.length ? playerIndices[endPos + 1] : null;
-      const lastIndex = totalTurns ? totalTurns - 1 : 0;
-
-      let resolvedStart = startPlayerIndex;
-      if (prologuePolicy === 'toStart') {
-        resolvedStart = 0;
-      } else if (prologuePolicy === 'upToPrevPlayer') {
-        if (Number.isFinite(prevPlayerIndex)) {
-          resolvedStart = Math.max(0, prevPlayerIndex + 1);
+      turns.forEach((turn, idx) => {
+        const sourceBlocks = Array.isArray(turn?.__gmhSourceBlocks)
+          ? turn.__gmhSourceBlocks.filter(
+              (value) => Number.isInteger(value) && value >= 0,
+            )
+          : [];
+        if (sourceBlocks.length) {
+          sourceBlocks.forEach((blockIdx) => {
+            const unit = ensureUnit(blockIdx);
+            unit.turnIndices.add(idx);
+          });
         } else {
-          resolvedStart = 0;
+          const unit = ensureUnit(null, idx);
+          unit.turnIndices.add(idx);
         }
-      }
-      const startClampTarget = Number.isFinite(startPlayerIndex)
-        ? startPlayerIndex
-        : fallbackStartIndex;
-      resolvedStart = Math.max(0, Math.min(resolvedStart, startClampTarget));
-      const baseEnd = Number.isFinite(endPlayerIndex)
-        ? endPlayerIndex
-        : resolvedStart;
-      let resolvedEnd = Math.max(resolvedStart, Math.min(lastIndex, baseEnd));
-      if (includeTrailingNpc) {
-        const trailingEnd = Number.isFinite(nextPlayerIndex)
-          ? Math.max(baseEnd, nextPlayerIndex - 1)
-          : lastIndex;
-        resolvedEnd = Math.max(resolvedEnd, Math.min(lastIndex, trailingEnd));
+      });
+
+      const totalMessages = units.length;
+      const ordinalByTurnIndex = new Map();
+      const ordinalByBlockIndex = new Map();
+
+      for (let pos = 0; pos < units.length; pos += 1) {
+        const unit = units[pos];
+        const ordinalFromLatest = totalMessages - pos;
+        unit.ordinal = ordinalFromLatest;
+        if (unit.blockIdx !== null) {
+          ordinalByBlockIndex.set(unit.blockIdx, ordinalFromLatest);
+        }
+        unit.turnIndices.forEach((turnIdx) => {
+          ordinalByTurnIndex.set(turnIdx, ordinalFromLatest);
+        });
       }
 
       return {
-        axis,
-        startIndex: resolvedStart,
-        endIndex: resolvedEnd,
-        startOrdinal,
-        endOrdinal,
-        startPos,
-        endPos,
-        prevPlayerIndex: Number.isFinite(prevPlayerIndex)
-          ? prevPlayerIndex
-          : null,
-        nextPlayerIndex: Number.isFinite(nextPlayerIndex)
-          ? nextPlayerIndex
-          : null,
-        startPlayerIndex,
-        endPlayerIndex: Number.isFinite(endPlayerIndex) ? endPlayerIndex : null,
-        policy: prologuePolicy,
-        totalPlayers,
-        totalEntries,
+        units,
+        totalMessages,
+        ordinalByTurnIndex,
+        ordinalByBlockIndex,
       };
     };
 
@@ -651,12 +501,13 @@
       getTotals() {
         return { ...totals };
       },
-      describe(totalPlayers = totals.player, totalEntries = totals.entry) {
-        return resolveBounds(totalPlayers, totalEntries);
+      describe(totalMessages = totals.message) {
+        return resolveBounds(totalMessages);
       },
       apply(turns = [], options = {}) {
         const list = Array.isArray(turns) ? turns : [];
-        const settings = options && typeof options === 'object' ? options : {};
+        const settings =
+          options && typeof options === 'object' ? options : {};
         if (!list.length) {
           return {
             turns: [],
@@ -674,123 +525,90 @@
             .forEach((value) => includeIndices.add(value));
         }
 
-        const playerIndices = [];
-        let totalEntryCount = 0;
-        list.forEach((turn, idx) => {
-          if (turn?.role === 'player') playerIndices.push(idx);
-          if (Array.isArray(turn?.__gmhEntries))
-            totalEntryCount += turn.__gmhEntries.length;
-        });
-        const totalPlayers = playerIndices.length;
-        const info = resolveBounds(totalPlayers, totalEntryCount);
+        const { units, totalMessages, ordinalByTurnIndex } =
+          buildMessageUnits(list);
+        const bounds = resolveBounds(totalMessages);
 
-        const ordinalMap = new Map();
-        playerIndices.forEach((idx, pos) => {
-          const ordinalFromLatest = totalPlayers - pos;
-          ordinalMap.set(idx, ordinalFromLatest);
-        });
-
-        const buildResult = (startIndex, endIndex) => {
-          const base = [];
-          for (let i = startIndex; i <= endIndex; i += 1) base.push(i);
-          includeIndices.forEach((idx) => base.push(idx));
-          const uniqueIndices = Array.from(new Set(base))
+        const collectIndicesInWindow = (startPos, endPos) => {
+          const indices = new Set();
+          for (let pos = startPos; pos <= endPos; pos += 1) {
+            const unit = units[pos];
+            unit.turnIndices.forEach((idx) => indices.add(idx));
+          }
+          includeIndices.forEach((idx) => indices.add(idx));
+          return Array.from(indices)
             .filter((idx) => idx >= 0 && idx < list.length)
             .sort((a, b) => a - b);
-          const turnsOut = uniqueIndices
-            .map((idx) => list[idx] ?? null)
-            .filter(Boolean);
-          const ordinals =
-            info.axis === 'player'
-              ? uniqueIndices.map((idx) => ordinalMap.get(idx) || null)
-              : uniqueIndices.map(() => null);
-          return {
-            turns: turnsOut,
-            indices: uniqueIndices,
-            ordinals,
-          };
         };
 
-        if (!info.count || !info.active) {
-          const {
+        const deriveSelection = (startPos, endPos) => {
+          const clampedStart = Math.max(0, Math.min(startPos, units.length - 1));
+          const clampedEnd = Math.max(clampedStart, Math.min(endPos, units.length - 1));
+          const selectedUnits = units.slice(clampedStart, clampedEnd + 1);
+          const indices = collectIndicesInWindow(clampedStart, clampedEnd);
+          const turnsOut = indices.map((idx) => list[idx] ?? null).filter(Boolean);
+          const ordinals = indices.map((idx) => ordinalByTurnIndex.get(idx) || null);
+          const startIndex = indices.length ? indices[0] : -1;
+          const endIndex = indices.length ? indices[indices.length - 1] : -1;
+          const firstUnit = selectedUnits[0] ?? null;
+          const lastUnit = selectedUnits[selectedUnits.length - 1] ?? null;
+          return {
             turns: turnsOut,
             indices,
             ordinals,
-          } = buildResult(0, list.length ? list.length - 1 : -1);
-          const startIndex = indices.length ? indices[0] : -1;
-          const endIndex = indices.length ? indices[indices.length - 1] : -1;
+            rangeDetails: {
+              startIndex,
+              endIndex,
+              messageStartIndex: firstUnit?.blockIdx ?? null,
+              messageEndIndex: lastUnit?.blockIdx ?? null,
+            },
+          };
+        };
+
+        if (!bounds.count || !bounds.active) {
+          const { turns: turnsOut, indices, ordinals, rangeDetails } =
+            deriveSelection(0, units.length - 1);
           return {
             turns: turnsOut,
             indices,
             ordinals,
             info: {
-              ...info,
-              total: info.total,
-              playerTotal: totalPlayers,
-              entryTotal: totalEntryCount,
-              all: totalEntryCount,
-              startIndex,
-              endIndex,
+              ...bounds,
+              startIndex: rangeDetails.startIndex,
+              endIndex: rangeDetails.endIndex,
+              messageStartIndex: rangeDetails.messageStartIndex,
+              messageEndIndex: rangeDetails.messageEndIndex,
             },
           };
         }
 
-        const window = resolveSelectionWindow({
-          list,
-          playerIndices,
-          info,
-          policy: settings.prologuePolicy,
-          includeTrailingNpc: settings.includeTrailingNpc === true,
-        });
-        const {
-          turns: turnsOut,
-          indices,
-          ordinals,
-        } = buildResult(window.startIndex, window.endIndex);
-        const startIndex = indices.length ? indices[0] : -1;
-        const endIndex = indices.length ? indices[indices.length - 1] : -1;
-        const entryInfo =
-          window.axis === 'entry'
-            ? {
-                entryStartIndex: window.entryStartIndex,
-                entryEndIndex: window.entryEndIndex,
-                entryStartOrdinal: window.entryStartOrdinal,
-                entryEndOrdinal: window.entryEndOrdinal,
-                entryCount: window.entryCount,
-              }
-            : {};
+        const startPos = Math.max(0, totalMessages - bounds.end);
+        const endPos = Math.max(startPos, totalMessages - bounds.start);
+        const { turns: turnsOut, indices, ordinals, rangeDetails } =
+          deriveSelection(startPos, endPos);
+
         if (settings.traceRange) {
           console.table({
-            axis: window.axis,
-            policy: window.policy,
-            startOrdinal: window.startOrdinal,
-            endOrdinal: window.endOrdinal,
-            startPos: window.startPos,
-            endPos: window.endPos,
-            startPlayerIndex: window.startPlayerIndex,
-            endPlayerIndex: window.endPlayerIndex,
-            prevPlayerIndex: window.prevPlayerIndex,
-            nextPlayerIndex: window.nextPlayerIndex,
-            resolvedStartIndex: window.startIndex,
-            resolvedEndIndex: window.endIndex,
-            totalPlayers: window.totalPlayers,
-            totalEntries: window.totalEntries,
+            axis: 'message',
+            startOrdinal: bounds.start,
+            endOrdinal: bounds.end,
+            resolvedStartIndex: rangeDetails.startIndex,
+            resolvedEndIndex: rangeDetails.endIndex,
+            totalMessages,
             includeCount: includeIndices.size,
           });
         }
+
         return {
           turns: turnsOut,
           indices,
           ordinals,
           info: {
-            ...info,
-            total: info.total,
-            playerTotal: totalPlayers,
-            entryTotal: totalEntryCount,
-            all: totalEntryCount,
-            startIndex,
-            endIndex,
-            ...entryInfo,
+            ...bounds,
+            startIndex: rangeDetails.startIndex,
+            endIndex: rangeDetails.endIndex,
+            messageStartIndex: rangeDetails.messageStartIndex,
+            messageEndIndex: rangeDetails.messageEndIndex,
           },
         };
       },
@@ -821,34 +639,46 @@
         notify();
         return snapshot();
       },
-      setAxis(axisValue) {
-        const nextAxis = axisValue === 'entry' ? 'entry' : 'player';
-        if (requested.axis === nextAxis) return snapshot();
-        requested.axis = nextAxis;
-        clampRequestedToTotal();
+      setAxis() {
+        requested.axis = 'message';
         notify();
         return snapshot();
       },
       clear() {
-        if (requested.start === null && requested.end === null)
-          return snapshot();
+        if (requested.start === null && requested.end === null) return snapshot();
         requested.start = null;
         requested.end = null;
         notify();
         return snapshot();
       },
       setTotals(input = {}) {
-        const nextPlayer = Number.isFinite(Number(input.player))
-          ? Math.max(0, Math.floor(Number(input.player)))
+        const nextMessage = Number.isFinite(Number(input.message ?? input.entry ?? input.all))
+          ? Math.max(0, Math.floor(Number(input.message ?? input.entry ?? input.all)))
           : 0;
-        const entrySource = input.entry !== undefined ? input.entry : input.all;
+        const nextUser = Number.isFinite(Number(input.user ?? input.player))
+          ? Math.max(0, Math.floor(Number(input.user ?? input.player)))
+          : 0;
+        const nextLlm = Number.isFinite(Number(input.llm))
+          ? Math.max(0, Math.floor(Number(input.llm)))
+          : 0;
+        const entrySource = input.entry ?? input.all ?? nextMessage;
         const nextEntry = Number.isFinite(Number(entrySource))
           ? Math.max(0, Math.floor(Number(entrySource)))
           : 0;
-        if (totals.player === nextPlayer && totals.entry === nextEntry) {
+        if (
+          totals.message === nextMessage &&
+          totals.user === nextUser &&
+          totals.llm === nextLlm &&
+          totals.entry === nextEntry
+        ) {
           return snapshot();
         }
-        totals = { player: nextPlayer, entry: nextEntry };
+        totals = {
+          message: nextMessage,
+          user: nextUser,
+          llm: nextLlm,
+          entry: nextEntry,
+        };
         clampRequestedToTotal();
         notify();
         return snapshot();
@@ -865,6 +695,7 @@
       },
     };
   })();
+
 
   GMH.Core.ExportRange = ExportRange;
   GMH.Core.getEntryOrigin = () => entryOrigin.slice();
@@ -906,7 +737,7 @@
         }
         const normalizedId =
           typeof messageId === 'string' && messageId ? messageId : null;
-        const normalizedAxis = axis === 'entry' ? 'entry' : 'player';
+        const normalizedAxis = axis === 'entry' ? 'entry' : 'message';
         const key = makeKey(normalizedIndex, normalizedId);
         const entry = {
           key,
@@ -998,7 +829,7 @@
         (node) => node instanceof Element,
       );
 
-      let playerCount = 0;
+      let userMessageCount = 0;
 
       blocks.forEach((block, idx) => {
         try {
@@ -1013,26 +844,35 @@
           else block.removeAttribute('data-gmh-message-id');
           const role = adapter?.detectRole?.(block) || 'unknown';
           block.setAttribute('data-gmh-message-role', role);
-          if (role === 'player') playerCount += 1;
-          else block.removeAttribute('data-gmh-player-turn');
+          const channel = role === 'player' ? 'user' : 'llm';
+          block.setAttribute('data-gmh-channel', channel);
+          if (channel === 'user') userMessageCount += 1;
+          block.removeAttribute('data-gmh-player-turn');
+          block.removeAttribute('data-gmh-user-ordinal');
+          block.removeAttribute('data-gmh-message-ordinal');
         } catch (err) {
           /* ignore per-node errors */
         }
       });
 
-      let ordinal = 0;
+      let messageOrdinal = 0;
+      let userOrdinal = 0;
       for (let i = blocks.length - 1; i >= 0; i -= 1) {
         const block = blocks[i];
         if (!block) continue;
-        if (block.getAttribute('data-gmh-message-role') === 'player') {
-          ordinal += 1;
-          block.setAttribute('data-gmh-player-turn', String(ordinal));
+        messageOrdinal += 1;
+        block.setAttribute('data-gmh-message-ordinal', String(messageOrdinal));
+        if (block.getAttribute('data-gmh-channel') === 'user') {
+          userOrdinal += 1;
+          block.setAttribute('data-gmh-user-ordinal', String(userOrdinal));
+        } else {
+          block.removeAttribute('data-gmh-user-ordinal');
         }
       }
 
       lastSummary = {
         totalMessages: blocks.length,
-        playerMessages: ordinal,
+        userMessages: userMessageCount,
         containerPresent: Boolean(container),
         timestamp: Date.now(),
       };
@@ -1045,7 +885,9 @@
         : 0;
       const entryCount = blocks.length || uniqueEntryCount;
       GMH.Core.ExportRange.setTotals({
-        player: ordinal,
+        message: blocks.length,
+        user: userMessageCount,
+        llm: Math.max(blocks.length - userMessageCount, 0),
         entry: entryCount,
       });
 
@@ -1144,8 +986,8 @@
         message.getAttribute('data-turn-index');
       if (indexAttr === null) return;
       const ordinalAttr =
-        message.getAttribute('data-gmh-player-turn') ||
-        message.getAttribute('data-player-turn');
+        message.getAttribute('data-gmh-message-ordinal') ||
+        message.getAttribute('data-message-ordinal');
       const messageIdAttr =
         message.getAttribute('data-gmh-message-id') ||
         message.getAttribute('data-message-id');
@@ -1156,7 +998,7 @@
         index,
         ordinal,
         messageIdAttr || null,
-        'player',
+        'message',
       );
     };
 
@@ -1691,12 +1533,15 @@
   }
 
   function collectSessionStats(session) {
-    if (!session) return { playerTurns: 0, totalTurns: 0, warnings: 0 };
-    const playerTurns =
-      session.turns?.filter((turn) => turn.role === 'player')?.length || 0;
-    const totalTurns = session.turns?.length || 0;
+    if (!session)
+      return { userMessages: 0, llmMessages: 0, totalMessages: 0, warnings: 0 };
+    const userMessages =
+      session.turns?.filter((turn) => turn.channel === 'user')?.length || 0;
+    const llmMessages =
+      session.turns?.filter((turn) => turn.channel === 'llm')?.length || 0;
+    const totalMessages = session.turns?.length || 0;
     const warnings = session.warnings?.length || 0;
-    return { playerTurns, totalTurns, warnings };
+    return { userMessages, llmMessages, totalMessages, warnings };
   }
 
   const PREVIEW_TURN_LIMIT = 5;
@@ -2160,29 +2005,25 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     };
 
     const turnsLabel = overallStats
-      ? `플레이어 ${stats.playerTurns}/${overallStats.playerTurns} · 전체 메시지 ${stats.totalTurns}/${overallStats.totalTurns}`
-      : `플레이어 ${stats.playerTurns} · 전체 메시지 ${stats.totalTurns}`;
+      ? `유저 메시지 ${stats.userMessages}/${overallStats.userMessages} · 전체 메시지 ${stats.totalMessages}/${overallStats.totalMessages}`
+      : `유저 메시지 ${stats.userMessages} · 전체 메시지 ${stats.totalMessages}`;
     const summaryRows = [
       createSummaryRow('프로필', profileLabel),
-      createSummaryRow('턴 수', turnsLabel),
+      createSummaryRow('메시지 수', turnsLabel),
       createSummaryRow('레다크션', summary),
     ];
     summaryRows.forEach((row) => summaryBox.appendChild(row));
     if (rangeInfo?.total) {
-      const axis = rangeInfo.axis === 'entry' ? 'entry' : 'player';
-      const axisLabel = axis === 'entry' ? '메시지' : '플레이어';
-      const axisTotal = rangeInfo.total;
+      const messageTotal = rangeInfo.messageTotal ?? rangeInfo.total;
       const rangeText = rangeInfo.active
-        ? `${axisLabel} ${rangeInfo.start}-${rangeInfo.end} · ${rangeInfo.count}/${axisTotal}`
-        : `${axisLabel} ${axisTotal}개 전체`;
-      const complement =
-        axis === 'entry'
-          ? rangeInfo.playerTotal
-            ? ` · 플레이어 ${rangeInfo.playerTotal}개`
-            : ''
-          : rangeInfo.entryTotal
-            ? ` · 메시지 ${rangeInfo.entryTotal}개`
-            : '';
+        ? `메시지 ${rangeInfo.start}-${rangeInfo.end} · ${rangeInfo.count}/${messageTotal}`
+        : `메시지 ${messageTotal}개 전체`;
+      const extraParts = [];
+      if (Number.isFinite(rangeInfo.userTotal))
+        extraParts.push(`유저 ${rangeInfo.userTotal}개`);
+      if (Number.isFinite(rangeInfo.llmTotal))
+        extraParts.push(`LLM ${rangeInfo.llmTotal}개`);
+      const complement = extraParts.length ? ` · ${extraParts.join(' · ')}` : '';
       summaryBox.appendChild(createSummaryRow('범위', rangeText + complement));
     }
     body.appendChild(summaryBox);
@@ -2190,7 +2031,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const previewTitle = document.createElement('div');
     previewTitle.style.fontWeight = '600';
     previewTitle.style.color = '#cbd5f5';
-    previewTitle.textContent = `미리보기 (${Math.min(previewTurns.length, PREVIEW_TURN_LIMIT)}턴)`;
+    previewTitle.textContent = `미리보기 (${Math.min(previewTurns.length, PREVIEW_TURN_LIMIT)}메시지)`;
     body.appendChild(previewTitle);
 
     const turnList = document.createElement('ul');
@@ -2240,7 +2081,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         const badge = document.createElement('span');
         badge.className = 'gmh-turn-list__badge';
         speaker.appendChild(badge);
-        badge.textContent = `턴 ${playerOrdinal}`;
+        badge.textContent = `메시지 ${playerOrdinal}`;
       }
       const text = document.createElement('div');
       text.className = 'gmh-preview-turn-text';
@@ -2254,7 +2095,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       empty.className = 'gmh-preview-turn';
       const text = document.createElement('div');
       text.className = 'gmh-preview-turn-text';
-      text.textContent = '표시할 턴이 없습니다. 상단 요약만 확인해주세요.';
+      text.textContent = '표시할 메시지가 없습니다. 상단 요약만 확인해주세요.';
       empty.appendChild(text);
       turnList.appendChild(empty);
     }
@@ -2345,36 +2186,32 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     };
 
     const turnsLabel = overallStats
-      ? `플레이어 ${stats.playerTurns}/${overallStats.playerTurns} · 전체 메시지 ${stats.totalTurns}/${overallStats.totalTurns}`
-      : `플레이어 ${stats.playerTurns} · 전체 메시지 ${stats.totalTurns}`;
+      ? `유저 메시지 ${stats.userMessages}/${overallStats.userMessages} · 전체 메시지 ${stats.totalMessages}/${overallStats.totalMessages}`
+      : `유저 메시지 ${stats.userMessages} · 전체 메시지 ${stats.totalMessages}`;
     const privacyRows = [
       createPrivacyRow('프로필', profileLabel),
-      createPrivacyRow('턴 수', turnsLabel),
+      createPrivacyRow('메시지 수', turnsLabel),
       createPrivacyRow('레다크션', summary),
     ];
     privacyRows.forEach((row) => summaryBox.appendChild(row));
     if (rangeInfo?.total) {
-      const axis = rangeInfo.axis === 'entry' ? 'entry' : 'player';
-      const axisLabel = axis === 'entry' ? '메시지' : '플레이어';
-      const axisTotal = rangeInfo.total;
+      const messageTotal = rangeInfo.messageTotal ?? rangeInfo.total;
       const rangeText = rangeInfo.active
-        ? `${axisLabel} ${rangeInfo.start}-${rangeInfo.end} · ${rangeInfo.count}/${axisTotal}`
-        : `${axisLabel} ${axisTotal}개 전체`;
-      const complement =
-        axis === 'entry'
-          ? rangeInfo.playerTotal
-            ? ` · 플레이어 ${rangeInfo.playerTotal}개`
-            : ''
-          : rangeInfo.entryTotal
-            ? ` · 메시지 ${rangeInfo.entryTotal}개`
-            : '';
+        ? `메시지 ${rangeInfo.start}-${rangeInfo.end} · ${rangeInfo.count}/${messageTotal}`
+        : `메시지 ${messageTotal}개 전체`;
+      const extraParts = [];
+      if (Number.isFinite(rangeInfo.userTotal))
+        extraParts.push(`유저 ${rangeInfo.userTotal}개`);
+      if (Number.isFinite(rangeInfo.llmTotal))
+        extraParts.push(`LLM ${rangeInfo.llmTotal}개`);
+      const complement = extraParts.length ? ` · ${extraParts.join(' · ')}` : '';
       summaryBox.appendChild(createPrivacyRow('범위', rangeText + complement));
     }
     stack.appendChild(summaryBox);
 
     const previewTitle = document.createElement('div');
     previewTitle.className = 'gmh-section-title';
-    previewTitle.textContent = `미리보기 (${Math.min(previewTurns.length, PREVIEW_TURN_LIMIT)}턴)`;
+    previewTitle.textContent = `미리보기 (${Math.min(previewTurns.length, PREVIEW_TURN_LIMIT)}메시지)`;
     stack.appendChild(previewTitle);
 
     const turnList = document.createElement('ul');
@@ -2423,7 +2260,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       if (typeof playerOrdinal === 'number' && playerOrdinal > 0) {
         const badge = document.createElement('span');
         badge.className = 'gmh-turn-list__badge';
-        badge.textContent = `턴 ${playerOrdinal}`;
+        badge.textContent = `메시지 ${playerOrdinal}`;
         speaker.appendChild(badge);
       }
 
@@ -2437,7 +2274,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     if (!turnList.children.length) {
       const empty = document.createElement('li');
       empty.className = 'gmh-turn-list__item gmh-turn-list__empty';
-      empty.textContent = '표시할 턴이 없습니다. 상단 요약만 확인해주세요.';
+      empty.textContent = '표시할 메시지가 없습니다. 상단 요약만 확인해주세요.';
       turnList.appendChild(empty);
     }
     stack.appendChild(turnList);
@@ -4368,13 +4205,13 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             ? numericTarget
             : Number(target) || 0;
           if (!goal || goal <= 0) {
-            setPanelStatus('플레이어 턴 목표가 올바르지 않습니다.', 'error');
+            setPanelStatus('유저 메시지 목표가 올바르지 않습니다.', 'error');
             return null;
           }
           this.lastTarget = goal;
           GMH.Core.State.setState(GMH.Core.STATE.SCANNING, {
-            label: '턴 확보 중',
-            message: `플레이어 턴 0/${goal}`,
+            label: '메시지 확보 중',
+            message: `유저 메시지 0/${goal}`,
             tone: 'progress',
             progress: { value: 0 },
           });
@@ -4531,6 +4368,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         role,
         text: textClean,
         sceneId: currentSceneId,
+        channel: role === 'player' ? 'user' : 'llm',
       };
       addEntriesToTurn(nextTurn, lineIndexes);
       turns.push(nextTurn);
@@ -4693,13 +4531,19 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     if (title) meta.title = title;
 
     const actorSet = new Set();
+    let userCount = 0;
+    let llmCount = 0;
     for (const t of turns) {
       if (t.role === 'player' || t.role === 'npc') actorSet.add(t.speaker);
+      if (t.channel === 'user') userCount += 1;
+      else if (t.channel === 'llm') llmCount += 1;
     }
     meta.actors = Array.from(actorSet);
     if (!meta.title && meta.place) meta.title = `${meta.place} 세션`;
     meta.player = PLAYER_NAMES[0] || '플레이어';
-    meta.turn_count = turns.filter((t) => t.role === 'player').length;
+    meta.turn_count = userCount;
+    meta.message_count = turns.length;
+    meta.channel_counts = { user: userCount, llm: llmCount };
     return meta;
   }
 
@@ -4946,12 +4790,15 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const raw = readTranscriptText();
       const normalized = normalizeTranscript(raw);
       const session = buildSession(normalized);
-      const playerTurns = session.turns.filter(
-        (t) => t.role === 'player',
+      const userMessages = session.turns.filter(
+        (t) => t.channel === 'user',
+      ).length;
+      const llmMessages = session.turns.filter(
+        (t) => t.channel === 'llm',
       ).length;
       const previousTotals = GMH.Core.ExportRange.getTotals
         ? GMH.Core.ExportRange.getTotals()
-        : { player: 0, entry: 0 };
+        : { message: 0, user: 0, llm: 0, entry: 0 };
       const blockSet = new Set();
       session.turns.forEach((turn) => {
         const blocks = Array.isArray(turn?.__gmhSourceBlocks)
@@ -4965,16 +4812,25 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       });
       const entryCount = blockSet.size || session.turns.length;
       GMH.Core.ExportRange.setTotals({
-        player: Math.max(previousTotals.player || 0, playerTurns),
+        message: Math.max(previousTotals.message || 0, session.turns.length),
+        user: Math.max(previousTotals.user || 0, userMessages),
+        llm: Math.max(previousTotals.llm || 0, llmMessages),
         entry: entryCount,
       });
       return {
         session,
-        playerTurns,
-        totalTurns: session.turns.length,
+        userMessages,
+        llmMessages,
+        totalMessages: session.turns.length,
       };
     } catch (error) {
-      return { session: null, playerTurns: 0, totalTurns: 0, error };
+      return {
+        session: null,
+        userMessages: 0,
+        llmMessages: 0,
+        totalMessages: 0,
+        error,
+      };
     }
   }
 
@@ -5024,7 +4880,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     } else {
       GMH.Core.State.setState(GMH.Core.STATE.DONE, {
         label: '자동 로딩 완료',
-        message: `플레이어 턴 ${stats.playerTurns}개 확보`,
+        message: `유저 메시지 ${stats.userMessages}개 확보`,
         tone: 'success',
         progress: { value: 1 },
       });
@@ -5049,7 +4905,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     let stableRounds = 0;
     let stagnantRounds = 0;
     let loopCount = 0;
-    let prevPlayerTurns = -1;
+    let prevUserMessages = -1;
 
     while (AUTO_STATE.running && loopCount < profile.guardLimit) {
       loopCount += 1;
@@ -5063,20 +4919,20 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         });
         break;
       }
-      if (stats.playerTurns >= target) {
+      if (stats.userMessages >= target) {
         GMH.Core.State.setState(GMH.Core.STATE.DONE, {
           label: '자동 로딩 완료',
-          message: `목표 달성 · 플레이어 턴 ${stats.playerTurns}개 확보`,
+          message: `목표 달성 · 유저 메시지 ${stats.userMessages}개 확보`,
           tone: 'success',
           progress: { value: 1 },
         });
         break;
       }
 
-      const ratio = target > 0 ? Math.min(1, stats.playerTurns / target) : 0;
+      const ratio = target > 0 ? Math.min(1, stats.userMessages / target) : 0;
       GMH.Core.State.setState(GMH.Core.STATE.SCANNING, {
-        label: '턴 확보 중',
-        message: `플레이어 턴 ${stats.playerTurns}/${target}`,
+        label: '메시지 확보 중',
+        message: `유저 메시지 ${stats.userMessages}/${target}`,
         tone: 'progress',
         progress: { value: ratio },
       });
@@ -5088,8 +4944,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       else stableRounds = 0;
 
       stagnantRounds =
-        stats.playerTurns === prevPlayerTurns ? stagnantRounds + 1 : 0;
-      prevPlayerTurns = stats.playerTurns;
+        stats.userMessages === prevUserMessages ? stagnantRounds + 1 : 0;
+      prevUserMessages = stats.userMessages;
 
       if (
         stableRounds >= profile.maxStableRounds ||
@@ -5112,7 +4968,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     if (finalStats?.error) {
       GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
         label: '자동 로딩 실패',
-        message: '턴 정보를 수집하지 못했습니다.',
+        message: '메시지 정보를 수집하지 못했습니다.',
         tone: 'error',
         progress: { value: 1 },
       });
@@ -5120,10 +4976,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     }
     if (GMH.Core.State.getState() === GMH.Core.STATE.SCANNING) {
       const ratio =
-        target > 0 ? Math.min(1, finalStats.playerTurns / target) : 0;
+        target > 0 ? Math.min(1, finalStats.userMessages / target) : 0;
       GMH.Core.State.setState(GMH.Core.STATE.DONE, {
         label: '자동 로딩 종료',
-        message: `플레이어 턴 ${finalStats.playerTurns}/${target}`,
+        message: `유저 메시지 ${finalStats.userMessages}/${target}`,
         tone: 'warning',
         progress: { value: ratio },
       });
@@ -5147,10 +5003,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const render = () => {
       const stats = collectTurnStats();
       if (stats.error) {
-        meter.textContent = '턴 측정 실패: DOM을 읽을 수 없습니다.';
+      meter.textContent = '메시지 측정 실패: DOM을 읽을 수 없습니다.';
         return;
       }
-      meter.textContent = `턴 현황 · 플레이어 ${stats.playerTurns}턴`;
+      meter.textContent = `메시지 현황 · 유저 ${stats.userMessages} · LLM ${stats.llmMessages}`;
     };
     render();
     if (AUTO_STATE.meterTimer) return;
@@ -5180,8 +5036,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         <button id="gmh-autoload-stop" class="gmh-panel-btn gmh-panel-btn--warn gmh-panel-btn--compact">정지</button>
       </div>
       <div class="gmh-field-row">
-        <input id="gmh-autoload-turns" class="gmh-input" type="number" min="1" step="1" placeholder="최근 플레이어 턴 N" />
-        <button id="gmh-autoload-turns-btn" class="gmh-small-btn gmh-small-btn--accent">턴 확보</button>
+        <input id="gmh-autoload-turns" class="gmh-input" type="number" min="1" step="1" placeholder="최근 유저 메시지 N" />
+        <button id="gmh-autoload-turns-btn" class="gmh-small-btn gmh-small-btn--accent">메시지 확보</button>
       </div>
       <div id="gmh-turn-meter" class="gmh-subtext"></div>
     `;
@@ -5214,7 +5070,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const rawVal = inputTurns?.value?.trim();
       const target = Number.parseInt(rawVal || '0', 10);
       if (!Number.isFinite(target) || target <= 0) {
-        setPanelStatus('플레이어 턴 수를 입력해주세요.', 'error');
+        setPanelStatus('유저 메시지 수를 입력해주세요.', 'error');
         return;
       }
       toggleControls(true);
@@ -5249,8 +5105,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         <button id="gmh-autoload-stop" style="width:88px; background:#ef4444; border:0; color:#fff; border-radius:8px; padding:6px; cursor:pointer;">정지</button>
       </div>
       <div style="display:flex; gap:8px; align-items:center;">
-        <input id="gmh-autoload-turns" type="number" min="1" step="1" placeholder="최근 플레이어 턴 N" style="flex:1; background:#111827; color:#f1f5f9; border:1px solid #1f2937; border-radius:8px; padding:6px;" />
-        <button id="gmh-autoload-turns-btn" style="width:96px; background:#34d399; border:0; color:#041; border-radius:8px; padding:6px; cursor:pointer;">턴 확보</button>
+        <input id="gmh-autoload-turns" type="number" min="1" step="1" placeholder="최근 유저 메시지 N" style="flex:1; background:#111827; color:#f1f5f9; border:1px solid #1f2937; border-radius:8px; padding:6px;" />
+        <button id="gmh-autoload-turns-btn" style="width:96px; background:#34d399; border:0; color:#041; border-radius:8px; padding:6px; cursor:pointer;">메시지 확보</button>
       </div>
       <div id="gmh-turn-meter" style="opacity:.7; font-size:11px;"></div>
     `;
@@ -5285,7 +5141,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const rawVal = inputTurns?.value?.trim();
       const target = Number.parseInt(rawVal || '0', 10);
       if (!Number.isFinite(target) || target <= 0) {
-        setPanelStatus('플레이어 턴 수를 입력해주세요.', 'error');
+        setPanelStatus('유저 메시지 수를 입력해주세요.', 'error');
         return;
       }
       toggleControls(true);
@@ -5293,7 +5149,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         const stats = await autoLoader.start('turns', target);
         if (stats && !stats.error) {
           setPanelStatus(
-            `현재 플레이어 턴 ${stats.playerTurns}개 확보.`,
+            `현재 유저 메시지 ${stats.userMessages}개 확보.`,
             'success',
           );
         }
@@ -5474,7 +5330,6 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       mountStatusActionsLegacy(panel);
     }
 
-    const rangeAxisSelect = panel.querySelector('#gmh-range-axis');
     const rangeStartInput = panel.querySelector('#gmh-range-start');
     const rangeEndInput = panel.querySelector('#gmh-range-end');
     const rangeClearBtn = panel.querySelector('#gmh-range-clear');
@@ -5502,7 +5357,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       entries.forEach((entry) => {
         const option = document.createElement('option');
         option.value = entry.key;
-        const axisLabel = entry.axis === 'entry' ? '메시지' : '턴';
+        const axisLabel =
+          entry.axis === 'player'
+            ? '유저'
+            : '메시지';
         const ordinalText = Number.isFinite(entry.ordinal)
           ? `${axisLabel} ${entry.ordinal}`
           : `${axisLabel} ?`;
@@ -5553,71 +5411,52 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const syncRangeControls = (snapshot) => {
       if (!snapshot) return;
       const { bounds, totals, range } = snapshot;
-      const axis =
-        range.axis === 'entry' || bounds.axis === 'entry' ? 'entry' : 'player';
-      const playerTotal = totals?.player ?? bounds.playerTotal ?? 0;
-      const entryTotal = totals?.entry ?? bounds.entryTotal ?? 0;
-      const axisTotal = axis === 'entry' ? entryTotal : playerTotal;
+      const messageTotal = totals?.message ?? bounds.messageTotal ?? 0;
+      const userTotal = totals?.user ?? bounds.userTotal ?? 0;
+      const llmTotal = totals?.llm ?? bounds.llmTotal ?? 0;
       const resolvedStart = bounds.active ? bounds.start : null;
       const resolvedEnd = bounds.active ? bounds.end : null;
-      if (rangeAxisSelect) {
-        rangeAxisSelect.value = axis;
-      }
+
       if (rangeStartInput) {
-        if (axisTotal) rangeStartInput.max = String(axisTotal);
+        if (messageTotal) rangeStartInput.max = String(messageTotal);
         else rangeStartInput.removeAttribute('max');
-        rangeStartInput.dataset.gmhAxis = axis;
+        rangeStartInput.dataset.gmhAxis = 'message';
         rangeStartInput.value = resolvedStart ? String(resolvedStart) : '';
         rangeStartInput.dataset.gmhRequested = range.start
           ? String(range.start)
           : '';
       }
       if (rangeEndInput) {
-        if (axisTotal) rangeEndInput.max = String(axisTotal);
+        if (messageTotal) rangeEndInput.max = String(messageTotal);
         else rangeEndInput.removeAttribute('max');
-        rangeEndInput.dataset.gmhAxis = axis;
+        rangeEndInput.dataset.gmhAxis = 'message';
         rangeEndInput.value = resolvedEnd ? String(resolvedEnd) : '';
         rangeEndInput.dataset.gmhRequested = range.end ? String(range.end) : '';
       }
       if (rangeMarkStartBtn) {
-        if (axis !== 'player')
-          rangeMarkStartBtn.setAttribute('disabled', 'true');
-        else rangeMarkStartBtn.removeAttribute('disabled');
+        if (messageTotal) rangeMarkStartBtn.removeAttribute('disabled');
+        else rangeMarkStartBtn.setAttribute('disabled', 'true');
       }
       if (rangeMarkEndBtn) {
-        if (axis !== 'player') rangeMarkEndBtn.setAttribute('disabled', 'true');
-        else rangeMarkEndBtn.removeAttribute('disabled');
+        if (messageTotal) rangeMarkEndBtn.removeAttribute('disabled');
+        else rangeMarkEndBtn.setAttribute('disabled', 'true');
       }
       if (rangeSummary) {
-        const axisLabel = axis === 'entry' ? '메시지' : '플레이어 턴';
-        if (!axisTotal) {
-          rangeSummary.textContent =
-            axis === 'entry'
-              ? '로드된 메시지가 없습니다.'
-              : '로드된 플레이어 턴이 없습니다.';
+        if (!messageTotal) {
+          rangeSummary.textContent = '로드된 메시지가 없습니다.';
           rangeSummary.title = '';
         } else if (!bounds.active) {
-          let text = `최근 ${axisLabel} ${axisTotal}개 전체`;
-          if (axis === 'entry' && playerTotal)
-            text += ` · 플레이어 턴 ${playerTotal}개`;
-          if (axis === 'player' && entryTotal)
-            text += ` · 메시지 ${entryTotal}개`;
-          rangeSummary.textContent = text;
-          rangeSummary.title =
-            axis === 'entry'
-              ? '메시지 축에서는 북마크가 해당 메시지 위치로 매핑됩니다.'
-              : '';
+          let textLabel = `최근 메시지 ${messageTotal}개 전체`;
+          if (userTotal) textLabel += ` · 유저 ${userTotal}개`;
+          if (llmTotal) textLabel += ` · LLM ${llmTotal}개`;
+          rangeSummary.textContent = textLabel;
+          rangeSummary.title = '';
         } else {
-          let text = `최근 ${axisLabel} ${bounds.start}-${bounds.end} · ${bounds.count}개 / 전체 ${bounds.total}개`;
-          if (axis === 'entry' && playerTotal)
-            text += ` · 플레이어 턴 ${playerTotal}개`;
-          if (axis === 'player' && entryTotal)
-            text += ` · 메시지 ${entryTotal}개`;
-          rangeSummary.textContent = text;
-          rangeSummary.title =
-            axis === 'entry'
-              ? '북마크를 클릭하면 해당 메시지를 기준으로 범위가 지정됩니다.'
-              : '';
+          let textLabel = `최근 메시지 ${bounds.start}-${bounds.end} · ${bounds.count}개 / 전체 ${bounds.total}개`;
+          if (userTotal) textLabel += ` · 유저 ${userTotal}개`;
+          if (llmTotal) textLabel += ` · LLM ${llmTotal}개`;
+          rangeSummary.textContent = textLabel;
+          rangeSummary.title = '';
         }
       }
     };
@@ -5659,12 +5498,6 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         rangeEndInput.addEventListener('change', handleEndChange);
         rangeEndInput.addEventListener('blur', handleEndChange);
       }
-      if (rangeAxisSelect) {
-        rangeAxisSelect.addEventListener('change', () => {
-          const next = rangeAxisSelect.value === 'entry' ? 'entry' : 'player';
-          GMH.Core.ExportRange.setAxis(next);
-        });
-      }
       if (rangeClearBtn) {
         rangeClearBtn.addEventListener('click', () => {
           GMH.Core.ExportRange.clear();
@@ -5674,458 +5507,109 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           if (rangeBookmarkSelect) rangeBookmarkSelect.value = '';
         });
       }
-      const doBookmark = async (mode) => {
-        const stats = collectTurnStats();
-        const rangeState = GMH.Core.ExportRange.getRange
-          ? GMH.Core.ExportRange.getRange()
-          : { axis: 'player' };
-        const axisPreference =
-          rangeAxisSelect?.value === 'entry' || rangeState.axis === 'entry'
-            ? 'entry'
-            : 'player';
-        const entryOrigin = GMH.Core.getEntryOrigin?.() || [];
-        if (stats.error || !stats.session?.turns?.length) {
-          setPanelStatus(
-            '현재 대화에서 턴 정보를 찾을 수 없습니다.',
-            'warning',
-          );
-          return;
+      const getActiveBookmark = () => {
+        if (rangeBookmarkSelect) {
+          const key = rangeBookmarkSelect.value || selectedBookmarkKey || '';
+          if (key) {
+            const picked = GMH.Core.TurnBookmarks.pick(key);
+            if (picked) return picked;
+          }
         }
-        const adapter = getActiveAdapter();
-        const container = adapter?.findContainer?.(document);
-        const blockNodes =
-          adapter?.listMessageBlocks?.(container || document) || [];
-        const blocks = Array.from(blockNodes).filter(
-          (node) => node instanceof Element,
-        );
-        const playerIndices = [];
-        let highestOrdinal = 0;
-        const blockIndexMap = new Map();
-        const blockIndexList = [];
-        blocks.forEach((block, idx) => {
-          if (block?.getAttribute?.('data-gmh-message-role') === 'player') {
-            playerIndices.push(idx);
-            const ordAttr = Number(block.getAttribute('data-gmh-player-turn'));
-            if (Number.isFinite(ordAttr))
-              highestOrdinal = Math.max(highestOrdinal, ordAttr);
-          }
-          const blockIdxAttr = Number(
-            block?.getAttribute?.('data-gmh-message-index'),
-          );
-          if (Number.isFinite(blockIdxAttr)) {
-            blockIndexMap.set(blockIdxAttr, block);
-            blockIndexList.push(blockIdxAttr);
-          }
-        });
+        return GMH.Core.TurnBookmarks.latest();
+      };
 
-        const uniqueBlockIndices = blockIndexList.length
-          ? Array.from(new Set(blockIndexList)).sort((a, b) => a - b)
-          : [];
-        const totalMessageEntries = uniqueBlockIndices.length;
-        const blockOrdinalMap = new Map();
-        uniqueBlockIndices.forEach((blockIdx, pos) => {
-          const ordinalFromLatest = totalMessageEntries - pos;
-          blockOrdinalMap.set(blockIdx, ordinalFromLatest);
-        });
-        const entryOriginIndices = entryOrigin
-          .map((value) =>
-            Number.isInteger(value) && value >= 0 ? value : null,
-          )
-          .filter((value) => value !== null);
-
-        const totalPlayers = Math.max(
-          highestOrdinal,
-          Number(stats.playerTurns) || 0,
-          playerIndices.length,
-        );
-
-        if (
-          axisPreference === 'player' &&
-          (!totalPlayers || !playerIndices.length)
-        ) {
-          setPanelStatus(
-            '플레이어 턴이 없어 범위를 지정할 수 없습니다.',
-            'warning',
-          );
-          return;
-        }
-
-        const selectBlockByIndex = (idx) => {
-          const numeric = Number(idx);
-          if (!Number.isFinite(numeric)) return null;
-          if (blockIndexMap.has(numeric)) return blockIndexMap.get(numeric);
-          try {
-            return document.querySelector(
-              `[data-gmh-message-index="${numeric}"]`,
-            );
-          } catch (err) {
-            return null;
-          }
+      const doBookmark = (mode) => {
+        const resolveFromElement = (element) => {
+          if (!(element instanceof Element)) return null;
+          const messageEl = element.closest('[data-gmh-message-index]');
+          if (!messageEl) return null;
+          const indexAttr = messageEl.getAttribute('data-gmh-message-index');
+          const ordinalAttr = messageEl.getAttribute('data-gmh-message-ordinal');
+          const messageIdAttr =
+            messageEl.getAttribute('data-gmh-message-id') ||
+            messageEl.getAttribute('data-message-id');
+          const index = Number(indexAttr);
+          const ordinal = Number(ordinalAttr);
+          return {
+            element: messageEl,
+            index: Number.isFinite(index) ? index : null,
+            ordinal: Number.isFinite(ordinal) ? ordinal : null,
+            messageId: messageIdAttr || null,
+          };
         };
 
-        const selectBlockByMessageId = (messageId) => {
+        const safeQueryById = (messageId) => {
           if (!messageId) return null;
           try {
-            const selector = CSS?.escape
-              ? `[data-gmh-message-id="${CSS.escape(messageId)}"]`
-              : `[data-gmh-message-id="${messageId.replace(/"/g, '\\"')}"]`;
-            return document.querySelector(selector);
+            if (CSS?.escape) {
+              return document.querySelector(
+                `[data-gmh-message-id="${CSS.escape(messageId)}"]`,
+              );
+            }
+            const escaped = String(messageId).replace(/"/g, '\\"');
+            return document.querySelector(
+              `[data-gmh-message-id="${escaped}"]`,
+            );
           } catch (err) {
             return null;
           }
         };
 
-        const resolvePlayerContext = (seedIndex, seedMessageId) => {
-          const findNearestPlayerIndex = (targetIndex) => {
-            if (!playerIndices.length) return null;
-            const target = Number(targetIndex);
-            if (!Number.isFinite(target)) {
-              return playerIndices[playerIndices.length - 1];
-            }
-            let nearest = playerIndices[0];
-            let bestDiff = Math.abs(playerIndices[0] - target);
-            for (let i = 1; i < playerIndices.length; i += 1) {
-              const diff = Math.abs(playerIndices[i] - target);
-              if (diff < bestDiff) {
-                nearest = playerIndices[i];
-                bestDiff = diff;
-              }
-            }
-            return nearest;
-          };
-
-          let block = null;
-          if (Number.isFinite(Number(seedIndex))) {
-            block = selectBlockByIndex(seedIndex);
+        const getCandidateContext = () => {
+          const bookmark = getActiveBookmark();
+          if (bookmark) {
+            const fromBookmark =
+              safeQueryById(bookmark.messageId) ||
+              (Number.isFinite(bookmark.index)
+                ? document.querySelector(
+                    `[data-gmh-message-index="${bookmark.index}"]`,
+                  )
+                : null);
+            const resolvedBookmark = resolveFromElement(fromBookmark);
+            if (resolvedBookmark) return resolvedBookmark;
           }
-          if (!block && seedMessageId) {
-            block = selectBlockByMessageId(seedMessageId);
-          }
-
-          const walkBackward = (node) => {
-            let current = node;
-            while (current) {
-              if (
-                current instanceof Element &&
-                current.hasAttribute('data-gmh-message')
-              ) {
-                return current;
-              }
-              current = current.previousElementSibling;
-            }
-            return null;
-          };
-
-          let playerBlock = block;
-          if (
-            !playerBlock ||
-            !playerBlock.getAttribute('data-gmh-player-turn')
-          ) {
-            playerBlock = walkBackward(playerBlock);
-            while (
-              playerBlock &&
-              !playerBlock.getAttribute('data-gmh-player-turn')
-            ) {
-              playerBlock = walkBackward(
-                playerBlock?.previousElementSibling || null,
-              );
-            }
-          }
-
-          if (
-            !playerBlock ||
-            !playerBlock.getAttribute('data-gmh-player-turn')
-          ) {
-            const fallbackIdx = findNearestPlayerIndex(seedIndex);
-            if (Number.isFinite(fallbackIdx)) {
-              playerBlock = selectBlockByIndex(fallbackIdx);
-            }
-          }
-
-          if (
-            !playerBlock ||
-            !playerBlock.getAttribute('data-gmh-player-turn')
-          ) {
-            return null;
-          }
-
-          const idxAttr = playerBlock.getAttribute('data-gmh-message-index');
-          const ordAttr = playerBlock.getAttribute('data-gmh-player-turn');
-          const msgAttr =
-            playerBlock.getAttribute('data-gmh-message-id') ||
-            playerBlock.getAttribute('data-message-id') ||
-            null;
-          const idx = Number(idxAttr);
-          const pos = playerIndices.indexOf(idx);
-          const ordinalFromPos = pos === -1 ? null : totalPlayers - pos;
-          let ordinal = Number.isFinite(Number(ordAttr))
-            ? Number(ordAttr)
-            : ordinalFromPos;
-          if (!Number.isFinite(ordinal)) ordinal = totalPlayers;
-          ordinal = Math.max(1, Math.min(totalPlayers, ordinal));
-          return {
-            index: Number.isFinite(idx)
-              ? idx
-              : (playerIndices[playerIndices.length - 1] ?? 0),
-            ordinal,
-            messageId: msgAttr,
-          };
+          const active = document.activeElement;
+          const resolvedActive = resolveFromElement(active);
+          if (resolvedActive) return resolvedActive;
+          const latest = document.querySelector('[data-gmh-message-ordinal="1"]');
+          return resolveFromElement(latest);
         };
 
-        const getActiveBookmark = () => {
-          if (rangeBookmarkSelect) {
-            const key = rangeBookmarkSelect.value || selectedBookmarkKey || '';
-            if (key) {
-              const picked = GMH.Core.TurnBookmarks.pick(key);
-              if (picked) return picked;
-            }
-          }
-          return GMH.Core.TurnBookmarks.latest();
-        };
-
-        const bookmarkCandidate = getActiveBookmark();
-        let entryTargetIndex =
-          bookmarkCandidate && Number.isFinite(Number(bookmarkCandidate.index))
-            ? Number(bookmarkCandidate.index)
-            : null;
-        let entryTargetMessageId =
-          typeof bookmarkCandidate?.messageId === 'string'
-            ? bookmarkCandidate.messageId
-            : null;
-        let context = null;
-        if (bookmarkCandidate) {
-          context = resolvePlayerContext(
-            bookmarkCandidate.index,
-            bookmarkCandidate.messageId,
-          );
-        }
-
-        if (!context) {
-          let seedIndex = null;
-          let seedMessageId = null;
-          try {
-            const current = document.activeElement;
-            if (current && panel.contains(current)) {
-              const block = current.closest(
-                '[data-gmh-message-index],[data-turn-index],[data-message-id]',
-              );
-              if (block) {
-                const indexAttr = block.getAttribute('data-gmh-message-index');
-                const turnAttr = block.getAttribute('data-turn-index');
-                if (indexAttr !== null) seedIndex = Number(indexAttr);
-                else if (turnAttr !== null) seedIndex = Number(turnAttr);
-                const idAttr =
-                  block.getAttribute('data-gmh-message-id') ||
-                  block.getAttribute('data-message-id');
-                if (idAttr) seedMessageId = idAttr;
-              }
-            }
-          } catch (err) {
-            /* noop */
-          }
-          if (entryTargetIndex === null && Number.isFinite(seedIndex)) {
-            entryTargetIndex = Number(seedIndex);
-          }
-          if (!entryTargetMessageId && seedMessageId) {
-            entryTargetMessageId = seedMessageId;
-          }
-          if (axisPreference === 'entry') {
-            if (Number.isFinite(entryTargetIndex)) {
-              const entryOrdinal = blockOrdinalMap.get(
-                Number(entryTargetIndex),
-              );
-              context = {
-                index: Number(entryTargetIndex),
-                ordinal: Number.isFinite(entryOrdinal) ? entryOrdinal : null,
-                messageId: entryTargetMessageId,
-              };
-            }
-          } else {
-            context = resolvePlayerContext(seedIndex, seedMessageId);
-          }
-        }
-
-        if (!context) {
-          if (axisPreference === 'entry') {
-            setPanelStatus('선택한 메시지를 찾을 수 없습니다.', 'warning');
-            return;
-          }
-          const existingRange = GMH.Core.ExportRange.getRange();
-          const hasCustomRange = existingRange.start || existingRange.end;
-          const totalPlayers = playerIndices.length;
-          if (!totalPlayers) {
-            setPanelStatus('플레이어 턴을 찾을 수 없습니다.', 'warning');
-            GMH.Core.TurnBookmarks.clear();
-            return;
-          }
-
-          if (hasCustomRange) {
-            setPanelStatus(
-              '플레이어 턴을 찾지 못해 현재 지정된 범위를 유지합니다.',
-              'warning',
-            );
-            return;
-          }
-
-          if (mode === 'start') {
-            const fallbackIdx = playerIndices[0] ?? 0;
-            const block = selectBlockByIndex(fallbackIdx);
-            const messageId =
-              block?.getAttribute?.('data-gmh-message-id') ||
-              block?.getAttribute?.('data-message-id') ||
-              null;
-            GMH.Core.ExportRange.setAxis('player');
-            GMH.Core.ExportRange.setStart(totalPlayers);
-            if (rangeStartInput) rangeStartInput.value = String(totalPlayers);
-            const recorded = GMH.Core.TurnBookmarks.record(
-              fallbackIdx,
-              totalPlayers,
-              messageId,
-              'player',
-            );
-            if (recorded?.key) {
-              selectedBookmarkKey = recorded.key;
-              bookmarkSelectionPinned = false;
-              if (rangeBookmarkSelect) rangeBookmarkSelect.value = recorded.key;
-            }
-            setPanelStatus(
-              '플레이어 턴을 찾지 못해 가장 오래된 턴을 시작으로 지정했습니다.',
-              'warning',
-            );
-          } else {
-            const fallbackIdx = playerIndices[playerIndices.length - 1] ?? 0;
-            const block = selectBlockByIndex(fallbackIdx);
-            const messageId =
-              block?.getAttribute?.('data-gmh-message-id') ||
-              block?.getAttribute?.('data-message-id') ||
-              null;
-            GMH.Core.ExportRange.setAxis('player');
-            GMH.Core.ExportRange.setEnd(1);
-            if (rangeEndInput) rangeEndInput.value = '1';
-            const recorded = GMH.Core.TurnBookmarks.record(
-              fallbackIdx,
-              1,
-              messageId,
-              'player',
-            );
-            if (recorded?.key) {
-              selectedBookmarkKey = recorded.key;
-              bookmarkSelectionPinned = false;
-              if (rangeBookmarkSelect) rangeBookmarkSelect.value = recorded.key;
-            }
-            setPanelStatus(
-              '플레이어 턴을 찾지 못해 최신 턴을 끝으로 지정했습니다.',
-              'warning',
-            );
-          }
-          return;
-        }
-
-        const targetIndex = Number.isFinite(Number(context?.index))
-          ? Number(context.index)
-          : null;
-        const targetMessageId =
-          context?.messageId || entryTargetMessageId || null;
-
-        if (axisPreference === 'entry') {
-          const totalEntries = totalMessageEntries || entryOriginIndices.length;
-          if (!totalEntries) {
-            setPanelStatus('메시지 데이터를 찾지 못했습니다.', 'warning');
-            return;
-          }
-          const blockIndex = Number.isFinite(entryTargetIndex)
-            ? entryTargetIndex
-            : targetIndex;
-          if (!Number.isFinite(blockIndex)) {
-            setPanelStatus('선택한 메시지를 찾을 수 없습니다.', 'warning');
-            return;
-          }
-          let entryOrdinal = blockOrdinalMap.get(Number(blockIndex));
-          if (!Number.isFinite(entryOrdinal) && entryOriginIndices.length) {
-            const entryIndicesForBlock = entryOriginIndices
-              .map((value, idx) => (value === blockIndex ? idx : -1))
-              .filter((idx) => idx >= 0);
-            if (entryIndicesForBlock.length) {
-              const entryIndex =
-                entryIndicesForBlock[entryIndicesForBlock.length - 1];
-              entryOrdinal = entryOriginIndices.length - entryIndex;
-            }
-          }
-          if (!Number.isFinite(entryOrdinal) || entryOrdinal <= 0) {
-            setPanelStatus(
-              '선택한 메시지의 순서를 해석하지 못했습니다.',
-              'warning',
-            );
-            return;
-          }
-          GMH.Core.ExportRange.setAxis('entry');
-          if (mode === 'start') {
-            GMH.Core.ExportRange.setStart(entryOrdinal);
-            if (rangeStartInput) rangeStartInput.value = String(entryOrdinal);
-            setPanelStatus(
-              `메시지 ${entryOrdinal}을 시작으로 지정했습니다.`,
-              'info',
-            );
-          } else {
-            GMH.Core.ExportRange.setEnd(entryOrdinal);
-            if (rangeEndInput) rangeEndInput.value = String(entryOrdinal);
-            setPanelStatus(
-              `메시지 ${entryOrdinal}을 끝으로 지정했습니다.`,
-              'info',
-            );
-          }
-          const recorded = GMH.Core.TurnBookmarks.record(
-            blockIndex,
-            entryOrdinal,
-            targetMessageId || null,
-            'entry',
-          );
-          if (recorded?.key) {
-            selectedBookmarkKey = recorded.key;
-            bookmarkSelectionPinned = false;
-            if (rangeBookmarkSelect) rangeBookmarkSelect.value = recorded.key;
-          }
-          return;
-        }
-
-        const resolvedOrdinal = Number.isFinite(Number(context?.ordinal))
-          ? Number(context.ordinal)
-          : null;
-        if (!Number.isFinite(resolvedOrdinal) || resolvedOrdinal <= 0) {
-          setPanelStatus('플레이어 턴 정보를 해석하지 못했습니다.', 'warning');
+        const context = getCandidateContext();
+        if (!context || !Number.isFinite(context.ordinal) || context.ordinal <= 0) {
+          setPanelStatus('메시지를 찾을 수 없습니다.', 'warning');
           return;
         }
 
         if (mode === 'start') {
-          GMH.Core.ExportRange.setAxis('player');
-          GMH.Core.ExportRange.setStart(resolvedOrdinal);
+          GMH.Core.ExportRange.setStart(context.ordinal);
+          if (rangeStartInput) rangeStartInput.value = String(context.ordinal);
           setPanelStatus(
-            `플레이어 턴 ${resolvedOrdinal}을 시작으로 지정했습니다.`,
+            `메시지 ${context.ordinal}을 시작으로 지정했습니다.`,
             'info',
           );
-          if (rangeStartInput) rangeStartInput.value = String(resolvedOrdinal);
         } else {
-          GMH.Core.ExportRange.setAxis('player');
-          GMH.Core.ExportRange.setEnd(resolvedOrdinal);
+          GMH.Core.ExportRange.setEnd(context.ordinal);
+          if (rangeEndInput) rangeEndInput.value = String(context.ordinal);
           setPanelStatus(
-            `플레이어 턴 ${resolvedOrdinal}을 끝으로 지정했습니다.`,
+            `메시지 ${context.ordinal}을 끝으로 지정했습니다.`,
             'info',
           );
-          if (rangeEndInput) rangeEndInput.value = String(resolvedOrdinal);
         }
-        const finalBookmark = GMH.Core.TurnBookmarks.record(
-          targetIndex,
-          resolvedOrdinal,
-          targetMessageId || null,
-          'player',
+
+        const recorded = GMH.Core.TurnBookmarks.record(
+          context.index,
+          context.ordinal,
+          context.messageId,
+          'message',
         );
-        if (finalBookmark?.key) {
-          selectedBookmarkKey = finalBookmark.key;
+        if (recorded?.key) {
+          selectedBookmarkKey = recorded.key;
           bookmarkSelectionPinned = false;
-          if (rangeBookmarkSelect)
-            rangeBookmarkSelect.value = finalBookmark.key;
+          if (rangeBookmarkSelect) rangeBookmarkSelect.value = recorded.key;
         }
       };
+;
 
       if (rangeMarkStartBtn) {
         rangeMarkStartBtn.addEventListener('click', () => doBookmark('start'));
@@ -6185,9 +5669,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const raw = readTranscriptText();
       const normalized = normalizeTranscript(raw);
       const session = buildSession(normalized);
-      if (!session.turns.length) throw new Error('대화 턴을 찾을 수 없습니다.');
-      const playerCount = session.turns.filter(
-        (turn) => turn.role === 'player',
+      if (!session.turns.length) throw new Error('대화 메시지를 찾을 수 없습니다.');
+      const userCount = session.turns.filter(
+        (turn) => turn.channel === 'user',
+      ).length;
+      const llmCount = session.turns.filter(
+        (turn) => turn.channel === 'llm',
       ).length;
       const entryCount = session.turns.reduce((sum, turn) => {
         if (Array.isArray(turn?.__gmhEntries))
@@ -6195,7 +5682,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         return sum + 1;
       }, 0);
       GMH.Core.ExportRange.setTotals({
-        player: playerCount,
+        message: session.turns.length,
+        user: userCount,
+        llm: llmCount,
         entry: entryCount,
       });
       return { session, raw: normalized };
@@ -6231,8 +5720,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           return null;
         }
         const requestedRange = GMH.Core.ExportRange.getRange();
-        const sanitizedPlayerCount = privacy.sanitizedSession.turns.filter(
-          (turn) => turn.role === 'player',
+        const sanitizedUserCount = privacy.sanitizedSession.turns.filter(
+          (turn) => turn.channel === 'user',
+        ).length;
+        const sanitizedLlmCount = privacy.sanitizedSession.turns.filter(
+          (turn) => turn.channel === 'llm',
         ).length;
         const sanitizedEntryCount = privacy.sanitizedSession.turns.reduce(
           (sum, turn) =>
@@ -6241,7 +5733,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           0,
         );
         GMH.Core.ExportRange.setTotals({
-          player: sanitizedPlayerCount,
+          message: privacy.sanitizedSession.turns.length,
+          user: sanitizedUserCount,
+          llm: sanitizedLlmCount,
           entry: sanitizedEntryCount,
         });
         if (requestedRange.start || requestedRange.end) {
@@ -6254,15 +5748,6 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           privacy.sanitizedSession.turns,
         );
         const exportSession = cloneSession(privacy.sanitizedSession);
-
-        const ordinalMap = new Map();
-        let ordinalCounter = 0;
-        privacy.sanitizedSession.turns.forEach((turn, idx) => {
-          if (turn?.role === 'player') {
-            ordinalCounter += 1;
-            ordinalMap.set(idx, ordinalCounter);
-          }
-        });
 
         const entryOrigin = GMH.Core.getEntryOrigin?.() || [];
 
@@ -6280,8 +5765,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             enumerable: false,
           });
           Object.defineProperty(clone, '__gmhOrdinal', {
-            value:
-              selection.ordinals?.[localIndex] ?? ordinalMap.get(index) ?? null,
+            value: selection.ordinals?.[localIndex] ?? null,
             enumerable: false,
           });
           Object.defineProperty(clone, '__gmhSourceBlock', {
@@ -6291,45 +5775,42 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           return clone;
         });
 
-        const rangeAxis = selection.info.axis === 'entry' ? 'entry' : 'player';
         exportSession.meta = {
           ...(exportSession.meta || {}),
           turn_range: {
             active: selection.info.active,
-            axis: rangeAxis,
+            axis: 'message',
             count: selection.info.count,
-            total:
-              rangeAxis === 'entry'
-                ? selection.info.entryTotal
-                : selection.info.playerTotal,
-            player_start: rangeAxis === 'player' ? selection.info.start : null,
-            player_end: rangeAxis === 'player' ? selection.info.end : null,
-            player_count: rangeAxis === 'player' ? selection.info.count : null,
-            player_total: selection.info.playerTotal,
-            entry_start: rangeAxis === 'entry' ? selection.info.start : null,
-            entry_end: rangeAxis === 'entry' ? selection.info.end : null,
-            entry_count: rangeAxis === 'entry' ? selection.info.count : null,
-            entry_total: selection.info.entryTotal,
-            entry_start_index:
-              rangeAxis === 'entry'
-                ? (selection.info.entryStartIndex ?? null)
-                : selection.info.startIndex,
-            entry_end_index:
-              rangeAxis === 'entry'
-                ? (selection.info.entryEndIndex ?? null)
-                : selection.info.endIndex,
-            entry_start_ordinal:
-              rangeAxis === 'entry'
-                ? (selection.info.entryStartOrdinal ?? selection.info.start)
-                : null,
-            entry_end_ordinal:
-              rangeAxis === 'entry'
-                ? (selection.info.entryEndOrdinal ?? selection.info.end)
-                : null,
+            total: selection.info.messageTotal ?? selection.info.total,
+            message_start: selection.info.start,
+            message_end: selection.info.end,
+            message_total: selection.info.messageTotal ?? selection.info.total,
+            user_total: selection.info.userTotal ?? null,
+            llm_total: selection.info.llmTotal ?? null,
+            message_start_index:
+              selection.info.messageStartIndex ?? selection.info.startIndex,
+            message_end_index:
+              selection.info.messageEndIndex ?? selection.info.endIndex,
             turn_start_index: selection.info.startIndex,
             turn_end_index: selection.info.endIndex,
-            player_ordinals: selection.ordinals || [],
-            entry_indices: selectedIndices,
+            selected_ordinals: selection.ordinals || [],
+            selected_indices: selection.indices || [],
+            // Legacy fields retained for backwards compatibility
+            player_start: null,
+            player_end: null,
+            player_count: null,
+            player_total: selection.info.userTotal ?? null,
+            entry_start: null,
+            entry_end: null,
+            entry_count: null,
+            entry_total: selection.info.messageTotal ?? selection.info.total,
+            entry_start_index:
+              selection.info.messageStartIndex ?? selection.info.startIndex,
+            entry_end_index:
+              selection.info.messageEndIndex ?? selection.info.endIndex,
+            entry_start_ordinal: selection.info.start,
+            entry_end_ordinal: selection.info.end,
+            turn_indices: selection.indices || [],
           },
         };
         const stats = collectSessionStats(exportSession);
@@ -6404,7 +5885,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
                 const label =
                   turn.role === 'narration'
                     ? '내레이션'
-                    : turn.speaker || turn.role || '턴';
+                    : turn.speaker || turn.role || '메시지';
                 return `${label}: ${turn.text}`;
               })
               .join('\n')
@@ -6437,23 +5918,24 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         const summary = formatRedactionCounts(privacy.counts);
         const profileLabel =
           PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
-        const playerTotalAvailable =
-          rangeInfo?.playerTotal ||
-          overallStats?.playerTurns ||
-          stats.playerTurns;
-        const entryTotalAvailable =
-          rangeInfo?.entryTotal || sessionForExport.turns.length;
-        const axis = rangeInfo?.axis === 'entry' ? 'entry' : 'player';
-        const axisLabel = axis === 'entry' ? '메시지' : '플레이어 턴';
-        const axisTotalAvailable =
-          axis === 'entry' ? entryTotalAvailable : playerTotalAvailable;
+        const messageTotalAvailable =
+          rangeInfo?.messageTotal || sessionForExport.turns.length;
+        const userTotalAvailable =
+          rangeInfo?.userTotal ||
+          overallStats?.userMessages ||
+          stats.userMessages;
+        const llmTotalAvailable =
+          rangeInfo?.llmTotal ||
+          overallStats?.llmMessages ||
+          stats.llmMessages;
         let rangeNote = hasCustomRange
-          ? ` · (선택) ${axisLabel} ${rangeInfo.start}-${rangeInfo.end}/${axisTotalAvailable}`
-          : ` · ${axisLabel} 총 ${axisTotalAvailable}개`;
-        if (axis === 'entry') {
-          rangeNote += ` · (선택) 플레이어 턴 ${stats.playerTurns}개 / (전체) ${playerTotalAvailable}개`;
-        } else {
-          rangeNote += ` · (선택) 플레이어 턴 ${stats.playerTurns}개`;
+          ? ` · (선택) 메시지 ${rangeInfo.start}-${rangeInfo.end}/${rangeInfo.total}`
+          : ` · 전체 메시지 ${messageTotalAvailable}개`;
+        if (Number.isFinite(userTotalAvailable)) {
+          rangeNote += ` · 유저 ${stats.userMessages}개`;
+        }
+        if (Number.isFinite(llmTotalAvailable)) {
+          rangeNote += ` · LLM ${stats.llmMessages}개`;
         }
         const message = `${format.toUpperCase()} 내보내기 완료${rangeNote} · ${profileLabel} · ${summary}`;
         GMH.Core.State.setState(GMH.Core.STATE.DONE, {
@@ -6489,7 +5971,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         try {
           GMH.Core.State.setState(GMH.Core.STATE.EXPORTING, {
             label: '복사 진행 중',
-            message: '최근 15턴을 복사하는 중입니다...',
+            message: '최근 15메시지를 복사하는 중입니다...',
             tone: 'progress',
             progress: { indeterminate: true },
           });
@@ -6499,13 +5981,13 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           const md = toMarkdownExport(privacy.sanitizedSession, {
             turns,
             includeMeta: false,
-            heading: '## 최근 15턴',
+            heading: '## 최근 15메시지',
           });
           GM_setClipboard(md, { type: 'text', mimetype: 'text/plain' });
           const summary = formatRedactionCounts(privacy.counts);
           const profileLabel =
             PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
-          const message = `최근 15턴 복사 완료 · 플레이어 턴 ${effectiveStats.playerTurns}개 · ${profileLabel} · ${summary}`;
+          const message = `최근 15메시지 복사 완료 · 유저 ${effectiveStats.userMessages}개 · LLM ${effectiveStats.llmMessages}개 · ${profileLabel} · ${summary}`;
           GMH.Core.State.setState(GMH.Core.STATE.DONE, {
             label: '복사 완료',
             message,
@@ -6549,7 +6031,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           const summary = formatRedactionCounts(privacy.counts);
           const profileLabel =
             PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
-          const message = `전체 Markdown 복사 완료 · 플레이어 턴 ${effectiveStats.playerTurns}개 · ${profileLabel} · ${summary}`;
+          const message = `전체 Markdown 복사 완료 · 유저 ${effectiveStats.userMessages}개 · LLM ${effectiveStats.llmMessages}개 · ${profileLabel} · ${summary}`;
           GMH.Core.State.setState(GMH.Core.STATE.DONE, {
             label: '복사 완료',
             message,
@@ -6647,7 +6129,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           const profileLabel =
             PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
           const extra = privacy.blocked ? ' · ⚠️ 미성년자 맥락 감지' : '';
-          const message = `재파싱 완료 · 플레이어 턴 ${stats.playerTurns}개 · 경고 ${privacy.sanitizedSession.warnings.length}건 · ${profileLabel} · ${summary}${extra}`;
+        const message = `재파싱 완료 · 유저 ${stats.userMessages}개 · LLM ${stats.llmMessages}개 · 경고 ${privacy.sanitizedSession.warnings.length}건 · ${profileLabel} · ${summary}${extra}`;
           GMH.Core.State.setState(GMH.Core.STATE.DONE, {
             label: '재파싱 완료',
             message,
@@ -6773,42 +6255,34 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       <section class="gmh-panel__section" id="gmh-section-export">
         <div class="gmh-panel__section-title">Export</div>
         <div class="gmh-field-row">
-          <button id="gmh-copy-recent" class="gmh-panel-btn gmh-panel-btn--neutral">최근 15턴 복사</button>
+          <button id="gmh-copy-recent" class="gmh-panel-btn gmh-panel-btn--neutral">최근 15메시지 복사</button>
           <button id="gmh-copy-all" class="gmh-panel-btn gmh-panel-btn--neutral">전체 MD 복사</button>
         </div>
       <div class="gmh-field-row gmh-field-row--wrap">
-        <label for="gmh-range-start" class="gmh-field-label">턴 범위</label>
+        <label for="gmh-range-start" class="gmh-field-label">메시지 범위</label>
         <div class="gmh-range-controls">
-          <select
-            id="gmh-range-axis"
-            class="gmh-select gmh-select--compact"
-            title="범위 기준을 선택하세요"
-          >
-            <option value="player">플레이어</option>
-            <option value="entry">메시지</option>
-          </select>
           <input
             id="gmh-range-start"
             class="gmh-input gmh-input--compact"
             type="number"
-              min="1"
-              inputmode="numeric"
-              pattern="[0-9]*"
-              placeholder="시작"
-            />
-            <span class="gmh-range-sep" aria-hidden="true">~</span>
-            <input
-              id="gmh-range-end"
-              class="gmh-input gmh-input--compact"
-              type="number"
-              min="1"
-              inputmode="numeric"
+            min="1"
+            inputmode="numeric"
             pattern="[0-9]*"
-            placeholder="끝"
+            placeholder="시작 메시지"
+          />
+          <span class="gmh-range-sep" aria-hidden="true">~</span>
+          <input
+            id="gmh-range-end"
+            class="gmh-input gmh-input--compact"
+            type="number"
+            min="1"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            placeholder="끝 메시지"
           />
           <div class="gmh-bookmark-controls">
-            <button id="gmh-range-mark-start" type="button" class="gmh-small-btn gmh-small-btn--muted" title="현재 플레이어 턴을 시작으로 지정 (실험 기능)">시작지정</button>
-            <button id="gmh-range-mark-end" type="button" class="gmh-small-btn gmh-small-btn--muted" title="현재 플레이어 턴을 끝으로 지정 (실험 기능)">끝지정</button>
+            <button id="gmh-range-mark-start" type="button" class="gmh-small-btn gmh-small-btn--muted" title="현재 메시지를 시작으로 지정">시작지정</button>
+            <button id="gmh-range-mark-end" type="button" class="gmh-small-btn gmh-small-btn--muted" title="현재 메시지를 끝으로 지정">끝지정</button>
           </div>
           <button id="gmh-range-clear" type="button" class="gmh-small-btn gmh-small-btn--muted">전체</button>
         </div>
@@ -6880,21 +6354,17 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         <button id="gmh-privacy-config" style="background:#c084fc; border:0; color:#210; border-radius:8px; padding:8px; cursor:pointer;">민감어</button>
       </div>
       <div style="display:flex; gap:8px;">
-        <button id="gmh-copy-recent" style="flex:1; background:#22c55e; border:0; color:#051; border-radius:8px; padding:8px; cursor:pointer;">최근 15턴 복사</button>
+        <button id="gmh-copy-recent" style="flex:1; background:#22c55e; border:0; color:#051; border-radius:8px; padding:8px; cursor:pointer;">최근 15메시지 복사</button>
         <button id="gmh-copy-all" style="flex:1; background:#60a5fa; border:0; color:#031; border-radius:8px; padding:8px; cursor:pointer;">전체 MD 복사</button>
       </div>
       <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-        <label for="gmh-range-start" style="font-size:11px; color:#94a3b8; font-weight:600;">턴 범위</label>
+        <label for="gmh-range-start" style="font-size:11px; color:#94a3b8; font-weight:600;">메시지 범위</label>
         <div style="display:flex; gap:6px; align-items:center; flex:1;">
-          <select id="gmh-range-axis" style="width:90px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;">
-            <option value="player">플레이어</option>
-            <option value="entry">메시지</option>
-          </select>
-          <input id="gmh-range-start" type="number" min="1" inputmode="numeric" pattern="[0-9]*" placeholder="시작" style="width:70px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;" />
+          <input id="gmh-range-start" type="number" min="1" inputmode="numeric" pattern="[0-9]*" placeholder="시작 메시지" style="width:70px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;" />
           <span style="color:#94a3b8;">~</span>
-          <input id="gmh-range-end" type="number" min="1" inputmode="numeric" pattern="[0-9]*" placeholder="끝" style="width:70px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;" />
-          <button id="gmh-range-mark-start" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;" title="현재 플레이어 턴을 시작으로 지정 (실험 기능)">시작지정</button>
-          <button id="gmh-range-mark-end" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;" title="현재 플레이어 턴을 끝으로 지정 (실험 기능)">끝지정</button>
+          <input id="gmh-range-end" type="number" min="1" inputmode="numeric" pattern="[0-9]*" placeholder="끝 메시지" style="width:70px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;" />
+          <button id="gmh-range-mark-start" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;" title="현재 메시지를 시작으로 지정">시작지정</button>
+          <button id="gmh-range-mark-end" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;" title="현재 메시지를 끝으로 지정">끝지정</button>
           <button id="gmh-range-clear" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;">전체</button>
         </div>
       </div>
