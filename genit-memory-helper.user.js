@@ -435,7 +435,20 @@
       const totalPlayers = Array.isArray(playerIndices)
         ? playerIndices.length
         : 0;
-      const totalEntries = Array.isArray(list) ? list.length : 0;
+      const totalTurns = Array.isArray(list) ? list.length : 0;
+      const entryMap = [];
+      list.forEach((turn, idx) => {
+        const entries = Array.isArray(turn?.__gmhEntries)
+          ? turn.__gmhEntries
+          : [];
+        entries.forEach((entryIdx) => {
+          if (Number.isInteger(entryIdx) && entryIdx >= 0) {
+            entryMap.push({ entryIdx, turnIdx: idx });
+          }
+        });
+      });
+      entryMap.sort((a, b) => a.entryIdx - b.entryIdx);
+      const totalEntries = entryMap.length;
 
       const startOrdinal = Number.isFinite(windowInfo.start)
         ? windowInfo.start
@@ -445,25 +458,50 @@
         : startOrdinal;
 
       if (axis === 'entry') {
-        const normalizedStartOrdinal = Math.max(
-          1,
-          Math.min(totalEntries, Math.floor(startOrdinal)),
-        );
-        const normalizedEndOrdinal = Math.max(
-          normalizedStartOrdinal,
-          Math.min(totalEntries, Math.floor(endOrdinal)),
-        );
-        const startIndex = Math.max(0, totalEntries - normalizedEndOrdinal);
-        const endIndex = Math.max(
-          startIndex,
-          Math.min(totalEntries - 1, totalEntries - normalizedStartOrdinal),
-        );
+        if (!totalEntries) {
+          return {
+            axis,
+            startIndex: 0,
+            endIndex: list.length ? list.length - 1 : -1,
+            startOrdinal: 1,
+            endOrdinal: 1,
+            entryStartIndex: null,
+            entryEndIndex: null,
+            policy: 'direct',
+            totalPlayers,
+            totalEntries,
+          };
+        }
+        const clampOrdinal = (value) =>
+          Math.max(1, Math.min(totalEntries, Math.floor(value)));
+        const normalizedStartOrdinal = clampOrdinal(startOrdinal);
+        const normalizedEndOrdinal = clampOrdinal(endOrdinal);
+        const startPos = Math.max(0, totalEntries - normalizedEndOrdinal);
+        const endPos = Math.max(startPos, totalEntries - normalizedStartOrdinal);
+        const selectedEntries = entryMap.slice(startPos, endPos + 1);
+        const selectedTurnIndices = selectedEntries.map((item) => item.turnIdx);
+        const startTurnIndex = selectedTurnIndices.length
+          ? Math.min(...selectedTurnIndices)
+          : 0;
+        const endTurnIndex = selectedTurnIndices.length
+          ? Math.max(...selectedTurnIndices)
+          : startTurnIndex;
+        const entryIndices = selectedEntries.map((item) => item.entryIdx);
+        const entryStartIndex = entryIndices.length ? entryIndices[0] : null;
+        const entryEndIndex = entryIndices.length
+          ? entryIndices[entryIndices.length - 1]
+          : null;
         return {
           axis,
-          startIndex,
-          endIndex,
+          startIndex: startTurnIndex,
+          endIndex: endTurnIndex,
           startOrdinal: normalizedStartOrdinal,
           endOrdinal: normalizedEndOrdinal,
+          entryStartIndex,
+          entryEndIndex,
+          entryStartOrdinal: normalizedStartOrdinal,
+          entryEndOrdinal: normalizedEndOrdinal,
+          entryCount: selectedEntries.length,
           policy: 'direct',
           totalPlayers,
           totalEntries,
@@ -492,7 +530,7 @@
       const prevPlayerIndex =
         startPos > 0 ? playerIndices[startPos - 1] : undefined;
       const nextPlayerIndex = playerIndices[endPos + 1];
-      const lastIndex = totalEntries ? totalEntries - 1 : 0;
+      const lastIndex = totalTurns ? totalTurns - 1 : 0;
       const trailingEnd = Number.isFinite(nextPlayerIndex)
         ? nextPlayerIndex - 1
         : lastIndex;
@@ -595,11 +633,14 @@
         }
 
         const playerIndices = [];
+        let totalEntryCount = 0;
         list.forEach((turn, idx) => {
           if (turn?.role === 'player') playerIndices.push(idx);
+          if (Array.isArray(turn?.__gmhEntries))
+            totalEntryCount += turn.__gmhEntries.length;
         });
         const totalPlayers = playerIndices.length;
-        const info = resolveBounds(totalPlayers, list.length);
+        const info = resolveBounds(totalPlayers, totalEntryCount);
 
         const ordinalMap = new Map();
         playerIndices.forEach((idx, pos) => {
@@ -617,10 +658,14 @@
           const turnsOut = uniqueIndices
             .map((idx) => list[idx] ?? null)
             .filter(Boolean);
+          const ordinals =
+            info.axis === 'player'
+              ? uniqueIndices.map((idx) => ordinalMap.get(idx) || null)
+              : uniqueIndices.map(() => null);
           return {
             turns: turnsOut,
             indices: uniqueIndices,
-            ordinals: uniqueIndices.map((idx) => ordinalMap.get(idx) || null),
+            ordinals,
           };
         };
 
@@ -637,10 +682,10 @@
             ordinals,
             info: {
               ...info,
-              total: info.axis === 'entry' ? list.length : totalPlayers,
+              total: info.total,
               playerTotal: totalPlayers,
-              entryTotal: list.length,
-              all: list.length,
+              entryTotal: totalEntryCount,
+              all: totalEntryCount,
               startIndex,
               endIndex,
             },
@@ -659,6 +704,15 @@
         );
         const startIndex = indices.length ? indices[0] : -1;
         const endIndex = indices.length ? indices[indices.length - 1] : -1;
+        const entryInfo = window.axis === 'entry'
+          ? {
+              entryStartIndex: window.entryStartIndex,
+              entryEndIndex: window.entryEndIndex,
+              entryStartOrdinal: window.entryStartOrdinal,
+              entryEndOrdinal: window.entryEndOrdinal,
+              entryCount: window.entryCount,
+            }
+          : {};
         if (settings.traceRange) {
           console.table({
             axis: window.axis,
@@ -684,12 +738,13 @@
           ordinals,
           info: {
             ...info,
-            total: info.axis === 'entry' ? list.length : totalPlayers,
+            total: info.total,
             playerTotal: totalPlayers,
-            entryTotal: list.length,
-            all: list.length,
+            entryTotal: totalEntryCount,
+            all: totalEntryCount,
             startIndex,
             endIndex,
+            ...entryInfo,
           },
         };
       },
@@ -934,9 +989,13 @@
         timestamp: Date.now(),
       };
 
+      const entryCount =
+        Array.isArray(entryOrigin) && entryOrigin.length
+          ? entryOrigin.length
+          : blocks.length;
       GMH.Core.ExportRange.setTotals({
         player: ordinal,
-        entry: blocks.length,
+        entry: entryCount,
       });
 
       notify();
@@ -1470,11 +1529,31 @@
   }
 
   function cloneSession(session) {
+    const clonedTurns = Array.isArray(session?.turns)
+      ? session.turns.map((turn) => {
+          const clone = { ...turn };
+          if (Array.isArray(turn.__gmhEntries)) {
+            Object.defineProperty(clone, '__gmhEntries', {
+              value: turn.__gmhEntries.slice(),
+              enumerable: false,
+              writable: true,
+              configurable: true,
+            });
+          }
+          if (Array.isArray(turn.__gmhSourceBlocks)) {
+            Object.defineProperty(clone, '__gmhSourceBlocks', {
+              value: turn.__gmhSourceBlocks.slice(),
+              enumerable: false,
+              writable: true,
+              configurable: true,
+            });
+          }
+          return clone;
+        })
+      : [];
     return {
       meta: { ...(session?.meta || {}) },
-      turns: Array.isArray(session?.turns)
-        ? session.turns.map((turn) => ({ ...turn }))
-        : [],
+      turns: clonedTurns,
       warnings: Array.isArray(session?.warnings) ? [...session.warnings] : [],
       source: session?.source,
     };
@@ -1489,6 +1568,22 @@
       next.text = redactText(turn.text, profile, counts);
       if (next.speaker)
         next.speaker = redactText(next.speaker, profile, counts);
+      if (Array.isArray(turn?.__gmhEntries)) {
+        Object.defineProperty(next, '__gmhEntries', {
+          value: turn.__gmhEntries.slice(),
+          enumerable: false,
+          writable: true,
+          configurable: true,
+        });
+      }
+      if (Array.isArray(turn?.__gmhSourceBlocks)) {
+        Object.defineProperty(next, '__gmhSourceBlocks', {
+          value: turn.__gmhSourceBlocks.slice(),
+          enumerable: false,
+          writable: true,
+          configurable: true,
+        });
+      }
       return next;
     });
     const sanitizedMeta = {};
@@ -4309,6 +4404,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   // -------------------------------
   function parseTurns(raw) {
     const lines = normalizeTranscript(raw).split('\n');
+    const originLines = Array.isArray(entryOrigin) ? entryOrigin.slice() : [];
     const turns = [];
     const warnings = [];
     const metaHints = { header: null, codes: [], titles: [] };
@@ -4316,7 +4412,42 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     let currentSceneId = 1;
     let pendingSpeaker = null;
 
-    const pushTurn = (speaker, text, roleOverride) => {
+    const addEntriesToTurn = (turn, lineIndexes = []) => {
+      if (!turn) return;
+      const normalized = Array.from(
+        new Set(
+          (Array.isArray(lineIndexes) ? lineIndexes : [])
+            .filter((idx) => Number.isInteger(idx) && idx >= 0)
+            .sort((a, b) => a - b),
+        ),
+      );
+      if (!normalized.length) return;
+      const existing = Array.isArray(turn.__gmhEntries)
+        ? turn.__gmhEntries.slice()
+        : [];
+      const merged = Array.from(new Set(existing.concat(normalized))).sort(
+        (a, b) => a - b,
+      );
+      Object.defineProperty(turn, '__gmhEntries', {
+        value: merged,
+        enumerable: false,
+        writable: true,
+        configurable: true,
+      });
+      const sourceBlocks = merged
+        .map((lineIdx) => originLines[lineIdx])
+        .filter((idx) => Number.isInteger(idx));
+      if (sourceBlocks.length) {
+        Object.defineProperty(turn, '__gmhSourceBlocks', {
+          value: Array.from(new Set(sourceBlocks)).sort((a, b) => a - b),
+          enumerable: false,
+          writable: true,
+          configurable: true,
+        });
+      }
+    };
+
+    const pushTurn = (speaker, text, roleOverride, lineIndexes = []) => {
       const textClean = sanitizeText(text);
       if (!textClean) return;
       const speakerName = normalizeSpeakerName(speaker || '내레이션');
@@ -4332,14 +4463,17 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         role !== 'narration'
       ) {
         last.text = `${last.text} ${textClean}`.trim();
+        addEntriesToTurn(last, lineIndexes);
         return;
       }
-      turns.push({
+      const nextTurn = {
         speaker: speakerName,
         role,
         text: textClean,
         sceneId: currentSceneId,
-      });
+      };
+      addEntriesToTurn(nextTurn, lineIndexes);
+      turns.push(nextTurn);
     };
 
     for (let i = 0; i < lines.length; i++) {
@@ -4389,14 +4523,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       let m = line.match(/^@([^@]{1,40})@\s*["“]?([\s\S]+?)["”]?\s*$/);
       if (m) {
         const speaker = normalizeSpeakerName(m[1]);
-        pushTurn(speaker, m[2], roleForSpeaker(speaker));
+        pushTurn(speaker, m[2], roleForSpeaker(speaker), [i]);
         pendingSpeaker = speaker;
         continue;
       }
 
       if (forcedPlayer) {
         const speaker = PLAYER_NAMES[0] || '플레이어';
-        pushTurn(speaker, stripQuotes(line), 'player');
+        pushTurn(speaker, stripQuotes(line), 'player', [i]);
         pendingSpeaker = speaker;
         continue;
       }
@@ -4404,13 +4538,13 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       m = line.match(/^([^:@—\-]{1,40})\s*[:\-—]\s*(.+)$/);
       if (m && looksLikeName(m[1])) {
         const speaker = normalizeSpeakerName(m[1]);
-        pushTurn(speaker, stripQuotes(m[2]), roleForSpeaker(speaker));
+        pushTurn(speaker, stripQuotes(m[2]), roleForSpeaker(speaker), [i]);
         pendingSpeaker = speaker;
         continue;
       }
 
       if (looksNarrative(line) || /^".+"$/.test(line) || /^“.+”$/.test(line)) {
-        pushTurn('내레이션', stripQuotes(line), 'narration');
+        pushTurn('내레이션', stripQuotes(line), 'narration', [i]);
         pendingSpeaker = null;
         continue;
       }
@@ -4418,6 +4552,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       if (looksLikeName(line)) {
         const speaker = normalizeSpeakerName(line);
         let textBuf = [];
+        const bufLines = [i];
         let j = i + 1;
         while (j < lines.length) {
           let peek = (lines[j] || '').trim();
@@ -4443,6 +4578,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           if (peekForced) break;
           if (looksLikeName(peek) || /^@[^@]+@/.test(peek)) break;
           textBuf.push(peek);
+          bufLines.push(j);
           j += 1;
           if (!/["”]$/.test(peek)) break;
         }
@@ -4451,6 +4587,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             speaker,
             stripQuotes(textBuf.join(' ')),
             roleForSpeaker(speaker),
+            bufLines,
           );
           pendingSpeaker = speaker;
           i = j - 1;
@@ -4465,6 +4602,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           pendingSpeaker,
           stripQuotes(line),
           roleForSpeaker(pendingSpeaker),
+          [i],
         );
         continue;
       }
@@ -4472,10 +4610,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       if (line.length <= 30 && /[!?…]$/.test(line) && turns.length) {
         const last = turns[turns.length - 1];
         last.text = `${last.text} ${line}`.trim();
+        addEntriesToTurn(last, [i]);
         continue;
       }
 
-      pushTurn('내레이션', line, 'narration');
+      pushTurn('내레이션', line, 'narration', [i]);
       pendingSpeaker = null;
     }
 
@@ -4751,9 +4890,13 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const previousTotals = GMH.Core.ExportRange.getTotals
         ? GMH.Core.ExportRange.getTotals()
         : { player: 0, entry: 0 };
+      const entryCount = session.turns.reduce((sum, turn) => {
+        if (Array.isArray(turn?.__gmhEntries)) return sum + turn.__gmhEntries.length;
+        return sum + 1;
+      }, 0);
       GMH.Core.ExportRange.setTotals({
         player: Math.max(previousTotals.player || 0, playerTurns),
-        entry: session.turns.length,
+        entry: entryCount,
       });
       return {
         session,
@@ -5788,11 +5931,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             setPanelStatus('선택한 메시지를 찾을 수 없습니다.', 'warning');
             return;
           }
-          const entryIndex = entryOrigin.findIndex((value) => value === blockIndex);
-          if (entryIndex === -1) {
+          const entryIndicesForBlock = entryOrigin
+            .map((value, idx) => (value === blockIndex ? idx : -1))
+            .filter((idx) => idx >= 0);
+          if (!entryIndicesForBlock.length) {
             setPanelStatus('해당 메시지를 현재 로그에서 찾지 못했습니다.', 'warning');
             return;
           }
+          const entryIndex = entryIndicesForBlock[entryIndicesForBlock.length - 1];
           const entryOrdinal = totalEntries - entryIndex;
           GMH.Core.ExportRange.setAxis('entry');
           if (mode === 'start') {
@@ -5913,9 +6059,13 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const playerCount = session.turns.filter(
         (turn) => turn.role === 'player',
       ).length;
+      const entryCount = session.turns.reduce((sum, turn) => {
+        if (Array.isArray(turn?.__gmhEntries)) return sum + turn.__gmhEntries.length;
+        return sum + 1;
+      }, 0);
       GMH.Core.ExportRange.setTotals({
         player: playerCount,
-        entry: session.turns.length,
+        entry: entryCount,
       });
       return { session, raw: normalized };
     };
@@ -5953,9 +6103,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         const sanitizedPlayerCount = privacy.sanitizedSession.turns.filter(
           (turn) => turn.role === 'player',
         ).length;
+        const sanitizedEntryCount = privacy.sanitizedSession.turns.reduce(
+          (sum, turn) =>
+            sum + (Array.isArray(turn?.__gmhEntries) ? turn.__gmhEntries.length : 1),
+          0,
+        );
         GMH.Core.ExportRange.setTotals({
           player: sanitizedPlayerCount,
-          entry: privacy.sanitizedSession.turns.length,
+          entry: sanitizedEntryCount,
         });
         if (requestedRange.start || requestedRange.end) {
           GMH.Core.ExportRange.setRange(
@@ -6027,8 +6182,24 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             entry_count:
               rangeAxis === 'entry' ? selection.info.count : null,
             entry_total: selection.info.entryTotal,
-            entry_start_index: selection.info.startIndex,
-            entry_end_index: selection.info.endIndex,
+            entry_start_index:
+              rangeAxis === 'entry'
+                ? selection.info.entryStartIndex ?? null
+                : selection.info.startIndex,
+            entry_end_index:
+              rangeAxis === 'entry'
+                ? selection.info.entryEndIndex ?? null
+                : selection.info.endIndex,
+            entry_start_ordinal:
+              rangeAxis === 'entry'
+                ? selection.info.entryStartOrdinal ?? selection.info.start
+                : null,
+            entry_end_ordinal:
+              rangeAxis === 'entry'
+                ? selection.info.entryEndOrdinal ?? selection.info.end
+                : null,
+            turn_start_index: selection.info.startIndex,
+            turn_end_index: selection.info.endIndex,
             player_ordinals: selection.ordinals || [],
             entry_indices: selectedIndices,
           },

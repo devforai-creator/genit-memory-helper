@@ -18,6 +18,14 @@ const sampleTurns = [
   { role: 'npc', speaker: '조력자', text: '좋아', id: 'npc-4' },
 ];
 
+sampleTurns.forEach((turn, idx) => {
+  Object.defineProperty(turn, '__gmhEntries', {
+    value: [idx],
+    enumerable: false,
+    configurable: true,
+  });
+});
+
 const createGMH = () => {
   const script = readFileSync(distPath, 'utf8');
   const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
@@ -174,6 +182,11 @@ describe('GMH.Core.ExportRange', () => {
     expect(selection.info.axis).toBe('entry');
     expect(selection.info.startIndex).toBe(0);
     expect(selection.info.endIndex).toBe(0);
+    expect(selection.info.entryStartIndex).toBe(0);
+    expect(selection.info.entryEndIndex).toBe(0);
+    expect(selection.info.entryStartOrdinal).toBe(5);
+    expect(selection.info.entryEndOrdinal).toBe(5);
+    expect(selection.info.entryCount).toBe(1);
     expect(selection.indices).toEqual([0]);
     expect(selection.turns.map((t) => t.text)).toEqual(['안녕']);
     expect(selection.info.entryTotal).toBe(sampleTurns.length);
