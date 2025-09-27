@@ -289,22 +289,23 @@
   };
 
   /**
-   * ExportRange tracks the optional player-turn window that should be exported.
+   * ExportRange tracks the optional window that should be exported.
    *
    * Internally it keeps two counters:
    * - `player`: number of turns spoken by the player in the current session.
-   * - `all`: total message entries (player + npc + narration).
+   * - `entry`: total message entries (player + npc + narration).
    *
    * Public helpers:
-   * - `setTotals({ player, all })`: establish the latest counts (player turns drive selection).
-   * - `setStart / setEnd / setRange / clear`: mutate the requested player-turn span (1-based).
-   * - `describe()`: snapshot showing the resolved span, counts, and corresponding entry indices.
-   * - `apply(turns)`: slice the provided `session.turns` array so only the selected player-turn
-   *   range (plus the interleaving NPC/narration entries) is returned.
+   * - `setTotals({ player, entry })`: establish the latest counts for both axes.
+   * - `setAxis('player' | 'entry')`: switch the active ordinal axis (latest=1 for both).
+   * - `setStart / setEnd / setRange / clear`: mutate the requested span on the active axis.
+   * - `describe()`: snapshot showing the resolved span, totals, and corresponding entry indices.
+   * - `apply(turns)`: slice the provided `session.turns` array according to the active axis,
+   *   while keeping NPC/narration entries that fall inside the resolved index window.
    */
   const ExportRange = (() => {
-    const requested = { start: null, end: null };
-    let totals = { player: 0, all: 0 };
+    const requested = { start: null, end: null, axis: 'player' };
+    let totals = { player: 0, entry: 0 };
     const listeners = new Set();
     let lastWarnTs = 0;
 
@@ -337,11 +338,20 @@
       }
     };
 
-    const clampRequestedToTotal = (totalPlayers) => {
-      const total = Number.isFinite(totalPlayers) ? Math.max(0, totalPlayers) : 0;
+    const clampRequestedToTotal = () => {
+      const axis = requested.axis === 'entry' ? 'entry' : 'player';
+      const totalPlayers = Number.isFinite(totals.player)
+        ? Math.max(0, totals.player)
+        : 0;
+      const totalEntries = Number.isFinite(totals.entry)
+        ? Math.max(0, totals.entry)
+        : 0;
+      const total = axis === 'entry' ? totalEntries : totalPlayers;
+      const axisLabel = axis === 'entry' ? 'entries' : 'player turns';
       if (!total) {
         if (requested.start !== null || requested.end !== null) {
-          emitRangeWarning('clearing range because no players detected', {
+          emitRangeWarning(`clearing range because no ${axisLabel} detected`, {
+            axis,
             start: requested.start,
             end: requested.end,
           });
@@ -352,6 +362,7 @@
       }
       if (requested.start !== null && requested.start > total) {
         emitRangeWarning('start exceeds total; clamping', {
+          axis,
           start: requested.start,
           total,
         });
@@ -359,6 +370,7 @@
       }
       if (requested.end !== null && requested.end > total) {
         emitRangeWarning('end exceeds total; clamping', {
+          axis,
           end: requested.end,
           total,
         });
@@ -367,18 +379,26 @@
       normalizeRequestedOrder();
     };
 
-    const resolveBounds = (totalPlayers = totals.player) => {
-      const total = Number.isFinite(totalPlayers)
-        ? Math.max(0, Math.floor(totalPlayers))
+    const resolveBounds = (
+      totalPlayers = totals.player,
+      totalEntries = totals.entry,
+    ) => {
+      const axis = requested.axis === 'entry' ? 'entry' : 'player';
+      const totalSource = axis === 'entry' ? totalEntries : totalPlayers;
+      const total = Number.isFinite(totalSource)
+        ? Math.max(0, Math.floor(totalSource))
         : 0;
       if (!total) {
         return {
+          axis,
           active: false,
           start: null,
           end: null,
           count: 0,
           total,
-          all: totals.all || 0,
+          playerTotal: totalPlayers,
+          entryTotal: totalEntries,
+          all: totalEntries,
         };
       }
       const clamp = (value, fallback) => {
@@ -392,12 +412,134 @@
       const normalizedEnd = Math.max(start, end);
       const count = Math.max(0, normalizedEnd - normalizedStart + 1);
       return {
+        axis,
         active,
         start: normalizedStart,
         end: normalizedEnd,
         count,
         total,
-        all: totals.all || 0,
+        playerTotal: totalPlayers,
+        entryTotal: totalEntries,
+        all: totalEntries,
+      };
+    };
+
+    const resolveSelectionWindow = ({
+      list = [],
+      playerIndices = [],
+      info = {},
+      policy,
+    }) => {
+      const windowInfo = info || {};
+      const axis = windowInfo.axis === 'entry' ? 'entry' : 'player';
+      const totalPlayers = Array.isArray(playerIndices)
+        ? playerIndices.length
+        : 0;
+      const totalEntries = Array.isArray(list) ? list.length : 0;
+
+      const startOrdinal = Number.isFinite(windowInfo.start)
+        ? windowInfo.start
+        : 1;
+      const endOrdinal = Number.isFinite(windowInfo.end)
+        ? windowInfo.end
+        : startOrdinal;
+
+      if (axis === 'entry') {
+        const normalizedStartOrdinal = Math.max(
+          1,
+          Math.min(totalEntries, Math.floor(startOrdinal)),
+        );
+        const normalizedEndOrdinal = Math.max(
+          normalizedStartOrdinal,
+          Math.min(totalEntries, Math.floor(endOrdinal)),
+        );
+        const startIndex = Math.max(0, totalEntries - normalizedEndOrdinal);
+        const endIndex = Math.max(
+          startIndex,
+          Math.min(totalEntries - 1, totalEntries - normalizedStartOrdinal),
+        );
+        return {
+          axis,
+          startIndex,
+          endIndex,
+          startOrdinal: normalizedStartOrdinal,
+          endOrdinal: normalizedEndOrdinal,
+          policy: 'direct',
+          totalPlayers,
+          totalEntries,
+        };
+      }
+
+      const allowedPolicies = ['none', 'toStart', 'upToPrevPlayer'];
+      const prologuePolicy = allowedPolicies.includes(policy)
+        ? policy
+        : 'upToPrevPlayer';
+
+      const startPos = Math.max(0, totalPlayers - endOrdinal);
+      const endPos = Math.max(startPos, totalPlayers - startOrdinal);
+      const fallbackStartIndex = Number.isFinite(playerIndices[0])
+        ? playerIndices[0]
+        : 0;
+      const candidateStartIndex = playerIndices[startPos];
+      const startPlayerIndex = Number.isFinite(candidateStartIndex)
+        ? candidateStartIndex
+        : fallbackStartIndex;
+      const lastPlayerPos = totalPlayers ? totalPlayers - 1 : 0;
+      const candidateEndIndex = playerIndices[Math.min(endPos, lastPlayerPos)];
+      const endPlayerIndex = Number.isFinite(candidateEndIndex)
+        ? candidateEndIndex
+        : null;
+      const prevPlayerIndex =
+        startPos > 0 ? playerIndices[startPos - 1] : undefined;
+      const nextPlayerIndex = playerIndices[endPos + 1];
+      const lastIndex = totalEntries ? totalEntries - 1 : 0;
+      const trailingEnd = Number.isFinite(nextPlayerIndex)
+        ? nextPlayerIndex - 1
+        : lastIndex;
+
+      let resolvedStart = startPlayerIndex;
+      if (prologuePolicy === 'toStart') {
+        resolvedStart = 0;
+      } else if (prologuePolicy === 'upToPrevPlayer') {
+        if (Number.isFinite(prevPlayerIndex)) {
+          resolvedStart = Math.max(0, prevPlayerIndex + 1);
+        } else {
+          resolvedStart = 0;
+        }
+      }
+      const startClampTarget = Number.isFinite(startPlayerIndex)
+        ? startPlayerIndex
+        : fallbackStartIndex;
+      resolvedStart = Math.max(0, Math.min(resolvedStart, startClampTarget));
+      const baseEnd = Number.isFinite(endPlayerIndex)
+        ? endPlayerIndex
+        : resolvedStart;
+      const resolvedEnd = Math.max(
+        resolvedStart,
+        Math.min(lastIndex, Math.max(baseEnd, trailingEnd)),
+      );
+
+      return {
+        axis,
+        startIndex: resolvedStart,
+        endIndex: resolvedEnd,
+        startOrdinal,
+        endOrdinal,
+        startPos,
+        endPos,
+        prevPlayerIndex: Number.isFinite(prevPlayerIndex)
+          ? prevPlayerIndex
+          : null,
+        nextPlayerIndex: Number.isFinite(nextPlayerIndex)
+          ? nextPlayerIndex
+          : null,
+        startPlayerIndex,
+        endPlayerIndex: Number.isFinite(endPlayerIndex)
+          ? endPlayerIndex
+          : null,
+        policy: prologuePolicy,
+        totalPlayers,
+        totalEntries,
       };
     };
 
@@ -425,11 +567,16 @@
       getTotals() {
         return { ...totals };
       },
-      describe(totalPlayers = totals.player) {
-        return resolveBounds(totalPlayers);
+      describe(
+        totalPlayers = totals.player,
+        totalEntries = totals.entry,
+      ) {
+        return resolveBounds(totalPlayers, totalEntries);
       },
       apply(turns = [], options = {}) {
         const list = Array.isArray(turns) ? turns : [];
+        const settings =
+          options && typeof options === 'object' ? options : {};
         if (!list.length) {
           return {
             turns: [],
@@ -440,8 +587,8 @@
         }
 
         const includeIndices = new Set();
-        if (Array.isArray(options.includeIndices)) {
-          options.includeIndices
+        if (Array.isArray(settings.includeIndices)) {
+          settings.includeIndices
             .map((value) => Number(value))
             .filter((value) => Number.isFinite(value) && value >= 0)
             .forEach((value) => includeIndices.add(value));
@@ -452,7 +599,7 @@
           if (turn?.role === 'player') playerIndices.push(idx);
         });
         const totalPlayers = playerIndices.length;
-        const info = resolveBounds(totalPlayers);
+        const info = resolveBounds(totalPlayers, list.length);
 
         const ordinalMap = new Map();
         playerIndices.forEach((idx, pos) => {
@@ -477,56 +624,72 @@
           };
         };
 
-        if (!totalPlayers || !info.count || !info.active) {
+        if (!info.count || !info.active) {
           const { turns: turnsOut, indices, ordinals } = buildResult(
             0,
             list.length ? list.length - 1 : -1,
           );
+          const startIndex = indices.length ? indices[0] : -1;
+          const endIndex = indices.length ? indices[indices.length - 1] : -1;
           return {
             turns: turnsOut,
             indices,
             ordinals,
             info: {
               ...info,
-              total: totalPlayers,
+              total: info.axis === 'entry' ? list.length : totalPlayers,
+              playerTotal: totalPlayers,
+              entryTotal: list.length,
               all: list.length,
-              startIndex: indices.length ? indices[0] : -1,
-              endIndex: indices.length ? indices[indices.length - 1] : -1,
+              startIndex,
+              endIndex,
             },
           };
         }
 
-        const startPos = Math.max(0, totalPlayers - info.end);
-        const endPos = Math.max(startPos, totalPlayers - info.start);
-        const startIndex = playerIndices[startPos] ?? playerIndices[0] ?? 0;
-        const endPlayerIndex =
-          playerIndices[Math.min(endPos, playerIndices.length - 1)];
-        const nextPlayerIndex = playerIndices[endPos + 1];
-        const lastIndex = list.length ? list.length - 1 : startIndex;
-        const trailingEnd = Number.isFinite(nextPlayerIndex)
-          ? nextPlayerIndex - 1
-          : lastIndex;
-        const baseEnd = Number.isFinite(endPlayerIndex)
-          ? endPlayerIndex
-          : startIndex;
-        const resolvedEndIndex = Math.max(
-          startIndex,
-          Math.min(lastIndex, Math.max(baseEnd, trailingEnd)),
-        );
+        const window = resolveSelectionWindow({
+          list,
+          playerIndices,
+          info,
+          policy: settings.prologuePolicy,
+        });
         const { turns: turnsOut, indices, ordinals } = buildResult(
-          startIndex,
-          resolvedEndIndex,
+          window.startIndex,
+          window.endIndex,
         );
+        const startIndex = indices.length ? indices[0] : -1;
+        const endIndex = indices.length ? indices[indices.length - 1] : -1;
+        if (settings.traceRange) {
+          console.table({
+            axis: window.axis,
+            policy: window.policy,
+            startOrdinal: window.startOrdinal,
+            endOrdinal: window.endOrdinal,
+            startPos: window.startPos,
+            endPos: window.endPos,
+            startPlayerIndex: window.startPlayerIndex,
+            endPlayerIndex: window.endPlayerIndex,
+            prevPlayerIndex: window.prevPlayerIndex,
+            nextPlayerIndex: window.nextPlayerIndex,
+            resolvedStartIndex: window.startIndex,
+            resolvedEndIndex: window.endIndex,
+            totalPlayers: window.totalPlayers,
+            totalEntries: window.totalEntries,
+            includeCount: includeIndices.size,
+          });
+        }
         return {
           turns: turnsOut,
           indices,
           ordinals,
           info: {
             ...info,
-            total: totalPlayers,
+            total: info.axis === 'entry' ? list.length : totalPlayers,
+            playerTotal: totalPlayers,
+            entryTotal: list.length,
             all: list.length,
             startIndex,
-            endIndex: resolvedEndIndex,
+            endIndex,
           },
         };
       },
@@ -557,6 +720,14 @@
         notify();
         return snapshot();
       },
+      setAxis(axisValue) {
+        const nextAxis = axisValue === 'entry' ? 'entry' : 'player';
+        if (requested.axis === nextAxis) return snapshot();
+        requested.axis = nextAxis;
+        clampRequestedToTotal();
+        notify();
+        return snapshot();
+      },
       clear() {
         if (requested.start === null && requested.end === null) return snapshot();
         requested.start = null;
@@ -568,14 +739,16 @@
         const nextPlayer = Number.isFinite(Number(input.player))
           ? Math.max(0, Math.floor(Number(input.player)))
           : 0;
-        const nextAll = Number.isFinite(Number(input.all))
-          ? Math.max(0, Math.floor(Number(input.all)))
+        const entrySource =
+          input.entry !== undefined ? input.entry : input.all;
+        const nextEntry = Number.isFinite(Number(entrySource))
+          ? Math.max(0, Math.floor(Number(entrySource)))
           : 0;
-        if (totals.player === nextPlayer && totals.all === nextAll) {
+        if (totals.player === nextPlayer && totals.entry === nextEntry) {
           return snapshot();
         }
-        totals = { player: nextPlayer, all: nextAll };
-        clampRequestedToTotal(nextPlayer);
+        totals = { player: nextPlayer, entry: nextEntry };
+        clampRequestedToTotal();
         notify();
         return snapshot();
       },
@@ -762,7 +935,7 @@
 
       GMH.Core.ExportRange.setTotals({
         player: ordinal,
-        all: blocks.length,
+        entry: blocks.length,
       });
 
       notify();
@@ -1844,10 +2017,20 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     ];
     summaryRows.forEach((row) => summaryBox.appendChild(row));
     if (rangeInfo?.total) {
+      const axis = rangeInfo.axis === 'entry' ? 'entry' : 'player';
+      const axisLabel = axis === 'entry' ? '메시지' : '플레이어';
+      const axisTotal = rangeInfo.total;
       const rangeText = rangeInfo.active
-        ? `플레이어 ${rangeInfo.start}-${rangeInfo.end} · ${rangeInfo.count}/${rangeInfo.total}`
-        : `플레이어 ${rangeInfo.total}개 전체`;
-      summaryBox.appendChild(createSummaryRow('범위', rangeText));
+        ? `${axisLabel} ${rangeInfo.start}-${rangeInfo.end} · ${rangeInfo.count}/${axisTotal}`
+        : `${axisLabel} ${axisTotal}개 전체`;
+      const complement = axis === 'entry'
+        ? rangeInfo.playerTotal
+          ? ` · 플레이어 ${rangeInfo.playerTotal}개`
+          : ''
+        : rangeInfo.entryTotal
+          ? ` · 메시지 ${rangeInfo.entryTotal}개`
+          : '';
+      summaryBox.appendChild(createSummaryRow('범위', rangeText + complement));
     }
     body.appendChild(summaryBox);
 
@@ -2018,10 +2201,20 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     ];
     privacyRows.forEach((row) => summaryBox.appendChild(row));
     if (rangeInfo?.total) {
+      const axis = rangeInfo.axis === 'entry' ? 'entry' : 'player';
+      const axisLabel = axis === 'entry' ? '메시지' : '플레이어';
+      const axisTotal = rangeInfo.total;
       const rangeText = rangeInfo.active
-        ? `플레이어 ${rangeInfo.start}-${rangeInfo.end} · ${rangeInfo.count}/${rangeInfo.total}`
-        : `플레이어 ${rangeInfo.total}개 전체`;
-      summaryBox.appendChild(createPrivacyRow('범위', rangeText));
+        ? `${axisLabel} ${rangeInfo.start}-${rangeInfo.end} · ${rangeInfo.count}/${axisTotal}`
+        : `${axisLabel} ${axisTotal}개 전체`;
+      const complement = axis === 'entry'
+        ? rangeInfo.playerTotal
+          ? ` · 플레이어 ${rangeInfo.playerTotal}개`
+          : ''
+        : rangeInfo.entryTotal
+          ? ` · 메시지 ${rangeInfo.entryTotal}개`
+          : '';
+      summaryBox.appendChild(createPrivacyRow('범위', rangeText + complement));
     }
     stack.appendChild(summaryBox);
 
@@ -2826,7 +3019,19 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const nodes = collectAll(selectors.narrationBlocks, block);
       if (!nodes.length) return;
       nodes.forEach((node) => {
-        if (npcScopeSelector && node.closest(npcScopeSelector)) return;
+        if (npcScopeSelector) {
+          const npcContainer = node.closest(npcScopeSelector);
+          if (npcContainer) {
+            const withinNpcBubble =
+              matchesSelectorList(node, selectors.npcBubble) ||
+              closestMatchInList(node, selectors.npcBubble) ||
+              containsSelector(node, selectors.npcBubble);
+            const mutedNarration =
+              node instanceof Element &&
+              node.classList?.contains('text-muted-foreground');
+            if (withinNpcBubble && !mutedNarration) return;
+          }
+        }
         textSegmentsFromNode(node).forEach((seg) => {
           if (!seg) return;
           pushLine(seg);
@@ -4507,10 +4712,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const playerTurns = session.turns.filter((t) => t.role === 'player').length;
       const previousTotals = GMH.Core.ExportRange.getTotals
         ? GMH.Core.ExportRange.getTotals()
-        : { player: 0, all: 0 };
+        : { player: 0, entry: 0 };
       GMH.Core.ExportRange.setTotals({
         player: Math.max(previousTotals.player || 0, playerTurns),
-        all: session.turns.length,
+        entry: session.turns.length,
       });
       return {
         session,
@@ -5018,6 +5223,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       mountStatusActionsLegacy(panel);
     }
 
+    const rangeAxisSelect = panel.querySelector('#gmh-range-axis');
     const rangeStartInput = panel.querySelector('#gmh-range-start');
     const rangeEndInput = panel.querySelector('#gmh-range-end');
     const rangeClearBtn = panel.querySelector('#gmh-range-clear');
@@ -5092,28 +5298,60 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const syncRangeControls = (snapshot) => {
       if (!snapshot) return;
       const { bounds, totals, range } = snapshot;
-      const totalPlayers = totals?.player ?? bounds.total ?? 0;
+      const axis = range.axis === 'entry' || bounds.axis === 'entry'
+        ? 'entry'
+        : 'player';
+      const playerTotal = totals?.player ?? bounds.playerTotal ?? 0;
+      const entryTotal = totals?.entry ?? bounds.entryTotal ?? 0;
+      const axisTotal = axis === 'entry' ? entryTotal : playerTotal;
       const resolvedStart = bounds.active ? bounds.start : null;
       const resolvedEnd = bounds.active ? bounds.end : null;
+      if (rangeAxisSelect) {
+        rangeAxisSelect.value = axis;
+      }
       if (rangeStartInput) {
-        if (totalPlayers) rangeStartInput.max = String(totalPlayers);
+        if (axisTotal) rangeStartInput.max = String(axisTotal);
         else rangeStartInput.removeAttribute('max');
+        rangeStartInput.dataset.gmhAxis = axis;
         rangeStartInput.value = resolvedStart ? String(resolvedStart) : '';
         rangeStartInput.dataset.gmhRequested = range.start ? String(range.start) : '';
       }
       if (rangeEndInput) {
-        if (totalPlayers) rangeEndInput.max = String(totalPlayers);
+        if (axisTotal) rangeEndInput.max = String(axisTotal);
         else rangeEndInput.removeAttribute('max');
+        rangeEndInput.dataset.gmhAxis = axis;
         rangeEndInput.value = resolvedEnd ? String(resolvedEnd) : '';
         rangeEndInput.dataset.gmhRequested = range.end ? String(range.end) : '';
       }
+      if (rangeMarkStartBtn) {
+        if (axis !== 'player') rangeMarkStartBtn.setAttribute('disabled', 'true');
+        else rangeMarkStartBtn.removeAttribute('disabled');
+      }
+      if (rangeMarkEndBtn) {
+        if (axis !== 'player') rangeMarkEndBtn.setAttribute('disabled', 'true');
+        else rangeMarkEndBtn.removeAttribute('disabled');
+      }
       if (rangeSummary) {
-        if (!bounds.total) {
-          rangeSummary.textContent = '로드된 플레이어 턴이 없습니다.';
+        const axisLabel = axis === 'entry' ? '메시지' : '플레이어 턴';
+        if (!axisTotal) {
+          rangeSummary.textContent =
+            axis === 'entry'
+              ? '로드된 메시지가 없습니다.'
+              : '로드된 플레이어 턴이 없습니다.';
         } else if (!bounds.active) {
-          rangeSummary.textContent = `최근 플레이어 턴 ${bounds.total}개 전체`;
+          let text = `최근 ${axisLabel} ${axisTotal}개 전체`;
+          if (axis === 'entry' && playerTotal)
+            text += ` · 플레이어 턴 ${playerTotal}개`;
+          if (axis === 'player' && entryTotal)
+            text += ` · 메시지 ${entryTotal}개`;
+          rangeSummary.textContent = text;
         } else {
-          rangeSummary.textContent = `최근 플레이어 턴 ${bounds.start}-${bounds.end} · ${bounds.count}개 / 전체 ${bounds.total}개`;
+          let text = `최근 ${axisLabel} ${bounds.start}-${bounds.end} · ${bounds.count}개 / 전체 ${bounds.total}개`;
+          if (axis === 'entry' && playerTotal)
+            text += ` · 플레이어 턴 ${playerTotal}개`;
+          if (axis === 'player' && entryTotal)
+            text += ` · 메시지 ${entryTotal}개`;
+          rangeSummary.textContent = text;
         }
       }
     };
@@ -5154,6 +5392,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       if (rangeEndInput) {
         rangeEndInput.addEventListener('change', handleEndChange);
         rangeEndInput.addEventListener('blur', handleEndChange);
+      }
+      if (rangeAxisSelect) {
+        rangeAxisSelect.addEventListener('change', () => {
+          const next = rangeAxisSelect.value === 'entry' ? 'entry' : 'player';
+          GMH.Core.ExportRange.setAxis(next);
+        });
       }
       if (rangeClearBtn) {
         rangeClearBtn.addEventListener('click', () => {
@@ -5394,6 +5638,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
               block?.getAttribute?.('data-gmh-message-id') ||
               block?.getAttribute?.('data-message-id') ||
               null;
+            GMH.Core.ExportRange.setAxis('player');
             GMH.Core.ExportRange.setStart(totalPlayers);
             if (rangeStartInput) rangeStartInput.value = String(totalPlayers);
             const recorded = GMH.Core.TurnBookmarks.record(
@@ -5417,6 +5662,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
               block?.getAttribute?.('data-gmh-message-id') ||
               block?.getAttribute?.('data-message-id') ||
               null;
+            GMH.Core.ExportRange.setAxis('player');
             GMH.Core.ExportRange.setEnd(1);
             if (rangeEndInput) rangeEndInput.value = '1';
             const recorded = GMH.Core.TurnBookmarks.record(
@@ -5442,6 +5688,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         const targetMessageId = context.messageId;
 
         if (mode === 'start') {
+          GMH.Core.ExportRange.setAxis('player');
           GMH.Core.ExportRange.setStart(resolvedOrdinal);
           setPanelStatus(
             `플레이어 턴 ${resolvedOrdinal}을 시작으로 지정했습니다.`,
@@ -5449,6 +5696,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           );
           if (rangeStartInput) rangeStartInput.value = String(resolvedOrdinal);
         } else {
+          GMH.Core.ExportRange.setAxis('player');
           GMH.Core.ExportRange.setEnd(resolvedOrdinal);
           setPanelStatus(
             `플레이어 턴 ${resolvedOrdinal}을 끝으로 지정했습니다.`,
@@ -5533,7 +5781,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       ).length;
       GMH.Core.ExportRange.setTotals({
         player: playerCount,
-        all: session.turns.length,
+        entry: session.turns.length,
       });
       return { session, raw: normalized };
     };
@@ -5573,7 +5821,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         ).length;
         GMH.Core.ExportRange.setTotals({
           player: sanitizedPlayerCount,
-          all: privacy.sanitizedSession.turns.length,
+          entry: privacy.sanitizedSession.turns.length,
         });
         if (requestedRange.start || requestedRange.end) {
           GMH.Core.ExportRange.setRange(
@@ -5599,6 +5847,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           ? selection.indices
           : privacy.sanitizedSession.turns.map((_, idx) => idx);
 
+        const selectedIndexSet = new Set(selectedIndices);
+
         exportSession.turns = selectedIndices.map((index, localIndex) => {
           const original = privacy.sanitizedSession.turns[index] || {};
           const clone = { ...original };
@@ -5614,18 +5864,31 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           return clone;
         });
 
-        const selectedIndexSet = new Set(selectedIndices);
+        const rangeAxis = selection.info.axis === 'entry' ? 'entry' : 'player';
         exportSession.meta = {
           ...(exportSession.meta || {}),
           turn_range: {
             active: selection.info.active,
-            player_start: selection.info.start,
-            player_end: selection.info.end,
-            player_count: selection.info.count,
-            player_total: selection.info.total,
+            axis: rangeAxis,
+            count: selection.info.count,
+            total:
+              rangeAxis === 'entry'
+                ? selection.info.entryTotal
+                : selection.info.playerTotal,
+            player_start:
+              rangeAxis === 'player' ? selection.info.start : null,
+            player_end: rangeAxis === 'player' ? selection.info.end : null,
+            player_count:
+              rangeAxis === 'player' ? selection.info.count : null,
+            player_total: selection.info.playerTotal,
+            entry_start:
+              rangeAxis === 'entry' ? selection.info.start : null,
+            entry_end: rangeAxis === 'entry' ? selection.info.end : null,
+            entry_count:
+              rangeAxis === 'entry' ? selection.info.count : null,
+            entry_total: selection.info.entryTotal,
             entry_start_index: selection.info.startIndex,
             entry_end_index: selection.info.endIndex,
-            entry_total: selection.info.all,
             player_ordinals: selection.ordinals || [],
             entry_indices: selectedIndices,
           },
@@ -5735,11 +5998,20 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         const summary = formatRedactionCounts(privacy.counts);
         const profileLabel =
           PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
-        const totalPlayersAvailable =
-          rangeInfo?.total || overallStats?.playerTurns || stats.playerTurns;
-        const rangeNote = hasCustomRange
-          ? ` · 플레이어 턴 ${rangeInfo.start}-${rangeInfo.end}/${totalPlayersAvailable}`
-          : ` · 플레이어 턴 총 ${totalPlayersAvailable}개`;
+        const playerTotalAvailable =
+          rangeInfo?.playerTotal || overallStats?.playerTurns || stats.playerTurns;
+        const entryTotalAvailable =
+          rangeInfo?.entryTotal || sessionForExport.turns.length;
+        const axis = rangeInfo?.axis === 'entry' ? 'entry' : 'player';
+        const axisLabel = axis === 'entry' ? '메시지' : '플레이어 턴';
+        const axisTotalAvailable =
+          axis === 'entry' ? entryTotalAvailable : playerTotalAvailable;
+        let rangeNote = hasCustomRange
+          ? ` · ${axisLabel} ${rangeInfo.start}-${rangeInfo.end}/${axisTotalAvailable}`
+          : ` · ${axisLabel} 총 ${axisTotalAvailable}개`;
+        if (axis === 'entry' && playerTotalAvailable) {
+          rangeNote += ` · 플레이어 턴 ${playerTotalAvailable}개`;
+        }
         const message = `${format.toUpperCase()} 내보내기 완료 · 플레이어 턴 ${stats.playerTurns}개${rangeNote} · ${profileLabel} · ${summary}`;
         GMH.Core.State.setState(GMH.Core.STATE.DONE, {
           label: '내보내기 완료',
@@ -6064,6 +6336,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       <div class="gmh-field-row gmh-field-row--wrap">
         <label for="gmh-range-start" class="gmh-field-label">턴 범위</label>
         <div class="gmh-range-controls">
+          <select
+            id="gmh-range-axis"
+            class="gmh-select gmh-select--compact"
+            title="범위 기준을 선택하세요"
+          >
+            <option value="player">플레이어</option>
+            <option value="entry">메시지</option>
+          </select>
           <input
             id="gmh-range-start"
             class="gmh-input gmh-input--compact"
@@ -6098,7 +6378,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           </select>
         </div>
       </div>
-        <div id="gmh-range-summary" class="gmh-helper-text">플레이어 턴 전체 내보내기</div>
+        <div id="gmh-range-summary" class="gmh-helper-text">범위 전체 내보내기</div>
         <div class="gmh-field-row">
           <select id="gmh-export-format" class="gmh-select">
             <option value="json">JSON (.json)</option>
@@ -6163,6 +6443,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
         <label for="gmh-range-start" style="font-size:11px; color:#94a3b8; font-weight:600;">턴 범위</label>
         <div style="display:flex; gap:6px; align-items:center; flex:1;">
+          <select id="gmh-range-axis" style="width:90px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;">
+            <option value="player">플레이어</option>
+            <option value="entry">메시지</option>
+          </select>
           <input id="gmh-range-start" type="number" min="1" inputmode="numeric" pattern="[0-9]*" placeholder="시작" style="width:70px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;" />
           <span style="color:#94a3b8;">~</span>
           <input id="gmh-range-end" type="number" min="1" inputmode="numeric" pattern="[0-9]*" placeholder="끝" style="width:70px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;" />
@@ -6177,7 +6461,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           <option value="">최근 클릭한 메시지가 없습니다</option>
         </select>
       </div>
-      <div id="gmh-range-summary" style="font-size:11px; color:#94a3b8;">플레이어 턴 전체 내보내기</div>
+      <div id="gmh-range-summary" style="font-size:11px; color:#94a3b8;">범위 전체 내보내기</div>
       <div style="display:flex; gap:8px; align-items:center;">
         <select id="gmh-export-format" style="flex:1; background:#111827; color:#f1f5f9; border:1px solid #1f2937; border-radius:8px; padding:8px;">
           <option value="json">JSON (.json)</option>

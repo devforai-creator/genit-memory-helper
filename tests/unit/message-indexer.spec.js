@@ -57,7 +57,10 @@ describe('MessageIndexer', () => {
     expect(summary.totalMessages).toBe(3);
 
     const exportBounds = GMH.Core.ExportRange.describe();
+    expect(exportBounds.axis).toBe('player');
     expect(exportBounds.total).toBe(1);
+    expect(exportBounds.playerTotal).toBe(1);
+    expect(exportBounds.entryTotal).toBe(3);
     expect(exportBounds.all).toBe(3);
   });
 });

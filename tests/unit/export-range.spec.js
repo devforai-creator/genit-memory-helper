@@ -48,28 +48,34 @@ describe('GMH.Core.ExportRange', () => {
     const GMH = createGMH();
     ExportRange = GMH.Core.ExportRange;
     ExportRange.clear();
-    ExportRange.setTotals({ player: 0, all: 0 });
+    ExportRange.setAxis('player');
+    ExportRange.setTotals({ player: 0, entry: 0 });
   });
 
   it('describes empty state when no player turns are recorded', () => {
     const snapshot = ExportRange.describe();
-    expect(snapshot).toEqual({
+    expect(snapshot).toMatchObject({
+      axis: 'player',
       active: false,
       start: null,
       end: null,
       count: 0,
       total: 0,
-      all: 0,
+      playerTotal: 0,
+      entryTotal: 0,
     });
+    expect(snapshot.all).toBe(0);
   });
 
   it('applies full conversation when no range is set', () => {
-    ExportRange.setTotals({ player: 2, all: sampleTurns.length });
+    ExportRange.setTotals({ player: 2, entry: sampleTurns.length });
     const selection = ExportRange.apply(sampleTurns);
     expect(selection.info).toMatchObject({
+      axis: 'player',
       active: false,
       total: 2,
-      all: sampleTurns.length,
+      playerTotal: 2,
+      entryTotal: sampleTurns.length,
     });
     expect(selection.turns).toHaveLength(sampleTurns.length);
     expect(selection.indices).toEqual([0, 1, 2, 3, 4]);
@@ -77,49 +83,100 @@ describe('GMH.Core.ExportRange', () => {
   });
 
   it('slices using player-turn boundaries while keeping surrounding entries', () => {
-    ExportRange.setTotals({ player: 2, all: sampleTurns.length });
+    ExportRange.setTotals({ player: 2, entry: sampleTurns.length });
     ExportRange.setRange(1, 1);
     const selection = ExportRange.apply(sampleTurns);
 
     expect(selection.info).toMatchObject({
+      axis: 'player',
       active: true,
       start: 1,
       end: 1,
       count: 1,
       total: 2,
-      all: sampleTurns.length,
+      playerTotal: 2,
+      entryTotal: sampleTurns.length,
     });
-    expect(selection.info.startIndex).toBe(3);
+    expect(selection.info.startIndex).toBe(2);
     expect(selection.info.endIndex).toBe(4);
-    expect(selection.indices).toEqual([3, 4]);
-    expect(selection.ordinals).toEqual([1, null]);
+    expect(selection.indices).toEqual([2, 3, 4]);
+    expect(selection.ordinals).toEqual([null, 1, null]);
 
     expect(selection.turns.map((t) => t.text)).toEqual([
+      '긴장감이 흐른다',
       '준비됐다',
       '좋아',
     ]);
   });
 
+  it('allows opting out of prologue expansion', () => {
+    ExportRange.setTotals({ player: 2, entry: sampleTurns.length });
+    ExportRange.setRange(1, 1);
+    const selection = ExportRange.apply(sampleTurns, {
+      prologuePolicy: 'none',
+    });
+
+    expect(selection.info.startIndex).toBe(3);
+    expect(selection.indices).toEqual([3, 4]);
+    expect(selection.ordinals).toEqual([1, null]);
+  });
+
+  it('can expand prologue all the way to the first entry', () => {
+    ExportRange.setTotals({ player: 2, entry: sampleTurns.length });
+    ExportRange.setRange(1, 1);
+    const selection = ExportRange.apply(sampleTurns, {
+      prologuePolicy: 'toStart',
+    });
+
+    expect(selection.info.startIndex).toBe(0);
+    expect(selection.indices).toEqual([0, 1, 2, 3, 4]);
+  });
+
   it('respects explicit start/end selections when totals are unchanged', () => {
-    ExportRange.setTotals({ player: 7, all: 10 });
+    ExportRange.setTotals({ player: 7, entry: 10 });
     ExportRange.setStart(1);
     ExportRange.setEnd(7);
     const snapshot = ExportRange.describe();
-    expect(snapshot).toMatchObject({ start: 1, end: 7, total: 7, active: true });
+    expect(snapshot).toMatchObject({
+      axis: 'player',
+      start: 1,
+      end: 7,
+      total: 7,
+      active: true,
+    });
   });
 
   it('clears custom range when totals reset to zero', () => {
-    ExportRange.setTotals({ player: 2, all: sampleTurns.length });
+    ExportRange.setTotals({ player: 2, entry: sampleTurns.length });
     ExportRange.setRange(1, 1);
-    ExportRange.setTotals({ player: 0, all: 0 });
+    ExportRange.setTotals({ player: 0, entry: 0 });
     const snapshot = ExportRange.describe();
-    expect(snapshot).toEqual({
+    expect(snapshot).toMatchObject({
+      axis: 'player',
       active: false,
       start: null,
       end: null,
       count: 0,
       total: 0,
-      all: 0,
+      playerTotal: 0,
+      entryTotal: 0,
     });
+  });
+
+  it('supports selecting by entry axis ordinals', () => {
+    ExportRange.setTotals({ player: 2, entry: sampleTurns.length });
+    ExportRange.setAxis('entry');
+    const entrySnapshot = ExportRange.describe();
+    expect(entrySnapshot.axis).toBe('entry');
+    ExportRange.setRange(5, 5);
+    const selection = ExportRange.apply(sampleTurns);
+
+    expect(selection.info.axis).toBe('entry');
+    expect(selection.info.startIndex).toBe(0);
+    expect(selection.info.endIndex).toBe(0);
+    expect(selection.indices).toEqual([0]);
+    expect(selection.turns.map((t) => t.text)).toEqual(['안녕']);
+    expect(selection.info.entryTotal).toBe(sampleTurns.length);
+    expect(selection.info.playerTotal).toBe(2);
   });
 });
