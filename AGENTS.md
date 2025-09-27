@@ -4,11 +4,12 @@
 - `genit-memory-helper.user.js` holds the entire Tampermonkey script; update logic, DOM parsers, and UI helpers here.
 - `README.md` covers installation and usage; keep feature explanations in sync with script changes.
 - `PRIVACY.md` documents data-handling expectations; review when introducing new logging or exports.
-- No dedicated test or asset directories exist—add subfolders only when a new module truly warrants it to keep the root lean.
+- `docs/` contains heuristics and DOM reference notes. Update alongside parsing changes.
+- `tests/` houses the Vitest suites (unit + smoke helpers). Extend these when touching parsing/ExportRange logic.
 
 ## Build, Test, and Development Commands
-- `npm install prettier@latest` (one-time) ensures a consistent formatter for contributors working locally.
-- `npx prettier --check genit-memory-helper.user.js` verifies formatting before committing.
+- `npm install` installs the local toolchain (includes `prettier`).
+- `npx prettier --check genit-memory-helper.user.js` verifies formatting before committing. Use `--write` if you intend to reformat.
 - Automated build steps are unnecessary; reload the script in Tampermonkey to validate changes.
 
 ### Versioning guardrail (for automation/agents)

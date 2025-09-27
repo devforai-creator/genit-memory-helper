@@ -18,7 +18,7 @@
 | 유형 | 주된 셀렉터 | 비고 |
 | --- | --- | --- |
 | `playerScopes` | `[data-role="user"]`, `[data-from-user="true"]`, `[data-author-role="user"]`, `.flex.w-full.justify-end`, `.flex.flex-col.items-end` | 래퍼/조상 방향으로 탐색 |
-| `playerText` | `.space-y-3.mb-6 > .markdown-content:nth-of-type(1)`, `[data-role="user"] .markdown-content:not(.text-muted-foreground)` 등 | muted 텍스트(`text-muted-foreground`)는 **현재 포함되지 않음** |
+| `playerText` | `.space-y-3.mb-6 > .markdown-content:nth-of-type(1)`, `[data-role="user"] .markdown-content` 등 | muted 텍스트(`.text-muted-foreground`, `.bg-muted/50`)도 포함되도록 2025-09 정비 |
 | `npcGroups` | `[data-role="assistant"]`, `.flex.flex-col.w-full.group` | GMH에서 NPC로 보는 컨테이너 |
 | `narrationBlocks` | `.markdown-content.text-muted-foreground`, `.text-muted-foreground.text-sm` | 회색/메모 스타일 |
 | `npcBubble` | `.p-4.rounded-xl.bg-background p`, `.markdown-content:not(.text-right)` | 어시스턴트 말풍선 |
@@ -33,7 +33,7 @@
    - `narrationBlocks`, `npcGroups`, `npcBubble`, `infoCode`에 해당하면 제외.
 3. 남은 노드의 텍스트를 `PLAYER_MARK (★)` + 내용으로 출력합니다.
 
-> muted 회색 말풍선은 `playerText` 필터에서 제외되기 때문에 현재 export에는 포함되지 않습니다. (Known Issue)
+> muted 회색 말풍선(`.text-muted-foreground`, `.bg-muted/50`)도 플레이어 텍스트로 수집됩니다. (2025-09-28 기준)
 
 ### 2.2 어시스턴트 (`emitNpcLines`)
 
@@ -57,7 +57,7 @@
 
 ## 4. Known Issues & 후속 과제
 
-1. **회색 플레이어 행동/내적 독백**: `.text-muted-foreground`, `.bg-muted/50` 스타일 말풍선은 플레이어 텍스트로 수집되지 않습니다. → 플레이어 셀렉터/필터 보강 필요.
+1. **회색 플레이어 행동/내적 독백**: 2025-09-28 기준, muted 스타일도 수집되지만 **추가로 등장한 새로운 muted 변형**이 생기면 셀렉터에 반영해야 합니다.
 2. **오프닝 NPC 블록**: 대화 초반의 내레이션/어시스턴트 블록도 `data-gmh-message-ordinal`에 포함되지만, 메시지 전체를 불러오지 않으면 범위 계산이 어긋날 수 있습니다. 범위 지정 전에 원하는 구간까지 스크롤하여 메시지를 로드하세요.
 3. **역할 중첩 해결 미흡**: 플레이어/어시스턴트 스코프가 중첩된 경우 tie-breaker가 없어 의도치 않은 분류가 발생할 수 있습니다.
 4. **파서 병합 규칙**: 내레이션도 동일 화자가 연속이면 병합되므로, 블록 단위 보존을 원한다면 추가 refactoring이 필요합니다.
