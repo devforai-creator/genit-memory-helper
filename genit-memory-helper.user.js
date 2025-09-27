@@ -766,6 +766,7 @@
   })();
 
   GMH.Core.ExportRange = ExportRange;
+  GMH.Core.getEntryOrigin = () => entryOrigin.slice();
 
   const TurnBookmarks = (() => {
     const HISTORY_LIMIT = 5;
@@ -4605,6 +4606,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   // -------------------------------
   // 3) DOM Reader
   // -------------------------------
+  let entryOrigin = [];
+
   function readTranscriptText() {
     const adapter = getActiveAdapter();
     const container = adapter?.findContainer?.(document);
@@ -4615,6 +4618,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     const seenLine = new Set();
     const out = [];
+    entryOrigin = [];
 
     const pushLine = (line) => {
       const s = (line || '').trim();
@@ -4625,7 +4629,22 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     };
 
     for (const block of blocks) {
+      const domIndexAttr = Number(
+        block?.getAttribute?.('data-gmh-message-index'),
+      );
+      const originIndex = Number.isFinite(domIndexAttr) ? domIndexAttr : null;
+      const before = out.length;
       adapter?.emitTranscriptLines?.(block, pushLine);
+      const added = out.length - before;
+      if (added > 0) {
+        for (let i = 0; i < added; i += 1) entryOrigin.push(originIndex);
+      }
+    }
+
+    if (entryOrigin.length < out.length) {
+      while (entryOrigin.length < out.length) entryOrigin.push(null);
+    } else if (entryOrigin.length > out.length) {
+      entryOrigin.length = out.length;
     }
 
     return out.join('\n');
@@ -5338,6 +5357,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             axis === 'entry'
               ? '로드된 메시지가 없습니다.'
               : '로드된 플레이어 턴이 없습니다.';
+          rangeSummary.title = '';
         } else if (!bounds.active) {
           let text = `최근 ${axisLabel} ${axisTotal}개 전체`;
           if (axis === 'entry' && playerTotal)
@@ -5345,6 +5365,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           if (axis === 'player' && entryTotal)
             text += ` · 메시지 ${entryTotal}개`;
           rangeSummary.textContent = text;
+          rangeSummary.title =
+            axis === 'entry'
+              ? '메시지 축에서는 북마크가 해당 메시지 위치로 매핑됩니다.'
+              : '';
         } else {
           let text = `최근 ${axisLabel} ${bounds.start}-${bounds.end} · ${bounds.count}개 / 전체 ${bounds.total}개`;
           if (axis === 'entry' && playerTotal)
@@ -5352,6 +5376,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           if (axis === 'player' && entryTotal)
             text += ` · 메시지 ${entryTotal}개`;
           rangeSummary.textContent = text;
+          rangeSummary.title =
+            axis === 'entry'
+              ? '북마크를 클릭하면 해당 메시지를 기준으로 범위가 지정됩니다.'
+              : '';
         }
       }
     };
@@ -5410,6 +5438,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       }
       const doBookmark = async (mode) => {
         const stats = collectTurnStats();
+        const rangeState = GMH.Core.ExportRange.getRange
+          ? GMH.Core.ExportRange.getRange()
+          : { axis: 'player' };
+        const axisPreference =
+          rangeAxisSelect?.value === 'entry' || rangeState.axis === 'entry'
+            ? 'entry'
+            : 'player';
+        const entryOrigin = GMH.Core.getEntryOrigin?.() || [];
         if (stats.error || !stats.session?.turns?.length) {
           setPanelStatus(
             '현재 대화에서 턴 정보를 찾을 수 없습니다.',
@@ -5441,7 +5477,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           playerIndices.length,
         );
 
-        if (!totalPlayers || !playerIndices.length) {
+        if (
+          axisPreference === 'player' &&
+          (!totalPlayers || !playerIndices.length)
+        ) {
           setPanelStatus(
             '플레이어 턴이 없어 범위를 지정할 수 없습니다.',
             'warning',
@@ -5579,6 +5618,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         };
 
         const bookmarkCandidate = getActiveBookmark();
+        let entryTargetIndex =
+          bookmarkCandidate && Number.isFinite(Number(bookmarkCandidate.index))
+            ? Number(bookmarkCandidate.index)
+            : null;
+        let entryTargetMessageId =
+          typeof bookmarkCandidate?.messageId === 'string'
+            ? bookmarkCandidate.messageId
+            : null;
         let context = null;
         if (bookmarkCandidate) {
           context = resolvePlayerContext(
@@ -5610,10 +5657,30 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           } catch (err) {
             /* noop */
           }
-          context = resolvePlayerContext(seedIndex, seedMessageId);
+          if (entryTargetIndex === null && Number.isFinite(seedIndex)) {
+            entryTargetIndex = Number(seedIndex);
+          }
+          if (!entryTargetMessageId && seedMessageId) {
+            entryTargetMessageId = seedMessageId;
+          }
+          if (axisPreference === 'entry') {
+            if (Number.isFinite(entryTargetIndex)) {
+              context = {
+                index: Number(entryTargetIndex),
+                ordinal: null,
+                messageId: entryTargetMessageId,
+              };
+            }
+          } else {
+            context = resolvePlayerContext(seedIndex, seedMessageId);
+          }
         }
 
         if (!context) {
+          if (axisPreference === 'entry') {
+            setPanelStatus('선택한 메시지를 찾을 수 없습니다.', 'warning');
+            return;
+          }
           const existingRange = GMH.Core.ExportRange.getRange();
           const hasCustomRange = existingRange.start || existingRange.end;
           const totalPlayers = playerIndices.length;
@@ -5683,9 +5750,57 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           return;
         }
 
-        const targetIndex = context.index;
-        const resolvedOrdinal = context.ordinal;
-        const targetMessageId = context.messageId;
+        const targetIndex = Number.isFinite(Number(context?.index))
+          ? Number(context.index)
+          : null;
+        const targetMessageId =
+          context?.messageId || entryTargetMessageId || null;
+
+        if (axisPreference === 'entry') {
+          const totalEntries = entryOrigin.length;
+          if (!totalEntries) {
+            setPanelStatus('메시지 데이터를 찾지 못했습니다.', 'warning');
+            return;
+          }
+          const blockIndex = Number.isFinite(entryTargetIndex)
+            ? entryTargetIndex
+            : targetIndex;
+          if (!Number.isFinite(blockIndex)) {
+            setPanelStatus('선택한 메시지를 찾을 수 없습니다.', 'warning');
+            return;
+          }
+          const entryIndex = entryOrigin.findIndex((value) => value === blockIndex);
+          if (entryIndex === -1) {
+            setPanelStatus('해당 메시지를 현재 로그에서 찾지 못했습니다.', 'warning');
+            return;
+          }
+          const entryOrdinal = totalEntries - entryIndex;
+          GMH.Core.ExportRange.setAxis('entry');
+          if (mode === 'start') {
+            GMH.Core.ExportRange.setStart(entryOrdinal);
+            if (rangeStartInput) rangeStartInput.value = String(entryOrdinal);
+            setPanelStatus(
+              `메시지 ${entryOrdinal}을 시작으로 지정했습니다.`,
+              'info',
+            );
+          } else {
+            GMH.Core.ExportRange.setEnd(entryOrdinal);
+            if (rangeEndInput) rangeEndInput.value = String(entryOrdinal);
+            setPanelStatus(
+              `메시지 ${entryOrdinal}을 끝으로 지정했습니다.`,
+              'info',
+            );
+          }
+          return;
+        }
+
+        const resolvedOrdinal = Number.isFinite(Number(context?.ordinal))
+          ? Number(context.ordinal)
+          : null;
+        if (!Number.isFinite(resolvedOrdinal) || resolvedOrdinal <= 0) {
+          setPanelStatus('플레이어 턴 정보를 해석하지 못했습니다.', 'warning');
+          return;
+        }
 
         if (mode === 'start') {
           GMH.Core.ExportRange.setAxis('player');
@@ -5843,6 +5958,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           }
         });
 
+        const entryOrigin = GMH.Core.getEntryOrigin?.() || [];
+
         const selectedIndices = selection.indices?.length
           ? selection.indices
           : privacy.sanitizedSession.turns.map((_, idx) => idx);
@@ -5859,6 +5976,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           Object.defineProperty(clone, '__gmhOrdinal', {
             value:
               selection.ordinals?.[localIndex] ?? ordinalMap.get(index) ?? null,
+            enumerable: false,
+          });
+          Object.defineProperty(clone, '__gmhSourceBlock', {
+            value: entryOrigin[index] ?? null,
             enumerable: false,
           });
           return clone;

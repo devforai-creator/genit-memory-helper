@@ -44,6 +44,14 @@ describe('MessageIndexer', () => {
 
     GMH.Core.MessageIndexer.refresh({ immediate: true });
 
+    const transcript = GMH.Core.readTranscriptText();
+    const origin = GMH.Core.getEntryOrigin();
+    expect(Array.isArray(origin)).toBe(true);
+    expect(origin.length).toBe(transcript.split('\n').length);
+    origin.forEach((value) => {
+      expect(value === null || Number.isInteger(value)).toBe(true);
+    });
+
     const nodes = window.document.querySelectorAll('[data-gmh-message-index]');
     expect(nodes.length).toBe(3);
 
