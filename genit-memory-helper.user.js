@@ -373,6 +373,7 @@
 
       if (!total) {
         return {
+          axis: 'message',
           active,
           start: null,
           end: null,
@@ -435,6 +436,7 @@
       const count = active ? Math.max(0, normalizedEnd - normalizedStart + 1) : total;
 
       return {
+        axis: 'message',
         active,
         start: active ? normalizedStart : 1,
         end: active ? normalizedEnd : total,
