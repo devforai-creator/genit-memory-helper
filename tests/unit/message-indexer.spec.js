@@ -55,19 +55,23 @@ describe('MessageIndexer', () => {
     const nodes = window.document.querySelectorAll('[data-gmh-message-index]');
     expect(nodes.length).toBe(3);
 
-    const playerNode = window.document.querySelector(
-      '[data-gmh-player-turn="1"]',
+    const userNode = window.document.querySelector(
+      '[data-gmh-channel="user"]',
     );
-    expect(playerNode).not.toBeNull();
+    expect(userNode).not.toBeNull();
+    expect(userNode?.getAttribute('data-gmh-user-ordinal')).toBe('1');
+    expect(userNode?.getAttribute('data-gmh-message-ordinal')).toBe('3');
 
     const summary = GMH.Core.MessageIndexer.getSummary();
-    expect(summary.playerMessages).toBe(1);
+    expect(summary.userMessages).toBe(1);
     expect(summary.totalMessages).toBe(3);
 
     const exportBounds = GMH.Core.ExportRange.describe();
-    expect(exportBounds.axis).toBe('player');
-    expect(exportBounds.total).toBe(1);
-    expect(exportBounds.playerTotal).toBe(1);
+    expect(exportBounds.axis).toBe('message');
+    expect(exportBounds.total).toBe(3);
+    expect(exportBounds.messageTotal).toBe(3);
+    expect(exportBounds.userTotal).toBe(1);
+    expect(exportBounds.llmTotal).toBe(2);
     expect(exportBounds.entryTotal).toBe(3);
     expect(exportBounds.all).toBe(3);
   });
