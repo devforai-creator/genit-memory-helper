@@ -14,32 +14,32 @@
 // ==/UserScript==
 
 (function () {
-  'use strict';
+  "use strict";
 
   const PAGE_WINDOW =
-    typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+    typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
   const detectScriptVersion = () => {
-    if (typeof GM_info !== 'undefined') {
+    if (typeof GM_info !== "undefined") {
       const version = GM_info?.script?.version;
-      if (typeof version === 'string' && version.trim()) {
+      if (typeof version === "string" && version.trim()) {
         return version.trim();
       }
     }
-    return '0.0.0-dev';
+    return "0.0.0-dev";
   };
 
   const scriptVersion = detectScriptVersion();
 
   try {
-    const killSwitchEnabled = localStorage.getItem('gmh_kill') === '1';
+    const killSwitchEnabled = localStorage.getItem("gmh_kill") === "1";
     if (!killSwitchEnabled) {
-      const currentValue = localStorage.getItem('gmh_flag_newUI');
-      if (currentValue !== '1') {
-        localStorage.setItem('gmh_flag_newUI', '1');
+      const currentValue = localStorage.getItem("gmh_flag_newUI");
+      if (currentValue !== "1") {
+        localStorage.setItem("gmh_flag_newUI", "1");
       }
     }
   } catch (err) {
-    console.warn('[GMH] failed to set default UI flag', err);
+    console.warn("[GMH] failed to set default UI flag", err);
   }
 
   const GMH = {
@@ -62,12 +62,12 @@
 
   const deepMerge = (target, patch) => {
     const base = Array.isArray(target) ? [...target] : { ...target };
-    if (!patch || typeof patch !== 'object') return base;
+    if (!patch || typeof patch !== "object") return base;
     Object.entries(patch).forEach(([key, value]) => {
-      if (value && typeof value === 'object' && !Array.isArray(value)) {
+      if (value && typeof value === "object" && !Array.isArray(value)) {
         const current =
           base[key] &&
-          typeof base[key] === 'object' &&
+          typeof base[key] === "object" &&
           !Array.isArray(base[key])
             ? base[key]
             : {};
@@ -116,82 +116,82 @@
     return GMH.Adapters.Registry.list();
   };
 
-  GMH.Adapters.register('genit', {
+  GMH.Adapters.register("genit", {
     selectors: {
       chatContainers: [
-        '[data-chat-container]',
+        "[data-chat-container]",
         '[data-testid="chat-scroll-region"]',
         '[data-testid="conversation-scroll"]',
         '[data-testid="chat-container"]',
         '[data-role="conversation"]',
-        '[data-overlayscrollbars]',
-        '.flex-1.min-h-0.overflow-y-auto',
+        "[data-overlayscrollbars]",
+        ".flex-1.min-h-0.overflow-y-auto",
         'main [class*="overflow-y"]',
       ],
       messageRoot: [
-        '[data-message-id]',
+        "[data-message-id]",
         '[role="listitem"][data-id]',
         '[data-testid="message-wrapper"]',
       ],
-      infoCode: ['code.language-INFO', 'pre code.language-INFO'],
+      infoCode: ["code.language-INFO", "pre code.language-INFO"],
       playerScopes: [
         '[data-role="user"]',
         '[data-from-user="true"]',
         '[data-author-role="user"]',
-        '.flex.w-full.justify-end',
-        '.flex.flex-col.items-end',
+        ".flex.w-full.justify-end",
+        ".flex.flex-col.items-end",
       ],
       playerText: [
-        '.space-y-3.mb-6 > .markdown-content:nth-of-type(1)',
+        ".space-y-3.mb-6 > .markdown-content:nth-of-type(1)",
         '[data-role="user"] .markdown-content:not(.text-muted-foreground)',
         '[data-author-role="user"] .markdown-content:not(.text-muted-foreground)',
-        '.flex.w-full.justify-end .markdown-content:not(.text-muted-foreground)',
-        '.flex.flex-col.items-end .markdown-content:not(.text-muted-foreground)',
-        '.markdown-content.text-right',
-        '.p-4.rounded-xl.bg-background p',
+        ".flex.w-full.justify-end .markdown-content:not(.text-muted-foreground)",
+        ".flex.flex-col.items-end .markdown-content:not(.text-muted-foreground)",
+        ".markdown-content.text-right",
+        ".p-4.rounded-xl.bg-background p",
         '[data-role="user"] .markdown-content.text-muted-foreground',
         '[data-author-role="user"] .markdown-content.text-muted-foreground',
-        '.flex.w-full.justify-end .markdown-content.text-muted-foreground',
-        '.flex.flex-col.items-end .markdown-content.text-muted-foreground',
-        '.flex.justify-end .text-muted-foreground.text-sm',
-        '.flex.justify-end .text-muted-foreground',
-        '.flex.flex-col.items-end .text-muted-foreground',
-        '.p-3.rounded-lg.bg-muted\\/50 p',
-        '.flex.justify-end .p-3.rounded-lg.bg-muted\\/50 p',
-        '.flex.flex-col.items-end .p-3.rounded-lg.bg-muted\\/50 p',
+        ".flex.w-full.justify-end .markdown-content.text-muted-foreground",
+        ".flex.flex-col.items-end .markdown-content.text-muted-foreground",
+        ".flex.justify-end .text-muted-foreground.text-sm",
+        ".flex.justify-end .text-muted-foreground",
+        ".flex.flex-col.items-end .text-muted-foreground",
+        ".p-3.rounded-lg.bg-muted\\/50 p",
+        ".flex.justify-end .p-3.rounded-lg.bg-muted\\/50 p",
+        ".flex.flex-col.items-end .p-3.rounded-lg.bg-muted\\/50 p",
       ],
-      npcGroups: ['[data-role="assistant"]', '.flex.flex-col.w-full.group'],
+      npcGroups: ['[data-role="assistant"]', ".flex.flex-col.w-full.group"],
       npcName: [
-        '[data-author-name]',
-        '[data-author]',
-        '[data-username]',
-        '.text-sm.text-muted-foreground.mb-1.ml-1',
+        "[data-author-name]",
+        "[data-author]",
+        "[data-username]",
+        ".text-sm.text-muted-foreground.mb-1.ml-1",
       ],
       npcBubble: [
-        '.p-4.rounded-xl.bg-background p',
-        '.markdown-content:not(.text-right)',
+        ".p-4.rounded-xl.bg-background p",
+        ".markdown-content:not(.text-right)",
       ],
       narrationBlocks: [
-        '.markdown-content.text-muted-foreground',
-        '.text-muted-foreground.text-sm',
+        ".markdown-content.text-muted-foreground",
+        ".text-muted-foreground.text-sm",
       ],
-      panelAnchor: ['[data-testid="app-root"]', '#__next', '#root', 'main'],
+      panelAnchor: ['[data-testid="app-root"]', "#__next", "#root", "main"],
       playerNameHints: [
         '[data-role="user"] [data-username]',
-        '[data-profile-name]',
-        '[data-user-name]',
+        "[data-profile-name]",
+        "[data-user-name]",
         '[data-testid="profile-name"]',
-        'header [data-username]',
+        "header [data-username]",
       ],
-      textHints: ['메시지', '채팅', '대화'],
+      textHints: ["메시지", "채팅", "대화"],
     },
   });
 
   const PanelSettings = (() => {
-    const STORAGE_KEY = 'gmh_panel_settings_v1';
+    const STORAGE_KEY = "gmh_panel_settings_v1";
     const DEFAULTS = {
       layout: {
-        anchor: 'right',
+        anchor: "right",
         offset: 16,
         bottom: 16,
         width: null,
@@ -216,7 +216,7 @@
         settings = deepMerge(clone(DEFAULTS), parsed);
       }
     } catch (err) {
-      console.warn('[GMH] failed to load panel settings', err);
+      console.warn("[GMH] failed to load panel settings", err);
       settings = clone(DEFAULTS);
     }
 
@@ -226,7 +226,7 @@
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
       } catch (err) {
-        console.warn('[GMH] failed to persist panel settings', err);
+        console.warn("[GMH] failed to persist panel settings", err);
       }
     };
 
@@ -236,7 +236,7 @@
         try {
           listener(snapshot);
         } catch (err) {
-          console.warn('[GMH] panel settings listener failed', err);
+          console.warn("[GMH] panel settings listener failed", err);
         }
       });
     };
@@ -248,7 +248,7 @@
         return clone(settings);
       },
       update(patch) {
-        if (!patch || typeof patch !== 'object') return clone(settings);
+        if (!patch || typeof patch !== "object") return clone(settings);
         const nextSettings = deepMerge(settings, patch);
         const before = JSON.stringify(settings);
         const after = JSON.stringify(nextSettings);
@@ -271,7 +271,7 @@
         return clone(settings);
       },
       onChange(listener) {
-        if (typeof listener !== 'function') return () => {};
+        if (typeof listener !== "function") return () => {};
         listeners.add(listener);
         return () => listeners.delete(listener);
       },
@@ -304,7 +304,7 @@
    *   while keeping NPC/narration entries that fall inside the resolved index window.
    */
   const ExportRange = (() => {
-    const requested = { start: null, end: null, axis: 'player' };
+    const requested = { start: null, end: null, axis: "player" };
     let totals = { player: 0, entry: 0 };
     const listeners = new Set();
     let lastWarnTs = 0;
@@ -319,7 +319,7 @@
       const now = Date.now();
       if (now - lastWarnTs < 500) return;
       lastWarnTs = now;
-      console.warn('[GMH] export range adjusted:', message, data);
+      console.warn("[GMH] export range adjusted:", message, data);
     };
 
     const normalizeRequestedOrder = () => {
@@ -328,7 +328,7 @@
         requested.end !== null &&
         requested.start > requested.end
       ) {
-        emitRangeWarning('start > end; swapping values', {
+        emitRangeWarning("start > end; swapping values", {
           start: requested.start,
           end: requested.end,
         });
@@ -339,15 +339,15 @@
     };
 
     const clampRequestedToTotal = () => {
-      const axis = requested.axis === 'entry' ? 'entry' : 'player';
+      const axis = requested.axis === "entry" ? "entry" : "player";
       const totalPlayers = Number.isFinite(totals.player)
         ? Math.max(0, totals.player)
         : 0;
       const totalEntries = Number.isFinite(totals.entry)
         ? Math.max(0, totals.entry)
         : 0;
-      const total = axis === 'entry' ? totalEntries : totalPlayers;
-      const axisLabel = axis === 'entry' ? 'entries' : 'player turns';
+      const total = axis === "entry" ? totalEntries : totalPlayers;
+      const axisLabel = axis === "entry" ? "entries" : "player turns";
       if (!total) {
         if (requested.start !== null || requested.end !== null) {
           emitRangeWarning(`clearing range because no ${axisLabel} detected`, {
@@ -361,7 +361,7 @@
         return;
       }
       if (requested.start !== null && requested.start > total) {
-        emitRangeWarning('start exceeds total; clamping', {
+        emitRangeWarning("start exceeds total; clamping", {
           axis,
           start: requested.start,
           total,
@@ -369,7 +369,7 @@
         requested.start = total;
       }
       if (requested.end !== null && requested.end > total) {
-        emitRangeWarning('end exceeds total; clamping', {
+        emitRangeWarning("end exceeds total; clamping", {
           axis,
           end: requested.end,
           total,
@@ -383,8 +383,8 @@
       totalPlayers = totals.player,
       totalEntries = totals.entry,
     ) => {
-      const axis = requested.axis === 'entry' ? 'entry' : 'player';
-      const totalSource = axis === 'entry' ? totalEntries : totalPlayers;
+      const axis = requested.axis === "entry" ? "entry" : "player";
+      const totalSource = axis === "entry" ? totalEntries : totalPlayers;
       const total = Number.isFinite(totalSource)
         ? Math.max(0, Math.floor(totalSource))
         : 0;
@@ -431,13 +431,26 @@
       policy,
     }) => {
       const windowInfo = info || {};
-      const axis = windowInfo.axis === 'entry' ? 'entry' : 'player';
+      const axis = windowInfo.axis === "entry" ? "entry" : "player";
       const totalPlayers = Array.isArray(playerIndices)
         ? playerIndices.length
         : 0;
       const totalTurns = Array.isArray(list) ? list.length : 0;
       const entryMap = [];
+      const blockToTurns = new Map();
       list.forEach((turn, idx) => {
+        const sourceBlocks = Array.isArray(turn?.__gmhSourceBlocks)
+          ? turn.__gmhSourceBlocks
+          : [];
+        sourceBlocks
+          .filter((blockIdx) => Number.isInteger(blockIdx) && blockIdx >= 0)
+          .forEach((blockIdx) => {
+            if (!blockToTurns.has(blockIdx)) {
+              blockToTurns.set(blockIdx, new Set());
+            }
+            blockToTurns.get(blockIdx).add(idx);
+          });
+
         const entries = Array.isArray(turn?.__gmhEntries)
           ? turn.__gmhEntries
           : [];
@@ -448,7 +461,15 @@
         });
       });
       entryMap.sort((a, b) => a.entryIdx - b.entryIdx);
-      const totalEntries = entryMap.length;
+      const sortedBlockIndices = Array.from(blockToTurns.keys()).sort(
+        (a, b) => a - b,
+      );
+      const blockEntryMap = sortedBlockIndices.map((blockIdx) => ({
+        blockIdx,
+        turnIndices: Array.from(blockToTurns.get(blockIdx) || []),
+      }));
+      const totalBlockEntries = blockEntryMap.length;
+      const totalEntries = totalBlockEntries || entryMap.length;
 
       const startOrdinal = Number.isFinite(windowInfo.start)
         ? windowInfo.start
@@ -457,7 +478,7 @@
         ? windowInfo.end
         : startOrdinal;
 
-      if (axis === 'entry') {
+      if (axis === "entry") {
         if (!totalEntries) {
           return {
             axis,
@@ -467,30 +488,57 @@
             endOrdinal: 1,
             entryStartIndex: null,
             entryEndIndex: null,
-            policy: 'direct',
+            policy: "direct",
             totalPlayers,
             totalEntries,
           };
         }
+
         const clampOrdinal = (value) =>
           Math.max(1, Math.min(totalEntries, Math.floor(value)));
         const normalizedStartOrdinal = clampOrdinal(startOrdinal);
         const normalizedEndOrdinal = clampOrdinal(endOrdinal);
         const startPos = Math.max(0, totalEntries - normalizedEndOrdinal);
-        const endPos = Math.max(startPos, totalEntries - normalizedStartOrdinal);
-        const selectedEntries = entryMap.slice(startPos, endPos + 1);
-        const selectedTurnIndices = selectedEntries.map((item) => item.turnIdx);
+        const endPos = Math.max(
+          startPos,
+          totalEntries - normalizedStartOrdinal,
+        );
+
+        const selectedEntries = totalBlockEntries
+          ? blockEntryMap.slice(startPos, endPos + 1)
+          : entryMap.slice(startPos, endPos + 1);
+
+        const selectedTurnSet = new Set();
+        if (totalBlockEntries) {
+          selectedEntries.forEach((entry) => {
+            entry.turnIndices.forEach((turnIdx) =>
+              selectedTurnSet.add(turnIdx),
+            );
+          });
+        } else {
+          selectedEntries.forEach((entry) =>
+            selectedTurnSet.add(entry.turnIdx),
+          );
+        }
+
+        const selectedTurnIndices = Array.from(selectedTurnSet).sort(
+          (a, b) => a - b,
+        );
         const startTurnIndex = selectedTurnIndices.length
-          ? Math.min(...selectedTurnIndices)
+          ? selectedTurnIndices[0]
           : 0;
         const endTurnIndex = selectedTurnIndices.length
-          ? Math.max(...selectedTurnIndices)
+          ? selectedTurnIndices[selectedTurnIndices.length - 1]
           : startTurnIndex;
-        const entryIndices = selectedEntries.map((item) => item.entryIdx);
+
+        const entryIndices = selectedEntries.map((entry) =>
+          totalBlockEntries ? entry.blockIdx : entry.entryIdx,
+        );
         const entryStartIndex = entryIndices.length ? entryIndices[0] : null;
         const entryEndIndex = entryIndices.length
           ? entryIndices[entryIndices.length - 1]
           : null;
+
         return {
           axis,
           startIndex: startTurnIndex,
@@ -502,16 +550,16 @@
           entryStartOrdinal: normalizedStartOrdinal,
           entryEndOrdinal: normalizedEndOrdinal,
           entryCount: selectedEntries.length,
-          policy: 'direct',
+          policy: "direct",
           totalPlayers,
           totalEntries,
         };
       }
 
-      const allowedPolicies = ['none', 'toStart', 'upToPrevPlayer'];
+      const allowedPolicies = ["none", "toStart", "upToPrevPlayer"];
       const prologuePolicy = allowedPolicies.includes(policy)
         ? policy
-        : 'upToPrevPlayer';
+        : "upToPrevPlayer";
 
       const startPos = Math.max(0, totalPlayers - endOrdinal);
       const endPos = Math.max(startPos, totalPlayers - startOrdinal);
@@ -536,9 +584,9 @@
         : lastIndex;
 
       let resolvedStart = startPlayerIndex;
-      if (prologuePolicy === 'toStart') {
+      if (prologuePolicy === "toStart") {
         resolvedStart = 0;
-      } else if (prologuePolicy === 'upToPrevPlayer') {
+      } else if (prologuePolicy === "upToPrevPlayer") {
         if (Number.isFinite(prevPlayerIndex)) {
           resolvedStart = Math.max(0, prevPlayerIndex + 1);
         } else {
@@ -572,9 +620,7 @@
           ? nextPlayerIndex
           : null,
         startPlayerIndex,
-        endPlayerIndex: Number.isFinite(endPlayerIndex)
-          ? endPlayerIndex
-          : null,
+        endPlayerIndex: Number.isFinite(endPlayerIndex) ? endPlayerIndex : null,
         policy: prologuePolicy,
         totalPlayers,
         totalEntries,
@@ -593,7 +639,7 @@
         try {
           listener(current);
         } catch (err) {
-          console.warn('[GMH] range listener failed', err);
+          console.warn("[GMH] range listener failed", err);
         }
       });
     };
@@ -605,16 +651,12 @@
       getTotals() {
         return { ...totals };
       },
-      describe(
-        totalPlayers = totals.player,
-        totalEntries = totals.entry,
-      ) {
+      describe(totalPlayers = totals.player, totalEntries = totals.entry) {
         return resolveBounds(totalPlayers, totalEntries);
       },
       apply(turns = [], options = {}) {
         const list = Array.isArray(turns) ? turns : [];
-        const settings =
-          options && typeof options === 'object' ? options : {};
+        const settings = options && typeof options === "object" ? options : {};
         if (!list.length) {
           return {
             turns: [],
@@ -635,7 +677,7 @@
         const playerIndices = [];
         let totalEntryCount = 0;
         list.forEach((turn, idx) => {
-          if (turn?.role === 'player') playerIndices.push(idx);
+          if (turn?.role === "player") playerIndices.push(idx);
           if (Array.isArray(turn?.__gmhEntries))
             totalEntryCount += turn.__gmhEntries.length;
         });
@@ -659,7 +701,7 @@
             .map((idx) => list[idx] ?? null)
             .filter(Boolean);
           const ordinals =
-            info.axis === 'player'
+            info.axis === "player"
               ? uniqueIndices.map((idx) => ordinalMap.get(idx) || null)
               : uniqueIndices.map(() => null);
           return {
@@ -670,10 +712,11 @@
         };
 
         if (!info.count || !info.active) {
-          const { turns: turnsOut, indices, ordinals } = buildResult(
-            0,
-            list.length ? list.length - 1 : -1,
-          );
+          const {
+            turns: turnsOut,
+            indices,
+            ordinals,
+          } = buildResult(0, list.length ? list.length - 1 : -1);
           const startIndex = indices.length ? indices[0] : -1;
           const endIndex = indices.length ? indices[indices.length - 1] : -1;
           return {
@@ -698,21 +741,23 @@
           info,
           policy: settings.prologuePolicy,
         });
-        const { turns: turnsOut, indices, ordinals } = buildResult(
-          window.startIndex,
-          window.endIndex,
-        );
+        const {
+          turns: turnsOut,
+          indices,
+          ordinals,
+        } = buildResult(window.startIndex, window.endIndex);
         const startIndex = indices.length ? indices[0] : -1;
         const endIndex = indices.length ? indices[indices.length - 1] : -1;
-        const entryInfo = window.axis === 'entry'
-          ? {
-              entryStartIndex: window.entryStartIndex,
-              entryEndIndex: window.entryEndIndex,
-              entryStartOrdinal: window.entryStartOrdinal,
-              entryEndOrdinal: window.entryEndOrdinal,
-              entryCount: window.entryCount,
-            }
-          : {};
+        const entryInfo =
+          window.axis === "entry"
+            ? {
+                entryStartIndex: window.entryStartIndex,
+                entryEndIndex: window.entryEndIndex,
+                entryStartOrdinal: window.entryStartOrdinal,
+                entryEndOrdinal: window.entryEndOrdinal,
+                entryCount: window.entryCount,
+              }
+            : {};
         if (settings.traceRange) {
           console.table({
             axis: window.axis,
@@ -776,7 +821,7 @@
         return snapshot();
       },
       setAxis(axisValue) {
-        const nextAxis = axisValue === 'entry' ? 'entry' : 'player';
+        const nextAxis = axisValue === "entry" ? "entry" : "player";
         if (requested.axis === nextAxis) return snapshot();
         requested.axis = nextAxis;
         clampRequestedToTotal();
@@ -784,7 +829,8 @@
         return snapshot();
       },
       clear() {
-        if (requested.start === null && requested.end === null) return snapshot();
+        if (requested.start === null && requested.end === null)
+          return snapshot();
         requested.start = null;
         requested.end = null;
         notify();
@@ -794,8 +840,7 @@
         const nextPlayer = Number.isFinite(Number(input.player))
           ? Math.max(0, Math.floor(Number(input.player)))
           : 0;
-        const entrySource =
-          input.entry !== undefined ? input.entry : input.all;
+        const entrySource = input.entry !== undefined ? input.entry : input.all;
         const nextEntry = Number.isFinite(Number(entrySource))
           ? Math.max(0, Math.floor(Number(entrySource)))
           : 0;
@@ -808,12 +853,12 @@
         return snapshot();
       },
       subscribe(listener) {
-        if (typeof listener !== 'function') return () => {};
+        if (typeof listener !== "function") return () => {};
         listeners.add(listener);
         try {
           listener(snapshot());
         } catch (err) {
-          console.warn('[GMH] range subscriber failed', err);
+          console.warn("[GMH] range subscriber failed", err);
         }
         return () => listeners.delete(listener);
       },
@@ -831,7 +876,7 @@
     const cloneEntry = (entry) => ({ ...entry });
 
     const makeKey = (index, messageId) => {
-      if (typeof messageId === 'string' && messageId) return `id:${messageId}`;
+      if (typeof messageId === "string" && messageId) return `id:${messageId}`;
       if (Number.isFinite(Number(index))) return `idx:${Number(index)}`;
       return `tmp:${Date.now()}`;
     };
@@ -842,13 +887,13 @@
         try {
           listener(snapshot);
         } catch (err) {
-          console.warn('[GMH] bookmark listener failed', err);
+          console.warn("[GMH] bookmark listener failed", err);
         }
       });
     };
 
     return {
-      record(index, ordinal, messageId) {
+      record(index, ordinal, messageId, axis) {
         if (!Number.isFinite(Number(index))) return null;
         const normalizedIndex = Number(index);
         let normalizedOrdinal = null;
@@ -859,13 +904,15 @@
           }
         }
         const normalizedId =
-          typeof messageId === 'string' && messageId ? messageId : null;
+          typeof messageId === "string" && messageId ? messageId : null;
+        const normalizedAxis = axis === "entry" ? "entry" : "player";
         const key = makeKey(normalizedIndex, normalizedId);
         const entry = {
           key,
           index: normalizedIndex,
           ordinal: normalizedOrdinal,
           messageId: normalizedId,
+          axis: normalizedAxis,
           timestamp: Date.now(),
         };
         const existing = history.findIndex((item) => item.key === key);
@@ -902,12 +949,12 @@
         return history.map(cloneEntry);
       },
       subscribe(listener) {
-        if (typeof listener !== 'function') return () => {};
+        if (typeof listener !== "function") return () => {};
         listeners.add(listener);
         try {
           listener(history.map(cloneEntry));
         } catch (err) {
-          console.warn('[GMH] bookmark subscriber failed', err);
+          console.warn("[GMH] bookmark subscriber failed", err);
         }
         return () => listeners.delete(listener);
       },
@@ -936,7 +983,7 @@
         try {
           listener(snapshot);
         } catch (err) {
-          console.warn('[GMH] index listener failed', err);
+          console.warn("[GMH] index listener failed", err);
         }
       });
     };
@@ -954,19 +1001,19 @@
 
       blocks.forEach((block, idx) => {
         try {
-          block.setAttribute('data-gmh-message', '1');
-          block.setAttribute('data-gmh-message-index', String(idx));
+          block.setAttribute("data-gmh-message", "1");
+          block.setAttribute("data-gmh-message-index", String(idx));
           const messageId =
-            block.getAttribute('data-gmh-message-id') ||
-            block.getAttribute('data-message-id') ||
-            block.getAttribute('data-id') ||
+            block.getAttribute("data-gmh-message-id") ||
+            block.getAttribute("data-message-id") ||
+            block.getAttribute("data-id") ||
             null;
-          if (messageId) block.setAttribute('data-gmh-message-id', messageId);
-          else block.removeAttribute('data-gmh-message-id');
-          const role = adapter?.detectRole?.(block) || 'unknown';
-          block.setAttribute('data-gmh-message-role', role);
-          if (role === 'player') playerCount += 1;
-          else block.removeAttribute('data-gmh-player-turn');
+          if (messageId) block.setAttribute("data-gmh-message-id", messageId);
+          else block.removeAttribute("data-gmh-message-id");
+          const role = adapter?.detectRole?.(block) || "unknown";
+          block.setAttribute("data-gmh-message-role", role);
+          if (role === "player") playerCount += 1;
+          else block.removeAttribute("data-gmh-player-turn");
         } catch (err) {
           /* ignore per-node errors */
         }
@@ -976,9 +1023,9 @@
       for (let i = blocks.length - 1; i >= 0; i -= 1) {
         const block = blocks[i];
         if (!block) continue;
-        if (block.getAttribute('data-gmh-message-role') === 'player') {
+        if (block.getAttribute("data-gmh-message-role") === "player") {
           ordinal += 1;
-          block.setAttribute('data-gmh-player-turn', String(ordinal));
+          block.setAttribute("data-gmh-player-turn", String(ordinal));
         }
       }
 
@@ -989,10 +1036,13 @@
         timestamp: Date.now(),
       };
 
-      const entryCount =
-        Array.isArray(entryOrigin) && entryOrigin.length
-          ? entryOrigin.length
-          : blocks.length;
+      const entryOriginIndices = Array.isArray(entryOrigin)
+        ? entryOrigin.filter((idx) => Number.isInteger(idx) && idx >= 0)
+        : [];
+      const uniqueEntryCount = entryOriginIndices.length
+        ? new Set(entryOriginIndices).size
+        : 0;
+      const entryCount = blocks.length || uniqueEntryCount;
       GMH.Core.ExportRange.setTotals({
         player: ordinal,
         entry: entryCount,
@@ -1009,12 +1059,12 @@
         try {
           indexMessages();
         } catch (err) {
-          console.warn('[GMH] message indexing failed', err);
+          console.warn("[GMH] message indexing failed", err);
         } finally {
           scheduled = false;
         }
       };
-      if (typeof requestAnimationFrame === 'function') {
+      if (typeof requestAnimationFrame === "function") {
         requestAnimationFrame(runner);
       } else {
         setTimeout(runner, 16);
@@ -1022,7 +1072,7 @@
     };
 
     const ensureObserver = () => {
-      if (observer || typeof MutationObserver === 'undefined') return;
+      if (observer || typeof MutationObserver === "undefined") return;
       const target = document.body || document.documentElement;
       if (!target) return;
       observer = new MutationObserver(() => {
@@ -1043,7 +1093,7 @@
         try {
           indexMessages();
         } catch (err) {
-          console.warn('[GMH] initial message indexing failed', err);
+          console.warn("[GMH] initial message indexing failed", err);
         }
       },
       stop() {
@@ -1064,12 +1114,12 @@
         return cloneSummary(lastSummary);
       },
       subscribe(listener) {
-        if (typeof listener !== 'function') return () => {};
+        if (typeof listener !== "function") return () => {};
         listeners.add(listener);
         try {
           listener(cloneSummary(lastSummary));
         } catch (err) {
-          console.warn('[GMH] index subscriber failed', err);
+          console.warn("[GMH] index subscriber failed", err);
         }
         return () => listeners.delete(listener);
       },
@@ -1085,34 +1135,39 @@
       const target = event.target;
       if (!(target instanceof Element)) return;
       const message = target.closest(
-        '[data-gmh-message-index], [data-turn-index]',
+        "[data-gmh-message-index], [data-turn-index]",
       );
       if (!message) return;
       const indexAttr =
-        message.getAttribute('data-gmh-message-index') ||
-        message.getAttribute('data-turn-index');
+        message.getAttribute("data-gmh-message-index") ||
+        message.getAttribute("data-turn-index");
       if (indexAttr === null) return;
       const ordinalAttr =
-        message.getAttribute('data-gmh-player-turn') ||
-        message.getAttribute('data-player-turn');
+        message.getAttribute("data-gmh-player-turn") ||
+        message.getAttribute("data-player-turn");
       const messageIdAttr =
-        message.getAttribute('data-gmh-message-id') ||
-        message.getAttribute('data-message-id');
+        message.getAttribute("data-gmh-message-id") ||
+        message.getAttribute("data-message-id");
       const index = Number(indexAttr);
       const ordinal = ordinalAttr !== null ? Number(ordinalAttr) : null;
       if (!Number.isFinite(index)) return;
-      GMH.Core.TurnBookmarks.record(index, ordinal, messageIdAttr || null);
+      GMH.Core.TurnBookmarks.record(
+        index,
+        ordinal,
+        messageIdAttr || null,
+        "player",
+      );
     };
 
     return {
       start() {
         if (active) return;
-        document.addEventListener('click', handleBookmarkCandidate, true);
+        document.addEventListener("click", handleBookmarkCandidate, true);
         active = true;
       },
       stop() {
         if (!active) return;
-        document.removeEventListener('click', handleBookmarkCandidate, true);
+        document.removeEventListener("click", handleBookmarkCandidate, true);
         active = false;
       },
       isActive() {
@@ -1126,7 +1181,7 @@
 
   if (!PAGE_WINDOW.__GMHBookmarkListener) {
     try {
-      Object.defineProperty(PAGE_WINDOW, '__GMHBookmarkListener', {
+      Object.defineProperty(PAGE_WINDOW, "__GMHBookmarkListener", {
         value: BookmarkListener,
         writable: false,
         configurable: false,
@@ -1139,27 +1194,27 @@
   const Flags = (() => {
     let betaQuery = false;
     try {
-      const params = new URLSearchParams(location.search || '');
-      betaQuery = params.has('gmhBeta');
+      const params = new URLSearchParams(location.search || "");
+      betaQuery = params.has("gmhBeta");
     } catch (err) {
       betaQuery = false;
     }
     const storedNewUI = (() => {
       try {
-        return localStorage.getItem('gmh_flag_newUI');
+        return localStorage.getItem("gmh_flag_newUI");
       } catch (err) {
         return null;
       }
     })();
     const storedKill = (() => {
       try {
-        return localStorage.getItem('gmh_kill');
+        return localStorage.getItem("gmh_kill");
       } catch (err) {
         return null;
       }
     })();
-    const newUI = storedNewUI === '1' || betaQuery;
-    const killSwitch = storedKill === '1';
+    const newUI = storedNewUI === "1" || betaQuery;
+    const killSwitch = storedKill === "1";
     return {
       newUI,
       killSwitch,
@@ -1172,27 +1227,27 @@
   const isModernUIActive = Flags.newUI && !Flags.killSwitch;
 
   const dbg = (...args) => {
-    if (isModernUIActive) console.debug('[GMH]', ...args);
+    if (isModernUIActive) console.debug("[GMH]", ...args);
   };
 
   const GMH_STATE = {
-    IDLE: 'idle',
-    SCANNING: 'scanning',
-    REDACTING: 'redacting',
-    PREVIEW: 'preview',
-    EXPORTING: 'exporting',
-    DONE: 'done',
-    ERROR: 'error',
+    IDLE: "idle",
+    SCANNING: "scanning",
+    REDACTING: "redacting",
+    PREVIEW: "preview",
+    EXPORTING: "exporting",
+    DONE: "done",
+    ERROR: "error",
   };
 
   const STATE_TRANSITIONS = {
-    idle: ['idle', 'scanning', 'redacting', 'error'],
-    scanning: ['scanning', 'redacting', 'preview', 'done', 'error', 'idle'],
-    redacting: ['redacting', 'preview', 'exporting', 'done', 'error', 'idle'],
-    preview: ['preview', 'exporting', 'idle', 'done', 'error'],
-    exporting: ['exporting', 'done', 'error', 'idle'],
-    done: ['done', 'idle', 'scanning', 'redacting'],
-    error: ['error', 'idle', 'scanning', 'redacting'],
+    idle: ["idle", "scanning", "redacting", "error"],
+    scanning: ["scanning", "redacting", "preview", "done", "error", "idle"],
+    redacting: ["redacting", "preview", "exporting", "done", "error", "idle"],
+    preview: ["preview", "exporting", "idle", "done", "error"],
+    exporting: ["exporting", "done", "error", "idle"],
+    done: ["done", "idle", "scanning", "redacting"],
+    error: ["error", "idle", "scanning", "redacting"],
   };
 
   const VALID_STATES = new Set(Object.values(GMH_STATE));
@@ -1213,7 +1268,7 @@
       return this.current;
     },
     subscribe(listener) {
-      if (typeof listener !== 'function') return () => {};
+      if (typeof listener !== "function") return () => {};
       stateSubscribers.add(listener);
       return () => {
         stateSubscribers.delete(listener);
@@ -1222,18 +1277,18 @@
     setState(nextState, payload) {
       const next = normalizeState(nextState);
       if (!next) {
-        console.warn('[GMH] unknown state requested', nextState);
+        console.warn("[GMH] unknown state requested", nextState);
         return false;
       }
       const allowed = STATE_TRANSITIONS[this.current]?.includes(next);
       if (!allowed) {
-        console.warn('[GMH] invalid state transition', this.current, '→', next);
+        console.warn("[GMH] invalid state transition", this.current, "→", next);
         return false;
       }
       this.previous = this.current;
       this.current = next;
       this.payload = payload ?? null;
-      dbg('state →', this.current, this.payload);
+      dbg("state →", this.current, this.payload);
       stateSubscribers.forEach((listener) => {
         try {
           listener(this.current, {
@@ -1241,7 +1296,7 @@
             payload: this.payload,
           });
         } catch (err) {
-          console.error('[GMH] state listener failed', err);
+          console.error("[GMH] state listener failed", err);
         }
       });
       return true;
@@ -1254,42 +1309,42 @@
   // -------------------------------
   // 0) Constants & utils
   // -------------------------------
-  const PLAYER_MARK = '⟦PLAYER⟧ ';
+  const PLAYER_MARK = "⟦PLAYER⟧ ";
   const HEADER_RE =
     /^(\d+월\s*\d+일.*?\d{1,2}:\d{2})\s*\|\s*([^|]+?)\s*\|\s*📍\s*([^|]+)\s*\|?(.*)$/;
   const CODE_RE = /^([A-J])\/(\d+)\/(\d+)\/(\d+)\/(\d+)$/i;
   const META_KEYWORDS = [
-    '지도',
-    '등장',
-    'Actors',
-    '배우',
-    '기록코드',
-    'Codes',
-    'SCENE',
+    "지도",
+    "등장",
+    "Actors",
+    "배우",
+    "기록코드",
+    "Codes",
+    "SCENE",
   ];
-  const PLAYER_NAME_FALLBACKS = ['플레이어', '소중한코알라5299'];
+  const PLAYER_NAME_FALLBACKS = ["플레이어", "소중한코알라5299"];
   const STORAGE_KEYS = {
-    privacyProfile: 'gmh_privacy_profile',
-    privacyBlacklist: 'gmh_privacy_blacklist',
-    privacyWhitelist: 'gmh_privacy_whitelist',
+    privacyProfile: "gmh_privacy_profile",
+    privacyBlacklist: "gmh_privacy_blacklist",
+    privacyWhitelist: "gmh_privacy_whitelist",
   };
 
   const PRIVACY_PROFILES = {
     safe: {
-      key: 'safe',
-      label: 'SAFE (권장)',
+      key: "safe",
+      label: "SAFE (권장)",
       maskAddressHints: true,
       maskNarrativeSensitive: true,
     },
     standard: {
-      key: 'standard',
-      label: 'STANDARD',
+      key: "standard",
+      label: "STANDARD",
       maskAddressHints: false,
       maskNarrativeSensitive: false,
     },
     research: {
-      key: 'research',
-      label: 'RESEARCH',
+      key: "research",
+      label: "RESEARCH",
       maskAddressHints: false,
       maskNarrativeSensitive: false,
     },
@@ -1298,20 +1353,20 @@
   const PRIVACY_CFG = loadPrivacySettings();
 
   function loadPrivacySettings() {
-    const profile = localStorage.getItem(STORAGE_KEYS.privacyProfile) || 'safe';
+    const profile = localStorage.getItem(STORAGE_KEYS.privacyProfile) || "safe";
     let blacklist = [];
     let whitelist = [];
     try {
       const rawBlack = localStorage.getItem(STORAGE_KEYS.privacyBlacklist);
       if (rawBlack) blacklist = JSON.parse(rawBlack);
     } catch (err) {
-      console.warn('[GMH] privacy blacklist load failed', err);
+      console.warn("[GMH] privacy blacklist load failed", err);
     }
     try {
       const rawWhite = localStorage.getItem(STORAGE_KEYS.privacyWhitelist);
       if (rawWhite) whitelist = JSON.parse(rawWhite);
     } catch (err) {
-      console.warn('[GMH] privacy whitelist load failed', err);
+      console.warn("[GMH] privacy whitelist load failed", err);
     }
     const normalizedBlack = Array.isArray(blacklist)
       ? blacklist.map((item) => collapseSpaces(item)).filter(Boolean)
@@ -1319,7 +1374,7 @@
     const normalizedWhite = Array.isArray(whitelist)
       ? whitelist.map((item) => collapseSpaces(item)).filter(Boolean)
       : [];
-    const profileKey = PRIVACY_PROFILES[profile] ? profile : 'safe';
+    const profileKey = PRIVACY_PROFILES[profile] ? profile : "safe";
     return {
       profile: profileKey,
       blacklist: normalizedBlack,
@@ -1339,12 +1394,12 @@
         JSON.stringify(PRIVACY_CFG.whitelist || []),
       );
     } catch (err) {
-      console.warn('[GMH] privacy settings persist failed', err);
+      console.warn("[GMH] privacy settings persist failed", err);
     }
   }
 
   function setPrivacyProfile(profileKey) {
-    PRIVACY_CFG.profile = PRIVACY_PROFILES[profileKey] ? profileKey : 'safe';
+    PRIVACY_CFG.profile = PRIVACY_PROFILES[profileKey] ? profileKey : "safe";
     persistPrivacySettings();
     syncPrivacyProfileSelect();
   }
@@ -1354,8 +1409,8 @@
     const normalized = items
       .map((item) => collapseSpaces(item))
       .filter(Boolean);
-    if (type === 'blacklist') PRIVACY_CFG.blacklist = normalized;
-    if (type === 'whitelist') PRIVACY_CFG.whitelist = normalized;
+    if (type === "blacklist") PRIVACY_CFG.blacklist = normalized;
+    if (type === "whitelist") PRIVACY_CFG.whitelist = normalized;
     persistPrivacySettings();
   }
 
@@ -1371,7 +1426,7 @@
   };
 
   function luhnValid(value) {
-    const digits = String(value || '').replace(/[^\d]/g, '');
+    const digits = String(value || "").replace(/[^\d]/g, "");
     if (digits.length < 13 || digits.length > 19) return false;
     let sum = 0;
     let shouldDouble = false;
@@ -1389,54 +1444,54 @@
   }
 
   function escapeForRegex(value) {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
   function createRedactionRules(profileKey) {
     const rules = [
       {
-        name: 'EMAIL',
+        name: "EMAIL",
         rx: REDACTION_PATTERNS.email,
-        mask: () => '[REDACTED:EMAIL]',
+        mask: () => "[REDACTED:EMAIL]",
       },
       {
-        name: 'PHONE',
+        name: "PHONE",
         rx: REDACTION_PATTERNS.krPhone,
-        mask: () => '[REDACTED:PHONE]',
+        mask: () => "[REDACTED:PHONE]",
       },
       {
-        name: 'PHONE',
+        name: "PHONE",
         rx: REDACTION_PATTERNS.intlPhone,
-        mask: () => '[REDACTED:PHONE]',
+        mask: () => "[REDACTED:PHONE]",
       },
       {
-        name: 'RRN',
+        name: "RRN",
         rx: REDACTION_PATTERNS.rrn,
-        mask: () => '[REDACTED:RRN]',
+        mask: () => "[REDACTED:RRN]",
       },
       {
-        name: 'CARD',
+        name: "CARD",
         rx: REDACTION_PATTERNS.card,
         validator: luhnValid,
-        mask: () => '[REDACTED:CARD]',
+        mask: () => "[REDACTED:CARD]",
       },
       {
-        name: 'IP',
+        name: "IP",
         rx: REDACTION_PATTERNS.ip,
-        mask: () => '[REDACTED:IP]',
+        mask: () => "[REDACTED:IP]",
       },
       {
-        name: 'HANDLE',
+        name: "HANDLE",
         rx: REDACTION_PATTERNS.handle,
-        mask: () => '[REDACTED:HANDLE]',
+        mask: () => "[REDACTED:HANDLE]",
       },
     ];
     const profile = PRIVACY_PROFILES[profileKey] || PRIVACY_PROFILES.safe;
     if (profile.maskAddressHints) {
       rules.push({
-        name: 'ADDR',
+        name: "ADDR",
         rx: REDACTION_PATTERNS.addressHint,
-        mask: () => '[REDACTED:ADDR]',
+        mask: () => "[REDACTED:ADDR]",
       });
     }
     return rules;
@@ -1450,7 +1505,7 @@
     whitelist.forEach((term, index) => {
       if (!term) return;
       const token = `§WL${index}_${term.length}§`;
-      const rx = new RegExp(escapeForRegex(term), 'gi');
+      const rx = new RegExp(escapeForRegex(term), "gi");
       let replaced = false;
       output = output.replace(rx, () => {
         replaced = true;
@@ -1465,7 +1520,7 @@
     if (!tokens?.length) return text;
     let output = text;
     tokens.forEach(({ token, value }) => {
-      const rx = new RegExp(escapeForRegex(token), 'g');
+      const rx = new RegExp(escapeForRegex(token), "g");
       output = output.replace(rx, value);
     });
     return output;
@@ -1478,7 +1533,7 @@
       output = output.replace(rule.rx, (match) => {
         if (rule.validator && !rule.validator(match)) return match;
         counts[rule.name] = (counts[rule.name] || 0) + 1;
-        return typeof rule.mask === 'function' ? rule.mask(match) : rule.mask;
+        return typeof rule.mask === "function" ? rule.mask(match) : rule.mask;
       });
     }
     return output;
@@ -1489,10 +1544,10 @@
     let output = text;
     blacklist.forEach((term) => {
       if (!term) return;
-      const rx = new RegExp(escapeForRegex(term), 'gi');
+      const rx = new RegExp(escapeForRegex(term), "gi");
       output = output.replace(rx, () => {
         counts.CUSTOM = (counts.CUSTOM || 0) + 1;
-        return '[REDACTED:CUSTOM]';
+        return "[REDACTED:CUSTOM]";
       });
     });
     return output;
@@ -1513,7 +1568,7 @@
     const rules = createRedactionRules(profile.key);
     const baseCounts = counts || {};
     const { text: protectedText, tokens } = protectWhitelist(
-      String(text || ''),
+      String(text || ""),
       PRIVACY_CFG.whitelist,
     );
     let result = applyRules(protectedText, rules, baseCounts);
@@ -1522,7 +1577,7 @@
     if (profile.maskNarrativeSensitive) {
       result = result.replace(/(자살|자해|강간|폭행|살해)/gi, () => {
         baseCounts.SENSITIVE = (baseCounts.SENSITIVE || 0) + 1;
-        return '[REDACTED:SENSITIVE]';
+        return "[REDACTED:SENSITIVE]";
       });
     }
     return result;
@@ -1533,7 +1588,7 @@
       ? session.turns.map((turn) => {
           const clone = { ...turn };
           if (Array.isArray(turn.__gmhEntries)) {
-            Object.defineProperty(clone, '__gmhEntries', {
+            Object.defineProperty(clone, "__gmhEntries", {
               value: turn.__gmhEntries.slice(),
               enumerable: false,
               writable: true,
@@ -1541,7 +1596,7 @@
             });
           }
           if (Array.isArray(turn.__gmhSourceBlocks)) {
-            Object.defineProperty(clone, '__gmhSourceBlocks', {
+            Object.defineProperty(clone, "__gmhSourceBlocks", {
               value: turn.__gmhSourceBlocks.slice(),
               enumerable: false,
               writable: true,
@@ -1560,7 +1615,7 @@
   }
 
   function applyPrivacyPipeline(session, rawText, profileKey) {
-    const profile = PRIVACY_PROFILES[profileKey] ? profileKey : 'safe';
+    const profile = PRIVACY_PROFILES[profileKey] ? profileKey : "safe";
     const counts = {};
     const sanitizedSession = cloneSession(session);
     sanitizedSession.turns = sanitizedSession.turns.map((turn) => {
@@ -1569,7 +1624,7 @@
       if (next.speaker)
         next.speaker = redactText(next.speaker, profile, counts);
       if (Array.isArray(turn?.__gmhEntries)) {
-        Object.defineProperty(next, '__gmhEntries', {
+        Object.defineProperty(next, "__gmhEntries", {
           value: turn.__gmhEntries.slice(),
           enumerable: false,
           writable: true,
@@ -1577,7 +1632,7 @@
         });
       }
       if (Array.isArray(turn?.__gmhSourceBlocks)) {
-        Object.defineProperty(next, '__gmhSourceBlocks', {
+        Object.defineProperty(next, "__gmhSourceBlocks", {
           value: turn.__gmhSourceBlocks.slice(),
           enumerable: false,
           writable: true,
@@ -1588,11 +1643,11 @@
     });
     const sanitizedMeta = {};
     Object.entries(sanitizedSession.meta || {}).forEach(([key, value]) => {
-      if (typeof value === 'string') {
+      if (typeof value === "string") {
         sanitizedMeta[key] = redactText(value, profile, counts);
       } else if (Array.isArray(value)) {
         sanitizedMeta[key] = value.map((item) =>
-          typeof item === 'string' ? redactText(item, profile, counts) : item,
+          typeof item === "string" ? redactText(item, profile, counts) : item,
         );
       } else {
         sanitizedMeta[key] = value;
@@ -1600,7 +1655,7 @@
     });
     sanitizedSession.meta = sanitizedMeta;
     sanitizedSession.warnings = sanitizedSession.warnings.map((warning) =>
-      typeof warning === 'string'
+      typeof warning === "string"
         ? redactText(warning, profile, counts)
         : warning,
     );
@@ -1630,14 +1685,14 @@
     const entries = Object.entries(counts || {}).filter(
       ([, value]) => value > 0,
     );
-    if (!entries.length) return '레다크션 없음';
-    return entries.map(([key, value]) => `${key}:${value}`).join(', ');
+    if (!entries.length) return "레다크션 없음";
+    return entries.map(([key, value]) => `${key}:${value}`).join(", ");
   }
 
   function collectSessionStats(session) {
     if (!session) return { playerTurns: 0, totalTurns: 0, warnings: 0 };
     const playerTurns =
-      session.turns?.filter((turn) => turn.role === 'player')?.length || 0;
+      session.turns?.filter((turn) => turn.role === "player")?.length || 0;
     const totalTurns = session.turns?.length || 0;
     const warnings = session.warnings?.length || 0;
     return { playerTurns, totalTurns, warnings };
@@ -1672,9 +1727,9 @@
 `;
 
   function ensureLegacyPreviewStyles() {
-    if (document.getElementById('gmh-preview-style')) return;
-    const style = document.createElement('style');
-    style.id = 'gmh-preview-style';
+    if (document.getElementById("gmh-preview-style")) return;
+    const style = document.createElement("style");
+    style.id = "gmh-preview-style";
     style.textContent = LEGACY_PREVIEW_CSS;
     document.head.appendChild(style);
   }
@@ -1788,9 +1843,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 `;
 
   function ensureDesignSystemStyles() {
-    if (document.getElementById('gmh-design-system-style')) return;
-    const style = document.createElement('style');
-    style.id = 'gmh-design-system-style';
+    if (document.getElementById("gmh-design-system-style")) return;
+    const style = document.createElement("style");
+    style.id = "gmh-design-system-style";
     style.textContent = DESIGN_SYSTEM_CSS;
     document.head.appendChild(style);
   }
@@ -1800,16 +1855,16 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     let modalIdCounter = 0;
 
     const sanitizeMarkupFragment = (markup) => {
-      const template = document.createElement('template');
-      template.innerHTML = String(markup ?? '');
+      const template = document.createElement("template");
+      template.innerHTML = String(markup ?? "");
       template.content
-        .querySelectorAll('script, style, iframe, object, embed, link, meta')
+        .querySelectorAll("script, style, iframe, object, embed, link, meta")
         .forEach((node) => node.remove());
-      template.content.querySelectorAll('*').forEach((element) => {
+      template.content.querySelectorAll("*").forEach((element) => {
         Array.from(element.attributes).forEach((attr) => {
           const name = attr.name.toLowerCase();
-          const value = String(attr.value || '');
-          if (name.startsWith('on')) {
+          const value = String(attr.value || "");
+          if (name.startsWith("on")) {
             element.removeAttribute(attr.name);
             return;
           }
@@ -1817,21 +1872,21 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             element.removeAttribute(attr.name);
             return;
           }
-          if (name === 'srcdoc') element.removeAttribute(attr.name);
+          if (name === "srcdoc") element.removeAttribute(attr.name);
         });
       });
       return template.content;
     };
 
     const focusableSelector = [
-      'a[href]',
-      'area[href]',
-      'input:not([disabled])',
-      'select:not([disabled])',
-      'textarea:not([disabled])',
-      'button:not([disabled])',
+      "a[href]",
+      "area[href]",
+      "input:not([disabled])",
+      "select:not([disabled])",
+      "textarea:not([disabled])",
+      "button:not([disabled])",
       '[tabindex]:not([tabindex="-1"])',
-    ].join(',');
+    ].join(",");
 
     const getFocusable = (root) => {
       if (!root) return [];
@@ -1839,26 +1894,26 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         (el) => {
           if (!(el instanceof HTMLElement)) return false;
           const style = window.getComputedStyle(el);
-          return style.visibility !== 'hidden' && style.display !== 'none';
+          return style.visibility !== "hidden" && style.display !== "none";
         },
       );
     };
 
     function buildButton(action, finalize) {
-      const button = document.createElement('button');
-      button.type = action.type || 'button';
-      button.className = 'gmh-button';
+      const button = document.createElement("button");
+      button.type = action.type || "button";
+      button.className = "gmh-button";
       if (action.variant) button.classList.add(`gmh-button--${action.variant}`);
-      if (action.attrs && typeof action.attrs === 'object') {
+      if (action.attrs && typeof action.attrs === "object") {
         Object.entries(action.attrs).forEach(([key, value]) => {
           button.setAttribute(key, value);
         });
       }
       if (action.disabled) button.disabled = true;
-      button.textContent = action.label || '확인';
-      button.addEventListener('click', (event) => {
+      button.textContent = action.label || "확인";
+      button.addEventListener("click", (event) => {
         if (button.disabled) return;
-        if (typeof action.onSelect === 'function') {
+        if (typeof action.onSelect === "function") {
           const shouldClose = action.onSelect(event);
           if (shouldClose === false) return;
         }
@@ -1868,7 +1923,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     }
 
     function closeActive(result) {
-      if (activeModal && typeof activeModal.close === 'function') {
+      if (activeModal && typeof activeModal.close === "function") {
         activeModal.close(result, true);
       }
     }
@@ -1878,70 +1933,70 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       closeActive(false);
 
       return new Promise((resolve) => {
-        const overlay = document.createElement('div');
-        overlay.className = 'gmh-modal-overlay';
-        const dialog = document.createElement('div');
-        dialog.className = 'gmh-modal';
-        if (options.size === 'small') dialog.classList.add('gmh-modal--sm');
-        if (options.size === 'large') dialog.classList.add('gmh-modal--lg');
-        dialog.setAttribute('role', 'dialog');
-        dialog.setAttribute('aria-modal', 'true');
-        dialog.setAttribute('tabindex', '-1');
+        const overlay = document.createElement("div");
+        overlay.className = "gmh-modal-overlay";
+        const dialog = document.createElement("div");
+        dialog.className = "gmh-modal";
+        if (options.size === "small") dialog.classList.add("gmh-modal--sm");
+        if (options.size === "large") dialog.classList.add("gmh-modal--lg");
+        dialog.setAttribute("role", "dialog");
+        dialog.setAttribute("aria-modal", "true");
+        dialog.setAttribute("tabindex", "-1");
         modalIdCounter += 1;
         const modalId = `gmh-modal-${modalIdCounter}`;
         const titleId = `${modalId}-title`;
-        const descId = options.description ? `${modalId}-desc` : '';
+        const descId = options.description ? `${modalId}-desc` : "";
         dialog.id = modalId;
 
-        const header = document.createElement('div');
-        header.className = 'gmh-modal__header';
-        const headerRow = document.createElement('div');
-        headerRow.className = 'gmh-modal__header-row';
+        const header = document.createElement("div");
+        header.className = "gmh-modal__header";
+        const headerRow = document.createElement("div");
+        headerRow.className = "gmh-modal__header-row";
 
-        const title = document.createElement('h2');
-        title.className = 'gmh-modal__title';
-        title.textContent = options.title || '';
+        const title = document.createElement("h2");
+        title.className = "gmh-modal__title";
+        title.textContent = options.title || "";
         title.id = titleId;
         headerRow.appendChild(title);
 
         let closeBtn = null;
         if (options.dismissible !== false) {
-          closeBtn = document.createElement('button');
-          closeBtn.type = 'button';
-          closeBtn.className = 'gmh-modal__close';
-          closeBtn.setAttribute('aria-label', '닫기');
-          closeBtn.textContent = '×';
+          closeBtn = document.createElement("button");
+          closeBtn.type = "button";
+          closeBtn.className = "gmh-modal__close";
+          closeBtn.setAttribute("aria-label", "닫기");
+          closeBtn.textContent = "×";
           headerRow.appendChild(closeBtn);
         }
 
         header.appendChild(headerRow);
 
         if (options.description) {
-          const desc = document.createElement('p');
-          desc.className = 'gmh-modal__description';
+          const desc = document.createElement("p");
+          desc.className = "gmh-modal__description";
           desc.textContent = options.description;
           desc.id = descId;
           header.appendChild(desc);
         }
 
-        dialog.setAttribute('aria-labelledby', titleId);
+        dialog.setAttribute("aria-labelledby", titleId);
         if (options.description)
-          dialog.setAttribute('aria-describedby', descId);
-        else dialog.removeAttribute('aria-describedby');
+          dialog.setAttribute("aria-describedby", descId);
+        else dialog.removeAttribute("aria-describedby");
 
-        const body = document.createElement('div');
-        body.className = 'gmh-modal__body gmh-modal__body--scroll';
+        const body = document.createElement("div");
+        body.className = "gmh-modal__body gmh-modal__body--scroll";
         if (options.bodyClass) body.classList.add(options.bodyClass);
         if (options.content instanceof Node) {
           body.appendChild(options.content);
-        } else if (typeof options.content === 'string') {
+        } else if (typeof options.content === "string") {
           body.appendChild(sanitizeMarkupFragment(options.content));
         }
 
-        const footer = document.createElement('div');
-        footer.className = 'gmh-modal__footer';
-        const actionsWrap = document.createElement('div');
-        actionsWrap.className = 'gmh-modal__actions';
+        const footer = document.createElement("div");
+        footer.className = "gmh-modal__footer";
+        const actionsWrap = document.createElement("div");
+        actionsWrap.className = "gmh-modal__actions";
         const actions =
           Array.isArray(options.actions) && options.actions.length
             ? options.actions
@@ -1971,17 +2026,17 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           document.activeElement instanceof HTMLElement
             ? document.activeElement
             : null;
-        bodyEl.style.overflow = 'hidden';
+        bodyEl.style.overflow = "hidden";
         bodyEl.appendChild(overlay);
-        overlay.setAttribute('role', 'presentation');
+        overlay.setAttribute("role", "presentation");
 
         const onKeydown = (event) => {
-          if (event.key === 'Escape' && options.dismissible !== false) {
+          if (event.key === "Escape" && options.dismissible !== false) {
             event.preventDefault();
             cleanup(false);
             return;
           }
-          if (event.key === 'Tab') {
+          if (event.key === "Tab") {
             const focusables = getFocusable(dialog);
             if (!focusables.length) {
               event.preventDefault();
@@ -2001,10 +2056,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
         const cleanup = (result) => {
           if (!overlay.isConnected) return;
-          document.removeEventListener('keydown', onKeydown, true);
+          document.removeEventListener("keydown", onKeydown, true);
           overlay.remove();
           bodyEl.style.overflow = prevOverflow;
-          if (restoreTarget && typeof restoreTarget.focus === 'function') {
+          if (restoreTarget && typeof restoreTarget.focus === "function") {
             restoreTarget.focus();
           }
           activeModal = null;
@@ -2012,16 +2067,16 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         };
 
         if (options.dismissible !== false) {
-          overlay.addEventListener('click', (event) => {
+          overlay.addEventListener("click", (event) => {
             if (event.target === overlay) cleanup(false);
           });
           if (closeBtn)
-            closeBtn.addEventListener('click', () => cleanup(false));
+            closeBtn.addEventListener("click", () => cleanup(false));
         }
 
-        document.addEventListener('keydown', onKeydown, true);
+        document.addEventListener("keydown", onKeydown, true);
 
-        const initialSelector = options.initialFocus || '.gmh-button--primary';
+        const initialSelector = options.initialFocus || ".gmh-button--primary";
         let focusTarget = initialSelector
           ? dialog.querySelector(initialSelector)
           : null;
@@ -2030,7 +2085,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           focusTarget = focusables[0] || closeBtn;
         }
         window.setTimeout(() => {
-          if (focusTarget && typeof focusTarget.focus === 'function')
+          if (focusTarget && typeof focusTarget.focus === "function")
             focusTarget.focus();
         }, 20);
 
@@ -2048,7 +2103,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   })();
 
   function truncateText(value, max = 220) {
-    const text = String(value || '').trim();
+    const text = String(value || "").trim();
     if (text.length <= max) return text;
     return `${text.slice(0, max - 1)}…`;
   }
@@ -2062,41 +2117,41 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     selectedIndices = [],
     selectedOrdinals = [],
     previewTurns = [],
-    actionLabel = '계속',
-    heading = '공유 전 확인',
-    subheading = '외부로 공유하기 전에 민감정보가 없는지 확인하세요.',
+    actionLabel = "계속",
+    heading = "공유 전 확인",
+    subheading = "외부로 공유하기 전에 민감정보가 없는지 확인하세요.",
   }) {
     ensureLegacyPreviewStyles();
     const profileLabel = PRIVACY_PROFILES[profile]?.label || profile;
     const summary = formatRedactionCounts(counts);
-    const overlay = document.createElement('div');
-    overlay.className = 'gmh-preview-overlay';
-    const card = document.createElement('div');
-    card.className = 'gmh-preview-card';
+    const overlay = document.createElement("div");
+    overlay.className = "gmh-preview-overlay";
+    const card = document.createElement("div");
+    card.className = "gmh-preview-card";
     overlay.appendChild(card);
 
-    const header = document.createElement('div');
-    header.className = 'gmh-preview-header';
-    const headerLabel = document.createElement('span');
+    const header = document.createElement("div");
+    header.className = "gmh-preview-header";
+    const headerLabel = document.createElement("span");
     headerLabel.textContent = heading;
     header.appendChild(headerLabel);
-    const closeBtn = document.createElement('button');
-    closeBtn.type = 'button';
-    closeBtn.className = 'gmh-preview-close';
-    closeBtn.setAttribute('aria-label', '닫기');
-    closeBtn.textContent = '✕';
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "gmh-preview-close";
+    closeBtn.setAttribute("aria-label", "닫기");
+    closeBtn.textContent = "✕";
     header.appendChild(closeBtn);
     card.appendChild(header);
 
-    const body = document.createElement('div');
-    body.className = 'gmh-preview-body';
-    const summaryBox = document.createElement('div');
-    summaryBox.className = 'gmh-preview-summary';
+    const body = document.createElement("div");
+    body.className = "gmh-preview-body";
+    const summaryBox = document.createElement("div");
+    summaryBox.className = "gmh-preview-summary";
     const createSummaryRow = (labelText, valueText) => {
-      const row = document.createElement('div');
-      const strong = document.createElement('strong');
+      const row = document.createElement("div");
+      const strong = document.createElement("strong");
       strong.textContent = labelText;
-      const value = document.createElement('span');
+      const value = document.createElement("span");
       value.textContent = valueText;
       row.appendChild(strong);
       row.appendChild(value);
@@ -2107,37 +2162,38 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       ? `플레이어 ${stats.playerTurns}/${overallStats.playerTurns} · 전체 메시지 ${stats.totalTurns}/${overallStats.totalTurns}`
       : `플레이어 ${stats.playerTurns} · 전체 메시지 ${stats.totalTurns}`;
     const summaryRows = [
-      createSummaryRow('프로필', profileLabel),
-      createSummaryRow('턴 수', turnsLabel),
-      createSummaryRow('레다크션', summary),
+      createSummaryRow("프로필", profileLabel),
+      createSummaryRow("턴 수", turnsLabel),
+      createSummaryRow("레다크션", summary),
     ];
     summaryRows.forEach((row) => summaryBox.appendChild(row));
     if (rangeInfo?.total) {
-      const axis = rangeInfo.axis === 'entry' ? 'entry' : 'player';
-      const axisLabel = axis === 'entry' ? '메시지' : '플레이어';
+      const axis = rangeInfo.axis === "entry" ? "entry" : "player";
+      const axisLabel = axis === "entry" ? "메시지" : "플레이어";
       const axisTotal = rangeInfo.total;
       const rangeText = rangeInfo.active
         ? `${axisLabel} ${rangeInfo.start}-${rangeInfo.end} · ${rangeInfo.count}/${axisTotal}`
         : `${axisLabel} ${axisTotal}개 전체`;
-      const complement = axis === 'entry'
-        ? rangeInfo.playerTotal
-          ? ` · 플레이어 ${rangeInfo.playerTotal}개`
-          : ''
-        : rangeInfo.entryTotal
-          ? ` · 메시지 ${rangeInfo.entryTotal}개`
-          : '';
-      summaryBox.appendChild(createSummaryRow('범위', rangeText + complement));
+      const complement =
+        axis === "entry"
+          ? rangeInfo.playerTotal
+            ? ` · 플레이어 ${rangeInfo.playerTotal}개`
+            : ""
+          : rangeInfo.entryTotal
+            ? ` · 메시지 ${rangeInfo.entryTotal}개`
+            : "";
+      summaryBox.appendChild(createSummaryRow("범위", rangeText + complement));
     }
     body.appendChild(summaryBox);
 
-    const previewTitle = document.createElement('div');
-    previewTitle.style.fontWeight = '600';
-    previewTitle.style.color = '#cbd5f5';
+    const previewTitle = document.createElement("div");
+    previewTitle.style.fontWeight = "600";
+    previewTitle.style.color = "#cbd5f5";
     previewTitle.textContent = `미리보기 (${Math.min(previewTurns.length, PREVIEW_TURN_LIMIT)}턴)`;
     body.appendChild(previewTitle);
 
-    const turnList = document.createElement('ul');
-    turnList.className = 'gmh-preview-turns';
+    const turnList = document.createElement("ul");
+    turnList.className = "gmh-preview-turns";
     const highlightActive = rangeInfo?.active;
     const selectedIndexSet = new Set(selectedIndices || []);
     const ordinalLookup = new Map();
@@ -2148,21 +2204,21 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     previewTurns.slice(-PREVIEW_TURN_LIMIT).forEach((turn) => {
       if (!turn) return;
-      const item = document.createElement('li');
-      item.className = 'gmh-preview-turn';
+      const item = document.createElement("li");
+      item.className = "gmh-preview-turn";
       item.tabIndex = 0;
 
       const sourceIndex =
-        typeof turn.__gmhIndex === 'number' ? turn.__gmhIndex : null;
+        typeof turn.__gmhIndex === "number" ? turn.__gmhIndex : null;
       if (sourceIndex !== null) item.dataset.turnIndex = String(sourceIndex);
 
       const playerOrdinal = (() => {
-        if (typeof turn.__gmhOrdinal === 'number') return turn.__gmhOrdinal;
+        if (typeof turn.__gmhOrdinal === "number") return turn.__gmhOrdinal;
         if (sourceIndex !== null && ordinalLookup.has(sourceIndex))
           return ordinalLookup.get(sourceIndex);
         return null;
       })();
-      if (typeof playerOrdinal === 'number') {
+      if (typeof playerOrdinal === "number") {
         item.dataset.playerTurn = String(playerOrdinal);
       }
 
@@ -2171,54 +2227,54 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         sourceIndex !== null &&
         selectedIndexSet.has(sourceIndex)
       ) {
-        item.classList.add('gmh-preview-turn--selected');
+        item.classList.add("gmh-preview-turn--selected");
       }
 
-      const speaker = document.createElement('div');
-      speaker.className = 'gmh-preview-turn-speaker';
-      const speakerLabel = document.createElement('span');
-      speakerLabel.textContent = `${turn.speaker || '??'} · ${turn.role}`;
+      const speaker = document.createElement("div");
+      speaker.className = "gmh-preview-turn-speaker";
+      const speakerLabel = document.createElement("span");
+      speakerLabel.textContent = `${turn.speaker || "??"} · ${turn.role}`;
       speaker.appendChild(speakerLabel);
-      if (typeof playerOrdinal === 'number' && playerOrdinal > 0) {
-        const badge = document.createElement('span');
-        badge.className = 'gmh-turn-list__badge';
+      if (typeof playerOrdinal === "number" && playerOrdinal > 0) {
+        const badge = document.createElement("span");
+        badge.className = "gmh-turn-list__badge";
         speaker.appendChild(badge);
         badge.textContent = `턴 ${playerOrdinal}`;
       }
-      const text = document.createElement('div');
-      text.className = 'gmh-preview-turn-text';
-      text.textContent = truncateText(turn.text || '');
+      const text = document.createElement("div");
+      text.className = "gmh-preview-turn-text";
+      text.textContent = truncateText(turn.text || "");
       item.appendChild(speaker);
       item.appendChild(text);
       turnList.appendChild(item);
     });
     if (!turnList.children.length) {
-      const empty = document.createElement('div');
-      empty.className = 'gmh-preview-turn';
-      const text = document.createElement('div');
-      text.className = 'gmh-preview-turn-text';
-      text.textContent = '표시할 턴이 없습니다. 상단 요약만 확인해주세요.';
+      const empty = document.createElement("div");
+      empty.className = "gmh-preview-turn";
+      const text = document.createElement("div");
+      text.className = "gmh-preview-turn-text";
+      text.textContent = "표시할 턴이 없습니다. 상단 요약만 확인해주세요.";
       empty.appendChild(text);
       turnList.appendChild(empty);
     }
     body.appendChild(turnList);
 
-    const footnote = document.createElement('div');
-    footnote.className = 'gmh-preview-footnote';
+    const footnote = document.createElement("div");
+    footnote.className = "gmh-preview-footnote";
     footnote.textContent = subheading;
     body.appendChild(footnote);
 
     card.appendChild(body);
 
-    const actions = document.createElement('div');
-    actions.className = 'gmh-preview-actions';
-    const cancelBtn = document.createElement('button');
-    cancelBtn.type = 'button';
-    cancelBtn.className = 'gmh-preview-cancel';
-    cancelBtn.textContent = '취소';
-    const confirmBtn = document.createElement('button');
-    confirmBtn.type = 'button';
-    confirmBtn.className = 'gmh-preview-confirm';
+    const actions = document.createElement("div");
+    actions.className = "gmh-preview-actions";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "gmh-preview-cancel";
+    cancelBtn.textContent = "취소";
+    const confirmBtn = document.createElement("button");
+    confirmBtn.type = "button";
+    confirmBtn.className = "gmh-preview-confirm";
     confirmBtn.textContent = actionLabel;
     actions.appendChild(cancelBtn);
     actions.appendChild(confirmBtn);
@@ -2226,28 +2282,28 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     const bodyEl = document.body;
     const prevOverflow = bodyEl.style.overflow;
-    bodyEl.style.overflow = 'hidden';
+    bodyEl.style.overflow = "hidden";
     bodyEl.appendChild(overlay);
 
     return new Promise((resolve) => {
       const cleanup = (result) => {
         bodyEl.style.overflow = prevOverflow;
         overlay.remove();
-        document.removeEventListener('keydown', onKey);
+        document.removeEventListener("keydown", onKey);
         resolve(result);
       };
 
       const onKey = (event) => {
-        if (event.key === 'Escape') cleanup(false);
+        if (event.key === "Escape") cleanup(false);
       };
-      document.addEventListener('keydown', onKey);
+      document.addEventListener("keydown", onKey);
 
-      overlay.addEventListener('click', (event) => {
+      overlay.addEventListener("click", (event) => {
         if (event.target === overlay) cleanup(false);
       });
-      closeBtn.addEventListener('click', () => cleanup(false));
-      cancelBtn.addEventListener('click', () => cleanup(false));
-      confirmBtn.addEventListener('click', () => cleanup(true));
+      closeBtn.addEventListener("click", () => cleanup(false));
+      cancelBtn.addEventListener("click", () => cleanup(false));
+      confirmBtn.addEventListener("click", () => cleanup(true));
     });
   }
 
@@ -2260,27 +2316,27 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     selectedIndices = [],
     selectedOrdinals = [],
     previewTurns = [],
-    actionLabel = '계속',
-    heading = '공유 전 확인',
-    subheading = '외부로 공유하기 전에 민감정보가 없는지 확인하세요.',
+    actionLabel = "계속",
+    heading = "공유 전 확인",
+    subheading = "외부로 공유하기 전에 민감정보가 없는지 확인하세요.",
   }) {
     ensureDesignSystemStyles();
     const profileLabel = PRIVACY_PROFILES[profile]?.label || profile;
     const summary = formatRedactionCounts(counts);
 
-    const stack = document.createElement('div');
-    stack.className = 'gmh-modal-stack';
+    const stack = document.createElement("div");
+    stack.className = "gmh-modal-stack";
 
-    const summaryBox = document.createElement('div');
-    summaryBox.className = 'gmh-privacy-summary';
+    const summaryBox = document.createElement("div");
+    summaryBox.className = "gmh-privacy-summary";
 
     const createPrivacyRow = (labelText, valueText) => {
-      const row = document.createElement('div');
-      row.className = 'gmh-privacy-summary__row';
-      const labelEl = document.createElement('span');
-      labelEl.className = 'gmh-privacy-summary__label';
+      const row = document.createElement("div");
+      row.className = "gmh-privacy-summary__row";
+      const labelEl = document.createElement("span");
+      labelEl.className = "gmh-privacy-summary__label";
       labelEl.textContent = labelText;
-      const valueEl = document.createElement('span');
+      const valueEl = document.createElement("span");
       valueEl.textContent = valueText;
       row.appendChild(labelEl);
       row.appendChild(valueEl);
@@ -2291,36 +2347,37 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       ? `플레이어 ${stats.playerTurns}/${overallStats.playerTurns} · 전체 메시지 ${stats.totalTurns}/${overallStats.totalTurns}`
       : `플레이어 ${stats.playerTurns} · 전체 메시지 ${stats.totalTurns}`;
     const privacyRows = [
-      createPrivacyRow('프로필', profileLabel),
-      createPrivacyRow('턴 수', turnsLabel),
-      createPrivacyRow('레다크션', summary),
+      createPrivacyRow("프로필", profileLabel),
+      createPrivacyRow("턴 수", turnsLabel),
+      createPrivacyRow("레다크션", summary),
     ];
     privacyRows.forEach((row) => summaryBox.appendChild(row));
     if (rangeInfo?.total) {
-      const axis = rangeInfo.axis === 'entry' ? 'entry' : 'player';
-      const axisLabel = axis === 'entry' ? '메시지' : '플레이어';
+      const axis = rangeInfo.axis === "entry" ? "entry" : "player";
+      const axisLabel = axis === "entry" ? "메시지" : "플레이어";
       const axisTotal = rangeInfo.total;
       const rangeText = rangeInfo.active
         ? `${axisLabel} ${rangeInfo.start}-${rangeInfo.end} · ${rangeInfo.count}/${axisTotal}`
         : `${axisLabel} ${axisTotal}개 전체`;
-      const complement = axis === 'entry'
-        ? rangeInfo.playerTotal
-          ? ` · 플레이어 ${rangeInfo.playerTotal}개`
-          : ''
-        : rangeInfo.entryTotal
-          ? ` · 메시지 ${rangeInfo.entryTotal}개`
-          : '';
-      summaryBox.appendChild(createPrivacyRow('범위', rangeText + complement));
+      const complement =
+        axis === "entry"
+          ? rangeInfo.playerTotal
+            ? ` · 플레이어 ${rangeInfo.playerTotal}개`
+            : ""
+          : rangeInfo.entryTotal
+            ? ` · 메시지 ${rangeInfo.entryTotal}개`
+            : "";
+      summaryBox.appendChild(createPrivacyRow("범위", rangeText + complement));
     }
     stack.appendChild(summaryBox);
 
-    const previewTitle = document.createElement('div');
-    previewTitle.className = 'gmh-section-title';
+    const previewTitle = document.createElement("div");
+    previewTitle.className = "gmh-section-title";
     previewTitle.textContent = `미리보기 (${Math.min(previewTurns.length, PREVIEW_TURN_LIMIT)}턴)`;
     stack.appendChild(previewTitle);
 
-    const turnList = document.createElement('ul');
-    turnList.className = 'gmh-turn-list';
+    const turnList = document.createElement("ul");
+    turnList.className = "gmh-turn-list";
     const highlightActive = rangeInfo?.active;
     const selectedIndexSet = new Set(selectedIndices || []);
     const ordinalLookup = new Map();
@@ -2331,21 +2388,21 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     previewTurns.slice(-PREVIEW_TURN_LIMIT).forEach((turn) => {
       if (!turn) return;
-      const item = document.createElement('li');
-      item.className = 'gmh-turn-list__item';
+      const item = document.createElement("li");
+      item.className = "gmh-turn-list__item";
       item.tabIndex = 0;
 
       const sourceIndex =
-        typeof turn.__gmhIndex === 'number' ? turn.__gmhIndex : null;
+        typeof turn.__gmhIndex === "number" ? turn.__gmhIndex : null;
       if (sourceIndex !== null) item.dataset.turnIndex = String(sourceIndex);
 
       const playerOrdinal = (() => {
-        if (typeof turn.__gmhOrdinal === 'number') return turn.__gmhOrdinal;
+        if (typeof turn.__gmhOrdinal === "number") return turn.__gmhOrdinal;
         if (sourceIndex !== null && ordinalLookup.has(sourceIndex))
           return ordinalLookup.get(sourceIndex);
         return null;
       })();
-      if (typeof playerOrdinal === 'number') {
+      if (typeof playerOrdinal === "number") {
         item.dataset.playerTurn = String(playerOrdinal);
       }
 
@@ -2354,61 +2411,61 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         sourceIndex !== null &&
         selectedIndexSet.has(sourceIndex)
       ) {
-        item.classList.add('gmh-turn-list__item--selected');
+        item.classList.add("gmh-turn-list__item--selected");
       }
 
-      const speaker = document.createElement('div');
-      speaker.className = 'gmh-turn-list__speaker';
-      const speakerLabel = document.createElement('span');
-      speakerLabel.textContent = `${turn.speaker || '??'} · ${turn.role}`;
+      const speaker = document.createElement("div");
+      speaker.className = "gmh-turn-list__speaker";
+      const speakerLabel = document.createElement("span");
+      speakerLabel.textContent = `${turn.speaker || "??"} · ${turn.role}`;
       speaker.appendChild(speakerLabel);
-      if (typeof playerOrdinal === 'number' && playerOrdinal > 0) {
-        const badge = document.createElement('span');
-        badge.className = 'gmh-turn-list__badge';
+      if (typeof playerOrdinal === "number" && playerOrdinal > 0) {
+        const badge = document.createElement("span");
+        badge.className = "gmh-turn-list__badge";
         badge.textContent = `턴 ${playerOrdinal}`;
         speaker.appendChild(badge);
       }
 
-      const text = document.createElement('div');
-      text.className = 'gmh-turn-list__text';
-      text.textContent = truncateText(turn.text || '');
+      const text = document.createElement("div");
+      text.className = "gmh-turn-list__text";
+      text.textContent = truncateText(turn.text || "");
       item.appendChild(speaker);
       item.appendChild(text);
       turnList.appendChild(item);
     });
     if (!turnList.children.length) {
-      const empty = document.createElement('li');
-      empty.className = 'gmh-turn-list__item gmh-turn-list__empty';
-      empty.textContent = '표시할 턴이 없습니다. 상단 요약만 확인해주세요.';
+      const empty = document.createElement("li");
+      empty.className = "gmh-turn-list__item gmh-turn-list__empty";
+      empty.textContent = "표시할 턴이 없습니다. 상단 요약만 확인해주세요.";
       turnList.appendChild(empty);
     }
     stack.appendChild(turnList);
 
-    const footnote = document.createElement('div');
-    footnote.className = 'gmh-modal-footnote';
+    const footnote = document.createElement("div");
+    footnote.className = "gmh-modal-footnote";
     footnote.textContent = subheading;
     stack.appendChild(footnote);
 
     return GMH.UI.Modal.open({
       title: heading,
-      description: '',
+      description: "",
       content: stack,
-      size: 'medium',
+      size: "medium",
       initialFocus: '[data-action="confirm"]',
       actions: [
         {
-          id: 'cancel',
-          label: '취소',
-          variant: 'secondary',
+          id: "cancel",
+          label: "취소",
+          variant: "secondary",
           value: false,
-          attrs: { 'data-action': 'cancel' },
+          attrs: { "data-action": "cancel" },
         },
         {
-          id: 'confirm',
+          id: "confirm",
           label: actionLabel,
-          variant: 'primary',
+          variant: "primary",
           value: true,
-          attrs: { 'data-action': 'confirm' },
+          attrs: { "data-action": "confirm" },
         },
       ],
     }).then((result) => Boolean(result));
@@ -2431,7 +2488,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     range,
   }) {
     return {
-      tool: 'Genit Memory Helper',
+      tool: "Genit Memory Helper",
       version: GMH.VERSION,
       generated_at: new Date().toISOString(),
       profile,
@@ -2447,90 +2504,90 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
   async function configurePrivacyListsModern() {
     ensureDesignSystemStyles();
-    const stack = document.createElement('div');
-    stack.className = 'gmh-modal-stack';
+    const stack = document.createElement("div");
+    stack.className = "gmh-modal-stack";
 
-    const intro = document.createElement('p');
-    intro.className = 'gmh-subtext';
+    const intro = document.createElement("p");
+    intro.className = "gmh-subtext";
     intro.textContent =
-      '쉼표 또는 줄바꿈으로 여러 항목을 구분하세요. 블랙리스트는 강제 마스킹, 화이트리스트는 예외 처리됩니다.';
+      "쉼표 또는 줄바꿈으로 여러 항목을 구분하세요. 블랙리스트는 강제 마스킹, 화이트리스트는 예외 처리됩니다.";
     stack.appendChild(intro);
 
-    const blackLabel = document.createElement('div');
-    blackLabel.className = 'gmh-field-label';
+    const blackLabel = document.createElement("div");
+    blackLabel.className = "gmh-field-label";
     blackLabel.textContent = `블랙리스트 (${PRIVACY_CFG.blacklist?.length || 0})`;
     stack.appendChild(blackLabel);
 
-    const blackTextarea = document.createElement('textarea');
-    blackTextarea.id = 'gmh-privacy-blacklist';
-    blackTextarea.className = 'gmh-textarea';
-    blackTextarea.placeholder = '예: 서울시, 010-1234-5678';
-    blackTextarea.value = PRIVACY_CFG.blacklist?.join('\n') || '';
+    const blackTextarea = document.createElement("textarea");
+    blackTextarea.id = "gmh-privacy-blacklist";
+    blackTextarea.className = "gmh-textarea";
+    blackTextarea.placeholder = "예: 서울시, 010-1234-5678";
+    blackTextarea.value = PRIVACY_CFG.blacklist?.join("\n") || "";
     stack.appendChild(blackTextarea);
 
-    const whiteLabel = document.createElement('div');
-    whiteLabel.className = 'gmh-field-label';
+    const whiteLabel = document.createElement("div");
+    whiteLabel.className = "gmh-field-label";
     whiteLabel.textContent = `화이트리스트 (${PRIVACY_CFG.whitelist?.length || 0})`;
     stack.appendChild(whiteLabel);
 
-    const whiteTextarea = document.createElement('textarea');
-    whiteTextarea.id = 'gmh-privacy-whitelist';
-    whiteTextarea.className = 'gmh-textarea';
-    whiteTextarea.placeholder = '예: 공식 길드명, 공개 닉네임';
-    whiteTextarea.value = PRIVACY_CFG.whitelist?.join('\n') || '';
+    const whiteTextarea = document.createElement("textarea");
+    whiteTextarea.id = "gmh-privacy-whitelist";
+    whiteTextarea.className = "gmh-textarea";
+    whiteTextarea.placeholder = "예: 공식 길드명, 공개 닉네임";
+    whiteTextarea.value = PRIVACY_CFG.whitelist?.join("\n") || "";
     stack.appendChild(whiteTextarea);
 
     const result = await GMH.UI.Modal.open({
-      title: '프라이버시 민감어 관리',
-      size: 'large',
+      title: "프라이버시 민감어 관리",
+      size: "large",
       content: stack,
       actions: [
         {
-          id: 'cancel',
-          label: '취소',
-          variant: 'secondary',
+          id: "cancel",
+          label: "취소",
+          variant: "secondary",
           value: false,
-          attrs: { 'data-action': 'cancel' },
+          attrs: { "data-action": "cancel" },
         },
         {
-          id: 'save',
-          label: '저장',
-          variant: 'primary',
+          id: "save",
+          label: "저장",
+          variant: "primary",
           value: true,
-          attrs: { 'data-action': 'save' },
+          attrs: { "data-action": "save" },
         },
       ],
-      initialFocus: '#gmh-privacy-blacklist',
+      initialFocus: "#gmh-privacy-blacklist",
     });
 
     if (!result) {
-      setPanelStatus('프라이버시 설정 변경을 취소했습니다.', 'muted');
+      setPanelStatus("프라이버시 설정 변경을 취소했습니다.", "muted");
       return;
     }
 
-    setCustomList('blacklist', parseListInput(blackTextarea.value));
-    setCustomList('whitelist', parseListInput(whiteTextarea.value));
-    setPanelStatus('프라이버시 사용자 목록을 저장했습니다.', 'success');
+    setCustomList("blacklist", parseListInput(blackTextarea.value));
+    setCustomList("whitelist", parseListInput(whiteTextarea.value));
+    setPanelStatus("프라이버시 사용자 목록을 저장했습니다.", "success");
   }
 
   function configurePrivacyListsLegacy() {
-    const currentBlack = PRIVACY_CFG.blacklist?.join('\n') || '';
+    const currentBlack = PRIVACY_CFG.blacklist?.join("\n") || "";
     const nextBlack = window.prompt(
-      '레다크션 강제 대상(블랙리스트)을 줄바꿈 또는 쉼표로 구분해 입력하세요.\n비워두면 목록을 초기화합니다.',
+      "레다크션 강제 대상(블랙리스트)을 줄바꿈 또는 쉼표로 구분해 입력하세요.\n비워두면 목록을 초기화합니다.",
       currentBlack,
     );
     if (nextBlack !== null) {
-      setCustomList('blacklist', parseListInput(nextBlack));
+      setCustomList("blacklist", parseListInput(nextBlack));
     }
-    const currentWhite = PRIVACY_CFG.whitelist?.join('\n') || '';
+    const currentWhite = PRIVACY_CFG.whitelist?.join("\n") || "";
     const nextWhite = window.prompt(
-      '레다크션 예외 대상(화이트리스트)을 줄바꿈 또는 쉼표로 구분해 입력하세요.\n비워두면 목록을 초기화합니다.',
+      "레다크션 예외 대상(화이트리스트)을 줄바꿈 또는 쉼표로 구분해 입력하세요.\n비워두면 목록을 초기화합니다.",
       currentWhite,
     );
     if (nextWhite !== null) {
-      setCustomList('whitelist', parseListInput(nextWhite));
+      setCustomList("whitelist", parseListInput(nextWhite));
     }
-    setPanelStatus('프라이버시 사용자 목록을 저장했습니다.', 'info');
+    setPanelStatus("프라이버시 사용자 목록을 저장했습니다.", "info");
   }
 
   async function configurePrivacyLists() {
@@ -2557,153 +2614,153 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         allowResize: settings.behavior?.allowResize !== false,
       };
 
-      const grid = document.createElement('div');
-      grid.className = 'gmh-settings-grid';
+      const grid = document.createElement("div");
+      grid.className = "gmh-settings-grid";
 
       const buildRow = ({ id, label, description, control }) => {
-        const row = document.createElement('div');
-        row.className = 'gmh-settings-row';
-        const main = document.createElement('div');
-        main.className = 'gmh-settings-row__main';
-        const labelEl = document.createElement('div');
-        labelEl.className = 'gmh-settings-row__label';
+        const row = document.createElement("div");
+        row.className = "gmh-settings-row";
+        const main = document.createElement("div");
+        main.className = "gmh-settings-row__main";
+        const labelEl = document.createElement("div");
+        labelEl.className = "gmh-settings-row__label";
         labelEl.textContent = label;
         main.appendChild(labelEl);
         if (description) {
-          const desc = document.createElement('div');
-          desc.className = 'gmh-settings-row__description';
+          const desc = document.createElement("div");
+          desc.className = "gmh-settings-row__description";
           desc.textContent = description;
           main.appendChild(desc);
         }
         row.appendChild(main);
         control.id = id;
-        const controls = document.createElement('div');
-        controls.style.display = 'flex';
-        controls.style.alignItems = 'center';
-        controls.style.gap = '8px';
+        const controls = document.createElement("div");
+        controls.style.display = "flex";
+        controls.style.alignItems = "center";
+        controls.style.gap = "8px";
         controls.appendChild(control);
         row.appendChild(controls);
         return { row, control, controls };
       };
 
-      const autoHideToggle = document.createElement('input');
-      autoHideToggle.type = 'checkbox';
+      const autoHideToggle = document.createElement("input");
+      autoHideToggle.type = "checkbox";
       autoHideToggle.checked = behavior.autoHideEnabled;
-      const autoHideDelay = document.createElement('input');
-      autoHideDelay.type = 'number';
-      autoHideDelay.min = '5';
-      autoHideDelay.max = '60';
-      autoHideDelay.step = '1';
+      const autoHideDelay = document.createElement("input");
+      autoHideDelay.type = "number";
+      autoHideDelay.min = "5";
+      autoHideDelay.max = "60";
+      autoHideDelay.step = "1";
       autoHideDelay.value = `${Math.round(behavior.autoHideDelayMs / 1000)}`;
       autoHideDelay.disabled = !behavior.autoHideEnabled;
-      const delayUnit = document.createElement('span');
-      delayUnit.textContent = '초';
-      delayUnit.style.fontSize = '12px';
-      delayUnit.style.color = 'var(--gmh-muted)';
+      const delayUnit = document.createElement("span");
+      delayUnit.textContent = "초";
+      delayUnit.style.fontSize = "12px";
+      delayUnit.style.color = "var(--gmh-muted)";
 
-      autoHideToggle.addEventListener('change', () => {
+      autoHideToggle.addEventListener("change", () => {
         autoHideDelay.disabled = !autoHideToggle.checked;
       });
 
       const autoHideRow = buildRow({
-        id: 'gmh-settings-autohide',
-        label: '자동 접힘',
-        description: '패널이 유휴 상태로 유지되면 자동으로 접습니다.',
+        id: "gmh-settings-autohide",
+        label: "자동 접힘",
+        description: "패널이 유휴 상태로 유지되면 자동으로 접습니다.",
         control: autoHideToggle,
       });
       autoHideRow.controls.appendChild(autoHideDelay);
       autoHideRow.controls.appendChild(delayUnit);
       grid.appendChild(autoHideRow.row);
 
-      const collapseOutsideToggle = document.createElement('input');
-      collapseOutsideToggle.type = 'checkbox';
+      const collapseOutsideToggle = document.createElement("input");
+      collapseOutsideToggle.type = "checkbox";
       collapseOutsideToggle.checked = behavior.collapseOnOutside;
       grid.appendChild(
         buildRow({
-          id: 'gmh-settings-collapse-outside',
-          label: '밖을 클릭하면 접기',
-          description: '패널 외부를 클릭하면 곧바로 접습니다.',
+          id: "gmh-settings-collapse-outside",
+          label: "밖을 클릭하면 접기",
+          description: "패널 외부를 클릭하면 곧바로 접습니다.",
           control: collapseOutsideToggle,
         }).row,
       );
 
-      const focusModeToggle = document.createElement('input');
-      focusModeToggle.type = 'checkbox';
+      const focusModeToggle = document.createElement("input");
+      focusModeToggle.type = "checkbox";
       focusModeToggle.checked = behavior.collapseOnFocus;
       grid.appendChild(
         buildRow({
-          id: 'gmh-settings-focus-collapse',
-          label: '집중 모드',
-          description: '입력 필드나 버튼에 포커스가 이동하면 패널을 접습니다.',
+          id: "gmh-settings-focus-collapse",
+          label: "집중 모드",
+          description: "입력 필드나 버튼에 포커스가 이동하면 패널을 접습니다.",
           control: focusModeToggle,
         }).row,
       );
 
-      const dragToggle = document.createElement('input');
-      dragToggle.type = 'checkbox';
+      const dragToggle = document.createElement("input");
+      dragToggle.type = "checkbox";
       dragToggle.checked = behavior.allowDrag;
       grid.appendChild(
         buildRow({
-          id: 'gmh-settings-drag',
-          label: '드래그 이동',
-          description: '상단 그립으로 패널 위치를 조정할 수 있습니다.',
+          id: "gmh-settings-drag",
+          label: "드래그 이동",
+          description: "상단 그립으로 패널 위치를 조정할 수 있습니다.",
           control: dragToggle,
         }).row,
       );
 
-      const resizeToggle = document.createElement('input');
-      resizeToggle.type = 'checkbox';
+      const resizeToggle = document.createElement("input");
+      resizeToggle.type = "checkbox";
       resizeToggle.checked = behavior.allowResize;
       grid.appendChild(
         buildRow({
-          id: 'gmh-settings-resize',
-          label: '크기 조절',
-          description: '우측 하단 손잡이로 패널 크기를 바꿉니다.',
+          id: "gmh-settings-resize",
+          label: "크기 조절",
+          description: "우측 하단 손잡이로 패널 크기를 바꿉니다.",
           control: resizeToggle,
         }).row,
       );
 
       const modalResult = await GMH.UI.Modal.open({
-        title: 'GMH 설정',
-        size: 'large',
+        title: "GMH 설정",
+        size: "large",
         content: grid,
-        initialFocus: '#gmh-settings-autohide',
+        initialFocus: "#gmh-settings-autohide",
         actions: [
           {
-            id: 'privacy',
-            label: '민감어 관리',
-            variant: 'secondary',
-            value: 'privacy',
+            id: "privacy",
+            label: "민감어 관리",
+            variant: "secondary",
+            value: "privacy",
           },
           {
-            id: 'reset',
-            label: '기본값 복원',
-            variant: 'secondary',
-            value: 'reset',
+            id: "reset",
+            label: "기본값 복원",
+            variant: "secondary",
+            value: "reset",
           },
           {
-            id: 'save',
-            label: '저장',
-            variant: 'primary',
-            value: 'save',
+            id: "save",
+            label: "저장",
+            variant: "primary",
+            value: "save",
           },
         ],
       });
 
       if (!modalResult) {
-        setPanelStatus('패널 설정 변경을 취소했습니다.', 'muted');
+        setPanelStatus("패널 설정 변경을 취소했습니다.", "muted");
         return;
       }
 
-      if (modalResult === 'privacy') {
+      if (modalResult === "privacy") {
         await configurePrivacyLists();
         keepOpen = true;
         continue;
       }
 
-      if (modalResult === 'reset') {
+      if (modalResult === "reset") {
         PanelSettings.reset();
-        setPanelStatus('패널 설정을 기본값으로 되돌렸습니다.', 'success');
+        setPanelStatus("패널 설정을 기본값으로 되돌렸습니다.", "success");
         keepOpen = true;
         continue;
       }
@@ -2724,40 +2781,40 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         },
       });
 
-      setPanelStatus('패널 설정을 저장했습니다.', 'success');
+      setPanelStatus("패널 설정을 저장했습니다.", "success");
     }
   }
 
   function normNL(s) {
-    return String(s ?? '').replace(/\r\n?|\u2028|\u2029/g, '\n');
+    return String(s ?? "").replace(/\r\n?|\u2028|\u2029/g, "\n");
   }
 
   function stripTicks(s) {
-    return String(s ?? '').replace(/```+/g, '');
+    return String(s ?? "").replace(/```+/g, "");
   }
 
   function collapseSpaces(s) {
-    return String(s ?? '')
-      .replace(/\s+/g, ' ')
-      .replace(/\s{2,}/g, ' ')
+    return String(s ?? "")
+      .replace(/\s+/g, " ")
+      .replace(/\s{2,}/g, " ")
       .trim();
   }
 
   function stripQuotes(s) {
-    return String(s ?? '')
-      .replace(/^['"“”『「《【]+/, '')
-      .replace(/['"“”』」》】]+$/, '')
+    return String(s ?? "")
+      .replace(/^['"“”『「《【]+/, "")
+      .replace(/['"“”』」》】]+$/, "")
       .trim();
   }
 
   function stripBrackets(v) {
-    return String(v ?? '')
-      .replace(/^\[|\]$/g, '')
+    return String(v ?? "")
+      .replace(/^\[|\]$/g, "")
       .trim();
   }
 
   function sanitizeText(s) {
-    return collapseSpaces(normNL(s).replace(/[\t\v\f\u00a0\u200b]/g, ' '));
+    return collapseSpaces(normNL(s).replace(/[\t\v\f\u00a0\u200b]/g, " "));
   }
 
   function parseListInput(raw) {
@@ -2773,7 +2830,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   }
 
   function triggerDownload(blob, filename) {
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = filename;
     link.click();
@@ -2790,13 +2847,13 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const cs = getComputedStyle(el);
     const oy = cs.overflowY;
     const scrollableStyle =
-      oy === 'auto' || oy === 'scroll' || oy === 'overlay';
+      oy === "auto" || oy === "scroll" || oy === "overlay";
     return scrollableStyle && el.scrollHeight > el.clientHeight + 4;
   }
 
   function looksLikeName(raw) {
-    const s = String(raw ?? '')
-      .replace(/^[\-•\s]+/, '')
+    const s = String(raw ?? "")
+      .replace(/^[\-•\s]+/, "")
       .trim();
     if (!s) return false;
     if (/^(INFO|메시지 이미지)$/i.test(s)) return false;
@@ -2816,7 +2873,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       )
     )
       return true;
-    if (s.includes(' ')) {
+    if (s.includes(" ")) {
       const words = s.split(/\s+/);
       if (words.length >= 4) return true;
     }
@@ -2833,7 +2890,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     if (/^INFO$/i.test(stripped)) return true;
     if (isActorStatsLine(stripped)) return true;
     if (/^메시지 이미지$/i.test(stripped)) return true;
-    if (CODE_RE.test(stripped.replace(/\s+/g, ''))) return true;
+    if (CODE_RE.test(stripped.replace(/\s+/g, ""))) return true;
     for (const keyword of META_KEYWORDS) {
       if (stripped.startsWith(keyword)) return true;
     }
@@ -2842,13 +2899,13 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   }
 
   GMH.Adapters.genit = (() => {
-    const adapterConfig = GMH.Adapters.Registry.get('genit');
+    const adapterConfig = GMH.Adapters.Registry.get("genit");
     const selectors = adapterConfig.selectors || {};
 
     const playerScopeSelector = selectors.playerScopes
       .filter(Boolean)
-      .join(',');
-    const npcScopeSelector = selectors.npcGroups.filter(Boolean).join(',');
+      .join(",");
+    const npcScopeSelector = selectors.npcGroups.filter(Boolean).join(",");
 
     const collectAll = (selList, root = document) => {
       const out = [];
@@ -2932,7 +2989,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     const textSegmentsFromNode = (node) => {
       if (!node) return [];
-      const text = node.innerText ?? node.textContent ?? '';
+      const text = node.innerText ?? node.textContent ?? "";
       if (!text) return [];
       return text
         .split(/\r?\n+/)
@@ -2950,9 +3007,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     };
 
     const findByRole = (root = document) => {
-      const roleNodes = collectAll(['[role]'], root);
+      const roleNodes = collectAll(["[role]"], root);
       return roleNodes.find((node) => {
-        const role = node.getAttribute('role') || '';
+        const role = node.getAttribute("role") || "";
         return /log|list|main|region/i.test(role) && isScrollable(node);
       });
     };
@@ -2960,10 +3017,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const findByTextHint = (root = document) => {
       const hints = selectors.textHints || [];
       if (!hints.length) return null;
-      const nodes = collectAll(['main', 'section', 'article'], root).filter(
+      const nodes = collectAll(["main", "section", "article"], root).filter(
         (node) => {
           if (!node || node.childElementCount < 3) return false;
-          const text = (node.textContent || '').trim();
+          const text = (node.textContent || "").trim();
           if (!text || text.length > 400) return false;
           return hints.some((hint) => text.includes(hint));
         },
@@ -3002,25 +3059,25 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     };
 
     const detectRole = (block) => {
-      if (!block) return 'unknown';
+      if (!block) return "unknown";
       const hasPlayer = collectAll(selectors.playerScopes, block).length > 0;
-      if (hasPlayer) return 'player';
+      if (hasPlayer) return "player";
       const hasNpc = collectAll(selectors.npcGroups, block).length > 0;
-      if (hasNpc) return 'npc';
-      return 'narration';
+      if (hasNpc) return "npc";
+      return "narration";
     };
 
     const emitInfo = (block, pushLine) => {
       const infoNode = firstMatch(selectors.infoCode, block);
       if (!infoNode) return;
-      pushLine('INFO');
+      pushLine("INFO");
       textSegmentsFromNode(infoNode).forEach((seg) => pushLine(seg));
     };
 
     const emitPlayerLines = (block, pushLine) => {
       const blockRole =
-        block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
-      if (blockRole !== 'player') return;
+        block?.getAttribute?.("data-gmh-message-role") || detectRole(block);
+      if (blockRole !== "player") return;
       const scopes = collectAll(selectors.playerScopes, block);
       const scopeList = scopes.length ? [...scopes] : [];
       if (playerScopeSelector && block.matches?.(playerScopeSelector)) {
@@ -3062,7 +3119,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         if (containsSelector(node, selectors.infoCode)) return false;
         return true;
       });
-      const effectiveTargets = filteredTargets.length ? filteredTargets : targets;
+      const effectiveTargets = filteredTargets.length
+        ? filteredTargets
+        : targets;
       const seenSegments = new Set();
       effectiveTargets.forEach((node) => {
         textSegmentsFromNode(node).forEach((seg) => {
@@ -3077,26 +3136,26 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const extractNameFromGroup = (group) => {
       const nameNode = firstMatch(selectors.npcName, group);
       let name =
-        nameNode?.getAttribute?.('data-author-name') || nameNode?.textContent;
+        nameNode?.getAttribute?.("data-author-name") || nameNode?.textContent;
       if (!name) {
         name =
-          group.getAttribute('data-author') ||
-          group.getAttribute('data-username') ||
-          group.getAttribute('data-name');
+          group.getAttribute("data-author") ||
+          group.getAttribute("data-username") ||
+          group.getAttribute("data-name");
       }
-      return stripQuotes(collapseSpaces(name || '')).slice(0, 40);
+      return stripQuotes(collapseSpaces(name || "")).slice(0, 40);
     };
 
     const emitNpcLines = (block, pushLine) => {
       const blockRole =
-        block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
-      if (blockRole !== 'npc') return;
+        block?.getAttribute?.("data-gmh-message-role") || detectRole(block);
+      if (blockRole !== "npc") return;
       const groups = collectAll(selectors.npcGroups, block);
       if (!groups.length) return;
       groups.forEach((group) => {
         if (playerScopeSelector && group.closest(playerScopeSelector)) return;
         const nameRaw = extractNameFromGroup(group);
-        const name = nameRaw || 'NPC';
+        const name = nameRaw || "NPC";
         const bubbleNodes = collectAll(selectors.npcBubble, group);
         const targets = bubbleNodes.length ? bubbleNodes : [group];
         targets.forEach((node) => {
@@ -3110,8 +3169,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     const emitNarrationLines = (block, pushLine) => {
       const blockRole =
-        block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
-      if (blockRole === 'player') return;
+        block?.getAttribute?.("data-gmh-message-role") || detectRole(block);
+      if (blockRole === "player") return;
       const nodes = collectAll(selectors.narrationBlocks, block);
       if (!nodes.length) return;
       nodes.forEach((node) => {
@@ -3124,10 +3183,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
               containsSelector(node, selectors.npcBubble);
             const mutedNarration =
               node instanceof Element &&
-              node.classList?.contains('text-muted-foreground');
+              node.classList?.contains("text-muted-foreground");
             if (withinNpcBubble && !mutedNarration) {
               const hostBlock =
-                node.closest('[data-gmh-message-index]') || block;
+                node.closest("[data-gmh-message-index]") || block;
               if (!isPrologueBlock(hostBlock)) return;
             }
           }
@@ -3152,9 +3211,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         const text = node?.textContent?.trim();
         if (text) results.add(stripQuotes(text));
         const attrNames = [
-          'data-username',
-          'data-user-name',
-          'data-display-name',
+          "data-username",
+          "data-user-name",
+          "data-display-name",
         ];
         for (const attr of attrNames) {
           const val = node.getAttribute?.(attr);
@@ -3162,14 +3221,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         }
       });
       collectAll(selectors.playerScopes).forEach((scope) => {
-        const attrNames = ['data-username', 'data-user-name', 'data-author'];
+        const attrNames = ["data-username", "data-user-name", "data-author"];
         for (const attr of attrNames) {
           const val = scope.getAttribute?.(attr);
           if (val) results.add(stripQuotes(val));
         }
       });
       return Array.from(results)
-        .map((name) => collapseSpaces(name || ''))
+        .map((name) => collapseSpaces(name || ""))
         .filter((name) => name && /^[\w가-힣][\w가-힣 _.-]{1,20}$/.test(name));
     };
 
@@ -3181,8 +3240,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const match = (loc) => /genit\.ai/i.test(loc.hostname);
 
     return {
-      id: 'genit',
-      label: 'Genit',
+      id: "genit",
+      label: "Genit",
       match,
       findContainer: (doc = document) => getChatContainer(doc),
       listMessageBlocks: (root) => getMessageBlocks(root),
@@ -3204,7 +3263,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       try {
         if (adapter?.match?.(loc, doc)) return adapter;
       } catch (err) {
-        console.warn('[GMH] adapter match error', err);
+        console.warn("[GMH] adapter match error", err);
       }
     }
     return GMH.Adapters.genit;
@@ -3224,15 +3283,15 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   let PRIVACY_SELECT_ELEMENT = null;
 
   const PanelVisibility = (() => {
-    const COLLAPSED_CLASS = 'gmh-collapsed';
-    const OPEN_CLASS = 'gmh-panel-open';
-    const STORAGE_KEY = 'gmh_panel_collapsed';
+    const COLLAPSED_CLASS = "gmh-collapsed";
+    const OPEN_CLASS = "gmh-panel-open";
+    const STORAGE_KEY = "gmh_panel_collapsed";
     const MIN_GAP = 12;
 
     const DEFAULT_LAYOUT = (() => {
       const layout = PanelSettings.defaults?.layout || {};
       return {
-        anchor: layout.anchor === 'left' ? 'left' : 'right',
+        anchor: layout.anchor === "left" ? "left" : "right",
         offset:
           Number.isFinite(Number(layout.offset)) && Number(layout.offset) > 0
             ? Math.max(MIN_GAP, Math.round(Number(layout.offset)))
@@ -3254,24 +3313,24 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const behavior = PanelSettings.defaults?.behavior || {};
       return {
         autoHideEnabled:
-          typeof behavior.autoHideEnabled === 'boolean'
+          typeof behavior.autoHideEnabled === "boolean"
             ? behavior.autoHideEnabled
             : true,
         autoHideDelayMs: Number.isFinite(Number(behavior.autoHideDelayMs))
           ? Math.max(2000, Math.round(Number(behavior.autoHideDelayMs)))
           : 10000,
         collapseOnOutside:
-          typeof behavior.collapseOnOutside === 'boolean'
+          typeof behavior.collapseOnOutside === "boolean"
             ? behavior.collapseOnOutside
             : true,
         collapseOnFocus:
-          typeof behavior.collapseOnFocus === 'boolean'
+          typeof behavior.collapseOnFocus === "boolean"
             ? behavior.collapseOnFocus
             : false,
         allowDrag:
-          typeof behavior.allowDrag === 'boolean' ? behavior.allowDrag : true,
+          typeof behavior.allowDrag === "boolean" ? behavior.allowDrag : true,
         allowResize:
-          typeof behavior.allowResize === 'boolean'
+          typeof behavior.allowResize === "boolean"
             ? behavior.allowResize
             : true,
       };
@@ -3280,7 +3339,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const coerceLayout = (input = {}) => {
       const layout = { ...DEFAULT_LAYOUT, ...(input || {}) };
       return {
-        anchor: layout.anchor === 'left' ? 'left' : 'right',
+        anchor: layout.anchor === "left" ? "left" : "right",
         offset: Number.isFinite(Number(layout.offset))
           ? Math.max(MIN_GAP, Math.round(Number(layout.offset)))
           : DEFAULT_LAYOUT.offset,
@@ -3299,7 +3358,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const coerceBehavior = (input = {}) => {
       const behavior = { ...DEFAULT_BEHAVIOR, ...(input || {}) };
       behavior.autoHideEnabled =
-        typeof behavior.autoHideEnabled === 'boolean'
+        typeof behavior.autoHideEnabled === "boolean"
           ? behavior.autoHideEnabled
           : DEFAULT_BEHAVIOR.autoHideEnabled;
       behavior.autoHideDelayMs = Number.isFinite(
@@ -3308,19 +3367,19 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         ? Math.max(2000, Math.round(Number(behavior.autoHideDelayMs)))
         : DEFAULT_BEHAVIOR.autoHideDelayMs;
       behavior.collapseOnOutside =
-        typeof behavior.collapseOnOutside === 'boolean'
+        typeof behavior.collapseOnOutside === "boolean"
           ? behavior.collapseOnOutside
           : DEFAULT_BEHAVIOR.collapseOnOutside;
       behavior.collapseOnFocus =
-        typeof behavior.collapseOnFocus === 'boolean'
+        typeof behavior.collapseOnFocus === "boolean"
           ? behavior.collapseOnFocus
           : DEFAULT_BEHAVIOR.collapseOnFocus;
       behavior.allowDrag =
-        typeof behavior.allowDrag === 'boolean'
+        typeof behavior.allowDrag === "boolean"
           ? behavior.allowDrag
           : DEFAULT_BEHAVIOR.allowDrag;
       behavior.allowResize =
-        typeof behavior.allowResize === 'boolean'
+        typeof behavior.allowResize === "boolean"
           ? behavior.allowResize
           : DEFAULT_BEHAVIOR.allowResize;
       return behavior;
@@ -3379,10 +3438,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const loadPersistedCollapsed = () => {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw === '1') return true;
-        if (raw === '0') return false;
+        if (raw === "1") return true;
+        if (raw === "0") return false;
       } catch (err) {
-        console.warn('[GMH] failed to read panel state', err);
+        console.warn("[GMH] failed to read panel state", err);
       }
       return null;
     };
@@ -3391,9 +3450,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       persistedPreference = value;
       try {
         if (value === null) localStorage.removeItem(STORAGE_KEY);
-        else localStorage.setItem(STORAGE_KEY, value ? '1' : '0');
+        else localStorage.setItem(STORAGE_KEY, value ? "1" : "0");
       } catch (err) {
-        console.warn('[GMH] failed to persist panel state', err);
+        console.warn("[GMH] failed to persist panel state", err);
       }
     };
 
@@ -3425,16 +3484,16 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       lastFocusTarget = null;
       requestAnimationFrame(() => {
         try {
-          if (typeof target.focus === 'function')
+          if (typeof target.focus === "function")
             target.focus({ preventScroll: true });
         } catch (err) {
-          console.warn('[GMH] focus restore failed', err);
+          console.warn("[GMH] focus restore failed", err);
         }
       });
     };
 
     const focusPanelElement = () => {
-      if (!panelEl || typeof panelEl.focus !== 'function') return;
+      if (!panelEl || typeof panelEl.focus !== "function") return;
       const attempt = () => {
         try {
           panelEl.focus({ preventScroll: true });
@@ -3481,9 +3540,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     const syncAria = (collapsed) => {
       if (!panelEl) return;
-      panelEl.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
+      panelEl.setAttribute("aria-hidden", collapsed ? "true" : "false");
       if (fabEl)
-        fabEl.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        fabEl.setAttribute("aria-expanded", collapsed ? "false" : "true");
     };
 
     const scheduleIdleClose = () => {
@@ -3496,7 +3555,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       idleTimer = window.setTimeout(() => {
         if (!isModernActive()) return;
         if (currentState !== GMH_STATE.IDLE) return;
-        close('idle');
+        close("idle");
       }, delay);
     };
 
@@ -3525,14 +3584,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         : null;
 
       if (width) panelEl.style.width = `${width}px`;
-      else panelEl.style.width = '';
+      else panelEl.style.width = "";
 
       if (height) {
         panelEl.style.height = `${height}px`;
         panelEl.style.maxHeight = `${height}px`;
       } else {
-        panelEl.style.height = '';
-        panelEl.style.maxHeight = '70vh';
+        panelEl.style.height = "";
+        panelEl.style.maxHeight = "70vh";
       }
 
       // Re-measure after size adjustments
@@ -3551,15 +3610,15 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         horizontalLimit,
       );
 
-      if (layout.anchor === 'left') {
+      if (layout.anchor === "left") {
         panelEl.style.left = `${offset}px`;
-        panelEl.style.right = 'auto';
+        panelEl.style.right = "auto";
       } else {
-        panelEl.style.left = 'auto';
+        panelEl.style.left = "auto";
         panelEl.style.right = `${offset}px`;
       }
       panelEl.style.bottom = `${bottom}px`;
-      panelEl.style.top = 'auto';
+      panelEl.style.top = "auto";
 
       const finalLayout = { ...layout, offset, bottom, width, height };
       const changed =
@@ -3576,7 +3635,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     const refreshOutsideHandler = () => {
       if (outsidePointerHandler) {
-        document.removeEventListener('pointerdown', outsidePointerHandler);
+        document.removeEventListener("pointerdown", outsidePointerHandler);
         outsidePointerHandler = null;
       }
       if (!currentBehavior.collapseOnOutside) return;
@@ -3588,14 +3647,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         if (fabEl && fabEl.contains(target)) return;
         if (GMH.UI.Modal?.isOpen?.()) return;
         clearFocusMemory();
-        close('user');
+        close("user");
       };
-      document.addEventListener('pointerdown', outsidePointerHandler);
+      document.addEventListener("pointerdown", outsidePointerHandler);
     };
 
     const refreshFocusCollapseHandler = () => {
       if (focusCollapseHandler) {
-        document.removeEventListener('focusin', focusCollapseHandler, true);
+        document.removeEventListener("focusin", focusCollapseHandler, true);
         focusCollapseHandler = null;
       }
       if (!currentBehavior.collapseOnFocus) return;
@@ -3606,21 +3665,21 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         if (panelEl && panelEl.contains(target)) return;
         if (fabEl && fabEl.contains(target)) return;
         if (GMH.UI.Modal?.isOpen?.()) return;
-        close('focus');
+        close("focus");
       };
-      document.addEventListener('focusin', focusCollapseHandler, true);
+      document.addEventListener("focusin", focusCollapseHandler, true);
     };
 
     const updateHandleAccessibility = () => {
       if (dragHandle) {
         dragHandle.disabled = !currentBehavior.allowDrag;
         dragHandle.setAttribute(
-          'aria-disabled',
-          currentBehavior.allowDrag ? 'false' : 'true',
+          "aria-disabled",
+          currentBehavior.allowDrag ? "false" : "true",
         );
       }
       if (resizeHandle) {
-        resizeHandle.style.display = currentBehavior.allowResize ? '' : 'none';
+        resizeHandle.style.display = currentBehavior.allowResize ? "" : "none";
       }
     };
 
@@ -3642,39 +3701,39 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       });
     };
 
-    window.addEventListener('resize', handleViewportResize);
+    window.addEventListener("resize", handleViewportResize);
 
     const ensureFab = () => {
       if (!modernMode) return null;
       if (!fabEl || !fabEl.isConnected) {
-        fabEl = document.getElementById('gmh-fab');
+        fabEl = document.getElementById("gmh-fab");
       }
       if (!fabEl || !fabEl.isConnected) {
-        fabEl = document.createElement('button');
-        fabEl.id = 'gmh-fab';
-        fabEl.type = 'button';
-        fabEl.textContent = 'GMH';
-        fabEl.setAttribute('aria-label', 'Genit Memory Helper 토글');
-        fabEl.setAttribute('aria-controls', 'genit-memory-helper-panel');
+        fabEl = document.createElement("button");
+        fabEl.id = "gmh-fab";
+        fabEl.type = "button";
+        fabEl.textContent = "GMH";
+        fabEl.setAttribute("aria-label", "Genit Memory Helper 토글");
+        fabEl.setAttribute("aria-controls", "genit-memory-helper-panel");
         document.body.appendChild(fabEl);
       }
       fabEl.onclick = (event) => {
         event.preventDefault();
         toggle();
       };
-      fabEl.setAttribute('aria-expanded', isCollapsed() ? 'false' : 'true');
+      fabEl.setAttribute("aria-expanded", isCollapsed() ? "false" : "true");
       return fabEl;
     };
 
     const attachPanelListeners = () => {
       if (!isModernActive() || panelListenersBound) return;
       const passiveReset = () => resetIdleTimer();
-      panelEl.addEventListener('pointerdown', passiveReset, { passive: true });
-      panelEl.addEventListener('pointermove', passiveReset, { passive: true });
-      panelEl.addEventListener('wheel', passiveReset, { passive: true });
-      panelEl.addEventListener('touchstart', passiveReset, { passive: true });
-      panelEl.addEventListener('keydown', resetIdleTimer);
-      panelEl.addEventListener('focusin', resetIdleTimer);
+      panelEl.addEventListener("pointerdown", passiveReset, { passive: true });
+      panelEl.addEventListener("pointermove", passiveReset, { passive: true });
+      panelEl.addEventListener("wheel", passiveReset, { passive: true });
+      panelEl.addEventListener("touchstart", passiveReset, { passive: true });
+      panelEl.addEventListener("keydown", resetIdleTimer);
+      panelEl.addEventListener("focusin", resetIdleTimer);
       panelListenersBound = true;
     };
 
@@ -3683,7 +3742,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       escapeKeyHandler = (event) => {
         if (!isModernActive()) return;
         if (
-          event.key !== 'Escape' ||
+          event.key !== "Escape" ||
           event.altKey ||
           event.ctrlKey ||
           event.metaKey
@@ -3691,14 +3750,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           return;
         if (GMH.UI.Modal?.isOpen?.()) return;
         if (isCollapsed()) return;
-        close('user');
+        close("user");
         event.preventDefault();
       };
-      window.addEventListener('keydown', escapeKeyHandler);
+      window.addEventListener("keydown", escapeKeyHandler);
     };
 
     const ensureStateSubscription = () => {
-      if (stateUnsubscribe || typeof GMH?.Core?.State?.subscribe !== 'function')
+      if (stateUnsubscribe || typeof GMH?.Core?.State?.subscribe !== "function")
         return;
       stateUnsubscribe = GMH.Core.State.subscribe((next) => {
         currentState = next || GMH_STATE.IDLE;
@@ -3715,30 +3774,30 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     const bindHandles = () => {
       if (!panelEl) return;
-      const nextDragHandle = panelEl.querySelector('#gmh-panel-drag-handle');
+      const nextDragHandle = panelEl.querySelector("#gmh-panel-drag-handle");
       if (dragHandle && dragHandle !== nextDragHandle)
-        dragHandle.removeEventListener('pointerdown', handleDragStart);
+        dragHandle.removeEventListener("pointerdown", handleDragStart);
       dragHandle = nextDragHandle;
       if (dragHandle)
-        dragHandle.addEventListener('pointerdown', handleDragStart);
+        dragHandle.addEventListener("pointerdown", handleDragStart);
 
       const nextResizeHandle = panelEl.querySelector(
-        '#gmh-panel-resize-handle',
+        "#gmh-panel-resize-handle",
       );
       if (resizeHandle && resizeHandle !== nextResizeHandle)
-        resizeHandle.removeEventListener('pointerdown', handleResizeStart);
+        resizeHandle.removeEventListener("pointerdown", handleResizeStart);
       resizeHandle = nextResizeHandle;
       if (resizeHandle)
-        resizeHandle.addEventListener('pointerdown', handleResizeStart);
+        resizeHandle.addEventListener("pointerdown", handleResizeStart);
 
       updateHandleAccessibility();
     };
 
     const stopDragTracking = () => {
       if (!dragSession) return;
-      window.removeEventListener('pointermove', handleDragMove);
-      window.removeEventListener('pointerup', handleDragEnd);
-      window.removeEventListener('pointercancel', handleDragCancel);
+      window.removeEventListener("pointermove", handleDragMove);
+      window.removeEventListener("pointerup", handleDragEnd);
+      window.removeEventListener("pointercancel", handleDragCancel);
       if (dragHandle && dragSession.pointerId !== undefined) {
         try {
           dragHandle.releasePointerCapture(dragSession.pointerId);
@@ -3746,7 +3805,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           /* noop */
         }
       }
-      panelEl?.classList.remove('gmh-panel--dragging');
+      panelEl?.classList.remove("gmh-panel--dragging");
       dragSession = null;
     };
 
@@ -3761,16 +3820,16 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         startY: event.clientY,
         rect: panelEl.getBoundingClientRect(),
       };
-      panelEl.classList.add('gmh-panel--dragging');
+      panelEl.classList.add("gmh-panel--dragging");
       clearIdleTimer();
       try {
         dragHandle?.setPointerCapture(event.pointerId);
       } catch (err) {
         /* noop */
       }
-      window.addEventListener('pointermove', handleDragMove);
-      window.addEventListener('pointerup', handleDragEnd);
-      window.addEventListener('pointercancel', handleDragCancel);
+      window.addEventListener("pointermove", handleDragMove);
+      window.addEventListener("pointerup", handleDragEnd);
+      window.addEventListener("pointercancel", handleDragCancel);
     };
 
     const handleDragMove = (event) => {
@@ -3795,8 +3854,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
       panelEl.style.left = `${Math.round(nextLeft)}px`;
       panelEl.style.top = `${Math.round(nextTop)}px`;
-      panelEl.style.right = 'auto';
-      panelEl.style.bottom = 'auto';
+      panelEl.style.right = "auto";
+      panelEl.style.bottom = "auto";
     };
 
     const finalizeDragLayout = () => {
@@ -3807,9 +3866,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const viewportHeight =
         window.innerHeight || document.documentElement.clientHeight || 720;
       const anchor =
-        rect.left + rect.width / 2 <= viewportWidth / 2 ? 'left' : 'right';
+        rect.left + rect.width / 2 <= viewportWidth / 2 ? "left" : "right";
       const offset =
-        anchor === 'left'
+        anchor === "left"
           ? Math.round(Math.max(MIN_GAP, rect.left))
           : Math.round(Math.max(MIN_GAP, viewportWidth - rect.right));
       const bottom = Math.round(
@@ -3831,9 +3890,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     const stopResizeTracking = () => {
       if (!resizeSession) return;
-      window.removeEventListener('pointermove', handleResizeMove);
-      window.removeEventListener('pointerup', handleResizeEnd);
-      window.removeEventListener('pointercancel', handleResizeCancel);
+      window.removeEventListener("pointermove", handleResizeMove);
+      window.removeEventListener("pointerup", handleResizeEnd);
+      window.removeEventListener("pointercancel", handleResizeCancel);
       if (resizeHandle && resizeSession.pointerId !== undefined) {
         try {
           resizeHandle.releasePointerCapture(resizeSession.pointerId);
@@ -3841,7 +3900,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           /* noop */
         }
       }
-      panelEl?.classList.remove('gmh-panel--resizing');
+      panelEl?.classList.remove("gmh-panel--resizing");
       resizeSession = null;
     };
 
@@ -3860,16 +3919,16 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         nextWidth: rect.width,
         nextHeight: rect.height,
       };
-      panelEl.classList.add('gmh-panel--resizing');
+      panelEl.classList.add("gmh-panel--resizing");
       clearIdleTimer();
       try {
         resizeHandle?.setPointerCapture(event.pointerId);
       } catch (err) {
         /* noop */
       }
-      window.addEventListener('pointermove', handleResizeMove);
-      window.addEventListener('pointerup', handleResizeEnd);
-      window.addEventListener('pointercancel', handleResizeCancel);
+      window.addEventListener("pointermove", handleResizeMove);
+      window.addEventListener("pointerup", handleResizeEnd);
+      window.addEventListener("pointercancel", handleResizeCancel);
     };
 
     const handleResizeMove = (event) => {
@@ -3925,7 +3984,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const open = ({ focus = false, persist = false } = {}) => {
       if (!panelEl) return false;
       if (!modernMode) {
-        if (focus && typeof panelEl.focus === 'function') {
+        if (focus && typeof panelEl.focus === "function") {
           requestAnimationFrame(() => panelEl.focus({ preventScroll: true }));
         }
         return true;
@@ -3933,7 +3992,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const wasCollapsed = isCollapsed();
       applyRootState(false);
       syncAria(false);
-      fabEl && fabEl.setAttribute('aria-expanded', 'true');
+      fabEl && fabEl.setAttribute("aria-expanded", "true");
       if (persist) persistCollapsed(false);
       userCollapsed = false;
       applyLayout();
@@ -3947,21 +4006,21 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       return wasCollapsed;
     };
 
-    const close = (reason = 'user') => {
+    const close = (reason = "user") => {
       if (!panelEl || !modernMode) return false;
       if (isCollapsed()) return false;
       applyRootState(true);
       syncAria(true);
-      fabEl && fabEl.setAttribute('aria-expanded', 'false');
+      fabEl && fabEl.setAttribute("aria-expanded", "false");
       clearIdleTimer();
       clearFocusSchedules();
-      if (reason === 'user') {
+      if (reason === "user") {
         userCollapsed = true;
         persistCollapsed(true);
         if (lastFocusTarget) restoreFocus();
       }
-      if (reason === 'idle') userCollapsed = false;
-      if (reason !== 'user') clearFocusMemory();
+      if (reason === "idle") userCollapsed = false;
+      if (reason !== "user") clearFocusMemory();
       return true;
     };
 
@@ -3971,7 +4030,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         open({ focus: true, persist: true });
         return true;
       }
-      close('user');
+      close("user");
       return false;
     };
 
@@ -3998,11 +4057,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       bindHandles();
       persistedPreference = loadPersistedCollapsed();
       const shouldCollapse = (() => {
-        if (typeof persistedPreference === 'boolean')
+        if (typeof persistedPreference === "boolean")
           return persistedPreference;
-        const mq = window.matchMedia?.('(max-width: 768px)');
+        const mq = window.matchMedia?.("(max-width: 768px)");
         if (mq?.matches) return true;
-        if (typeof window.innerWidth === 'number')
+        if (typeof window.innerWidth === "number")
           return window.innerWidth <= 768;
         return false;
       })();
@@ -4018,7 +4077,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       if (!isModernActive()) return;
       if (
         tone &&
-        ['error', 'warning', 'progress'].includes(tone) &&
+        ["error", "warning", "progress"].includes(tone) &&
         isCollapsed()
       ) {
         open({ focus: false });
@@ -4037,37 +4096,37 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   })();
 
   const STATUS_TONES = {
-    success: { color: '#34d399', icon: '✅' },
-    info: { color: '#93c5fd', icon: 'ℹ️' },
-    progress: { color: '#facc15', icon: '⏳' },
-    warning: { color: '#f97316', icon: '⚠️' },
-    error: { color: '#f87171', icon: '❌' },
-    muted: { color: '#cbd5f5', icon: '' },
+    success: { color: "#34d399", icon: "✅" },
+    info: { color: "#93c5fd", icon: "ℹ️" },
+    progress: { color: "#facc15", icon: "⏳" },
+    warning: { color: "#f97316", icon: "⚠️" },
+    error: { color: "#f87171", icon: "❌" },
+    muted: { color: "#cbd5f5", icon: "" },
   };
 
   function attachStatusElement(el) {
     STATUS_ELEMENT = el || null;
   }
 
-  function setPanelStatus(message, toneOrColor = 'info') {
+  function setPanelStatus(message, toneOrColor = "info") {
     if (!STATUS_ELEMENT) return;
-    const text = String(message || '');
-    let icon = '';
-    let color = '#9ca3af';
+    const text = String(message || "");
+    let icon = "";
+    let color = "#9ca3af";
     let tone = toneOrColor;
 
-    if (typeof toneOrColor === 'string' && toneOrColor.startsWith('#')) {
+    if (typeof toneOrColor === "string" && toneOrColor.startsWith("#")) {
       color = toneOrColor;
       tone = null;
-    } else if (typeof toneOrColor === 'string' && STATUS_TONES[toneOrColor]) {
+    } else if (typeof toneOrColor === "string" && STATUS_TONES[toneOrColor]) {
       tone = toneOrColor;
     } else if (!toneOrColor) {
-      tone = 'info';
+      tone = "info";
     }
 
     if (tone && STATUS_TONES[tone]) {
       color = STATUS_TONES[tone].color;
-      icon = STATUS_TONES[tone].icon || '';
+      icon = STATUS_TONES[tone].icon || "";
     }
 
     STATUS_ELEMENT.textContent = icon ? `${icon} ${text}` : text;
@@ -4079,45 +4138,45 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
   const STATE_PRESETS = {
     idle: {
-      label: '대기 중',
-      message: '준비 완료',
-      tone: 'info',
+      label: "대기 중",
+      message: "준비 완료",
+      tone: "info",
       progress: { value: 0 },
     },
     scanning: {
-      label: '스크롤/수집 중',
-      message: '위로 불러오는 중...',
-      tone: 'progress',
+      label: "스크롤/수집 중",
+      message: "위로 불러오는 중...",
+      tone: "progress",
       progress: { indeterminate: true },
     },
     redacting: {
-      label: '민감정보 마스킹 중',
-      message: '레다크션 파이프라인 적용 중...',
-      tone: 'progress',
+      label: "민감정보 마스킹 중",
+      message: "레다크션 파이프라인 적용 중...",
+      tone: "progress",
       progress: { indeterminate: true },
     },
     preview: {
-      label: '미리보기 준비 완료',
-      message: '레다크션 결과를 검토하세요.',
-      tone: 'info',
+      label: "미리보기 준비 완료",
+      message: "레다크션 결과를 검토하세요.",
+      tone: "info",
       progress: { value: 0.75 },
     },
     exporting: {
-      label: '내보내기 진행 중',
-      message: '파일을 준비하는 중입니다...',
-      tone: 'progress',
+      label: "내보내기 진행 중",
+      message: "파일을 준비하는 중입니다...",
+      tone: "progress",
       progress: { indeterminate: true },
     },
     done: {
-      label: '작업 완료',
-      message: '결과를 확인하세요.',
-      tone: 'success',
+      label: "작업 완료",
+      message: "결과를 확인하세요.",
+      tone: "success",
       progress: { value: 1 },
     },
     error: {
-      label: '오류 발생',
-      message: '작업을 다시 시도해주세요.',
-      tone: 'error',
+      label: "오류 발생",
+      message: "작업을 다시 시도해주세요.",
+      tone: "error",
       progress: { value: 1 },
     },
   };
@@ -4137,26 +4196,26 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const applyState = (stateKey, meta = {}) => {
       const payload = meta?.payload || {};
       const preset = STATE_PRESETS[stateKey] || STATE_PRESETS.idle;
-      const label = payload.label || preset.label || '';
-      const tone = payload.tone || preset.tone || 'info';
-      const message = payload.message || preset.message || label || '';
+      const label = payload.label || preset.label || "";
+      const tone = payload.tone || preset.tone || "info";
+      const message = payload.message || preset.message || label || "";
       const progress = payload.progress || preset.progress || null;
 
-      if (progressLabelEl) progressLabelEl.textContent = label || ' ';
+      if (progressLabelEl) progressLabelEl.textContent = label || " ";
 
       if (progressFillEl) {
         if (progress?.indeterminate) {
-          progressFillEl.dataset.indeterminate = 'true';
-          progressFillEl.style.width = '40%';
-          progressFillEl.setAttribute('aria-valuenow', '0');
+          progressFillEl.dataset.indeterminate = "true";
+          progressFillEl.style.width = "40%";
+          progressFillEl.setAttribute("aria-valuenow", "0");
         } else {
-          progressFillEl.dataset.indeterminate = 'false';
+          progressFillEl.dataset.indeterminate = "false";
           const value = clamp(progress?.value);
           progressFillEl.style.width = `${Math.round(value * 100)}%`;
-          progressFillEl.setAttribute('aria-valuenow', String(value));
+          progressFillEl.setAttribute("aria-valuenow", String(value));
         }
-        progressFillEl.dataset.state = stateKey || 'idle';
-        if (label) progressFillEl.setAttribute('aria-valuetext', label);
+        progressFillEl.dataset.state = stateKey || "idle";
+        if (label) progressFillEl.setAttribute("aria-valuetext", label);
       }
 
       if (message) setPanelStatus(message, tone);
@@ -4165,16 +4224,16 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const bind = ({ progressFill, progressLabel } = {}) => {
       progressFillEl = progressFill || null;
       progressLabelEl = progressLabel || null;
-      if (typeof unsubscribe === 'function') unsubscribe();
+      if (typeof unsubscribe === "function") unsubscribe();
       if (progressFillEl) {
-        progressFillEl.setAttribute('role', 'progressbar');
-        progressFillEl.setAttribute('aria-valuemin', '0');
-        progressFillEl.setAttribute('aria-valuemax', '1');
-        progressFillEl.setAttribute('aria-valuenow', '0');
-        progressFillEl.setAttribute('aria-live', 'polite');
+        progressFillEl.setAttribute("role", "progressbar");
+        progressFillEl.setAttribute("aria-valuemin", "0");
+        progressFillEl.setAttribute("aria-valuemax", "1");
+        progressFillEl.setAttribute("aria-valuenow", "0");
+        progressFillEl.setAttribute("aria-live", "polite");
       }
       if (progressLabelEl) {
-        progressLabelEl.setAttribute('aria-live', 'polite');
+        progressLabelEl.setAttribute("aria-live", "polite");
       }
       unsubscribe = GMH.Core.State.subscribe((state, meta) => {
         applyState(state, meta);
@@ -4214,7 +4273,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   };
 
   const AUTO_CFG = {
-    profile: 'default',
+    profile: "default",
   };
 
   function getAutoProfile() {
@@ -4236,12 +4295,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       let part = current.tagName.toLowerCase();
       if (current.id) part += `#${current.id}`;
       if (current.classList?.length)
-        part += `.${Array.from(current.classList).slice(0, 3).join('.')}`;
+        part += `.${Array.from(current.classList).slice(0, 3).join(".")}`;
       parts.unshift(part);
       current = current.parentElement;
       depth += 1;
     }
-    return parts.join(' > ');
+    return parts.join(" > ");
   }
 
   function downloadDomSnapshot() {
@@ -4257,19 +4316,19 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         block_count: blocks.length,
         selector_strategies: adapter?.dumpSelectors?.(),
         container_html_sample: container
-          ? (container.innerHTML || '').slice(0, 40000)
+          ? (container.innerHTML || "").slice(0, 40000)
           : null,
       };
       const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
-        type: 'application/json',
+        type: "application/json",
       });
       triggerDownload(blob, `genit-snapshot-${Date.now()}.json`);
-      setPanelStatus('DOM 스냅샷이 저장되었습니다.', 'success');
+      setPanelStatus("DOM 스냅샷이 저장되었습니다.", "success");
     } catch (error) {
-      console.error('[GMH] snapshot error', error);
+      console.error("[GMH] snapshot error", error);
       setPanelStatus(
         `스냅샷 실패: ${(error && error.message) || error}`,
-        'error',
+        "error",
       );
     }
   }
@@ -4280,52 +4339,52 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     lastProfile: AUTO_CFG.profile,
     async start(mode, target, opts = {}) {
       if (AUTO_STATE.running) {
-        setPanelStatus('이미 자동 로딩이 진행 중입니다.', 'muted');
+        setPanelStatus("이미 자동 로딩이 진행 중입니다.", "muted");
         return null;
       }
       if (opts.profile) {
         AUTO_CFG.profile = AUTO_PROFILES[opts.profile]
           ? opts.profile
-          : 'default';
+          : "default";
         syncProfileSelect();
       }
       this.lastMode = mode;
       this.lastProfile = AUTO_CFG.profile;
       try {
-        if (mode === 'all') {
+        if (mode === "all") {
           this.lastTarget = null;
           GMH.Core.State.setState(GMH.Core.STATE.SCANNING, {
-            label: '위로 끝까지 로딩',
-            message: '위로 불러오는 중...',
-            tone: 'progress',
+            label: "위로 끝까지 로딩",
+            message: "위로 불러오는 중...",
+            tone: "progress",
             progress: { indeterminate: true },
           });
           return await autoLoadAll();
         }
-        if (mode === 'turns') {
+        if (mode === "turns") {
           const numericTarget = Number(target);
           const goal = Number.isFinite(numericTarget)
             ? numericTarget
             : Number(target) || 0;
           if (!goal || goal <= 0) {
-            setPanelStatus('플레이어 턴 목표가 올바르지 않습니다.', 'error');
+            setPanelStatus("플레이어 턴 목표가 올바르지 않습니다.", "error");
             return null;
           }
           this.lastTarget = goal;
           GMH.Core.State.setState(GMH.Core.STATE.SCANNING, {
-            label: '턴 확보 중',
+            label: "턴 확보 중",
             message: `플레이어 턴 0/${goal}`,
-            tone: 'progress',
+            tone: "progress",
             progress: { value: 0 },
           });
           return await autoLoadUntilPlayerTurns(goal);
         }
       } catch (error) {
-        console.error('[GMH] auto loader error', error);
+        console.error("[GMH] auto loader error", error);
         GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
-          label: '자동 로딩 오류',
+          label: "자동 로딩 오류",
           message: `자동 로딩 오류: ${(error && error.message) || error}`,
-          tone: 'error',
+          tone: "error",
           progress: { value: 1 },
         });
         throw error;
@@ -4334,22 +4393,22 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     },
     async startCurrent(profileName) {
       if (!this.lastMode) {
-        setPanelStatus('재시도할 이전 작업이 없습니다.', 'muted');
+        setPanelStatus("재시도할 이전 작업이 없습니다.", "muted");
         return null;
       }
       if (profileName) {
-        AUTO_CFG.profile = AUTO_PROFILES[profileName] ? profileName : 'default';
+        AUTO_CFG.profile = AUTO_PROFILES[profileName] ? profileName : "default";
       } else {
-        AUTO_CFG.profile = this.lastProfile || 'default';
+        AUTO_CFG.profile = this.lastProfile || "default";
       }
       syncProfileSelect();
       return this.start(this.lastMode, this.lastTarget);
     },
     setProfile(profileName) {
-      const next = AUTO_PROFILES[profileName] ? profileName : 'default';
+      const next = AUTO_PROFILES[profileName] ? profileName : "default";
       AUTO_CFG.profile = next;
       this.lastProfile = next;
-      setPanelStatus(`프로파일이 '${next}'로 설정되었습니다.`, 'info');
+      setPanelStatus(`프로파일이 '${next}'로 설정되었습니다.`, "info");
       syncProfileSelect();
     },
     stop() {
@@ -4370,40 +4429,40 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
   const PLAYER_ALIASES = new Set(
     PLAYER_NAMES.map((n) => n.toLowerCase()).concat([
-      'player',
-      '플레이어',
-      '유저',
-      '나',
+      "player",
+      "플레이어",
+      "유저",
+      "나",
     ]),
   );
 
   function normalizeSpeakerName(name) {
     const stripped = collapseSpaces(name)
-      .replace(/[\[\]{}()]+/g, '')
-      .replace(/^[-•]+/, '')
+      .replace(/[\[\]{}()]+/g, "")
+      .replace(/^[-•]+/, "")
       .trim();
-    if (!stripped) return '내레이션';
+    if (!stripped) return "내레이션";
     const lower = stripped.toLowerCase();
-    if (PLAYER_ALIASES.has(lower)) return PLAYER_NAMES[0] || '플레이어';
-    if (/^(system|시스템|내레이션|narration)$/i.test(lower)) return '내레이션';
+    if (PLAYER_ALIASES.has(lower)) return PLAYER_NAMES[0] || "플레이어";
+    if (/^(system|시스템|내레이션|narration)$/i.test(lower)) return "내레이션";
     return stripped;
   }
 
   function roleForSpeaker(name) {
-    if (name === '내레이션') return 'narration';
-    if (PLAYER_NAMES.includes(name)) return 'player';
-    return 'npc';
+    if (name === "내레이션") return "narration";
+    if (PLAYER_NAMES.includes(name)) return "player";
+    return "npc";
   }
 
   function normalizeTranscript(raw) {
-    return stripTicks(normNL(raw)).replace(/[\t\u00a0\u200b]/g, ' ');
+    return stripTicks(normNL(raw)).replace(/[\t\u00a0\u200b]/g, " ");
   }
 
   // -------------------------------
   // 1) Turns-first parser
   // -------------------------------
   function parseTurns(raw) {
-    const lines = normalizeTranscript(raw).split('\n');
+    const lines = normalizeTranscript(raw).split("\n");
     const originLines = Array.isArray(entryOrigin) ? entryOrigin.slice() : [];
     const turns = [];
     const warnings = [];
@@ -4428,7 +4487,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const merged = Array.from(new Set(existing.concat(normalized))).sort(
         (a, b) => a - b,
       );
-      Object.defineProperty(turn, '__gmhEntries', {
+      Object.defineProperty(turn, "__gmhEntries", {
         value: merged,
         enumerable: false,
         writable: true,
@@ -4438,7 +4497,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         .map((lineIdx) => originLines[lineIdx])
         .filter((idx) => Number.isInteger(idx));
       if (sourceBlocks.length) {
-        Object.defineProperty(turn, '__gmhSourceBlocks', {
+        Object.defineProperty(turn, "__gmhSourceBlocks", {
           value: Array.from(new Set(sourceBlocks)).sort((a, b) => a - b),
           enumerable: false,
           writable: true,
@@ -4450,9 +4509,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const pushTurn = (speaker, text, roleOverride, lineIndexes = []) => {
       const textClean = sanitizeText(text);
       if (!textClean) return;
-      const speakerName = normalizeSpeakerName(speaker || '내레이션');
+      const speakerName = normalizeSpeakerName(speaker || "내레이션");
       const role = roleOverride || roleForSpeaker(speakerName);
-      if (role === 'player' && turns.length) {
+      if (role === "player" && turns.length) {
         currentSceneId += 1;
       }
       const last = turns[turns.length - 1];
@@ -4460,7 +4519,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         last &&
         last.speaker === speakerName &&
         last.role === role &&
-        role !== 'narration'
+        role !== "narration"
       ) {
         last.text = `${last.text} ${textClean}`.trim();
         addEntriesToTurn(last, lineIndexes);
@@ -4477,7 +4536,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     };
 
     for (let i = 0; i < lines.length; i++) {
-      let original = lines[i] ?? '';
+      let original = lines[i] ?? "";
       if (!original) continue;
       let line = original.trim();
       if (!line) continue;
@@ -4491,18 +4550,18 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       }
 
       if (/^#/.test(line) && line.length <= 80) {
-        metaHints.titles.push(stripQuotes(line.replace(/^#+/, '').trim()));
+        metaHints.titles.push(stripQuotes(line.replace(/^#+/, "").trim()));
         pendingSpeaker = null;
         continue;
       }
 
-      if (CODE_RE.test(line.replace(/\s+/g, ''))) {
+      if (CODE_RE.test(line.replace(/\s+/g, ""))) {
         metaHints.codes.push(line.trim());
         pendingSpeaker = null;
         continue;
       }
 
-      if (stripBrackets(line).toUpperCase() === 'INFO') {
+      if (stripBrackets(line).toUpperCase() === "INFO") {
         currentSceneId += 1;
         pendingSpeaker = null;
         continue;
@@ -4529,8 +4588,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       }
 
       if (forcedPlayer) {
-        const speaker = PLAYER_NAMES[0] || '플레이어';
-        pushTurn(speaker, stripQuotes(line), 'player', [i]);
+        const speaker = PLAYER_NAMES[0] || "플레이어";
+        pushTurn(speaker, stripQuotes(line), "player", [i]);
         pendingSpeaker = speaker;
         continue;
       }
@@ -4544,7 +4603,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       }
 
       if (looksNarrative(line) || /^".+"$/.test(line) || /^“.+”$/.test(line)) {
-        pushTurn('내레이션', stripQuotes(line), 'narration', [i]);
+        pushTurn("내레이션", stripQuotes(line), "narration", [i]);
         pendingSpeaker = null;
         continue;
       }
@@ -4555,7 +4614,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         const bufLines = [i];
         let j = i + 1;
         while (j < lines.length) {
-          let peek = (lines[j] || '').trim();
+          let peek = (lines[j] || "").trim();
           if (!peek) {
             j += 1;
             break;
@@ -4571,7 +4630,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           }
           if (
             HEADER_RE.test(peek) ||
-            stripBrackets(peek).toUpperCase() === 'INFO'
+            stripBrackets(peek).toUpperCase() === "INFO"
           )
             break;
           if (isMetaLine(peek)) break;
@@ -4585,7 +4644,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         if (textBuf.length) {
           pushTurn(
             speaker,
-            stripQuotes(textBuf.join(' ')),
+            stripQuotes(textBuf.join(" ")),
             roleForSpeaker(speaker),
             bufLines,
           );
@@ -4614,7 +4673,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         continue;
       }
 
-      pushTurn('내레이션', line, 'narration', [i]);
+      pushTurn("내레이션", line, "narration", [i]);
       pendingSpeaker = null;
     }
 
@@ -4634,12 +4693,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     const actorSet = new Set();
     for (const t of turns) {
-      if (t.role === 'player' || t.role === 'npc') actorSet.add(t.speaker);
+      if (t.role === "player" || t.role === "npc") actorSet.add(t.speaker);
     }
     meta.actors = Array.from(actorSet);
     if (!meta.title && meta.place) meta.title = `${meta.place} 세션`;
-    meta.player = PLAYER_NAMES[0] || '플레이어';
-    meta.turn_count = turns.filter((t) => t.role === 'player').length;
+    meta.player = PLAYER_NAMES[0] || "플레이어";
+    meta.turn_count = turns.filter((t) => t.role === "player").length;
     return meta;
   }
 
@@ -4650,7 +4709,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       meta,
       turns,
       warnings,
-      source: 'genit-memory-helper',
+      source: "genit-memory-helper",
     };
   }
 
@@ -4659,14 +4718,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   // -------------------------------
   function toJSONExport(session, normalizedRaw) {
     const payload = {
-      version: '1.0',
+      version: "1.0",
       generated_at: new Date().toISOString(),
       source: session.source,
       player_names: session.player_names || PLAYER_NAMES,
       meta: session.meta,
       turns: session.turns,
       warnings: session.warnings,
-      raw_excerpt: (normalizedRaw || '').slice(0, 2000),
+      raw_excerpt: (normalizedRaw || "").slice(0, 2000),
     };
     return JSON.stringify(payload, null, 2);
   }
@@ -4680,19 +4739,19 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       if (session.meta.date) lines.push(`# DATE: ${session.meta.date}`);
       if (session.meta.place) lines.push(`# PLACE: ${session.meta.place}`);
       if (session.meta.actors?.length)
-        lines.push(`# ACTORS: ${session.meta.actors.join(', ')}`);
-      lines.push('');
+        lines.push(`# ACTORS: ${session.meta.actors.join(", ")}`);
+      lines.push("");
     }
     for (const t of turns) {
-      const speaker = t.role === 'narration' ? '내레이션' : t.speaker;
+      const speaker = t.role === "narration" ? "내레이션" : t.speaker;
       lines.push(`@${speaker}@ ${t.text}`);
     }
-    return lines.join('\n').trim();
+    return lines.join("\n").trim();
   }
 
   function toMarkdownExport(session, opts = {}) {
     const turns = opts.turns || session.turns;
-    const heading = opts.heading || '# 대화 로그';
+    const heading = opts.heading || "# 대화 로그";
     const includeMeta = opts.includeMeta !== false;
     const lines = [heading];
     if (includeMeta) {
@@ -4701,46 +4760,46 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       if (session.meta.place) metaLines.push(`- 장소: ${session.meta.place}`);
       if (session.meta.mode) metaLines.push(`- 모드: ${session.meta.mode}`);
       if (session.meta.actors?.length)
-        metaLines.push(`- 참여자: ${session.meta.actors.join(', ')}`);
+        metaLines.push(`- 참여자: ${session.meta.actors.join(", ")}`);
       if (metaLines.length) {
-        lines.push(metaLines.join('\n'));
-        lines.push('');
+        lines.push(metaLines.join("\n"));
+        lines.push("");
       }
     } else {
-      lines.push('');
+      lines.push("");
     }
     for (const t of turns) {
-      if (t.role === 'narration') {
+      if (t.role === "narration") {
         lines.push(`> **내레이션**: ${t.text}`);
       } else {
         lines.push(`- **${t.speaker}**: ${t.text}`);
       }
     }
-    return lines.join('\n').trim();
+    return lines.join("\n").trim();
   }
 
   function buildExportBundle(session, normalizedRaw, format, stamp) {
-    const stampToken = stamp || new Date().toISOString().replace(/[:.]/g, '-');
+    const stampToken = stamp || new Date().toISOString().replace(/[:.]/g, "-");
     const base = `genit_turns_${stampToken}`;
-    if (format === 'md') {
+    if (format === "md") {
       return {
         filename: `${base}.md`,
-        mime: 'text/markdown',
+        mime: "text/markdown",
         content: toMarkdownExport(session),
         stamp: stampToken,
       };
     }
-    if (format === 'txt') {
+    if (format === "txt") {
       return {
         filename: `${base}.txt`,
-        mime: 'text/plain',
+        mime: "text/plain",
         content: toTXTExport(session),
         stamp: stampToken,
       };
     }
     return {
       filename: `${base}.json`,
-      mime: 'application/json',
+      mime: "application/json",
       content: toJSONExport(session, normalizedRaw),
       stamp: stampToken,
     };
@@ -4756,15 +4815,15 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const container = adapter?.findContainer?.(document);
     const blocks = adapter?.listMessageBlocks?.(container || document) || [];
     if (!container && !blocks.length)
-      throw new Error('채팅 컨테이너를 찾을 수 없습니다.');
-    if (!blocks.length) return '';
+      throw new Error("채팅 컨테이너를 찾을 수 없습니다.");
+    if (!blocks.length) return "";
 
     const seenLine = new Set();
     const out = [];
     entryOrigin = [];
 
     const pushLine = (line) => {
-      const s = (line || '').trim();
+      const s = (line || "").trim();
       if (!s) return;
       if (seenLine.has(s)) return;
       seenLine.add(s);
@@ -4773,7 +4832,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     for (const block of blocks) {
       const domIndexAttr = Number(
-        block?.getAttribute?.('data-gmh-message-index'),
+        block?.getAttribute?.("data-gmh-message-index"),
       );
       const originIndex = Number.isFinite(domIndexAttr) ? domIndexAttr : null;
       const before = out.length;
@@ -4790,14 +4849,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       entryOrigin.length = out.length;
     }
 
-    return out.join('\n');
+    return out.join("\n");
   }
 
   function isPrologueBlock(element) {
     let current = element instanceof Element ? element : null;
     let hops = 0;
     while (current && hops < 400) {
-      if (current.hasAttribute?.('data-gmh-player-turn')) return false;
+      if (current.hasAttribute?.("data-gmh-player-turn")) return false;
       if (current.previousElementSibling) {
         current = current.previousElementSibling;
       } else {
@@ -4881,19 +4940,29 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       try {
         GMH.Core.MessageIndexer.refresh({ immediate: true });
       } catch (err) {
-        console.warn('[GMH] message indexing before stats failed', err);
+        console.warn("[GMH] message indexing before stats failed", err);
       }
       const raw = readTranscriptText();
       const normalized = normalizeTranscript(raw);
       const session = buildSession(normalized);
-      const playerTurns = session.turns.filter((t) => t.role === 'player').length;
+      const playerTurns = session.turns.filter(
+        (t) => t.role === "player",
+      ).length;
       const previousTotals = GMH.Core.ExportRange.getTotals
         ? GMH.Core.ExportRange.getTotals()
         : { player: 0, entry: 0 };
-      const entryCount = session.turns.reduce((sum, turn) => {
-        if (Array.isArray(turn?.__gmhEntries)) return sum + turn.__gmhEntries.length;
-        return sum + 1;
-      }, 0);
+      const blockSet = new Set();
+      session.turns.forEach((turn) => {
+        const blocks = Array.isArray(turn?.__gmhSourceBlocks)
+          ? turn.__gmhSourceBlocks
+          : [];
+        if (blocks.length) {
+          blocks
+            .filter((idx) => Number.isInteger(idx) && idx >= 0)
+            .forEach((idx) => blockSet.add(idx));
+        }
+      });
+      const entryCount = blockSet.size || session.turns.length;
       GMH.Core.ExportRange.setTotals({
         player: Math.max(previousTotals.player || 0, playerTurns),
         entry: entryCount,
@@ -4913,12 +4982,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const container = ensureScrollContainer();
     if (!container) {
       GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
-        label: '자동 로딩 실패',
-        message: '채팅 컨테이너를 찾을 수 없습니다.',
-        tone: 'error',
+        label: "자동 로딩 실패",
+        message: "채팅 컨테이너를 찾을 수 없습니다.",
+        tone: "error",
         progress: { value: 1 },
       });
-      return { error: new Error('container missing') };
+      return { error: new Error("container missing") };
     }
     AUTO_STATE.running = true;
     AUTO_STATE.container = container;
@@ -4928,9 +4997,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     while (AUTO_STATE.running && guard < profile.guardLimit) {
       guard += 1;
       GMH.Core.State.setState(GMH.Core.STATE.SCANNING, {
-        label: '위로 끝까지 로딩',
+        label: "위로 끝까지 로딩",
         message: `추가 수집 중 (${guard}/${profile.guardLimit})`,
-        tone: 'progress',
+        tone: "progress",
         progress: { indeterminate: true },
       });
       const { grew, before, after } = await scrollUpCycle(container, profile);
@@ -4946,16 +5015,16 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const stats = collectTurnStats();
     if (stats.error) {
       GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
-        label: '자동 로딩 실패',
-        message: '스크롤 후 파싱 실패',
-        tone: 'error',
+        label: "자동 로딩 실패",
+        message: "스크롤 후 파싱 실패",
+        tone: "error",
         progress: { value: 1 },
       });
     } else {
       GMH.Core.State.setState(GMH.Core.STATE.DONE, {
-        label: '자동 로딩 완료',
+        label: "자동 로딩 완료",
         message: `플레이어 턴 ${stats.playerTurns}개 확보`,
-        tone: 'success',
+        tone: "success",
         progress: { value: 1 },
       });
     }
@@ -4967,12 +5036,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const container = ensureScrollContainer();
     if (!container) {
       GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
-        label: '자동 로딩 실패',
-        message: '채팅 컨테이너를 찾을 수 없습니다.',
-        tone: 'error',
+        label: "자동 로딩 실패",
+        message: "채팅 컨테이너를 찾을 수 없습니다.",
+        tone: "error",
         progress: { value: 1 },
       });
-      return { error: new Error('container missing') };
+      return { error: new Error("container missing") };
     }
     AUTO_STATE.running = true;
     AUTO_STATE.container = container;
@@ -4986,18 +5055,18 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const stats = collectTurnStats();
       if (stats.error) {
         GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
-          label: '자동 로딩 실패',
-          message: '파싱 실패 - DOM 변화를 감지하지 못했습니다.',
-          tone: 'error',
+          label: "자동 로딩 실패",
+          message: "파싱 실패 - DOM 변화를 감지하지 못했습니다.",
+          tone: "error",
           progress: { value: 1 },
         });
         break;
       }
       if (stats.playerTurns >= target) {
         GMH.Core.State.setState(GMH.Core.STATE.DONE, {
-          label: '자동 로딩 완료',
+          label: "자동 로딩 완료",
           message: `목표 달성 · 플레이어 턴 ${stats.playerTurns}개 확보`,
-          tone: 'success',
+          tone: "success",
           progress: { value: 1 },
         });
         break;
@@ -5005,9 +5074,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
       const ratio = target > 0 ? Math.min(1, stats.playerTurns / target) : 0;
       GMH.Core.State.setState(GMH.Core.STATE.SCANNING, {
-        label: '턴 확보 중',
+        label: "턴 확보 중",
         message: `플레이어 턴 ${stats.playerTurns}/${target}`,
-        tone: 'progress',
+        tone: "progress",
         progress: { value: ratio },
       });
 
@@ -5026,10 +5095,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         stagnantRounds >= profile.guardLimit
       ) {
         GMH.Core.State.setState(GMH.Core.STATE.DONE, {
-          label: '자동 로딩 종료',
+          label: "자동 로딩 종료",
           message:
-            '추가 데이터를 불러오지 못했습니다. 더 이상 기록이 없거나 막혀있습니다.',
-          tone: 'warning',
+            "추가 데이터를 불러오지 못했습니다. 더 이상 기록이 없거나 막혀있습니다.",
+          tone: "warning",
           progress: { value: ratio },
         });
         break;
@@ -5041,9 +5110,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const finalStats = collectTurnStats();
     if (finalStats?.error) {
       GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
-        label: '자동 로딩 실패',
-        message: '턴 정보를 수집하지 못했습니다.',
-        tone: 'error',
+        label: "자동 로딩 실패",
+        message: "턴 정보를 수집하지 못했습니다.",
+        tone: "error",
         progress: { value: 1 },
       });
       return finalStats;
@@ -5052,9 +5121,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const ratio =
         target > 0 ? Math.min(1, finalStats.playerTurns / target) : 0;
       GMH.Core.State.setState(GMH.Core.STATE.DONE, {
-        label: '자동 로딩 종료',
+        label: "자동 로딩 종료",
         message: `플레이어 턴 ${finalStats.playerTurns}/${target}`,
-        tone: 'warning',
+        tone: "warning",
         progress: { value: ratio },
       });
     }
@@ -5065,9 +5134,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     if (!AUTO_STATE.running) return;
     AUTO_STATE.running = false;
     GMH.Core.State.setState(GMH.Core.STATE.IDLE, {
-      label: '대기 중',
-      message: '자동 로딩을 중지했습니다.',
-      tone: 'info',
+      label: "대기 중",
+      message: "자동 로딩을 중지했습니다.",
+      tone: "info",
       progress: { value: 0 },
     });
   }
@@ -5077,7 +5146,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const render = () => {
       const stats = collectTurnStats();
       if (stats.error) {
-        meter.textContent = '턴 측정 실패: DOM을 읽을 수 없습니다.';
+        meter.textContent = "턴 측정 실패: DOM을 읽을 수 없습니다.";
         return;
       }
       meter.textContent = `턴 현황 · 플레이어 ${stats.playerTurns}턴`;
@@ -5096,14 +5165,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
   function ensureAutoLoadControlsModern(panel) {
     if (!panel) return;
-    let wrap = panel.querySelector('#gmh-autoload-controls');
+    let wrap = panel.querySelector("#gmh-autoload-controls");
     if (!wrap) {
-      wrap = document.createElement('div');
-      wrap.id = 'gmh-autoload-controls';
+      wrap = document.createElement("div");
+      wrap.id = "gmh-autoload-controls";
       panel.appendChild(wrap);
     }
-    if (wrap.dataset.ready === 'true') return;
-    wrap.dataset.ready = 'true';
+    if (wrap.dataset.ready === "true") return;
+    wrap.dataset.ready = "true";
     wrap.innerHTML = `
       <div class="gmh-field-row">
         <button id="gmh-autoload-all" class="gmh-panel-btn gmh-panel-btn--accent">위로 끝까지 로딩</button>
@@ -5116,24 +5185,24 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       <div id="gmh-turn-meter" class="gmh-subtext"></div>
     `;
 
-    const btnAll = wrap.querySelector('#gmh-autoload-all');
-    const btnStop = wrap.querySelector('#gmh-autoload-stop');
-    const btnTurns = wrap.querySelector('#gmh-autoload-turns-btn');
-    const inputTurns = wrap.querySelector('#gmh-autoload-turns');
-    const meter = wrap.querySelector('#gmh-turn-meter');
+    const btnAll = wrap.querySelector("#gmh-autoload-all");
+    const btnStop = wrap.querySelector("#gmh-autoload-stop");
+    const btnTurns = wrap.querySelector("#gmh-autoload-turns-btn");
+    const inputTurns = wrap.querySelector("#gmh-autoload-turns");
+    const meter = wrap.querySelector("#gmh-turn-meter");
 
     const toggleControls = (disabled) => {
       btnAll.disabled = disabled;
       btnTurns.disabled = disabled;
-      btnAll.classList.toggle('gmh-disabled', disabled);
-      btnTurns.classList.toggle('gmh-disabled', disabled);
+      btnAll.classList.toggle("gmh-disabled", disabled);
+      btnTurns.classList.toggle("gmh-disabled", disabled);
     };
 
     btnAll.onclick = async () => {
       if (AUTO_STATE.running) return;
       toggleControls(true);
       try {
-        await autoLoader.start('all');
+        await autoLoader.start("all");
       } finally {
         toggleControls(false);
       }
@@ -5142,14 +5211,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     btnTurns.onclick = async () => {
       if (AUTO_STATE.running) return;
       const rawVal = inputTurns?.value?.trim();
-      const target = Number.parseInt(rawVal || '0', 10);
+      const target = Number.parseInt(rawVal || "0", 10);
       if (!Number.isFinite(target) || target <= 0) {
-        setPanelStatus('플레이어 턴 수를 입력해주세요.', 'error');
+        setPanelStatus("플레이어 턴 수를 입력해주세요.", "error");
         return;
       }
       toggleControls(true);
       try {
-        await autoLoader.start('turns', target);
+        await autoLoader.start("turns", target);
       } finally {
         toggleControls(false);
       }
@@ -5157,7 +5226,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     btnStop.onclick = () => {
       if (!AUTO_STATE.running) {
-        setPanelStatus('자동 로딩이 실행 중이 아닙니다.', 'muted');
+        setPanelStatus("자동 로딩이 실행 중이 아닙니다.", "muted");
         return;
       }
       autoLoader.stop();
@@ -5167,12 +5236,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   }
 
   function ensureAutoLoadControlsLegacy(panel) {
-    if (!panel || panel.querySelector('#gmh-autoload-controls')) return;
+    if (!panel || panel.querySelector("#gmh-autoload-controls")) return;
 
-    const wrap = document.createElement('div');
-    wrap.id = 'gmh-autoload-controls';
+    const wrap = document.createElement("div");
+    wrap.id = "gmh-autoload-controls";
     wrap.style.cssText =
-      'display:grid; gap:6px; border-top:1px solid #1f2937; padding-top:6px;';
+      "display:grid; gap:6px; border-top:1px solid #1f2937; padding-top:6px;";
     wrap.innerHTML = `
       <div style="display:flex; gap:8px;">
         <button id="gmh-autoload-all" style="flex:1; background:#38bdf8; border:0; color:#041; border-radius:8px; padding:6px; cursor:pointer;">위로 끝까지 로딩</button>
@@ -5187,24 +5256,24 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     panel.appendChild(wrap);
 
-    const btnAll = wrap.querySelector('#gmh-autoload-all');
-    const btnStop = wrap.querySelector('#gmh-autoload-stop');
-    const btnTurns = wrap.querySelector('#gmh-autoload-turns-btn');
-    const inputTurns = wrap.querySelector('#gmh-autoload-turns');
-    const meter = wrap.querySelector('#gmh-turn-meter');
+    const btnAll = wrap.querySelector("#gmh-autoload-all");
+    const btnStop = wrap.querySelector("#gmh-autoload-stop");
+    const btnTurns = wrap.querySelector("#gmh-autoload-turns-btn");
+    const inputTurns = wrap.querySelector("#gmh-autoload-turns");
+    const meter = wrap.querySelector("#gmh-turn-meter");
 
     const toggleControls = (disabled) => {
       btnAll.disabled = disabled;
       btnTurns.disabled = disabled;
-      btnAll.style.opacity = disabled ? '0.6' : '1';
-      btnTurns.style.opacity = disabled ? '0.6' : '1';
+      btnAll.style.opacity = disabled ? "0.6" : "1";
+      btnTurns.style.opacity = disabled ? "0.6" : "1";
     };
 
     btnAll.onclick = async () => {
       if (AUTO_STATE.running) return;
       toggleControls(true);
       try {
-        await autoLoader.start('all');
+        await autoLoader.start("all");
       } finally {
         toggleControls(false);
       }
@@ -5213,18 +5282,18 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     btnTurns.onclick = async () => {
       if (AUTO_STATE.running) return;
       const rawVal = inputTurns?.value?.trim();
-      const target = Number.parseInt(rawVal || '0', 10);
+      const target = Number.parseInt(rawVal || "0", 10);
       if (!Number.isFinite(target) || target <= 0) {
-        setPanelStatus('플레이어 턴 수를 입력해주세요.', 'error');
+        setPanelStatus("플레이어 턴 수를 입력해주세요.", "error");
         return;
       }
       toggleControls(true);
       try {
-        const stats = await autoLoader.start('turns', target);
+        const stats = await autoLoader.start("turns", target);
         if (stats && !stats.error) {
           setPanelStatus(
             `현재 플레이어 턴 ${stats.playerTurns}개 확보.`,
-            'success',
+            "success",
           );
         }
       } finally {
@@ -5234,11 +5303,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     btnStop.onclick = () => {
       if (!AUTO_STATE.running) {
-        setPanelStatus('자동 로딩이 실행 중이 아닙니다.', 'muted');
+        setPanelStatus("자동 로딩이 실행 중이 아닙니다.", "muted");
         return;
       }
       autoLoader.stop();
-      setPanelStatus('자동 로딩 중지를 요청했습니다.', 'warning');
+      setPanelStatus("자동 로딩 중지를 요청했습니다.", "warning");
     };
 
     startTurnMeter(meter);
@@ -5246,14 +5315,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
   function mountStatusActionsModern(panel) {
     if (!panel) return;
-    let actions = panel.querySelector('#gmh-status-actions');
+    let actions = panel.querySelector("#gmh-status-actions");
     if (!actions) {
-      actions = document.createElement('div');
-      actions.id = 'gmh-status-actions';
+      actions = document.createElement("div");
+      actions.id = "gmh-status-actions";
       panel.appendChild(actions);
     }
-    if (actions.dataset.ready === 'true') return;
-    actions.dataset.ready = 'true';
+    if (actions.dataset.ready === "true") return;
+    actions.dataset.ready = "true";
     actions.innerHTML = `
       <div class="gmh-field-row">
         <label for="gmh-profile-select" class="gmh-subtext gmh-field-label--inline">프로파일</label>
@@ -5270,7 +5339,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       </div>
     `;
 
-    PROFILE_SELECT_ELEMENT = actions.querySelector('#gmh-profile-select');
+    PROFILE_SELECT_ELEMENT = actions.querySelector("#gmh-profile-select");
     if (PROFILE_SELECT_ELEMENT) {
       PROFILE_SELECT_ELEMENT.value = AUTO_CFG.profile;
       PROFILE_SELECT_ELEMENT.onchange = (event) => {
@@ -5279,29 +5348,29 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     }
     syncProfileSelect();
 
-    const retryBtn = actions.querySelector('#gmh-btn-retry');
+    const retryBtn = actions.querySelector("#gmh-btn-retry");
     if (retryBtn) {
       retryBtn.onclick = async () => {
         if (AUTO_STATE.running) {
-          setPanelStatus('이미 자동 로딩이 진행 중입니다.', 'muted');
+          setPanelStatus("이미 자동 로딩이 진행 중입니다.", "muted");
           return;
         }
         await autoLoader.startCurrent();
       };
     }
 
-    const retryStableBtn = actions.querySelector('#gmh-btn-retry-stable');
+    const retryStableBtn = actions.querySelector("#gmh-btn-retry-stable");
     if (retryStableBtn) {
       retryStableBtn.onclick = async () => {
         if (AUTO_STATE.running) {
-          setPanelStatus('이미 자동 로딩이 진행 중입니다.', 'muted');
+          setPanelStatus("이미 자동 로딩이 진행 중입니다.", "muted");
           return;
         }
-        await autoLoader.startCurrent('stability');
+        await autoLoader.startCurrent("stability");
       };
     }
 
-    const snapshotBtn = actions.querySelector('#gmh-btn-snapshot');
+    const snapshotBtn = actions.querySelector("#gmh-btn-snapshot");
     if (snapshotBtn) {
       snapshotBtn.onclick = () => downloadDomSnapshot();
     }
@@ -5310,12 +5379,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   }
 
   function mountStatusActionsLegacy(panel) {
-    if (!panel || panel.querySelector('#gmh-status-actions')) return;
+    if (!panel || panel.querySelector("#gmh-status-actions")) return;
 
-    const actions = document.createElement('div');
-    actions.id = 'gmh-status-actions';
+    const actions = document.createElement("div");
+    actions.id = "gmh-status-actions";
     actions.style.cssText =
-      'display:grid; gap:6px; border-top:1px solid rgba(148,163,184,0.25); padding-top:6px;';
+      "display:grid; gap:6px; border-top:1px solid rgba(148,163,184,0.25); padding-top:6px;";
     actions.innerHTML = `
       <div style="display:flex; gap:6px; align-items:center;">
         <label for="gmh-profile-select" style="font-size:11px; color:#94a3b8;">프로파일</label>
@@ -5332,7 +5401,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       </div>
     `;
 
-    PROFILE_SELECT_ELEMENT = actions.querySelector('#gmh-profile-select');
+    PROFILE_SELECT_ELEMENT = actions.querySelector("#gmh-profile-select");
     if (PROFILE_SELECT_ELEMENT) {
       PROFILE_SELECT_ELEMENT.value = AUTO_CFG.profile;
       PROFILE_SELECT_ELEMENT.onchange = (event) => {
@@ -5341,29 +5410,29 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     }
     syncProfileSelect();
 
-    const retryBtn = actions.querySelector('#gmh-btn-retry');
+    const retryBtn = actions.querySelector("#gmh-btn-retry");
     if (retryBtn) {
       retryBtn.onclick = async () => {
         if (AUTO_STATE.running) {
-          setPanelStatus('이미 자동 로딩이 진행 중입니다.', 'muted');
+          setPanelStatus("이미 자동 로딩이 진행 중입니다.", "muted");
           return;
         }
         await autoLoader.startCurrent();
       };
     }
 
-    const retryStableBtn = actions.querySelector('#gmh-btn-retry-stable');
+    const retryStableBtn = actions.querySelector("#gmh-btn-retry-stable");
     if (retryStableBtn) {
       retryStableBtn.onclick = async () => {
         if (AUTO_STATE.running) {
-          setPanelStatus('이미 자동 로딩이 진행 중입니다.', 'muted');
+          setPanelStatus("이미 자동 로딩이 진행 중입니다.", "muted");
           return;
         }
-        await autoLoader.startCurrent('stability');
+        await autoLoader.startCurrent("stability");
       };
     }
 
-    const snapshotBtn = actions.querySelector('#gmh-btn-snapshot');
+    const snapshotBtn = actions.querySelector("#gmh-btn-snapshot");
     if (snapshotBtn) {
       snapshotBtn.onclick = () => downloadDomSnapshot();
     }
@@ -5373,7 +5442,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
   function setupPanelInteractions(panel, { modern = false } = {}) {
     PanelVisibility.bind(panel, { modern });
-    PRIVACY_SELECT_ELEMENT = panel.querySelector('#gmh-privacy-profile');
+    PRIVACY_SELECT_ELEMENT = panel.querySelector("#gmh-privacy-profile");
     if (PRIVACY_SELECT_ELEMENT) {
       PRIVACY_SELECT_ELEMENT.value = PRIVACY_CFG.profile;
       PRIVACY_SELECT_ELEMENT.onchange = (event) => {
@@ -5381,17 +5450,17 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         setPrivacyProfile(value);
         setPanelStatus(
           `프라이버시 프로필이 ${PRIVACY_PROFILES[value]?.label || value}로 설정되었습니다.`,
-          'info',
+          "info",
         );
       };
     }
 
-    const privacyConfigBtn = panel.querySelector('#gmh-privacy-config');
+    const privacyConfigBtn = panel.querySelector("#gmh-privacy-config");
     if (privacyConfigBtn) {
       privacyConfigBtn.onclick = () => configurePrivacyLists();
     }
 
-    const settingsBtn = panel.querySelector('#gmh-panel-settings');
+    const settingsBtn = panel.querySelector("#gmh-panel-settings");
     if (settingsBtn) {
       settingsBtn.onclick = () => openPanelSettings();
     }
@@ -5404,37 +5473,38 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       mountStatusActionsLegacy(panel);
     }
 
-    const rangeAxisSelect = panel.querySelector('#gmh-range-axis');
-    const rangeStartInput = panel.querySelector('#gmh-range-start');
-    const rangeEndInput = panel.querySelector('#gmh-range-end');
-    const rangeClearBtn = panel.querySelector('#gmh-range-clear');
-    const rangeMarkStartBtn = panel.querySelector('#gmh-range-mark-start');
-    const rangeMarkEndBtn = panel.querySelector('#gmh-range-mark-end');
-    const rangeSummary = panel.querySelector('#gmh-range-summary');
+    const rangeAxisSelect = panel.querySelector("#gmh-range-axis");
+    const rangeStartInput = panel.querySelector("#gmh-range-start");
+    const rangeEndInput = panel.querySelector("#gmh-range-end");
+    const rangeClearBtn = panel.querySelector("#gmh-range-clear");
+    const rangeMarkStartBtn = panel.querySelector("#gmh-range-mark-start");
+    const rangeMarkEndBtn = panel.querySelector("#gmh-range-mark-end");
+    const rangeSummary = panel.querySelector("#gmh-range-summary");
     const rangeBookmarkSelect = panel.querySelector(
-      '#gmh-range-bookmark-select',
+      "#gmh-range-bookmark-select",
     );
 
     let rangeUnsubscribe = null;
-    let selectedBookmarkKey = '';
+    let selectedBookmarkKey = "";
     let bookmarkSelectionPinned = false;
 
     const syncBookmarkSelect = (entries = []) => {
       if (!rangeBookmarkSelect) return;
-      const previous = selectedBookmarkKey || rangeBookmarkSelect.value || '';
-      rangeBookmarkSelect.innerHTML = '';
-      const placeholder = document.createElement('option');
-      placeholder.value = '';
+      const previous = selectedBookmarkKey || rangeBookmarkSelect.value || "";
+      rangeBookmarkSelect.innerHTML = "";
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
       placeholder.textContent = entries.length
-        ? '최근 클릭한 메시지를 선택하세요'
-        : '최근 클릭한 메시지가 없습니다';
+        ? "최근 클릭한 메시지를 선택하세요"
+        : "최근 클릭한 메시지가 없습니다";
       rangeBookmarkSelect.appendChild(placeholder);
       entries.forEach((entry) => {
-        const option = document.createElement('option');
+        const option = document.createElement("option");
         option.value = entry.key;
+        const axisLabel = entry.axis === "entry" ? "메시지" : "턴";
         const ordinalText = Number.isFinite(entry.ordinal)
-          ? `턴 ${entry.ordinal}`
-          : '턴 ?';
+          ? `${axisLabel} ${entry.ordinal}`
+          : `${axisLabel} ?`;
         const idText = entry.messageId
           ? entry.messageId
           : `index ${entry.index}`;
@@ -5442,15 +5512,18 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         option.dataset.index = String(entry.index);
         rangeBookmarkSelect.appendChild(option);
       });
-      let nextValue = '';
-      if (bookmarkSelectionPinned && entries.some((entry) => entry.key === previous)) {
+      let nextValue = "";
+      if (
+        bookmarkSelectionPinned &&
+        entries.some((entry) => entry.key === previous)
+      ) {
         nextValue = previous;
       } else if (entries.length) {
         nextValue = entries[0].key;
         bookmarkSelectionPinned = false;
       }
       rangeBookmarkSelect.value = nextValue;
-      selectedBookmarkKey = nextValue || '';
+      selectedBookmarkKey = nextValue || "";
       if (!nextValue && !entries.length) {
         rangeBookmarkSelect.selectedIndex = 0;
       }
@@ -5458,20 +5531,20 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     if (
       rangeBookmarkSelect &&
-      rangeBookmarkSelect.dataset.gmhBookmarksReady !== 'true'
+      rangeBookmarkSelect.dataset.gmhBookmarksReady !== "true"
     ) {
-      rangeBookmarkSelect.dataset.gmhBookmarksReady = 'true';
-      rangeBookmarkSelect.addEventListener('change', () => {
-        selectedBookmarkKey = rangeBookmarkSelect.value || '';
+      rangeBookmarkSelect.dataset.gmhBookmarksReady = "true";
+      rangeBookmarkSelect.addEventListener("change", () => {
+        selectedBookmarkKey = rangeBookmarkSelect.value || "";
         if (!selectedBookmarkKey) bookmarkSelectionPinned = false;
         else bookmarkSelectionPinned = true;
       });
-      if (typeof GMH.Core?.TurnBookmarks?.subscribe === 'function') {
+      if (typeof GMH.Core?.TurnBookmarks?.subscribe === "function") {
         GMH.Core.TurnBookmarks.subscribe(syncBookmarkSelect);
       }
     } else if (
       rangeBookmarkSelect &&
-      typeof GMH.Core?.TurnBookmarks?.list === 'function'
+      typeof GMH.Core?.TurnBookmarks?.list === "function"
     ) {
       syncBookmarkSelect(GMH.Core.TurnBookmarks.list());
     }
@@ -5479,12 +5552,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const syncRangeControls = (snapshot) => {
       if (!snapshot) return;
       const { bounds, totals, range } = snapshot;
-      const axis = range.axis === 'entry' || bounds.axis === 'entry'
-        ? 'entry'
-        : 'player';
+      const axis =
+        range.axis === "entry" || bounds.axis === "entry" ? "entry" : "player";
       const playerTotal = totals?.player ?? bounds.playerTotal ?? 0;
       const entryTotal = totals?.entry ?? bounds.entryTotal ?? 0;
-      const axisTotal = axis === 'entry' ? entryTotal : playerTotal;
+      const axisTotal = axis === "entry" ? entryTotal : playerTotal;
       const resolvedStart = bounds.active ? bounds.start : null;
       const resolvedEnd = bounds.active ? bounds.end : null;
       if (rangeAxisSelect) {
@@ -5492,56 +5564,59 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       }
       if (rangeStartInput) {
         if (axisTotal) rangeStartInput.max = String(axisTotal);
-        else rangeStartInput.removeAttribute('max');
+        else rangeStartInput.removeAttribute("max");
         rangeStartInput.dataset.gmhAxis = axis;
-        rangeStartInput.value = resolvedStart ? String(resolvedStart) : '';
-        rangeStartInput.dataset.gmhRequested = range.start ? String(range.start) : '';
+        rangeStartInput.value = resolvedStart ? String(resolvedStart) : "";
+        rangeStartInput.dataset.gmhRequested = range.start
+          ? String(range.start)
+          : "";
       }
       if (rangeEndInput) {
         if (axisTotal) rangeEndInput.max = String(axisTotal);
-        else rangeEndInput.removeAttribute('max');
+        else rangeEndInput.removeAttribute("max");
         rangeEndInput.dataset.gmhAxis = axis;
-        rangeEndInput.value = resolvedEnd ? String(resolvedEnd) : '';
-        rangeEndInput.dataset.gmhRequested = range.end ? String(range.end) : '';
+        rangeEndInput.value = resolvedEnd ? String(resolvedEnd) : "";
+        rangeEndInput.dataset.gmhRequested = range.end ? String(range.end) : "";
       }
       if (rangeMarkStartBtn) {
-        if (axis !== 'player') rangeMarkStartBtn.setAttribute('disabled', 'true');
-        else rangeMarkStartBtn.removeAttribute('disabled');
+        if (axis !== "player")
+          rangeMarkStartBtn.setAttribute("disabled", "true");
+        else rangeMarkStartBtn.removeAttribute("disabled");
       }
       if (rangeMarkEndBtn) {
-        if (axis !== 'player') rangeMarkEndBtn.setAttribute('disabled', 'true');
-        else rangeMarkEndBtn.removeAttribute('disabled');
+        if (axis !== "player") rangeMarkEndBtn.setAttribute("disabled", "true");
+        else rangeMarkEndBtn.removeAttribute("disabled");
       }
       if (rangeSummary) {
-        const axisLabel = axis === 'entry' ? '메시지' : '플레이어 턴';
+        const axisLabel = axis === "entry" ? "메시지" : "플레이어 턴";
         if (!axisTotal) {
           rangeSummary.textContent =
-            axis === 'entry'
-              ? '로드된 메시지가 없습니다.'
-              : '로드된 플레이어 턴이 없습니다.';
-          rangeSummary.title = '';
+            axis === "entry"
+              ? "로드된 메시지가 없습니다."
+              : "로드된 플레이어 턴이 없습니다.";
+          rangeSummary.title = "";
         } else if (!bounds.active) {
           let text = `최근 ${axisLabel} ${axisTotal}개 전체`;
-          if (axis === 'entry' && playerTotal)
+          if (axis === "entry" && playerTotal)
             text += ` · 플레이어 턴 ${playerTotal}개`;
-          if (axis === 'player' && entryTotal)
+          if (axis === "player" && entryTotal)
             text += ` · 메시지 ${entryTotal}개`;
           rangeSummary.textContent = text;
           rangeSummary.title =
-            axis === 'entry'
-              ? '메시지 축에서는 북마크가 해당 메시지 위치로 매핑됩니다.'
-              : '';
+            axis === "entry"
+              ? "메시지 축에서는 북마크가 해당 메시지 위치로 매핑됩니다."
+              : "";
         } else {
           let text = `최근 ${axisLabel} ${bounds.start}-${bounds.end} · ${bounds.count}개 / 전체 ${bounds.total}개`;
-          if (axis === 'entry' && playerTotal)
+          if (axis === "entry" && playerTotal)
             text += ` · 플레이어 턴 ${playerTotal}개`;
-          if (axis === 'player' && entryTotal)
+          if (axis === "player" && entryTotal)
             text += ` · 메시지 ${entryTotal}개`;
           rangeSummary.textContent = text;
           rangeSummary.title =
-            axis === 'entry'
-              ? '북마크를 클릭하면 해당 메시지를 기준으로 범위가 지정됩니다.'
-              : '';
+            axis === "entry"
+              ? "북마크를 클릭하면 해당 메시지를 기준으로 범위가 지정됩니다."
+              : "";
         }
       }
     };
@@ -5561,7 +5636,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           GMH.Core.ExportRange.setStart(value);
         } else {
           GMH.Core.ExportRange.setStart(null);
-          rangeStartInput.value = '';
+          rangeStartInput.value = "";
         }
       };
 
@@ -5571,47 +5646,47 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           GMH.Core.ExportRange.setEnd(value);
         } else {
           GMH.Core.ExportRange.setEnd(null);
-          rangeEndInput.value = '';
+          rangeEndInput.value = "";
         }
       };
 
       if (rangeStartInput) {
-        rangeStartInput.addEventListener('change', handleStartChange);
-        rangeStartInput.addEventListener('blur', handleStartChange);
+        rangeStartInput.addEventListener("change", handleStartChange);
+        rangeStartInput.addEventListener("blur", handleStartChange);
       }
       if (rangeEndInput) {
-        rangeEndInput.addEventListener('change', handleEndChange);
-        rangeEndInput.addEventListener('blur', handleEndChange);
+        rangeEndInput.addEventListener("change", handleEndChange);
+        rangeEndInput.addEventListener("blur", handleEndChange);
       }
       if (rangeAxisSelect) {
-        rangeAxisSelect.addEventListener('change', () => {
-          const next = rangeAxisSelect.value === 'entry' ? 'entry' : 'player';
+        rangeAxisSelect.addEventListener("change", () => {
+          const next = rangeAxisSelect.value === "entry" ? "entry" : "player";
           GMH.Core.ExportRange.setAxis(next);
         });
       }
       if (rangeClearBtn) {
-        rangeClearBtn.addEventListener('click', () => {
+        rangeClearBtn.addEventListener("click", () => {
           GMH.Core.ExportRange.clear();
           GMH.Core.TurnBookmarks.clear();
-          selectedBookmarkKey = '';
+          selectedBookmarkKey = "";
           bookmarkSelectionPinned = false;
-          if (rangeBookmarkSelect) rangeBookmarkSelect.value = '';
+          if (rangeBookmarkSelect) rangeBookmarkSelect.value = "";
         });
       }
       const doBookmark = async (mode) => {
         const stats = collectTurnStats();
         const rangeState = GMH.Core.ExportRange.getRange
           ? GMH.Core.ExportRange.getRange()
-          : { axis: 'player' };
+          : { axis: "player" };
         const axisPreference =
-          rangeAxisSelect?.value === 'entry' || rangeState.axis === 'entry'
-            ? 'entry'
-            : 'player';
+          rangeAxisSelect?.value === "entry" || rangeState.axis === "entry"
+            ? "entry"
+            : "player";
         const entryOrigin = GMH.Core.getEntryOrigin?.() || [];
         if (stats.error || !stats.session?.turns?.length) {
           setPanelStatus(
-            '현재 대화에서 턴 정보를 찾을 수 없습니다.',
-            'warning',
+            "현재 대화에서 턴 정보를 찾을 수 없습니다.",
+            "warning",
           );
           return;
         }
@@ -5624,14 +5699,38 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         );
         const playerIndices = [];
         let highestOrdinal = 0;
+        const blockIndexMap = new Map();
+        const blockIndexList = [];
         blocks.forEach((block, idx) => {
-          if (block?.getAttribute?.('data-gmh-message-role') === 'player') {
+          if (block?.getAttribute?.("data-gmh-message-role") === "player") {
             playerIndices.push(idx);
-            const ordAttr = Number(block.getAttribute('data-gmh-player-turn'));
+            const ordAttr = Number(block.getAttribute("data-gmh-player-turn"));
             if (Number.isFinite(ordAttr))
               highestOrdinal = Math.max(highestOrdinal, ordAttr);
           }
+          const blockIdxAttr = Number(
+            block?.getAttribute?.("data-gmh-message-index"),
+          );
+          if (Number.isFinite(blockIdxAttr)) {
+            blockIndexMap.set(blockIdxAttr, block);
+            blockIndexList.push(blockIdxAttr);
+          }
         });
+
+        const uniqueBlockIndices = blockIndexList.length
+          ? Array.from(new Set(blockIndexList)).sort((a, b) => a - b)
+          : [];
+        const totalMessageEntries = uniqueBlockIndices.length;
+        const blockOrdinalMap = new Map();
+        uniqueBlockIndices.forEach((blockIdx, pos) => {
+          const ordinalFromLatest = totalMessageEntries - pos;
+          blockOrdinalMap.set(blockIdx, ordinalFromLatest);
+        });
+        const entryOriginIndices = entryOrigin
+          .map((value) =>
+            Number.isInteger(value) && value >= 0 ? value : null,
+          )
+          .filter((value) => value !== null);
 
         const totalPlayers = Math.max(
           highestOrdinal,
@@ -5640,20 +5739,24 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         );
 
         if (
-          axisPreference === 'player' &&
+          axisPreference === "player" &&
           (!totalPlayers || !playerIndices.length)
         ) {
           setPanelStatus(
-            '플레이어 턴이 없어 범위를 지정할 수 없습니다.',
-            'warning',
+            "플레이어 턴이 없어 범위를 지정할 수 없습니다.",
+            "warning",
           );
           return;
         }
 
         const selectBlockByIndex = (idx) => {
-          if (!Number.isFinite(Number(idx))) return null;
+          const numeric = Number(idx);
+          if (!Number.isFinite(numeric)) return null;
+          if (blockIndexMap.has(numeric)) return blockIndexMap.get(numeric);
           try {
-            return document.querySelector(`[data-gmh-message-index="${idx}"]`);
+            return document.querySelector(
+              `[data-gmh-message-index="${numeric}"]`,
+            );
           } catch (err) {
             return null;
           }
@@ -5703,7 +5806,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             while (current) {
               if (
                 current instanceof Element &&
-                current.hasAttribute('data-gmh-message')
+                current.hasAttribute("data-gmh-message")
               ) {
                 return current;
               }
@@ -5715,12 +5818,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           let playerBlock = block;
           if (
             !playerBlock ||
-            !playerBlock.getAttribute('data-gmh-player-turn')
+            !playerBlock.getAttribute("data-gmh-player-turn")
           ) {
             playerBlock = walkBackward(playerBlock);
             while (
               playerBlock &&
-              !playerBlock.getAttribute('data-gmh-player-turn')
+              !playerBlock.getAttribute("data-gmh-player-turn")
             ) {
               playerBlock = walkBackward(
                 playerBlock?.previousElementSibling || null,
@@ -5730,7 +5833,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
           if (
             !playerBlock ||
-            !playerBlock.getAttribute('data-gmh-player-turn')
+            !playerBlock.getAttribute("data-gmh-player-turn")
           ) {
             const fallbackIdx = findNearestPlayerIndex(seedIndex);
             if (Number.isFinite(fallbackIdx)) {
@@ -5740,16 +5843,16 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
           if (
             !playerBlock ||
-            !playerBlock.getAttribute('data-gmh-player-turn')
+            !playerBlock.getAttribute("data-gmh-player-turn")
           ) {
             return null;
           }
 
-          const idxAttr = playerBlock.getAttribute('data-gmh-message-index');
-          const ordAttr = playerBlock.getAttribute('data-gmh-player-turn');
+          const idxAttr = playerBlock.getAttribute("data-gmh-message-index");
+          const ordAttr = playerBlock.getAttribute("data-gmh-player-turn");
           const msgAttr =
-            playerBlock.getAttribute('data-gmh-message-id') ||
-            playerBlock.getAttribute('data-message-id') ||
+            playerBlock.getAttribute("data-gmh-message-id") ||
+            playerBlock.getAttribute("data-message-id") ||
             null;
           const idx = Number(idxAttr);
           const pos = playerIndices.indexOf(idx);
@@ -5770,7 +5873,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
         const getActiveBookmark = () => {
           if (rangeBookmarkSelect) {
-            const key = rangeBookmarkSelect.value || selectedBookmarkKey || '';
+            const key = rangeBookmarkSelect.value || selectedBookmarkKey || "";
             if (key) {
               const picked = GMH.Core.TurnBookmarks.pick(key);
               if (picked) return picked;
@@ -5785,7 +5888,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             ? Number(bookmarkCandidate.index)
             : null;
         let entryTargetMessageId =
-          typeof bookmarkCandidate?.messageId === 'string'
+          typeof bookmarkCandidate?.messageId === "string"
             ? bookmarkCandidate.messageId
             : null;
         let context = null;
@@ -5803,16 +5906,16 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             const current = document.activeElement;
             if (current && panel.contains(current)) {
               const block = current.closest(
-                '[data-gmh-message-index],[data-turn-index],[data-message-id]',
+                "[data-gmh-message-index],[data-turn-index],[data-message-id]",
               );
               if (block) {
-                const indexAttr = block.getAttribute('data-gmh-message-index');
-                const turnAttr = block.getAttribute('data-turn-index');
+                const indexAttr = block.getAttribute("data-gmh-message-index");
+                const turnAttr = block.getAttribute("data-turn-index");
                 if (indexAttr !== null) seedIndex = Number(indexAttr);
                 else if (turnAttr !== null) seedIndex = Number(turnAttr);
                 const idAttr =
-                  block.getAttribute('data-gmh-message-id') ||
-                  block.getAttribute('data-message-id');
+                  block.getAttribute("data-gmh-message-id") ||
+                  block.getAttribute("data-message-id");
                 if (idAttr) seedMessageId = idAttr;
               }
             }
@@ -5825,11 +5928,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           if (!entryTargetMessageId && seedMessageId) {
             entryTargetMessageId = seedMessageId;
           }
-          if (axisPreference === 'entry') {
+          if (axisPreference === "entry") {
             if (Number.isFinite(entryTargetIndex)) {
+              const entryOrdinal = blockOrdinalMap.get(
+                Number(entryTargetIndex),
+              );
               context = {
                 index: Number(entryTargetIndex),
-                ordinal: null,
+                ordinal: Number.isFinite(entryOrdinal) ? entryOrdinal : null,
                 messageId: entryTargetMessageId,
               };
             }
@@ -5839,41 +5945,42 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         }
 
         if (!context) {
-          if (axisPreference === 'entry') {
-            setPanelStatus('선택한 메시지를 찾을 수 없습니다.', 'warning');
+          if (axisPreference === "entry") {
+            setPanelStatus("선택한 메시지를 찾을 수 없습니다.", "warning");
             return;
           }
           const existingRange = GMH.Core.ExportRange.getRange();
           const hasCustomRange = existingRange.start || existingRange.end;
           const totalPlayers = playerIndices.length;
           if (!totalPlayers) {
-            setPanelStatus('플레이어 턴을 찾을 수 없습니다.', 'warning');
+            setPanelStatus("플레이어 턴을 찾을 수 없습니다.", "warning");
             GMH.Core.TurnBookmarks.clear();
             return;
           }
 
           if (hasCustomRange) {
             setPanelStatus(
-              '플레이어 턴을 찾지 못해 현재 지정된 범위를 유지합니다.',
-              'warning',
+              "플레이어 턴을 찾지 못해 현재 지정된 범위를 유지합니다.",
+              "warning",
             );
             return;
           }
 
-          if (mode === 'start') {
+          if (mode === "start") {
             const fallbackIdx = playerIndices[0] ?? 0;
             const block = selectBlockByIndex(fallbackIdx);
             const messageId =
-              block?.getAttribute?.('data-gmh-message-id') ||
-              block?.getAttribute?.('data-message-id') ||
+              block?.getAttribute?.("data-gmh-message-id") ||
+              block?.getAttribute?.("data-message-id") ||
               null;
-            GMH.Core.ExportRange.setAxis('player');
+            GMH.Core.ExportRange.setAxis("player");
             GMH.Core.ExportRange.setStart(totalPlayers);
             if (rangeStartInput) rangeStartInput.value = String(totalPlayers);
             const recorded = GMH.Core.TurnBookmarks.record(
               fallbackIdx,
               totalPlayers,
               messageId,
+              "player",
             );
             if (recorded?.key) {
               selectedBookmarkKey = recorded.key;
@@ -5881,23 +5988,24 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
               if (rangeBookmarkSelect) rangeBookmarkSelect.value = recorded.key;
             }
             setPanelStatus(
-              '플레이어 턴을 찾지 못해 가장 오래된 턴을 시작으로 지정했습니다.',
-              'warning',
+              "플레이어 턴을 찾지 못해 가장 오래된 턴을 시작으로 지정했습니다.",
+              "warning",
             );
           } else {
             const fallbackIdx = playerIndices[playerIndices.length - 1] ?? 0;
             const block = selectBlockByIndex(fallbackIdx);
             const messageId =
-              block?.getAttribute?.('data-gmh-message-id') ||
-              block?.getAttribute?.('data-message-id') ||
+              block?.getAttribute?.("data-gmh-message-id") ||
+              block?.getAttribute?.("data-message-id") ||
               null;
-            GMH.Core.ExportRange.setAxis('player');
+            GMH.Core.ExportRange.setAxis("player");
             GMH.Core.ExportRange.setEnd(1);
-            if (rangeEndInput) rangeEndInput.value = '1';
+            if (rangeEndInput) rangeEndInput.value = "1";
             const recorded = GMH.Core.TurnBookmarks.record(
               fallbackIdx,
               1,
               messageId,
+              "player",
             );
             if (recorded?.key) {
               selectedBookmarkKey = recorded.key;
@@ -5905,8 +6013,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
               if (rangeBookmarkSelect) rangeBookmarkSelect.value = recorded.key;
             }
             setPanelStatus(
-              '플레이어 턴을 찾지 못해 최신 턴을 끝으로 지정했습니다.',
-              'warning',
+              "플레이어 턴을 찾지 못해 최신 턴을 끝으로 지정했습니다.",
+              "warning",
             );
           }
           return;
@@ -5918,43 +6026,63 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         const targetMessageId =
           context?.messageId || entryTargetMessageId || null;
 
-        if (axisPreference === 'entry') {
-          const totalEntries = entryOrigin.length;
+        if (axisPreference === "entry") {
+          const totalEntries = totalMessageEntries || entryOriginIndices.length;
           if (!totalEntries) {
-            setPanelStatus('메시지 데이터를 찾지 못했습니다.', 'warning');
+            setPanelStatus("메시지 데이터를 찾지 못했습니다.", "warning");
             return;
           }
           const blockIndex = Number.isFinite(entryTargetIndex)
             ? entryTargetIndex
             : targetIndex;
           if (!Number.isFinite(blockIndex)) {
-            setPanelStatus('선택한 메시지를 찾을 수 없습니다.', 'warning');
+            setPanelStatus("선택한 메시지를 찾을 수 없습니다.", "warning");
             return;
           }
-          const entryIndicesForBlock = entryOrigin
-            .map((value, idx) => (value === blockIndex ? idx : -1))
-            .filter((idx) => idx >= 0);
-          if (!entryIndicesForBlock.length) {
-            setPanelStatus('해당 메시지를 현재 로그에서 찾지 못했습니다.', 'warning');
+          let entryOrdinal = blockOrdinalMap.get(Number(blockIndex));
+          if (!Number.isFinite(entryOrdinal) && entryOriginIndices.length) {
+            const entryIndicesForBlock = entryOriginIndices
+              .map((value, idx) => (value === blockIndex ? idx : -1))
+              .filter((idx) => idx >= 0);
+            if (entryIndicesForBlock.length) {
+              const entryIndex =
+                entryIndicesForBlock[entryIndicesForBlock.length - 1];
+              entryOrdinal = entryOriginIndices.length - entryIndex;
+            }
+          }
+          if (!Number.isFinite(entryOrdinal) || entryOrdinal <= 0) {
+            setPanelStatus(
+              "선택한 메시지의 순서를 해석하지 못했습니다.",
+              "warning",
+            );
             return;
           }
-          const entryIndex = entryIndicesForBlock[entryIndicesForBlock.length - 1];
-          const entryOrdinal = totalEntries - entryIndex;
-          GMH.Core.ExportRange.setAxis('entry');
-          if (mode === 'start') {
+          GMH.Core.ExportRange.setAxis("entry");
+          if (mode === "start") {
             GMH.Core.ExportRange.setStart(entryOrdinal);
             if (rangeStartInput) rangeStartInput.value = String(entryOrdinal);
             setPanelStatus(
               `메시지 ${entryOrdinal}을 시작으로 지정했습니다.`,
-              'info',
+              "info",
             );
           } else {
             GMH.Core.ExportRange.setEnd(entryOrdinal);
             if (rangeEndInput) rangeEndInput.value = String(entryOrdinal);
             setPanelStatus(
               `메시지 ${entryOrdinal}을 끝으로 지정했습니다.`,
-              'info',
+              "info",
             );
+          }
+          const recorded = GMH.Core.TurnBookmarks.record(
+            blockIndex,
+            entryOrdinal,
+            targetMessageId || null,
+            "entry",
+          );
+          if (recorded?.key) {
+            selectedBookmarkKey = recorded.key;
+            bookmarkSelectionPinned = false;
+            if (rangeBookmarkSelect) rangeBookmarkSelect.value = recorded.key;
           }
           return;
         }
@@ -5963,24 +6091,24 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           ? Number(context.ordinal)
           : null;
         if (!Number.isFinite(resolvedOrdinal) || resolvedOrdinal <= 0) {
-          setPanelStatus('플레이어 턴 정보를 해석하지 못했습니다.', 'warning');
+          setPanelStatus("플레이어 턴 정보를 해석하지 못했습니다.", "warning");
           return;
         }
 
-        if (mode === 'start') {
-          GMH.Core.ExportRange.setAxis('player');
+        if (mode === "start") {
+          GMH.Core.ExportRange.setAxis("player");
           GMH.Core.ExportRange.setStart(resolvedOrdinal);
           setPanelStatus(
             `플레이어 턴 ${resolvedOrdinal}을 시작으로 지정했습니다.`,
-            'info',
+            "info",
           );
           if (rangeStartInput) rangeStartInput.value = String(resolvedOrdinal);
         } else {
-          GMH.Core.ExportRange.setAxis('player');
+          GMH.Core.ExportRange.setAxis("player");
           GMH.Core.ExportRange.setEnd(resolvedOrdinal);
           setPanelStatus(
             `플레이어 턴 ${resolvedOrdinal}을 끝으로 지정했습니다.`,
-            'info',
+            "info",
           );
           if (rangeEndInput) rangeEndInput.value = String(resolvedOrdinal);
         }
@@ -5988,6 +6116,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           targetIndex,
           resolvedOrdinal,
           targetMessageId || null,
+          "player",
         );
         if (finalBookmark?.key) {
           selectedBookmarkKey = finalBookmark.key;
@@ -5998,10 +6127,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       };
 
       if (rangeMarkStartBtn) {
-        rangeMarkStartBtn.addEventListener('click', () => doBookmark('start'));
+        rangeMarkStartBtn.addEventListener("click", () => doBookmark("start"));
       }
       if (rangeMarkEndBtn) {
-        rangeMarkEndBtn.addEventListener('click', () => doBookmark('end'));
+        rangeMarkEndBtn.addEventListener("click", () => doBookmark("end"));
       }
     }
 
@@ -6014,40 +6143,40 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         if (target instanceof HTMLElement) {
           const tag = target.tagName.toLowerCase();
           const isInputLike =
-            ['input', 'textarea', 'select'].includes(tag) ||
+            ["input", "textarea", "select"].includes(tag) ||
             target.isContentEditable;
-          if (isInputLike && !['g', 'm'].includes(key)) return;
+          if (isInputLike && !["g", "m"].includes(key)) return;
         }
         if (GMH.UI.Modal?.isOpen?.()) return;
         switch (key) {
-          case 'g':
+          case "g":
             event.preventDefault();
             PanelVisibility.open({ focus: true, persist: true });
             break;
-          case 'm':
+          case "m":
             event.preventDefault();
             PanelVisibility.toggle();
             break;
-          case 's':
+          case "s":
             event.preventDefault();
             if (!AUTO_STATE.running)
               autoLoader
-                .start('all')
-                .catch((error) => console.warn('[GMH] auto shortcut', error));
+                .start("all")
+                .catch((error) => console.warn("[GMH] auto shortcut", error));
             break;
-          case 'p':
+          case "p":
             event.preventDefault();
             configurePrivacyLists();
             break;
-          case 'e':
+          case "e":
             event.preventDefault();
-            panel.querySelector('#gmh-export')?.click();
+            panel.querySelector("#gmh-export")?.click();
             break;
           default:
             break;
         }
       };
-      window.addEventListener('keydown', shortcutHandler);
+      window.addEventListener("keydown", shortcutHandler);
       PAGE_WINDOW.__GMHShortcutsBound = true;
     }
 
@@ -6055,12 +6184,13 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const raw = readTranscriptText();
       const normalized = normalizeTranscript(raw);
       const session = buildSession(normalized);
-      if (!session.turns.length) throw new Error('대화 턴을 찾을 수 없습니다.');
+      if (!session.turns.length) throw new Error("대화 턴을 찾을 수 없습니다.");
       const playerCount = session.turns.filter(
-        (turn) => turn.role === 'player',
+        (turn) => turn.role === "player",
       ).length;
       const entryCount = session.turns.reduce((sum, turn) => {
-        if (Array.isArray(turn?.__gmhEntries)) return sum + turn.__gmhEntries.length;
+        if (Array.isArray(turn?.__gmhEntries))
+          return sum + turn.__gmhEntries.length;
         return sum + 1;
       }, 0);
       GMH.Core.ExportRange.setTotals({
@@ -6070,8 +6200,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       return { session, raw: normalized };
     };
 
-    const exportFormatSelect = panel.querySelector('#gmh-export-format');
-    const quickExportBtn = panel.querySelector('#gmh-quick-export');
+    const exportFormatSelect = panel.querySelector("#gmh-export-format");
+    const quickExportBtn = panel.querySelector("#gmh-quick-export");
 
     async function prepareShare({
       confirmLabel,
@@ -6080,32 +6210,33 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     }) {
       try {
         GMH.Core.State.setState(GMH.Core.STATE.REDACTING, {
-          label: '민감정보 마스킹 중',
-          message: '레다크션 파이프라인 적용 중...',
-          tone: 'progress',
+          label: "민감정보 마스킹 중",
+          message: "레다크션 파이프라인 적용 중...",
+          tone: "progress",
           progress: { indeterminate: true },
         });
         const { session, raw } = parseAll();
         const privacy = applyPrivacyPipeline(session, raw, PRIVACY_CFG.profile);
         if (privacy.blocked) {
-          alert('미성년자 성적 맥락이 감지되어 작업을 중단했습니다.');
+          alert("미성년자 성적 맥락이 감지되어 작업을 중단했습니다.");
           GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
-            label: '작업 차단',
+            label: "작업 차단",
             message:
               blockedStatusMessage ||
-              '미성년자 민감 맥락으로 작업이 차단되었습니다.',
-            tone: 'error',
+              "미성년자 민감 맥락으로 작업이 차단되었습니다.",
+            tone: "error",
             progress: { value: 1 },
           });
           return null;
         }
         const requestedRange = GMH.Core.ExportRange.getRange();
         const sanitizedPlayerCount = privacy.sanitizedSession.turns.filter(
-          (turn) => turn.role === 'player',
+          (turn) => turn.role === "player",
         ).length;
         const sanitizedEntryCount = privacy.sanitizedSession.turns.reduce(
           (sum, turn) =>
-            sum + (Array.isArray(turn?.__gmhEntries) ? turn.__gmhEntries.length : 1),
+            sum +
+            (Array.isArray(turn?.__gmhEntries) ? turn.__gmhEntries.length : 1),
           0,
         );
         GMH.Core.ExportRange.setTotals({
@@ -6126,7 +6257,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         const ordinalMap = new Map();
         let ordinalCounter = 0;
         privacy.sanitizedSession.turns.forEach((turn, idx) => {
-          if (turn?.role === 'player') {
+          if (turn?.role === "player") {
             ordinalCounter += 1;
             ordinalMap.set(idx, ordinalCounter);
           }
@@ -6143,23 +6274,23 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         exportSession.turns = selectedIndices.map((index, localIndex) => {
           const original = privacy.sanitizedSession.turns[index] || {};
           const clone = { ...original };
-          Object.defineProperty(clone, '__gmhIndex', {
+          Object.defineProperty(clone, "__gmhIndex", {
             value: index,
             enumerable: false,
           });
-          Object.defineProperty(clone, '__gmhOrdinal', {
+          Object.defineProperty(clone, "__gmhOrdinal", {
             value:
               selection.ordinals?.[localIndex] ?? ordinalMap.get(index) ?? null,
             enumerable: false,
           });
-          Object.defineProperty(clone, '__gmhSourceBlock', {
+          Object.defineProperty(clone, "__gmhSourceBlock", {
             value: entryOrigin[index] ?? null,
             enumerable: false,
           });
           return clone;
         });
 
-        const rangeAxis = selection.info.axis === 'entry' ? 'entry' : 'player';
+        const rangeAxis = selection.info.axis === "entry" ? "entry" : "player";
         exportSession.meta = {
           ...(exportSession.meta || {}),
           turn_range: {
@@ -6167,36 +6298,32 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             axis: rangeAxis,
             count: selection.info.count,
             total:
-              rangeAxis === 'entry'
+              rangeAxis === "entry"
                 ? selection.info.entryTotal
                 : selection.info.playerTotal,
-            player_start:
-              rangeAxis === 'player' ? selection.info.start : null,
-            player_end: rangeAxis === 'player' ? selection.info.end : null,
-            player_count:
-              rangeAxis === 'player' ? selection.info.count : null,
+            player_start: rangeAxis === "player" ? selection.info.start : null,
+            player_end: rangeAxis === "player" ? selection.info.end : null,
+            player_count: rangeAxis === "player" ? selection.info.count : null,
             player_total: selection.info.playerTotal,
-            entry_start:
-              rangeAxis === 'entry' ? selection.info.start : null,
-            entry_end: rangeAxis === 'entry' ? selection.info.end : null,
-            entry_count:
-              rangeAxis === 'entry' ? selection.info.count : null,
+            entry_start: rangeAxis === "entry" ? selection.info.start : null,
+            entry_end: rangeAxis === "entry" ? selection.info.end : null,
+            entry_count: rangeAxis === "entry" ? selection.info.count : null,
             entry_total: selection.info.entryTotal,
             entry_start_index:
-              rangeAxis === 'entry'
-                ? selection.info.entryStartIndex ?? null
+              rangeAxis === "entry"
+                ? (selection.info.entryStartIndex ?? null)
                 : selection.info.startIndex,
             entry_end_index:
-              rangeAxis === 'entry'
-                ? selection.info.entryEndIndex ?? null
+              rangeAxis === "entry"
+                ? (selection.info.entryEndIndex ?? null)
                 : selection.info.endIndex,
             entry_start_ordinal:
-              rangeAxis === 'entry'
-                ? selection.info.entryStartOrdinal ?? selection.info.start
+              rangeAxis === "entry"
+                ? (selection.info.entryStartOrdinal ?? selection.info.start)
                 : null,
             entry_end_ordinal:
-              rangeAxis === 'entry'
-                ? selection.info.entryEndOrdinal ?? selection.info.end
+              rangeAxis === "entry"
+                ? (selection.info.entryEndOrdinal ?? selection.info.end)
                 : null,
             turn_start_index: selection.info.startIndex,
             turn_end_index: selection.info.endIndex,
@@ -6208,9 +6335,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         const overallStats = collectSessionStats(privacy.sanitizedSession);
         const previewTurns = exportSession.turns.slice(-PREVIEW_TURN_LIMIT);
         GMH.Core.State.setState(GMH.Core.STATE.PREVIEW, {
-          label: '미리보기 준비 완료',
-          message: '레다크션 결과를 검토하세요.',
-          tone: 'info',
+          label: "미리보기 준비 완료",
+          message: "레다크션 결과를 검토하세요.",
+          tone: "info",
           progress: { value: 0.75 },
         });
         const ok = await confirmPrivacyGate({
@@ -6222,16 +6349,16 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           selectedOrdinals: selection.ordinals || [],
           rangeInfo: selection.info,
           previewTurns,
-          actionLabel: confirmLabel || '계속',
+          actionLabel: confirmLabel || "계속",
         });
         if (!ok) {
           GMH.Core.State.setState(GMH.Core.STATE.IDLE, {
-            label: '대기 중',
-            message: cancelStatusMessage || '작업을 취소했습니다.',
-            tone: cancelStatusMessage ? 'muted' : 'info',
+            label: "대기 중",
+            message: cancelStatusMessage || "작업을 취소했습니다.",
+            tone: cancelStatusMessage ? "muted" : "info",
             progress: { value: 0 },
           });
-          if (cancelStatusMessage) setPanelStatus(cancelStatusMessage, 'muted');
+          if (cancelStatusMessage) setPanelStatus(cancelStatusMessage, "muted");
           return null;
         }
         return {
@@ -6246,9 +6373,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       } catch (error) {
         alert(`오류: ${(error && error.message) || error}`);
         GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
-          label: '작업 실패',
-          message: '작업 준비 중 오류가 발생했습니다.',
-          tone: 'error',
+          label: "작업 실패",
+          message: "작업 준비 중 오류가 발생했습니다.",
+          tone: "error",
           progress: { value: 1 },
         });
         return null;
@@ -6259,14 +6386,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       if (!prepared) return false;
       try {
         GMH.Core.State.setState(GMH.Core.STATE.EXPORTING, {
-          label: '내보내기 진행 중',
+          label: "내보내기 진행 중",
           message: `${format.toUpperCase()} 내보내기를 준비하는 중입니다...`,
-          tone: 'progress',
+          tone: "progress",
           progress: { indeterminate: true },
         });
         const { privacy, stats, exportSession, selection, overallStats } =
           prepared;
-        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const stamp = new Date().toISOString().replace(/[:.]/g, "-");
         const sessionForExport = exportSession || privacy.sanitizedSession;
         const rangeInfo = selection?.info || GMH.Core.ExportRange.describe();
         const hasCustomRange = Boolean(rangeInfo?.active);
@@ -6274,12 +6401,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           ? sessionForExport.turns
               .map((turn) => {
                 const label =
-                  turn.role === 'narration'
-                    ? '내레이션'
-                    : turn.speaker || turn.role || '턴';
+                  turn.role === "narration"
+                    ? "내레이션"
+                    : turn.speaker || turn.role || "턴";
                 return `${label}: ${turn.text}`;
               })
-              .join('\n')
+              .join("\n")
           : privacy.sanitizedRaw;
         const bundle = buildExportBundle(
           sessionForExport,
@@ -6301,66 +6428,68 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           range: sessionForExport.meta?.turn_range || rangeInfo,
         });
         const manifestBlob = new Blob([JSON.stringify(manifest, null, 2)], {
-          type: 'application/json',
+          type: "application/json",
         });
-        const manifestName = `${bundle.filename.replace(/\.[^.]+$/, '')}.manifest.json`;
+        const manifestName = `${bundle.filename.replace(/\.[^.]+$/, "")}.manifest.json`;
         triggerDownload(manifestBlob, manifestName);
 
         const summary = formatRedactionCounts(privacy.counts);
         const profileLabel =
           PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
         const playerTotalAvailable =
-          rangeInfo?.playerTotal || overallStats?.playerTurns || stats.playerTurns;
+          rangeInfo?.playerTotal ||
+          overallStats?.playerTurns ||
+          stats.playerTurns;
         const entryTotalAvailable =
           rangeInfo?.entryTotal || sessionForExport.turns.length;
-        const axis = rangeInfo?.axis === 'entry' ? 'entry' : 'player';
-        const axisLabel = axis === 'entry' ? '메시지' : '플레이어 턴';
+        const axis = rangeInfo?.axis === "entry" ? "entry" : "player";
+        const axisLabel = axis === "entry" ? "메시지" : "플레이어 턴";
         const axisTotalAvailable =
-          axis === 'entry' ? entryTotalAvailable : playerTotalAvailable;
+          axis === "entry" ? entryTotalAvailable : playerTotalAvailable;
         let rangeNote = hasCustomRange
           ? ` · (선택) ${axisLabel} ${rangeInfo.start}-${rangeInfo.end}/${axisTotalAvailable}`
           : ` · ${axisLabel} 총 ${axisTotalAvailable}개`;
-        if (axis === 'entry') {
+        if (axis === "entry") {
           rangeNote += ` · (선택) 플레이어 턴 ${stats.playerTurns}개 / (전체) ${playerTotalAvailable}개`;
         } else {
           rangeNote += ` · (선택) 플레이어 턴 ${stats.playerTurns}개`;
         }
         const message = `${format.toUpperCase()} 내보내기 완료${rangeNote} · ${profileLabel} · ${summary}`;
         GMH.Core.State.setState(GMH.Core.STATE.DONE, {
-          label: '내보내기 완료',
+          label: "내보내기 완료",
           message,
-          tone: 'success',
+          tone: "success",
           progress: { value: 1 },
         });
         if (privacy.sanitizedSession.warnings.length)
-          console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
+          console.warn("[GMH] warnings:", privacy.sanitizedSession.warnings);
         return true;
       } catch (error) {
         alert(`오류: ${(error && error.message) || error}`);
         GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
-          label: '내보내기 실패',
-          message: '내보내기 실패',
-          tone: 'error',
+          label: "내보내기 실패",
+          message: "내보내기 실패",
+          tone: "error",
           progress: { value: 1 },
         });
         return false;
       }
     }
 
-    const copyRecentBtn = panel.querySelector('#gmh-copy-recent');
+    const copyRecentBtn = panel.querySelector("#gmh-copy-recent");
     if (copyRecentBtn) {
       copyRecentBtn.onclick = async () => {
         const prepared = await prepareShare({
-          confirmLabel: '복사 계속',
-          cancelStatusMessage: '복사를 취소했습니다.',
-          blockedStatusMessage: '미성년자 민감 맥락으로 복사가 차단되었습니다.',
+          confirmLabel: "복사 계속",
+          cancelStatusMessage: "복사를 취소했습니다.",
+          blockedStatusMessage: "미성년자 민감 맥락으로 복사가 차단되었습니다.",
         });
         if (!prepared) return;
         try {
           GMH.Core.State.setState(GMH.Core.STATE.EXPORTING, {
-            label: '복사 진행 중',
-            message: '최근 15턴을 복사하는 중입니다...',
-            tone: 'progress',
+            label: "복사 진행 중",
+            message: "최근 15턴을 복사하는 중입니다...",
+            tone: "progress",
             progress: { indeterminate: true },
           });
           const { privacy, overallStats, stats } = prepared;
@@ -6369,86 +6498,86 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           const md = toMarkdownExport(privacy.sanitizedSession, {
             turns,
             includeMeta: false,
-            heading: '## 최근 15턴',
+            heading: "## 최근 15턴",
           });
-          GM_setClipboard(md, { type: 'text', mimetype: 'text/plain' });
+          GM_setClipboard(md, { type: "text", mimetype: "text/plain" });
           const summary = formatRedactionCounts(privacy.counts);
           const profileLabel =
             PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
           const message = `최근 15턴 복사 완료 · 플레이어 턴 ${effectiveStats.playerTurns}개 · ${profileLabel} · ${summary}`;
           GMH.Core.State.setState(GMH.Core.STATE.DONE, {
-            label: '복사 완료',
+            label: "복사 완료",
             message,
-            tone: 'success',
+            tone: "success",
             progress: { value: 1 },
           });
           if (privacy.sanitizedSession.warnings.length)
-            console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
+            console.warn("[GMH] warnings:", privacy.sanitizedSession.warnings);
         } catch (error) {
           alert(`오류: ${(error && error.message) || error}`);
           GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
-            label: '복사 실패',
-            message: '복사 실패',
-            tone: 'error',
+            label: "복사 실패",
+            message: "복사 실패",
+            tone: "error",
             progress: { value: 1 },
           });
         }
       };
     }
 
-    const copyAllBtn = panel.querySelector('#gmh-copy-all');
+    const copyAllBtn = panel.querySelector("#gmh-copy-all");
     if (copyAllBtn) {
       copyAllBtn.onclick = async () => {
         const prepared = await prepareShare({
-          confirmLabel: '복사 계속',
-          cancelStatusMessage: '복사를 취소했습니다.',
-          blockedStatusMessage: '미성년자 민감 맥락으로 복사가 차단되었습니다.',
+          confirmLabel: "복사 계속",
+          cancelStatusMessage: "복사를 취소했습니다.",
+          blockedStatusMessage: "미성년자 민감 맥락으로 복사가 차단되었습니다.",
         });
         if (!prepared) return;
         try {
           GMH.Core.State.setState(GMH.Core.STATE.EXPORTING, {
-            label: '복사 진행 중',
-            message: '전체 Markdown을 복사하는 중입니다...',
-            tone: 'progress',
+            label: "복사 진행 중",
+            message: "전체 Markdown을 복사하는 중입니다...",
+            tone: "progress",
             progress: { indeterminate: true },
           });
           const { privacy, overallStats, stats } = prepared;
           const effectiveStats = overallStats || stats;
           const md = toMarkdownExport(privacy.sanitizedSession);
-          GM_setClipboard(md, { type: 'text', mimetype: 'text/plain' });
+          GM_setClipboard(md, { type: "text", mimetype: "text/plain" });
           const summary = formatRedactionCounts(privacy.counts);
           const profileLabel =
             PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
           const message = `전체 Markdown 복사 완료 · 플레이어 턴 ${effectiveStats.playerTurns}개 · ${profileLabel} · ${summary}`;
           GMH.Core.State.setState(GMH.Core.STATE.DONE, {
-            label: '복사 완료',
+            label: "복사 완료",
             message,
-            tone: 'success',
+            tone: "success",
             progress: { value: 1 },
           });
           if (privacy.sanitizedSession.warnings.length)
-            console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
+            console.warn("[GMH] warnings:", privacy.sanitizedSession.warnings);
         } catch (error) {
           alert(`오류: ${(error && error.message) || error}`);
           GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
-            label: '복사 실패',
-            message: '복사 실패',
-            tone: 'error',
+            label: "복사 실패",
+            message: "복사 실패",
+            tone: "error",
             progress: { value: 1 },
           });
         }
       };
     }
 
-    const exportBtn = panel.querySelector('#gmh-export');
+    const exportBtn = panel.querySelector("#gmh-export");
     if (exportBtn) {
       exportBtn.onclick = async () => {
-        const format = exportFormatSelect?.value || 'json';
+        const format = exportFormatSelect?.value || "json";
         const prepared = await prepareShare({
-          confirmLabel: '내보내기 진행',
-          cancelStatusMessage: '내보내기를 취소했습니다.',
+          confirmLabel: "내보내기 진행",
+          cancelStatusMessage: "내보내기를 취소했습니다.",
           blockedStatusMessage:
-            '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
+            "미성년자 민감 맥락으로 내보내기가 차단되었습니다.",
         });
         if (!prepared) return;
         await performExport(prepared, format);
@@ -6458,35 +6587,35 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     if (quickExportBtn) {
       quickExportBtn.onclick = async () => {
         if (AUTO_STATE.running) {
-          setPanelStatus('이미 자동 로딩이 진행 중입니다.', 'muted');
+          setPanelStatus("이미 자동 로딩이 진행 중입니다.", "muted");
           return;
         }
         const originalText = quickExportBtn.textContent;
         quickExportBtn.disabled = true;
-        quickExportBtn.textContent = '진행 중...';
+        quickExportBtn.textContent = "진행 중...";
         try {
           GMH.Core.State.setState(GMH.Core.STATE.SCANNING, {
-            label: '원클릭 내보내기',
-            message: '전체 로딩 중...',
-            tone: 'progress',
+            label: "원클릭 내보내기",
+            message: "전체 로딩 중...",
+            tone: "progress",
             progress: { indeterminate: true },
           });
-          await autoLoader.start('all');
-          const format = exportFormatSelect?.value || 'json';
+          await autoLoader.start("all");
+          const format = exportFormatSelect?.value || "json";
           const prepared = await prepareShare({
             confirmLabel: `${format.toUpperCase()} 내보내기`,
-            cancelStatusMessage: '내보내기를 취소했습니다.',
+            cancelStatusMessage: "내보내기를 취소했습니다.",
             blockedStatusMessage:
-              '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
+              "미성년자 민감 맥락으로 내보내기가 차단되었습니다.",
           });
           if (!prepared) return;
           await performExport(prepared, format);
         } catch (error) {
           alert(`오류: ${(error && error.message) || error}`);
           GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
-            label: '원클릭 실패',
-            message: '원클릭 내보내기 실패',
-            tone: 'error',
+            label: "원클릭 실패",
+            message: "원클릭 내보내기 실패",
+            tone: "error",
             progress: { value: 1 },
           });
         } finally {
@@ -6496,14 +6625,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       };
     }
 
-    const reparseBtn = panel.querySelector('#gmh-reparse');
+    const reparseBtn = panel.querySelector("#gmh-reparse");
     if (reparseBtn) {
       reparseBtn.onclick = () => {
         try {
           GMH.Core.State.setState(GMH.Core.STATE.REDACTING, {
-            label: '재파싱 중',
-            message: '대화 로그를 다시 분석하는 중입니다...',
-            tone: 'progress',
+            label: "재파싱 중",
+            message: "대화 로그를 다시 분석하는 중입니다...",
+            tone: "progress",
             progress: { indeterminate: true },
           });
           const { session, raw } = parseAll();
@@ -6516,29 +6645,29 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           const summary = formatRedactionCounts(privacy.counts);
           const profileLabel =
             PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
-          const extra = privacy.blocked ? ' · ⚠️ 미성년자 맥락 감지' : '';
+          const extra = privacy.blocked ? " · ⚠️ 미성년자 맥락 감지" : "";
           const message = `재파싱 완료 · 플레이어 턴 ${stats.playerTurns}개 · 경고 ${privacy.sanitizedSession.warnings.length}건 · ${profileLabel} · ${summary}${extra}`;
           GMH.Core.State.setState(GMH.Core.STATE.DONE, {
-            label: '재파싱 완료',
+            label: "재파싱 완료",
             message,
-            tone: 'info',
+            tone: "info",
             progress: { value: 1 },
           });
           if (privacy.sanitizedSession.warnings.length)
-            console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
+            console.warn("[GMH] warnings:", privacy.sanitizedSession.warnings);
         } catch (e) {
           alert(`오류: ${(e && e.message) || e}`);
           GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
-            label: '재파싱 실패',
-            message: '재파싱 실패',
-            tone: 'error',
+            label: "재파싱 실패",
+            message: "재파싱 실패",
+            tone: "error",
             progress: { value: 1 },
           });
         }
       };
     }
 
-    const guideBtn = panel.querySelector('#gmh-guide');
+    const guideBtn = panel.querySelector("#gmh-guide");
     if (guideBtn) {
       guideBtn.onclick = () => {
         const prompt = `
@@ -6562,12 +6691,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
    - 문장은 간결하게.
    - 플레이어 이름은 "플레이어"로 통일.
 `;
-        GM_setClipboard(prompt, { type: 'text', mimetype: 'text/plain' });
-        setPanelStatus('요약 프롬프트가 클립보드에 복사되었습니다.', 'success');
+        GM_setClipboard(prompt, { type: "text", mimetype: "text/plain" });
+        setPanelStatus("요약 프롬프트가 클립보드에 복사되었습니다.", "success");
       };
     }
 
-    const reguideBtn = panel.querySelector('#gmh-reguide');
+    const reguideBtn = panel.querySelector("#gmh-reguide");
     if (reguideBtn) {
       reguideBtn.onclick = () => {
         const prompt = `
@@ -6580,10 +6709,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 - 출력 구조는 [전체 줄거리 요약] / [주요 관계 변화] / [핵심 테마].
 - 길이는 1200~1800자.
 `;
-        GM_setClipboard(prompt, { type: 'text', mimetype: 'text/plain' });
+        GM_setClipboard(prompt, { type: "text", mimetype: "text/plain" });
         setPanelStatus(
-          '재요약 프롬프트가 클립보드에 복사되었습니다.',
-          'success',
+          "재요약 프롬프트가 클립보드에 복사되었습니다.",
+          "success",
         );
       };
     }
@@ -6594,12 +6723,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   // -------------------------------
   function mountPanelModern() {
     ensureDesignSystemStyles();
-    if (document.querySelector('#genit-memory-helper-panel')) return;
-    const panel = document.createElement('div');
-    panel.id = 'genit-memory-helper-panel';
-    panel.className = 'gmh-panel';
-    panel.setAttribute('role', 'region');
-    panel.setAttribute('aria-label', 'Genit Memory Helper');
+    if (document.querySelector("#genit-memory-helper-panel")) return;
+    const panel = document.createElement("div");
+    panel.id = "genit-memory-helper-panel";
+    panel.className = "gmh-panel";
+    panel.setAttribute("role", "region");
+    panel.setAttribute("aria-label", "Genit Memory Helper");
     panel.tabIndex = -1;
     panel.innerHTML = `
       <div class="gmh-panel__header">
@@ -6717,22 +6846,22 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const anchor = adapter?.getPanelAnchor?.(document) || document.body;
     anchor.appendChild(panel);
 
-    const statusEl = panel.querySelector('#gmh-status');
+    const statusEl = panel.querySelector("#gmh-status");
     attachStatusElement(statusEl);
     if (statusEl) {
-      statusEl.setAttribute('role', 'status');
-      statusEl.setAttribute('aria-live', 'polite');
+      statusEl.setAttribute("role", "status");
+      statusEl.setAttribute("aria-live", "polite");
     }
-    const progressFill = panel.querySelector('#gmh-progress-fill');
-    const progressLabel = panel.querySelector('#gmh-progress-label');
+    const progressFill = panel.querySelector("#gmh-progress-fill");
+    const progressLabel = panel.querySelector("#gmh-progress-label");
     GMH.UI.StateView.bind({ progressFill, progressLabel });
     setupPanelInteractions(panel, { modern: true });
   }
 
   function mountPanelLegacy() {
-    if (document.querySelector('#genit-memory-helper-panel')) return;
-    const panel = document.createElement('div');
-    panel.id = 'genit-memory-helper-panel';
+    if (document.querySelector("#genit-memory-helper-panel")) return;
+    const panel = document.createElement("div");
+    panel.id = "genit-memory-helper-panel";
     panel.style.cssText = `
       position: fixed; right: 16px; bottom: 16px; z-index: 999999;
       background: #0b1020; color: #fff; padding: 10px 12px; border-radius: 10px;
@@ -6799,9 +6928,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const anchor = adapter?.getPanelAnchor?.(document) || document.body;
     anchor.appendChild(panel);
 
-    const statusEl = panel.querySelector('#gmh-status');
+    const statusEl = panel.querySelector("#gmh-status");
     attachStatusElement(statusEl);
-    setPanelStatus('준비 완료', 'info');
+    setPanelStatus("준비 완료", "info");
     GMH.UI.StateView.bind();
     setupPanelInteractions(panel, { modern: false });
   }
@@ -6811,7 +6940,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       mountPanelModern();
     } else {
       if (Flags.killSwitch)
-        console.info('[GMH] modern UI disabled by kill switch');
+        console.info("[GMH] modern UI disabled by kill switch");
       mountPanelLegacy();
     }
   }
@@ -6825,17 +6954,17 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       GMH.Core.MessageIndexer.start();
       BookmarkListener.start();
     } catch (e) {
-      console.error('[GMH] mount error', e);
+      console.error("[GMH] mount error", e);
     }
   }
 
   if (
-    document.readyState === 'complete' ||
-    document.readyState === 'interactive'
+    document.readyState === "complete" ||
+    document.readyState === "interactive"
   ) {
     setTimeout(boot, 1200);
   } else {
-    window.addEventListener('DOMContentLoaded', () => setTimeout(boot, 1200));
+    window.addEventListener("DOMContentLoaded", () => setTimeout(boot, 1200));
   }
 
   if (!PAGE_WINDOW.__GMHTeardownHook) {
@@ -6843,16 +6972,16 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       try {
         BookmarkListener.stop();
       } catch (err) {
-        console.warn('[GMH] bookmark listener cleanup failed', err);
+        console.warn("[GMH] bookmark listener cleanup failed", err);
       }
       try {
         MessageIndexer.stop();
       } catch (err) {
-        console.warn('[GMH] message indexer cleanup failed', err);
+        console.warn("[GMH] message indexer cleanup failed", err);
       }
     };
-    window.addEventListener('pagehide', teardown);
-    window.addEventListener('beforeunload', teardown);
+    window.addEventListener("pagehide", teardown);
+    window.addEventListener("beforeunload", teardown);
     PAGE_WINDOW.__GMHTeardownHook = true;
   }
 
@@ -6862,21 +6991,21 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     moScheduled = true;
     requestAnimationFrame(() => {
       moScheduled = false;
-      if (!document.querySelector('#genit-memory-helper-panel')) boot();
+      if (!document.querySelector("#genit-memory-helper-panel")) boot();
     });
   });
   mo.observe(document.documentElement, { subtree: true, childList: true });
 
   if (!PAGE_WINDOW.__GMHTest) {
-    Object.defineProperty(PAGE_WINDOW, '__GMHTest', {
+    Object.defineProperty(PAGE_WINDOW, "__GMHTest", {
       value: {
-        runPrivacyCheck(rawText, profileKey = 'safe') {
+        runPrivacyCheck(rawText, profileKey = "safe") {
           try {
-            const normalized = normalizeTranscript(rawText || '');
+            const normalized = normalizeTranscript(rawText || "");
             const session = buildSession(normalized);
             return applyPrivacyPipeline(session, normalized, profileKey);
           } catch (error) {
-            console.error('[GMH] runPrivacyCheck error', error);
+            console.error("[GMH] runPrivacyCheck error", error);
             return { error: error?.message || String(error) };
           }
         },
@@ -6945,13 +7074,13 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
   if (!PAGE_WINDOW.GMH) {
     try {
-      Object.defineProperty(PAGE_WINDOW, 'GMH', {
+      Object.defineProperty(PAGE_WINDOW, "GMH", {
         value: GMH,
         writable: false,
         configurable: false,
       });
     } catch (err) {
-      console.warn('[GMH] expose GMH failed', err);
+      console.warn("[GMH] expose GMH failed", err);
     }
   }
 })();
