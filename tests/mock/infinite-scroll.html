@@ -106,8 +106,18 @@
         const node = tpl.content.firstElementChild.cloneNode(true);
 
         node.classList.add(data.role);
+        const roleAttr =
+          data.role === 'player' ? 'user' : data.role === 'npc' ? 'assistant' : 'narration';
+        node.setAttribute('data-role', roleAttr);
+        node.setAttribute('data-message-id', `mock-${chunk}-${index}`);
         node.querySelector('.speaker').textContent = data.name;
-        node.querySelector('.text').textContent = `${data.preset} (${chunk}-${index})`;
+        const textNode = node.querySelector('.text');
+        if (data.role === 'player') {
+          textNode.classList.add('markdown-content', 'text-right');
+        } else {
+          textNode.classList.add('markdown-content');
+        }
+        textNode.textContent = `${data.preset} (${chunk}-${index})`;
 
         return node;
       }
