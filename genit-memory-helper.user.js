@@ -312,6 +312,24 @@
       console.warn('[GMH] export range adjusted:', message, data);
     };
 
+    const isRangeDebugEnabled = () => {
+      const flag = PAGE_WINDOW?.GMH_DEBUG_RANGE;
+      if (typeof flag === 'boolean') return flag;
+      if (typeof flag === 'string') {
+        const trimmed = flag.trim().toLowerCase();
+        if (!trimmed) return false;
+        return trimmed !== '0' && trimmed !== 'false' && trimmed !== 'off';
+      }
+      try {
+        const stored = localStorage.getItem('GMH_DEBUG_RANGE');
+        if (stored === null) return false;
+        const normalized = stored.trim().toLowerCase();
+        return normalized === '1' || normalized === 'true' || normalized === 'on';
+      } catch (err) {
+        return false;
+      }
+    };
+
     const normalizeRequestedOrder = () => {
       if (requested.start !== null && requested.end !== null && requested.start > requested.end) {
         emitRangeWarning('start > end; swapping values', {
@@ -339,28 +357,23 @@
         requested.end = null;
         return;
       }
-      if (requested.start !== null && requested.start > totalMessages) {
-        emitRangeWarning('start exceeds total; clamping', {
-          start: requested.start,
-          total: totalMessages,
-        });
-        requested.start = totalMessages;
-      }
-      if (requested.end !== null && requested.end > totalMessages) {
-        emitRangeWarning('end exceeds total; clamping', {
-          end: requested.end,
-          total: totalMessages,
-        });
-        requested.end = totalMessages;
-      }
       normalizeRequestedOrder();
     };
 
     const resolveBounds = (totalMessages = totals.message) => {
       const total = Number.isFinite(totalMessages) ? Math.max(0, Math.floor(totalMessages)) : 0;
+
+      const rawStart = Number.isFinite(requested.start)
+        ? Math.max(1, Math.floor(requested.start))
+        : null;
+      const rawEnd = Number.isFinite(requested.end) ? Math.max(1, Math.floor(requested.end)) : null;
+      const hasStart = rawStart !== null;
+      const hasEnd = rawEnd !== null;
+      const active = hasStart || hasEnd;
+
       if (!total) {
         return {
-          active: false,
+          active,
           start: null,
           end: null,
           count: 0,
@@ -370,22 +383,61 @@
           llmTotal: totals.llm,
           entryTotal: totals.entry,
           all: totals.entry,
+          requestedStart: rawStart,
+          requestedEnd: rawEnd,
+          desiredStart: null,
+          desiredEnd: null,
+          intersectionStart: null,
+          intersectionEnd: null,
+          reason: active ? 'empty' : 'all',
         };
       }
-      const clamp = (value, fallback) => {
-        if (!Number.isFinite(value)) return fallback;
-        return Math.max(1, Math.min(total, Math.floor(value)));
-      };
-      const start = clamp(requested.start ?? 1, 1);
-      const end = clamp(requested.end ?? total, total);
-      const active = Boolean(requested.start || requested.end);
-      const normalizedStart = Math.min(start, end);
-      const normalizedEnd = Math.max(start, end);
-      const count = Math.max(0, normalizedEnd - normalizedStart + 1);
+
+      const defaultStart = hasStart ? rawStart : 1;
+      const defaultEnd = hasEnd ? rawEnd : total;
+      const desiredStart = Math.min(defaultStart, defaultEnd);
+      const desiredEnd = Math.max(defaultStart, defaultEnd);
+
+      const availableStart = 1;
+      const availableEnd = total;
+      const intersectionStart = Math.max(desiredStart, availableStart);
+      const intersectionEnd = Math.min(desiredEnd, availableEnd);
+
+      let effectiveStart;
+      let effectiveEnd;
+      let reason = 'exact';
+
+      if (intersectionStart <= intersectionEnd) {
+        const clampToAvailable = (value) => Math.min(availableEnd, Math.max(availableStart, value));
+
+        const startCandidate = hasStart ? clampToAvailable(rawStart) : intersectionStart;
+        const endCandidate = hasEnd ? clampToAvailable(rawEnd) : intersectionEnd;
+
+        effectiveStart = Math.min(startCandidate, endCandidate);
+        effectiveEnd = Math.max(startCandidate, endCandidate);
+
+        if (effectiveStart > intersectionStart) effectiveStart = intersectionStart;
+        if (effectiveEnd < intersectionEnd) effectiveEnd = intersectionEnd;
+
+        if (effectiveStart !== desiredStart || effectiveEnd !== desiredEnd) {
+          reason = 'intersect';
+        }
+      } else {
+        const wantsOlder = desiredStart > availableEnd;
+        const nearest = wantsOlder ? availableEnd : availableStart;
+        effectiveStart = nearest;
+        effectiveEnd = nearest;
+        reason = 'nearest';
+      }
+
+      const normalizedStart = Math.min(effectiveStart, effectiveEnd);
+      const normalizedEnd = Math.max(effectiveStart, effectiveEnd);
+      const count = active ? Math.max(0, normalizedEnd - normalizedStart + 1) : total;
+
       return {
         active,
-        start: normalizedStart,
-        end: normalizedEnd,
+        start: active ? normalizedStart : 1,
+        end: active ? normalizedEnd : total,
         count,
         total,
         messageTotal: totalMessages,
@@ -393,6 +445,13 @@
         llmTotal: totals.llm,
         entryTotal: totals.entry,
         all: totals.entry,
+        requestedStart: rawStart,
+        requestedEnd: rawEnd,
+        desiredStart,
+        desiredEnd,
+        intersectionStart: intersectionStart <= intersectionEnd ? intersectionStart : null,
+        intersectionEnd: intersectionStart <= intersectionEnd ? intersectionEnd : null,
+        reason,
       };
     };
 
@@ -503,6 +562,23 @@
 
         const { units, totalMessages, ordinalByTurnIndex } = buildMessageUnits(list);
         const bounds = resolveBounds(totalMessages);
+
+        if (
+          (bounds.reason === 'intersect' || bounds.reason === 'nearest') &&
+          isRangeDebugEnabled()
+        ) {
+          console.warn('[GMH] range projection', {
+            requested: [bounds.requestedStart, bounds.requestedEnd],
+            desired: [bounds.desiredStart, bounds.desiredEnd],
+            intersection:
+              bounds.intersectionStart !== null && bounds.intersectionEnd !== null
+                ? [bounds.intersectionStart, bounds.intersectionEnd]
+                : null,
+            applied: [bounds.start, bounds.end],
+            total: totalMessages,
+            reason: bounds.reason,
+          });
+        }
 
         const collectIndicesInWindow = (startPos, endPos) => {
           const indices = new Set();
