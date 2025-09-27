@@ -291,20 +291,18 @@
   /**
    * ExportRange tracks the optional window that should be exported.
    *
-   * Internally it keeps two counters:
-   * - `player`: number of turns spoken by the player in the current session.
-   * - `entry`: total message entries (player + npc + narration).
+   * Ranges are always expressed in message ordinals (latest message = 1).
+   * Totals for user/llm/message counts are still tracked for UI display only.
    *
    * Public helpers:
-   * - `setTotals({ player, entry })`: establish the latest counts for both axes.
-   * - `setAxis('player' | 'entry')`: switch the active ordinal axis (latest=1 for both).
-   * - `setStart / setEnd / setRange / clear`: mutate the requested span on the active axis.
-   * - `describe()`: snapshot showing the resolved span, totals, and corresponding entry indices.
-   * - `apply(turns)`: slice the provided `session.turns` array according to the active axis,
-   *   while keeping NPC/narration entries that fall inside the resolved index window.
+   * - `setTotals({ message, user, llm, entry })`: establish the latest counts.
+   * - `setStart / setEnd / setRange / clear`: mutate the requested span.
+   * - `describe()`: snapshot showing the resolved span and totals.
+   * - `apply(turns)`: slice the provided turns array using message ordinals while
+   *   keeping NPC/narration entries that fall inside the resolved window.
    */
   const ExportRange = (() => {
-    const requested = { start: null, end: null, axis: 'message' };
+    const requested = { start: null, end: null };
     let totals = { message: 0, user: 0, llm: 0, entry: 0 };
     const listeners = new Set();
     let lastWarnTs = 0;
@@ -345,7 +343,6 @@
       if (!totalMessages) {
         if (requested.start !== null || requested.end !== null) {
           emitRangeWarning('clearing range because no messages detected', {
-            axis: 'message',
             start: requested.start,
             end: requested.end,
           });
@@ -356,7 +353,6 @@
       }
       if (requested.start !== null && requested.start > totalMessages) {
         emitRangeWarning('start exceeds total; clamping', {
-          axis: 'message',
           start: requested.start,
           total: totalMessages,
         });
@@ -364,7 +360,6 @@
       }
       if (requested.end !== null && requested.end > totalMessages) {
         emitRangeWarning('end exceeds total; clamping', {
-          axis: 'message',
           end: requested.end,
           total: totalMessages,
         });
@@ -379,7 +374,6 @@
         : 0;
       if (!total) {
         return {
-          axis: 'message',
           active: false,
           start: null,
           end: null,
@@ -403,7 +397,6 @@
       const normalizedEnd = Math.max(start, end);
       const count = Math.max(0, normalizedEnd - normalizedStart + 1);
       return {
-        axis: 'message',
         active,
         start: normalizedStart,
         end: normalizedEnd,
@@ -639,11 +632,6 @@
         notify();
         return snapshot();
       },
-      setAxis() {
-        requested.axis = 'message';
-        notify();
-        return snapshot();
-      },
       clear() {
         if (requested.start === null && requested.end === null) return snapshot();
         requested.start = null;
@@ -705,7 +693,22 @@
     const history = [];
     const listeners = new Set();
 
-    const cloneEntry = (entry) => ({ ...entry });
+    const sanitizeEntry = (entry) => {
+      if (!entry || typeof entry !== 'object') return null;
+      const { axis, ...rest } = entry;
+      if (axis && axis !== 'message') {
+        console.warn('[GMH] entry-axis bookmark detected; forcing message ordinals', {
+          axis,
+          key: entry?.key,
+        });
+      }
+      return rest;
+    };
+
+    const cloneEntry = (entry) => {
+      const sanitized = sanitizeEntry(entry);
+      return sanitized ? { ...sanitized } : null;
+    };
 
     const makeKey = (index, messageId) => {
       if (typeof messageId === 'string' && messageId) return `id:${messageId}`;
@@ -714,7 +717,7 @@
     };
 
     const emit = () => {
-      const snapshot = history.map(cloneEntry);
+      const snapshot = history.map(cloneEntry).filter(Boolean);
       listeners.forEach((listener) => {
         try {
           listener(snapshot);
@@ -737,14 +740,20 @@
         }
         const normalizedId =
           typeof messageId === 'string' && messageId ? messageId : null;
-        const normalizedAxis = axis === 'entry' ? 'entry' : 'message';
+        if (axis && axis !== 'message') {
+          console.warn('[GMH] non-message bookmark axis ignored', {
+            axis,
+            index: normalizedIndex,
+            ordinal: normalizedOrdinal,
+            messageId: normalizedId,
+          });
+        }
         const key = makeKey(normalizedIndex, normalizedId);
         const entry = {
           key,
           index: normalizedIndex,
           ordinal: normalizedOrdinal,
           messageId: normalizedId,
-          axis: normalizedAxis,
           timestamp: Date.now(),
         };
         const existing = history.findIndex((item) => item.key === key);
@@ -778,13 +787,13 @@
         return found ? cloneEntry(found) : null;
       },
       list() {
-        return history.map(cloneEntry);
+        return history.map(cloneEntry).filter(Boolean);
       },
       subscribe(listener) {
         if (typeof listener !== 'function') return () => {};
         listeners.add(listener);
         try {
-          listener(history.map(cloneEntry));
+          listener(history.map(cloneEntry).filter(Boolean));
         } catch (err) {
           console.warn('[GMH] bookmark subscriber failed', err);
         }
@@ -5357,10 +5366,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       entries.forEach((entry) => {
         const option = document.createElement('option');
         option.value = entry.key;
-        const axisLabel =
-          entry.axis === 'player'
-            ? '유저'
-            : '메시지';
+        const axisLabel = '메시지';
         const ordinalText = Number.isFinite(entry.ordinal)
           ? `${axisLabel} ${entry.ordinal}`
           : `${axisLabel} ?`;
