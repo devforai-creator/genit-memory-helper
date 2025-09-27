@@ -1075,9 +1075,24 @@
       const messageIdAttr =
         message.getAttribute('data-gmh-message-id') || message.getAttribute('data-message-id');
       const index = Number(indexAttr);
-      const ordinal = ordinalAttr !== null ? Number(ordinalAttr) : null;
+      const lookupOrdinalByIndex = GMH.Core.MessageIndexer.lookupOrdinalByIndex;
+      const lookupOrdinalByMessageId = GMH.Core.MessageIndexer.lookupOrdinalByMessageId;
+      const resolvedOrdinal = [
+        Number.isFinite(index) && typeof lookupOrdinalByIndex === 'function'
+          ? lookupOrdinalByIndex(index)
+          : null,
+        messageIdAttr && typeof lookupOrdinalByMessageId === 'function'
+          ? lookupOrdinalByMessageId(messageIdAttr)
+          : null,
+        ordinalAttr !== null ? Number(ordinalAttr) : null,
+      ].find((value) => Number.isFinite(value) && value > 0);
       if (!Number.isFinite(index)) return;
-      GMH.Core.TurnBookmarks.record(index, ordinal, messageIdAttr || null, 'message');
+      GMH.Core.TurnBookmarks.record(
+        index,
+        Number.isFinite(resolvedOrdinal) ? resolvedOrdinal : null,
+        messageIdAttr || null,
+        'message',
+      );
     };
 
     return {
@@ -5373,11 +5388,21 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             messageEl.getAttribute('data-gmh-message-id') ||
             messageEl.getAttribute('data-message-id');
           const index = Number(indexAttr);
-          const ordinal = Number(ordinalAttr);
+          const lookupOrdinalByIndex = GMH.Core.MessageIndexer.lookupOrdinalByIndex;
+          const lookupOrdinalByMessageId = GMH.Core.MessageIndexer.lookupOrdinalByMessageId;
+          const resolvedOrdinal = [
+            Number.isFinite(index) && typeof lookupOrdinalByIndex === 'function'
+              ? lookupOrdinalByIndex(index)
+              : null,
+            messageIdAttr && typeof lookupOrdinalByMessageId === 'function'
+              ? lookupOrdinalByMessageId(messageIdAttr)
+              : null,
+            ordinalAttr !== null ? Number(ordinalAttr) : null,
+          ].find((value) => Number.isFinite(value) && value > 0);
           return {
             element: messageEl,
             index: Number.isFinite(index) ? index : null,
-            ordinal: Number.isFinite(ordinal) ? ordinal : null,
+            ordinal: Number.isFinite(resolvedOrdinal) ? resolvedOrdinal : null,
             messageId: messageIdAttr || null,
           };
         };
