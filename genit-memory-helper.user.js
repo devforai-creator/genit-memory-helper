@@ -5430,16 +5430,33 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           }
         }
 
+        const reselectElement = () => {
+          const byId = context.messageId ? safeQueryById(context.messageId) : null;
+          if (byId) {
+            const resolved = resolveFromElement(byId);
+            if (resolved) return resolved;
+          }
+          if (Number.isFinite(context.index)) {
+            const byIndex = document.querySelector(`[data-gmh-message-index="${context.index}"]`);
+            const resolved = resolveFromElement(byIndex);
+            if (resolved) return resolved;
+          }
+          return null;
+        };
+
+        const refreshedContext = reselectElement() || context;
+
         const ordinalFromIndex =
-          Number.isFinite(context.index) && lookupOrdinalByIndex
-            ? lookupOrdinalByIndex(context.index)
+          Number.isFinite(refreshedContext.index) && lookupOrdinalByIndex
+            ? lookupOrdinalByIndex(refreshedContext.index)
             : null;
         const ordinalFromId =
-          context.messageId && lookupOrdinalByMessageId
-            ? lookupOrdinalByMessageId(context.messageId)
+          refreshedContext.messageId && lookupOrdinalByMessageId
+            ? lookupOrdinalByMessageId(refreshedContext.messageId)
             : null;
         const ordinalFromAttr = Number(
-          context.element?.getAttribute?.('data-gmh-message-ordinal') ?? context.ordinal,
+          refreshedContext.element?.getAttribute?.('data-gmh-message-ordinal') ??
+            refreshedContext.ordinal,
         );
         const resolvedOrdinal = [ordinalFromIndex, ordinalFromId, ordinalFromAttr].find(
           (value) => Number.isFinite(value) && value > 0,
