@@ -4,6 +4,13 @@
 
 - _No changes yet_
 
+## v1.4.1 (2025-09-28)
+
+- bookmark 클릭이 동일 messageId의 다른 DOM 노드를 참조하던 버그를 해결해, `시작/끝 지정`이 항상 최신 메시지 번호(1, 2 …)를 사용하도록 보강했습니다. ExportRange가 잘못된 6‒15 구간으로 스냅되는 현상이 사라집니다.
+- ExportRange를 메시지 축 전용으로 정식 선언하고, 오디널 재계산/재선택 시 인덱서 캐시를 우선 사용하도록 정리했습니다.
+- role heuristics 문서를 muted 플레이어 말풍선 포함 여부에 맞춰 업데이트하고, AGENTS.md/README.md를 현재 저장소 구조(테스트 폴더·Prettier 포함)에 맞게 정리했습니다. (`prettier`를devDependency로 추가)
+- 관련 Vitest 스위트(`message-indexer`, `range-bookmark`, `export-range`)를 수동 실행해 리그레션을 확인했습니다.
+
 ## v1.4.0 (2025-09-28)
 
 - 턴 파서를 플레이어/NPC/내레이션 축 대신 `user`/`llm` 메시지 축으로 리팩터링해 각 DOM 메시지가 고유한 순번(`data-gmh-message-ordinal`)을 갖도록 정비했습니다. JSON/Markdown/프리뷰 내보내기가 동일한 메시지 축을 사용합니다.
