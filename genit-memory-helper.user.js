@@ -10,7 +10,7 @@
 // @run-at       document-idle
 // @updateURL    https://github.com/devforai-creator/genit-memory-helper/raw/main/genit-memory-helper.user.js
 // @downloadURL  https://github.com/devforai-creator/genit-memory-helper/raw/main/genit-memory-helper.user.js
-// @license      MIT
+// @license      GPL-3.0-or-later
 // ==/UserScript==
 
 (function () {
