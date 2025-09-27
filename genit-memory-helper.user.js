@@ -3030,7 +3030,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             const mutedNarration =
               node instanceof Element &&
               node.classList?.contains('text-muted-foreground');
-            if (withinNpcBubble && !mutedNarration) return;
+            if (withinNpcBubble && !mutedNarration) {
+              const hostBlock =
+                node.closest('[data-gmh-message-index]') || block;
+              if (!isPrologueBlock(hostBlock)) return;
+            }
           }
         }
         textSegmentsFromNode(node).forEach((seg) => {
@@ -4650,6 +4654,21 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     return out.join('\n');
   }
 
+  function isPrologueBlock(element) {
+    let current = element instanceof Element ? element : null;
+    let hops = 0;
+    while (current && hops < 400) {
+      if (current.hasAttribute?.('data-gmh-player-turn')) return false;
+      if (current.previousElementSibling) {
+        current = current.previousElementSibling;
+      } else {
+        current = current.parentElement;
+      }
+      hops += 1;
+    }
+    return true;
+  }
+
   // -------------------------------
   // 3.5) Scroll auto loader & turn stats
   // -------------------------------
@@ -6128,12 +6147,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         const axisTotalAvailable =
           axis === 'entry' ? entryTotalAvailable : playerTotalAvailable;
         let rangeNote = hasCustomRange
-          ? ` · ${axisLabel} ${rangeInfo.start}-${rangeInfo.end}/${axisTotalAvailable}`
+          ? ` · (선택) ${axisLabel} ${rangeInfo.start}-${rangeInfo.end}/${axisTotalAvailable}`
           : ` · ${axisLabel} 총 ${axisTotalAvailable}개`;
-        if (axis === 'entry' && playerTotalAvailable) {
-          rangeNote += ` · 플레이어 턴 ${playerTotalAvailable}개`;
+        if (axis === 'entry') {
+          rangeNote += ` · (선택) 플레이어 턴 ${stats.playerTurns}개 / (전체) ${playerTotalAvailable}개`;
+        } else {
+          rangeNote += ` · (선택) 플레이어 턴 ${stats.playerTurns}개`;
         }
-        const message = `${format.toUpperCase()} 내보내기 완료 · 플레이어 턴 ${stats.playerTurns}개${rangeNote} · ${profileLabel} · ${summary}`;
+        const message = `${format.toUpperCase()} 내보내기 완료${rangeNote} · ${profileLabel} · ${summary}`;
         GMH.Core.State.setState(GMH.Core.STATE.DONE, {
           label: '내보내기 완료',
           message,
