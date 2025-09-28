@@ -1,0 +1,28 @@
+{
+  "files": [
+    "README.md"
+  ],
+  "imageSize": 100,
+  "commit": false,
+  "commitType": "docs",
+  "commitConvention": "angular",
+  "contributors": [
+    {
+      "login": "devforai-creator",
+      "name": "SY Dev",
+      "avatar_url": "https://avatars.githubusercontent.com/u/212040505?v=4",
+      "profile": "https://github.com/devforai-creator",
+      "contributions": [
+        "ideas",
+        "code",
+        "doc"
+      ]
+    }
+  ],
+  "contributorsPerLine": 7,
+  "skipCi": true,
+  "repoType": "github",
+  "repoHost": "https://github.com",
+  "projectName": "genit-memory-helper",
+  "projectOwner": "devforai-creator"
+}
