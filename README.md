@@ -1,4 +1,7 @@
 # Genit Memory Helper (Tampermonkey)
+<!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
+[![All Contributors](https://img.shields.io/badge/all_contributors-1-orange.svg?style=flat-square)](#contributors-)
+<!-- ALL-CONTRIBUTORS-BADGE:END -->
 
 Genit 대화 로그를 정형화된 JSON으로 추출하고, LLM 요약 프롬프트를 원클릭 복사해 유저노트(2000자)에 넣을 수 있게 하는 사용자 스크립트입니다.
 
@@ -175,3 +178,25 @@ A. 네, 모델에는 **토큰(token)**이라는 입력 한계가 있습니다.
 | **🥉 Tier 3: 수호자 (Guardian)** | 3회 이상 의미있는 기여를 하고, 다른 사람의 질문에 친절하게 답변하는 등 커뮤니티에 긍정적인 영향을 주신 분 | 새로운 탐험가들의 질문에 답변하고, 간단한 PR을 리뷰하며 프로젝트를 함께 지켜나가는 멘토 역할을 수행합니다. |
 
 여러분의 첫 번째 기여를 시작으로, 수호자가 되어 새로운 기여자들을 이끌어주는 멋진 리더로 성장해보세요!
+
+## Contributors ✨
+
+Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/docs/en/emoji-key)):
+
+<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
+<!-- prettier-ignore-start -->
+<!-- markdownlint-disable -->
+<table>
+  <tbody>
+    <tr>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/devforai-creator"><img src="https://avatars.githubusercontent.com/u/212040505?v=4?s=100" width="100px;" alt="SY Dev"/><br /><sub><b>SY Dev</b></sub></a><br /><a href="#ideas-devforai-creator" title="Ideas, Planning, & Feedback">🤔</a> <a href="https://github.com/devforai-creator/genit-memory-helper/commits?author=devforai-creator" title="Code">💻</a> <a href="https://github.com/devforai-creator/genit-memory-helper/commits?author=devforai-creator" title="Documentation">📖</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- markdownlint-restore -->
+<!-- prettier-ignore-end -->
+
+<!-- ALL-CONTRIBUTORS-LIST:END -->
+
+This project follows the [all-contributors](https://github.com/all-contributors/all-contributors) specification. Contributions of any kind welcome!
