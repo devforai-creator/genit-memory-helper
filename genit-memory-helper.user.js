@@ -51,6 +51,8 @@
     Adapters: {},
   };
 
+  let INFO_NODE_REGISTRY = new WeakSet();
+
   const clone = (value) => {
     try {
       return JSON.parse(JSON.stringify(value));
@@ -1539,7 +1541,62 @@
     };
   }
 
-  function applyPrivacyPipeline(session, rawText, profileKey) {
+  function sanitizeStructuredPart(part, profile, counts) {
+    if (!part || typeof part !== 'object') return null;
+    const sanitized = { ...part };
+    if (typeof sanitized.speaker === 'string')
+      sanitized.speaker = redactText(sanitized.speaker, profile, counts);
+    if (Array.isArray(part.lines))
+      sanitized.lines = part.lines.map((line) => redactText(line, profile, counts));
+    if (Array.isArray(part.legacyLines))
+      sanitized.legacyLines = part.legacyLines.map((line) => redactText(line, profile, counts));
+    if (Array.isArray(part.items))
+      sanitized.items = part.items.map((item) => redactText(item, profile, counts));
+    if (typeof part.text === 'string') sanitized.text = redactText(part.text, profile, counts);
+    if (typeof part.alt === 'string') sanitized.alt = redactText(part.alt, profile, counts);
+    if (typeof part.title === 'string') sanitized.title = redactText(part.title, profile, counts);
+    return sanitized;
+  }
+
+  function sanitizeStructuredSnapshot(snapshot, profile, counts) {
+    if (!snapshot) return null;
+    const messages = Array.isArray(snapshot.messages)
+      ? snapshot.messages.map((message) => {
+          const sanitizedMessage = { ...message };
+          if (typeof sanitizedMessage.speaker === 'string')
+            sanitizedMessage.speaker = redactText(sanitizedMessage.speaker, profile, counts);
+          if (Array.isArray(message.parts)) {
+            sanitizedMessage.parts = message.parts
+              .map((part) => sanitizeStructuredPart(part, profile, counts))
+              .filter(Boolean);
+          } else {
+            sanitizedMessage.parts = [];
+          }
+          if (Array.isArray(message.legacyLines)) {
+            sanitizedMessage.legacyLines = message.legacyLines.map((line) =>
+              redactText(line, profile, counts),
+            );
+          } else {
+            sanitizedMessage.legacyLines = [];
+          }
+          return sanitizedMessage;
+        })
+      : [];
+    const legacyLines = Array.isArray(snapshot.legacyLines)
+      ? snapshot.legacyLines.map((line) => redactText(line, profile, counts))
+      : [];
+    return {
+      messages,
+      legacyLines,
+      entryOrigin: Array.isArray(snapshot.entryOrigin)
+        ? snapshot.entryOrigin.slice()
+        : [],
+      errors: Array.isArray(snapshot.errors) ? snapshot.errors.slice() : [],
+      generatedAt: snapshot.generatedAt || Date.now(),
+    };
+  }
+
+  function applyPrivacyPipeline(session, rawText, profileKey, structuredSnapshot = null) {
     const profile = PRIVACY_PROFILES[profileKey] ? profileKey : 'safe';
     const counts = {};
     const sanitizedSession = cloneSession(session);
@@ -1584,6 +1641,7 @@
     const sanitizedPlayers = PLAYER_NAMES.map((name) => redactText(name, profile, counts));
     sanitizedSession.player_names = sanitizedPlayers;
     const sanitizedRaw = redactText(rawText, profile, counts);
+    const sanitizedStructured = sanitizeStructuredSnapshot(structuredSnapshot, profile, counts);
     const aggregatedCounts = counts;
     const totalRedactions = Object.values(aggregatedCounts).reduce(
       (sum, value) => sum + (value || 0),
@@ -1594,6 +1652,7 @@
       profile,
       sanitizedSession,
       sanitizedRaw,
+      structured: sanitizedStructured,
       playerNames: sanitizedPlayers,
       counts: aggregatedCounts,
       totalRedactions,
@@ -2940,14 +2999,243 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       return 'narration';
     };
 
-    const emitInfo = (block, pushLine) => {
+    const resolvePartType = (node) => {
+      if (!(node instanceof Element)) return 'paragraph';
+      const tag = node.tagName?.toLowerCase?.() || '';
+      if (!tag) return 'paragraph';
+      if (tag === 'pre') return 'code';
+      if (tag === 'code' && node.closest('pre')) return 'code';
+      if (tag === 'blockquote') return 'blockquote';
+      if (tag === 'ul' || tag === 'ol') return 'list';
+      if (tag === 'img') return 'image';
+      if (tag === 'hr') return 'horizontal-rule';
+      if (/^h[1-6]$/.test(tag)) return 'heading';
+      if (tag === 'table') return 'table';
+      return 'paragraph';
+    };
+
+    const detectCodeLanguage = (node) => {
+      if (!(node instanceof Element)) return null;
+      const target =
+        node.matches?.('code') && !node.matches('pre code') ? node : node.querySelector?.('code');
+      const classList = (target || node).classList || [];
+      for (const cls of classList) {
+        if (cls.startsWith('language-')) return cls.slice('language-'.length) || null;
+      }
+      const dataLang = target?.getAttribute?.('data-language') || node.getAttribute?.('data-language');
+      if (dataLang) return dataLang;
+      return null;
+    };
+
+    const buildStructuredPart = (node, context = {}, options = {}) => {
+      const baseLines = Array.isArray(options.lines) ? options.lines.slice() : [];
+      const legacyLines = Array.isArray(options.legacyLines)
+        ? options.legacyLines.slice()
+        : baseLines.slice();
+      const partType = options.type || resolvePartType(node);
+      const part = {
+        type: partType,
+        flavor: context.flavor || 'speech',
+        role: context.role || null,
+        speaker: context.speaker || null,
+        lines: baseLines,
+        legacyLines,
+        legacyFormat: options.legacyFormat || context.legacyFormat || null,
+      };
+      if (partType === 'code') {
+        const codeNode =
+          node instanceof Element && node.matches('pre') ? node.querySelector('code') || node : node;
+        const raw = (codeNode?.textContent ?? node?.textContent ?? '').replace(/\r\n/g, '\n');
+        part.text = raw;
+        part.language = detectCodeLanguage(codeNode || node);
+        if (!part.lines.length) {
+          part.lines = raw
+            .split(/\n/)
+            .map((line) => line.replace(/\s+$/g, '').trim())
+            .filter(Boolean);
+          part.legacyLines = part.lines.slice();
+        }
+      } else if (partType === 'list' && node instanceof Element) {
+        const ordered = node.tagName?.toLowerCase() === 'ol';
+        const items = Array.from(node.querySelectorAll('li'))
+          .map((li) => collapseSpaces(li.textContent || ''))
+          .filter(Boolean);
+        part.ordered = ordered;
+        part.items = items;
+        if (!part.lines.length) {
+          part.lines = items.slice();
+          part.legacyLines = items.slice();
+        }
+      } else if (partType === 'image') {
+        const imgEl =
+          node instanceof HTMLImageElement ? node : node.querySelector?.('img') || null;
+        if (imgEl) {
+          part.src = imgEl.getAttribute('src') || imgEl.getAttribute('data-src') || '';
+          part.alt = imgEl.getAttribute('alt') || '';
+          part.title = imgEl.getAttribute('title') || '';
+        }
+        if (!part.lines.length && part.alt) {
+          part.lines = [part.alt];
+          part.legacyLines = [part.alt];
+        }
+      } else if (partType === 'heading' && node instanceof Element) {
+        const levelMatch = node.tagName?.match(/h(\d)/i);
+        part.level = levelMatch ? Number(levelMatch[1]) : null;
+        const headingText = collapseSpaces(node.textContent || '');
+        part.text = headingText;
+        if (!part.lines.length && headingText) {
+          part.lines = [headingText];
+          part.legacyLines = [headingText];
+        }
+      } else if (partType === 'horizontal-rule') {
+        if (!part.lines.length) part.lines = [];
+        if (!part.legacyLines.length) part.legacyLines = [];
+      } else if (!part.lines.length) {
+        const fallbackLines = textSegmentsFromNode(node);
+        part.lines = fallbackLines;
+        part.legacyLines = fallbackLines.slice();
+      }
+      return part;
+    };
+
+    const getOrderPath = (node, root) => {
+      if (!(node instanceof Node) || !(root instanceof Node)) return null;
+      const path = [];
+      let current = node;
+      let guard = 0;
+      while (current && current !== root && guard < 200) {
+        const parent = current.parentNode;
+        if (!parent) return null;
+        const index = Array.prototype.indexOf.call(parent.childNodes, current);
+        path.push(index);
+        current = parent;
+        guard += 1;
+      }
+      if (current !== root) return null;
+      path.reverse();
+      return path;
+    };
+
+    const compareOrderPaths = (a, b) => {
+      const len = Math.max(a.length, b.length);
+      for (let i = 0; i < len; i += 1) {
+        const valA = Number.isFinite(a[i]) ? a[i] : -1;
+        const valB = Number.isFinite(b[i]) ? b[i] : -1;
+        if (valA !== valB) return valA - valB;
+      }
+      return 0;
+    };
+
+    const createStructuredCollector = (defaults = {}, context = {}) => {
+      const parts = [];
+      const snapshotDefaults = {
+        playerName: defaults.playerName || '플레이어',
+      };
+      const infoLineSet = new Set();
+      const normalizeLine = (line) => (typeof line === 'string' ? line.trim() : '');
+      const filterInfoLines = (lines = []) =>
+        lines
+          .map((line) => normalizeLine(line))
+          .filter((line) => line.length)
+          .filter((line) => !infoLineSet.has(line));
+      const rootNode = context?.rootNode instanceof Node ? context.rootNode : null;
+      let fallbackCounter = 0;
+      return {
+        push(part, meta = {}) {
+          if (!part) return;
+          const next = { ...part };
+          if (!Array.isArray(next.lines)) next.lines = [];
+          if (!Array.isArray(next.legacyLines)) next.legacyLines = next.lines.slice();
+          if (!next.role && next.flavor === 'speech') next.role = 'unknown';
+          if (!next.speaker && next.role === 'player') next.speaker = snapshotDefaults.playerName;
+          if (next.type === 'info') {
+            next.lines = next.lines.map((line) => normalizeLine(line)).filter(Boolean);
+            next.legacyLines = next.legacyLines.map((line) => normalizeLine(line)).filter(Boolean);
+            next.lines.forEach((line) => infoLineSet.add(line));
+            next.legacyLines.forEach((line) => infoLineSet.add(line));
+          } else if (infoLineSet.size) {
+            next.lines = filterInfoLines(next.lines);
+            next.legacyLines = filterInfoLines(next.legacyLines);
+            if (!next.lines.length && !next.legacyLines.length) return;
+          }
+          const orderNode = meta?.node instanceof Node ? meta.node : null;
+          const orderPathRaw = orderNode && rootNode ? getOrderPath(orderNode, rootNode) : null;
+          const fallbackToken = fallbackCounter += 1;
+          const orderPath = orderPathRaw
+            ? orderPathRaw
+            : [Number.MAX_SAFE_INTEGER, fallbackToken];
+          parts.push({ part: next, orderPath, fallback: fallbackToken });
+        },
+        list() {
+          return parts
+            .slice()
+            .sort((a, b) => {
+              const diff = compareOrderPaths(a.orderPath, b.orderPath);
+              if (diff !== 0) return diff;
+              return a.fallback - b.fallback;
+            })
+            .map((entry) => entry.part);
+        },
+        defaults: snapshotDefaults,
+      };
+    };
+
+    const markInfoNodeTree = (node) => {
+      if (!node) return;
+      try {
+        const markSubtree = (element) => {
+          if (!element) return;
+          INFO_NODE_REGISTRY.add(element);
+          if (element instanceof Element) {
+            element.querySelectorAll('*').forEach((child) => INFO_NODE_REGISTRY.add(child));
+          }
+        };
+        markSubtree(node);
+        if (node instanceof Element) {
+          const infoContainer =
+            node.closest?.('.markdown-content, .info-card, .info-block, .gmh-info') || null;
+          if (infoContainer) markSubtree(infoContainer);
+          const preContainer = node.closest?.('pre, code');
+          if (preContainer) markSubtree(preContainer);
+        }
+      } catch (err) {
+        /* noop */
+      }
+    };
+
+    const isInfoRelatedNode = (node) => {
+      if (!node) return false;
+      if (INFO_NODE_REGISTRY.has(node)) return true;
+      if (closestMatchInList(node, selectors.infoCode)) return true;
+      return false;
+    };
+
+    const emitInfo = (block, pushLine, collector = null) => {
       const infoNode = firstMatch(selectors.infoCode, block);
       if (!infoNode) return;
       pushLine('INFO');
-      textSegmentsFromNode(infoNode).forEach((seg) => pushLine(seg));
+      const infoLines = textSegmentsFromNode(infoNode);
+      infoLines.forEach((seg) => pushLine(seg));
+      markInfoNodeTree(infoNode);
+      if (collector) {
+        const infoContainer =
+          (infoNode instanceof Element &&
+            (infoNode.closest('.markdown-content') || infoNode.closest('pre') || infoNode)) ||
+          infoNode.parentElement ||
+          block;
+        collector.push({
+          type: 'info',
+          flavor: 'meta',
+          role: 'system',
+          speaker: 'INFO',
+          lines: infoLines.slice(),
+          legacyLines: ['INFO', ...infoLines],
+          legacyFormat: 'meta',
+        }, { node: infoContainer });
+      }
     };
 
-    const emitPlayerLines = (block, pushLine) => {
+    const emitPlayerLines = (block, pushLine, collector = null) => {
       const blockRole = block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
       if (blockRole !== 'player') return;
       const scopes = collectAll(selectors.playerScopes, block);
@@ -2994,12 +3282,29 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const effectiveTargets = filteredTargets.length ? filteredTargets : targets;
       const seenSegments = new Set();
       effectiveTargets.forEach((node) => {
+        if (isInfoRelatedNode(node)) return;
+        const partLines = [];
         textSegmentsFromNode(node).forEach((seg) => {
           if (!seg) return;
           if (seenSegments.has(seg)) return;
           seenSegments.add(seg);
           pushLine(PLAYER_MARK + seg);
+          partLines.push(seg);
         });
+        if (collector && partLines.length) {
+          const playerName = collector.defaults?.playerName || '플레이어';
+          const part = buildStructuredPart(node, {
+            flavor: 'speech',
+            role: 'player',
+            speaker: playerName,
+            legacyFormat: 'player',
+          }, {
+            lines: partLines,
+            legacyLines: partLines,
+            legacyFormat: 'player',
+          });
+          collector.push(part, { node });
+        }
       });
     };
 
@@ -3015,7 +3320,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       return stripQuotes(collapseSpaces(name || '')).slice(0, 40);
     };
 
-    const emitNpcLines = (block, pushLine) => {
+    const emitNpcLines = (block, pushLine, collector = null) => {
       const blockRole = block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
       if (blockRole !== 'npc') return;
       const groups = collectAll(selectors.npcGroups, block);
@@ -3027,19 +3332,56 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         const bubbleNodes = collectAll(selectors.npcBubble, group);
         const targets = bubbleNodes.length ? bubbleNodes : [group];
         targets.forEach((node) => {
+          if (isInfoRelatedNode(node)) return;
+          const partLines = [];
           textSegmentsFromNode(node).forEach((seg) => {
             if (!seg) return;
+            if (seg && seg === name) return;
             pushLine(`@${name}@ "${seg}"`);
+            partLines.push(seg);
           });
+          if (collector && partLines.length) {
+            const part = buildStructuredPart(node, {
+              flavor: 'speech',
+              role: 'npc',
+              speaker: name,
+              legacyFormat: 'npc',
+            }, {
+              lines: partLines,
+              legacyLines: partLines,
+              legacyFormat: 'npc',
+            });
+            collector.push(part, { node });
+          }
         });
       });
     };
 
-    const emitNarrationLines = (block, pushLine) => {
+    const emitNarrationLines = (block, pushLine, collector = null) => {
       const blockRole = block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
       if (blockRole === 'player') return;
       const nodes = collectAll(selectors.narrationBlocks, block);
       if (!nodes.length) return;
+      const knownLabels = new Set(
+        [collector?.defaults?.playerName]
+          .concat(PLAYER_NAMES)
+          .filter(Boolean)
+          .map((name) => name.trim()),
+      );
+      const shouldSkipNarrationLine = (text) => {
+        const clean = text.trim();
+        if (!clean) return true;
+        if (/^INFO$/i.test(clean)) return true;
+        if (knownLabels.has(clean)) return true;
+        const wordCount = clean.split(/\s+/).length;
+        if (
+          wordCount === 1 &&
+          looksLikeName(clean) &&
+          !/[.!?…:,]/.test(clean)
+        )
+          return true;
+        return false;
+      };
       nodes.forEach((node) => {
         if (npcScopeSelector) {
           const npcContainer = node.closest(npcScopeSelector);
@@ -3056,18 +3398,91 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             }
           }
         }
+        if (isInfoRelatedNode(node)) return;
+        const partLines = [];
         textSegmentsFromNode(node).forEach((seg) => {
           if (!seg) return;
-          pushLine(seg);
+          const clean = seg.trim();
+          if (!clean) return;
+          if (shouldSkipNarrationLine(clean)) return;
+          pushLine(clean);
+          partLines.push(clean);
         });
+        if (collector && partLines.length) {
+          const part = buildStructuredPart(node, {
+            flavor: 'narration',
+            role: 'narration',
+            speaker: '내레이션',
+            legacyFormat: 'plain',
+          }, {
+            lines: partLines,
+            legacyLines: partLines,
+            legacyFormat: 'plain',
+          });
+          collector.push(part, { node });
+        }
       });
     };
 
-    const emitTranscriptLines = (block, pushLine) => {
-      emitInfo(block, pushLine);
-      emitPlayerLines(block, pushLine);
-      emitNpcLines(block, pushLine);
-      emitNarrationLines(block, pushLine);
+    const emitTranscriptLines = (block, pushLine, collector = null) => {
+      emitInfo(block, pushLine, collector);
+      emitPlayerLines(block, pushLine, collector);
+      emitNpcLines(block, pushLine, collector);
+      emitNarrationLines(block, pushLine, collector);
+    };
+
+    const collectStructuredMessage = (block) => {
+      if (!block) return null;
+      const playerGuess = guessPlayerNames()[0] || '플레이어';
+      const collector = createStructuredCollector({ playerName: playerGuess }, { rootNode: block });
+      const localLines = [];
+      const seen = new Set();
+      const pushLine = (line) => {
+        const trimmed = (line || '').trim();
+        if (!trimmed) return;
+        if (seen.has(trimmed)) return;
+        seen.add(trimmed);
+        localLines.push(trimmed);
+      };
+      try {
+        emitTranscriptLines(block, pushLine, collector);
+      } catch (err) {
+        console.warn('[GMH] structured emit failed', err);
+        emitTranscriptLines(block, pushLine);
+      }
+      const parts = collector.list();
+      const role = block?.getAttribute?.('data-gmh-message-role') || detectRole(block) || 'unknown';
+      const ordinalAttr = Number(block?.getAttribute?.('data-gmh-message-ordinal'));
+      const indexAttr = Number(block?.getAttribute?.('data-gmh-message-index'));
+      const userOrdinalAttr = Number(block?.getAttribute?.('data-gmh-user-ordinal'));
+      const channelAttr = block?.getAttribute?.('data-gmh-channel') || null;
+      const idAttr =
+        block?.getAttribute?.('data-gmh-message-id') ||
+        block?.getAttribute?.('data-message-id') ||
+        block?.getAttribute?.('data-id') ||
+        null;
+      const firstSpeakerPart = parts.find((part) => part?.speaker);
+      const speaker =
+        firstSpeakerPart?.speaker ||
+        (role === 'player'
+          ? collector.defaults.playerName
+          : role === 'narration'
+          ? '내레이션'
+          : role === 'npc'
+          ? 'NPC'
+          : null);
+      return {
+        id: idAttr,
+        index: Number.isFinite(indexAttr) ? indexAttr : null,
+        ordinal: Number.isFinite(ordinalAttr) ? ordinalAttr : null,
+        userOrdinal: Number.isFinite(userOrdinalAttr) ? userOrdinalAttr : null,
+        role,
+        channel:
+          channelAttr || (role === 'player' ? 'user' : role === 'npc' ? 'llm' : 'system'),
+        speaker,
+        parts,
+        legacyLines: localLines,
+      };
     };
 
     const guessPlayerNames = () => {
@@ -3107,6 +3522,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       findContainer: (doc = document) => getChatContainer(doc),
       listMessageBlocks: (root) => getMessageBlocks(root),
       emitTranscriptLines,
+      collectStructuredMessage,
       detectRole,
       guessPlayerNames,
       getPanelAnchor,
@@ -4533,15 +4949,247 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     return lines.join('\n').trim();
   }
 
-  function buildExportBundle(session, normalizedRaw, format, stamp) {
+  const stripLegacySpeechLine = (line, role) => {
+    if (!line) return '';
+    let text = line;
+    if (role === 'player' && text.startsWith(PLAYER_MARK)) {
+      text = text.slice(PLAYER_MARK.length);
+    }
+    const npcMatch = text.match(/^@([^@]+)@\s+"(.+)"$/);
+    if (npcMatch) {
+      return npcMatch[2].trim();
+    }
+    return text.trim();
+  };
+
+  const renderStructuredMarkdownPart = (part, message) => {
+    const out = [];
+    const fallbackLines = Array.isArray(part?.legacyLines) ? part.legacyLines : [];
+    const baseLines = Array.isArray(part?.lines) && part.lines.length
+      ? part.lines
+      : fallbackLines.map((line) => stripLegacySpeechLine(line, part?.role || message?.role));
+    const safeLines = baseLines.filter((line) => typeof line === 'string' && line.trim().length);
+    const flavor = part?.flavor || 'speech';
+    switch (part?.type) {
+      case 'info': {
+        out.push('> **INFO**');
+        safeLines.forEach((line) => out.push(`> ${line}`));
+        break;
+      }
+      case 'code': {
+        const language = part?.language || '';
+        const codeText =
+          typeof part?.text === 'string' && part.text.trim()
+            ? part.text
+            : safeLines.join('\n');
+        out.push(`\u0060\u0060\u0060${language}`);
+        out.push(codeText);
+        out.push('```');
+        break;
+      }
+      case 'list': {
+        const ordered = Boolean(part?.ordered);
+        safeLines.forEach((line, idx) => {
+          out.push(ordered ? `${idx + 1}. ${line}` : `- ${line}`);
+        });
+        break;
+      }
+      case 'blockquote': {
+        safeLines.forEach((line) => out.push(`> ${line}`));
+        break;
+      }
+      case 'image': {
+        const alt = part?.alt || '이미지';
+        const src = part?.src || '';
+        out.push(`![${alt}](${src})`);
+        break;
+      }
+      case 'heading': {
+        const level = Math.min(6, Math.max(3, Number(part?.level) || 3));
+        const text = safeLines.join(' ');
+        out.push(`${'#'.repeat(level)} ${text}`.trim());
+        break;
+      }
+      case 'horizontal-rule': {
+        out.push('---');
+        break;
+      }
+      case 'paragraph':
+      default: {
+        if (flavor === 'narration') {
+          safeLines.forEach((line) => out.push(`> ${line}`));
+        } else if (flavor === 'speech' && (part?.role || message?.role) === 'npc') {
+          const speaker = part?.speaker || message?.speaker || 'NPC';
+          safeLines.forEach((line) => out.push(`> ${speaker}: ${line}`));
+        } else {
+          safeLines.forEach((line) => out.push(line));
+        }
+        break;
+      }
+    }
+    if (!out.length && fallbackLines.length) {
+      fallbackLines.forEach((line) => out.push(line));
+    }
+    return out;
+  };
+
+  function toStructuredMarkdown(options = {}) {
+    const {
+      messages = [],
+      session,
+      profile,
+      rangeInfo,
+      playerNames = PLAYER_NAMES,
+    } = options;
+    const lines = ['# 구조 보존 대화 로그'];
+    const meta = session?.meta || {};
+    if (meta.title) lines.push(`**제목:** ${meta.title}`);
+    if (meta.date) lines.push(`**날짜:** ${meta.date}`);
+    if (meta.place) lines.push(`**장소:** ${meta.place}`);
+    if (Array.isArray(meta.actors) && meta.actors.length) {
+      lines.push(`**참여자:** ${meta.actors.join(', ')}`);
+    }
+    if (profile) lines.push(`**레다크션 프로파일:** ${profile.toUpperCase()}`);
+    if (rangeInfo?.active) {
+      const totalMessagesForRange =
+        rangeInfo.total || rangeInfo.messageTotal || messages.length || 0;
+      lines.push(
+        `**선택 범위:** 메시지 ${rangeInfo.start}-${rangeInfo.end} · ${rangeInfo.count}/${totalMessagesForRange}`,
+      );
+    }
+    if (playerNames?.length) {
+      lines.push(`**플레이어 이름:** ${playerNames.join(', ')}`);
+    }
+    if (lines[lines.length - 1] !== '') lines.push('');
+
+    messages.forEach((message, idx) => {
+      const ordinal = Number.isFinite(message?.ordinal) ? `[#${message.ordinal}] ` : '';
+      const speakerLabel =
+        message?.role === 'narration' ? '내레이션' : message?.speaker || '메시지';
+      const roleLabel = message?.role && message.role !== 'narration' ? ` (${message.role})` : '';
+      lines.push(`## ${ordinal}${speakerLabel}${roleLabel}`.trim());
+      const parts = Array.isArray(message?.parts) && message.parts.length
+        ? message.parts
+        : [
+            {
+              type: 'paragraph',
+              flavor: message?.role === 'narration' ? 'narration' : 'speech',
+              role: message?.role,
+              speaker: message?.speaker,
+              lines: Array.isArray(message?.legacyLines)
+                ? message.legacyLines.map((line) => stripLegacySpeechLine(line, message?.role))
+                : [],
+            },
+          ];
+      parts.forEach((part) => {
+        const rendered = renderStructuredMarkdownPart(part, message).filter((line) =>
+          typeof line === 'string',
+        );
+        if (rendered.length) {
+          lines.push(...rendered);
+          if (rendered[rendered.length - 1] !== '') lines.push('');
+        }
+      });
+      if (idx !== messages.length - 1) lines.push('');
+    });
+
+    return lines.join('\n').replace(/\n{3,}/g, '\n\n');
+  }
+
+  function toStructuredJSON(options = {}) {
+    const {
+      session,
+      structuredSelection,
+      structuredSnapshot,
+      profile,
+      playerNames = PLAYER_NAMES,
+      rangeInfo,
+      normalizedRaw,
+    } = options;
+    const generatedAt = new Date().toISOString();
+    const messages = structuredSelection?.messages || structuredSnapshot?.messages || [];
+    const structuredMeta = {
+      total_messages:
+        structuredSelection?.sourceTotal ?? structuredSnapshot?.messages?.length ?? messages.length,
+      exported_messages: messages.length,
+      range: structuredSelection?.range || rangeInfo || null,
+      errors: structuredSnapshot?.errors || [],
+    };
+    const metaBase = session?.meta || {};
+    const payload = {
+      version: '2.0-structured',
+      generated_at: generatedAt,
+      source: session?.source || 'genit-memory-helper',
+      profile: profile || 'safe',
+      player_names: playerNames,
+      meta: {
+        ...metaBase,
+        turn_range: session?.meta?.turn_range || rangeInfo || null,
+        structured: structuredMeta,
+      },
+      messages,
+      warnings: session?.warnings || [],
+      classic_fallback: {
+        version: '1.0',
+        turns: session?.turns || [],
+        raw_excerpt: (normalizedRaw || '').slice(0, 2000),
+      },
+    };
+    return JSON.stringify(payload, null, 2);
+  }
+
+  function buildExportBundle(session, normalizedRaw, format, stamp, options = {}) {
     const stampToken = stamp || new Date().toISOString().replace(/[:.]/g, '-');
     const base = `genit_turns_${stampToken}`;
+    const {
+      structuredSelection,
+      structuredSnapshot,
+      profile,
+      playerNames,
+      rangeInfo,
+    } = options;
+
+    if (format === 'structured-md') {
+      const markdown = toStructuredMarkdown({
+        messages: structuredSelection?.messages || [],
+        session,
+        profile,
+        playerNames,
+        rangeInfo,
+      });
+      return {
+        filename: `${base}_structured.md`,
+        mime: 'text/markdown',
+        content: markdown,
+        stamp: stampToken,
+        format,
+      };
+    }
+    if (format === 'structured-json') {
+      const jsonPayload = toStructuredJSON({
+        session,
+        structuredSelection,
+        structuredSnapshot,
+        profile,
+        playerNames,
+        rangeInfo,
+        normalizedRaw,
+      });
+      return {
+        filename: `${base}_structured.json`,
+        mime: 'application/json',
+        content: jsonPayload,
+        stamp: stampToken,
+        format,
+      };
+    }
     if (format === 'md') {
       return {
         filename: `${base}.md`,
         mime: 'text/markdown',
         content: toMarkdownExport(session),
         stamp: stampToken,
+        format,
       };
     }
     if (format === 'txt') {
@@ -4550,6 +5198,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         mime: 'text/plain',
         content: toTXTExport(session),
         stamp: stampToken,
+        format,
       };
     }
     return {
@@ -4557,6 +5206,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       mime: 'application/json',
       content: toJSONExport(session, normalizedRaw),
       stamp: stampToken,
+      format,
     };
   }
 
@@ -4564,44 +5214,180 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   // 3) DOM Reader
   // -------------------------------
   let entryOrigin = [];
+  let latestStructuredSnapshot = null;
 
-  function readTranscriptText() {
+  function captureStructuredSnapshot() {
     const adapter = getActiveAdapter();
     const container = adapter?.findContainer?.(document);
     const blocks = adapter?.listMessageBlocks?.(container || document) || [];
     if (!container && !blocks.length) throw new Error('채팅 컨테이너를 찾을 수 없습니다.');
-    if (!blocks.length) return '';
+    if (!blocks.length) {
+      latestStructuredSnapshot = {
+        messages: [],
+        legacyLines: [],
+        entryOrigin: [],
+        errors: [],
+        generatedAt: Date.now(),
+      };
+      entryOrigin = [];
+      return latestStructuredSnapshot;
+    }
 
     const seenLine = new Set();
-    const out = [];
-    entryOrigin = [];
+    const legacyLines = [];
+    const origins = [];
+    const messages = [];
+    const errors = [];
+    const totalBlocks = blocks.length;
 
-    const pushLine = (line) => {
-      const s = (line || '').trim();
-      if (!s) return;
-      if (seenLine.has(s)) return;
-      seenLine.add(s);
-      out.push(s);
-    };
+    INFO_NODE_REGISTRY = new WeakSet();
 
-    for (const block of blocks) {
-      const domIndexAttr = Number(block?.getAttribute?.('data-gmh-message-index'));
-      const originIndex = Number.isFinite(domIndexAttr) ? domIndexAttr : null;
-      const before = out.length;
-      adapter?.emitTranscriptLines?.(block, pushLine);
-      const added = out.length - before;
-      if (added > 0) {
-        for (let i = 0; i < added; i += 1) entryOrigin.push(originIndex);
+    blocks.forEach((block, idx) => {
+      const fallbackIndex = Number(block?.getAttribute?.('data-gmh-message-index'));
+      const originIndex = Number.isFinite(fallbackIndex) ? fallbackIndex : idx;
+      try {
+        const structured = adapter?.collectStructuredMessage?.(block);
+        if (structured) {
+          if (!Number.isFinite(structured.index)) structured.index = originIndex;
+          if (!Number.isFinite(structured.ordinal)) {
+            const ordinalAttr = Number(block?.getAttribute?.('data-gmh-message-ordinal'));
+            structured.ordinal = Number.isFinite(ordinalAttr) ? ordinalAttr : totalBlocks - idx;
+          }
+          if (!structured.channel) {
+            structured.channel =
+              structured.role === 'player'
+                ? 'user'
+                : structured.role === 'npc'
+                ? 'llm'
+                : 'system';
+          }
+          messages.push(structured);
+          const localLines = Array.isArray(structured.legacyLines) ? structured.legacyLines : [];
+          localLines.forEach((line) => {
+            const trimmed = (line || '').trim();
+            if (!trimmed) return;
+            if (seenLine.has(trimmed)) return;
+            seenLine.add(trimmed);
+            legacyLines.push(trimmed);
+            origins.push(originIndex);
+          });
+          return;
+        }
+      } catch (err) {
+        errors.push({ index: originIndex, error: err?.message || String(err) });
       }
+
+      const localSeen = new Set();
+      const pushLine = (line) => {
+        const trimmed = (line || '').trim();
+        if (!trimmed) return;
+        if (localSeen.has(trimmed)) return;
+        localSeen.add(trimmed);
+        if (seenLine.has(trimmed)) return;
+        seenLine.add(trimmed);
+        legacyLines.push(trimmed);
+        origins.push(originIndex);
+      };
+      try {
+        adapter?.emitTranscriptLines?.(block, pushLine);
+      } catch (err) {
+        errors.push({ index: originIndex, error: err?.message || String(err) });
+      }
+    });
+
+    if (origins.length < legacyLines.length) {
+      while (origins.length < legacyLines.length) origins.push(null);
+    } else if (origins.length > legacyLines.length) {
+      origins.length = legacyLines.length;
     }
 
-    if (entryOrigin.length < out.length) {
-      while (entryOrigin.length < out.length) entryOrigin.push(null);
-    } else if (entryOrigin.length > out.length) {
-      entryOrigin.length = out.length;
+    entryOrigin = origins.slice();
+    latestStructuredSnapshot = {
+      messages,
+      legacyLines,
+      entryOrigin: origins,
+      errors,
+      generatedAt: Date.now(),
+    };
+    return latestStructuredSnapshot;
+  }
+
+  function readTranscriptText() {
+    const snapshot = captureStructuredSnapshot();
+    return snapshot.legacyLines.join('\n');
+  }
+
+  function projectStructuredMessages(structuredSnapshot, rangeInfo) {
+    if (!structuredSnapshot) {
+      return {
+        messages: [],
+        sourceTotal: 0,
+        range: {
+          active: false,
+          start: null,
+          end: null,
+          messageStartIndex: null,
+          messageEndIndex: null,
+        },
+      };
+    }
+    const messages = Array.isArray(structuredSnapshot.messages)
+      ? structuredSnapshot.messages.slice()
+      : [];
+    const total = messages.length;
+    const baseRange = {
+      active: Boolean(rangeInfo?.active),
+      start: Number.isFinite(rangeInfo?.start) ? rangeInfo.start : null,
+      end: Number.isFinite(rangeInfo?.end) ? rangeInfo.end : null,
+      messageStartIndex: Number.isFinite(rangeInfo?.messageStartIndex)
+        ? rangeInfo.messageStartIndex
+        : null,
+      messageEndIndex: Number.isFinite(rangeInfo?.messageEndIndex)
+        ? rangeInfo.messageEndIndex
+        : null,
+    };
+    if (!messages.length || !baseRange.active) {
+      return { messages, sourceTotal: total, range: { ...baseRange, active: false } };
     }
 
-    return out.join('\n');
+    let filtered = messages;
+    if (Number.isFinite(baseRange.messageStartIndex) && Number.isFinite(baseRange.messageEndIndex)) {
+      const lower = Math.min(baseRange.messageStartIndex, baseRange.messageEndIndex);
+      const upper = Math.max(baseRange.messageStartIndex, baseRange.messageEndIndex);
+      filtered = messages.filter((message) => {
+        const idx = Number(message?.index);
+        return Number.isFinite(idx) ? idx >= lower && idx <= upper : false;
+      });
+    } else if (Number.isFinite(baseRange.start) && Number.isFinite(baseRange.end)) {
+      const lowerOrdinal = Math.min(baseRange.start, baseRange.end);
+      const upperOrdinal = Math.max(baseRange.start, baseRange.end);
+      filtered = messages.filter((message) => {
+        const ord = Number(message?.ordinal);
+        return Number.isFinite(ord) ? ord >= lowerOrdinal && ord <= upperOrdinal : false;
+      });
+    }
+
+    if (!filtered.length) filtered = messages.slice();
+
+    return {
+      messages: filtered,
+      sourceTotal: total,
+      range: {
+        ...baseRange,
+        active: Boolean(baseRange.active && filtered.length && filtered.length <= total),
+      },
+    };
+  }
+
+  function readStructuredMessages(options = {}) {
+    const { force } = options || {};
+    if (!force && latestStructuredSnapshot) {
+      return Array.isArray(latestStructuredSnapshot.messages)
+        ? latestStructuredSnapshot.messages.slice()
+        : [];
+    }
+    const snapshot = captureStructuredSnapshot();
+    return Array.isArray(snapshot.messages) ? snapshot.messages.slice() : [];
   }
 
   function isPrologueBlock(element) {
@@ -5612,7 +6398,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     }
 
     const parseAll = () => {
-      const raw = readTranscriptText();
+      const snapshot = captureStructuredSnapshot();
+      const raw = snapshot.legacyLines.join('\n');
       const normalized = normalizeTranscript(raw);
       const session = buildSession(normalized);
       if (!session.turns.length) throw new Error('대화 메시지를 찾을 수 없습니다.');
@@ -5628,7 +6415,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         llm: llmCount,
         entry: entryCount,
       });
-      return { session, raw: normalized };
+      return { session, raw: normalized, snapshot };
     };
 
     const exportFormatSelect = panel.querySelector('#gmh-export-format');
@@ -5642,8 +6429,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           tone: 'progress',
           progress: { indeterminate: true },
         });
-        const { session, raw } = parseAll();
-        const privacy = applyPrivacyPipeline(session, raw, PRIVACY_CFG.profile);
+        const { session, raw, snapshot } = parseAll();
+        const privacy = applyPrivacyPipeline(session, raw, PRIVACY_CFG.profile, snapshot);
         if (privacy.blocked) {
           alert('미성년자 성적 맥락이 감지되어 작업을 중단했습니다.');
           GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
@@ -5675,6 +6462,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           GMH.Core.ExportRange.setRange(requestedRange.start, requestedRange.end);
         }
         const selection = GMH.Core.ExportRange.apply(privacy.sanitizedSession.turns);
+        const rangeInfo = selection?.info || GMH.Core.ExportRange.describe(privacy.sanitizedSession.turns.length);
+        const structuredSelection = projectStructuredMessages(privacy.structured, rangeInfo);
         const exportSession = cloneSession(privacy.sanitizedSession);
 
         const entryOrigin = GMH.Core.getEntryOrigin?.() || [];
@@ -5770,11 +6559,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         return {
           session,
           raw,
+          snapshot,
           privacy,
           stats,
           overallStats,
           selection,
+          rangeInfo,
           exportSession,
+          structuredSelection,
         };
       } catch (error) {
         alert(`오류: ${(error && error.message) || error}`);
@@ -5797,10 +6589,18 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           tone: 'progress',
           progress: { indeterminate: true },
         });
-        const { privacy, stats, exportSession, selection, overallStats } = prepared;
+        const {
+          privacy,
+          stats,
+          exportSession,
+          selection,
+          overallStats,
+          structuredSelection,
+          rangeInfo: preparedRangeInfo,
+        } = prepared;
         const stamp = new Date().toISOString().replace(/[:.]/g, '-');
         const sessionForExport = exportSession || privacy.sanitizedSession;
-        const rangeInfo = selection?.info || GMH.Core.ExportRange.describe();
+        const rangeInfo = preparedRangeInfo || selection?.info || GMH.Core.ExportRange.describe();
         const hasCustomRange = Boolean(rangeInfo?.active);
         const selectionRaw = hasCustomRange
           ? sessionForExport.turns
@@ -5811,7 +6611,34 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
               })
               .join('\n')
           : privacy.sanitizedRaw;
-        const bundle = buildExportBundle(sessionForExport, selectionRaw, format, stamp);
+        const bundleOptions = {
+          structuredSelection,
+          structuredSnapshot: privacy.structured,
+          profile: privacy.profile,
+          playerNames: privacy.playerNames,
+          rangeInfo,
+        };
+        let targetFormat = format;
+        let bundle;
+        let structuredFallback = false;
+        try {
+          bundle = buildExportBundle(sessionForExport, selectionRaw, targetFormat, stamp, bundleOptions);
+        } catch (error) {
+          if (targetFormat === 'structured-json' || targetFormat === 'structured-md') {
+            console.warn('[GMH] structured export failed, falling back', error);
+            structuredFallback = true;
+            targetFormat = targetFormat === 'structured-json' ? 'json' : 'md';
+            bundle = buildExportBundle(
+              sessionForExport,
+              selectionRaw,
+              targetFormat,
+              stamp,
+              bundleOptions,
+            );
+          } else {
+            throw error;
+          }
+        }
         const fileBlob = new Blob([bundle.content], { type: bundle.mime });
         triggerDownload(fileBlob, bundle.filename);
 
@@ -5820,7 +6647,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           counts: { ...privacy.counts },
           stats,
           overallStats,
-          format,
+          format: targetFormat,
           warnings: privacy.sanitizedSession.warnings,
           source: privacy.sanitizedSession.source,
           range: sessionForExport.meta?.turn_range || rangeInfo,
@@ -5847,13 +6674,16 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         if (Number.isFinite(llmTotalAvailable)) {
           rangeNote += ` · LLM ${stats.llmMessages}개`;
         }
-        const message = `${format.toUpperCase()} 내보내기 완료${rangeNote} · ${profileLabel} · ${summary}`;
+        const message = `${targetFormat.toUpperCase()} 내보내기 완료${rangeNote} · ${profileLabel} · ${summary}`;
         GMH.Core.State.setState(GMH.Core.STATE.DONE, {
           label: '내보내기 완료',
           message,
           tone: 'success',
           progress: { value: 1 },
         });
+        if (structuredFallback) {
+          setPanelStatus('구조 보존 내보내기에 실패하여 Classic 포맷으로 전환했습니다.', 'warning');
+        }
         if (privacy.sanitizedSession.warnings.length)
           console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
         return true;
@@ -6024,8 +6854,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             tone: 'progress',
             progress: { indeterminate: true },
           });
-          const { session, raw } = parseAll();
-          const privacy = applyPrivacyPipeline(session, raw, PRIVACY_CFG.profile);
+          const { session, raw, snapshot } = parseAll();
+          const privacy = applyPrivacyPipeline(session, raw, PRIVACY_CFG.profile, snapshot);
           const stats = collectSessionStats(privacy.sanitizedSession);
           const summary = formatRedactionCounts(privacy.counts);
           const profileLabel = PRIVACY_PROFILES[privacy.profile]?.label || privacy.profile;
@@ -6196,9 +7026,13 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         <div id="gmh-range-summary" class="gmh-helper-text">범위 전체 내보내기</div>
         <div class="gmh-field-row">
           <select id="gmh-export-format" class="gmh-select">
-            <option value="json">JSON (.json)</option>
-            <option value="txt">TXT (.txt)</option>
-            <option value="md">Markdown (.md)</option>
+            <option value="structured-md" selected>Rich Markdown (.md) — 추천</option>
+            <option value="structured-json">Rich JSON (.json)</option>
+            <optgroup label="Classic (경량/호환)">
+              <option value="json">Classic JSON (.json)</option>
+              <option value="md">Classic Markdown (.md)</option>
+              <option value="txt">Classic TXT (.txt)</option>
+            </optgroup>
           </select>
           <button id="gmh-export" class="gmh-small-btn gmh-small-btn--accent">내보내기</button>
         </div>
@@ -6275,9 +7109,13 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       <div id="gmh-range-summary" style="font-size:11px; color:#94a3b8;">범위 전체 내보내기</div>
       <div style="display:flex; gap:8px; align-items:center;">
         <select id="gmh-export-format" style="flex:1; background:#111827; color:#f1f5f9; border:1px solid #1f2937; border-radius:8px; padding:8px;">
-          <option value="json">JSON (.json)</option>
-          <option value="txt">TXT (.txt)</option>
-          <option value="md">Markdown (.md)</option>
+          <option value="structured-md" selected>Rich Markdown (.md) — 추천</option>
+          <option value="structured-json">Rich JSON (.json)</option>
+          <optgroup label="Classic (경량/호환)">
+            <option value="json">Classic JSON (.json)</option>
+            <option value="md">Classic Markdown (.md)</option>
+            <option value="txt">Classic TXT (.txt)</option>
+          </optgroup>
         </select>
         <button id="gmh-export" style="flex:1; background:#2dd4bf; border:0; color:#052; border-radius:8px; padding:8px; cursor:pointer;">내보내기</button>
       </div>
@@ -6368,7 +7206,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           try {
             const normalized = normalizeTranscript(rawText || '');
             const session = buildSession(normalized);
-            return applyPrivacyPipeline(session, normalized, profileKey);
+            return applyPrivacyPipeline(session, normalized, profileKey, null);
           } catch (error) {
             console.error('[GMH] runPrivacyCheck error', error);
             return { error: error?.message || String(error) };
@@ -6410,6 +7248,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     toJSONExport,
     toTXTExport,
     toMarkdownExport,
+    toStructuredJSON,
+    toStructuredMarkdown,
     buildExportBundle,
     buildExportManifest,
   });
@@ -6428,6 +7268,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   Object.assign(GMH.Core, {
     getAdapter: getActiveAdapter,
     readTranscriptText,
+    captureStructuredSnapshot,
+    readStructuredMessages,
+    projectStructuredMessages,
     normalizeTranscript,
     parseTurns,
     buildSession,

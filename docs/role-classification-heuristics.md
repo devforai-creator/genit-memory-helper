@@ -1,6 +1,6 @@
 # Role Classification & Parsing Heuristics
 
-본 문서는 Genit Memory Helper의 **현재(2025-09-27 기준)** 역할 판정 및 파싱 로직을 정리한 것입니다. Tampermonkey 스크립트(`genit-memory-helper.user.js`)에서 DOM을 읽어 플레이어/어시스턴트/나레이션으로 분리하고, `parseTurns`로 턴 배열을 구축하는 흐름을 다룹니다.
+본 문서는 Genit Memory Helper의 **현재(2025-10-04 기준)** 역할 판정 및 파싱 로직을 정리한 것입니다. Tampermonkey 스크립트(`genit-memory-helper.user.js`)에서 DOM을 읽어 플레이어/어시스턴트/나레이션으로 분리하고, `parseTurns`로 턴 배열을 구축하는 흐름을 다룹니다.
 
 ## 1. DOM → Role 판정 개요
 
@@ -34,17 +34,31 @@
 3. 남은 노드의 텍스트를 `PLAYER_MARK (★)` + 내용으로 출력합니다.
 
 > muted 회색 말풍선(`.text-muted-foreground`, `.bg-muted/50`)도 플레이어 텍스트로 수집됩니다. (2025-09-28 기준)
+>
+> 2025-10-04 업데이트: `emitPlayerLines`는 Classic 문자열 출력과 동시에 Rich 구조 보존 Export 파트를 생성합니다(`type: 'paragraph'`, `flavor: 'speech'`, `legacyLines`). Classic 파이프라인에는 영향이 없습니다.
 
 ### 2.2 어시스턴트 (`emitNpcLines`)
 
 1. `npcGroups` 내부의 발화, 이름(`npcName`)을 찾아 `@Speaker@ "…"` 형식으로 출력합니다.
 2. `npcBubble`을 우선 사용하고, 없으면 그룹 전체 텍스트를 사용합니다.
+>
+> 2025-10-04 업데이트: Classic 출력과 동시에 `type: 'paragraph'`, `flavor: 'speech'`, `speaker` 정보를 갖는 Rich Export 파트가 생성됩니다. Classic 포맷에는 영향이 없습니다.
 
 ### 2.3 내레이션 (`emitNarrationLines`)
 
 1. `narrationBlocks`에 해당하는 회색 텍스트를 수집합니다.
 2. NPC 스코프 안에 있으면 제외합니다.
 3. 플레이어/어시스턴트와 같은 merge 규칙을 따릅니다.
+>
+> 2025-10-04 업데이트: 내레이션도 `flavor: 'narration'` 파트로 구조 보존 Export에 포함됩니다.
+>
+> 2025-10-04 추가 조정: 라벨 전용 텍스트(한 단어 이름)는 구조/Classic 모두에서 제외해 INFO 카드나 문단 앞뒤에 이름만 덩그러니 남지 않도록 했습니다.
+
+### 2.4 구조 보존 Export 연동
+
+- `GMH.Adapters.genit.collectStructuredMessage(block)`가 위 `emit*` 로직과 동일한 셀렉터/필터를 공유하며, 메시지별 파트를 구성합니다.
+- 각 파트에는 `type`(paragraph/code/list/blockquote/heading/image 등), `flavor`(speech/narration/meta), `role`, `speaker`, `lines`, `legacyLines` 정보가 들어갑니다.
+- Rich Export(JSON/Markdown)는 이 파트를 기반으로 코드블록·인용·이미지 구조를 보존합니다. DOM 구조가 예상과 다를 경우 Classic 포맷(JSON/TXT/MD)으로 자동 폴백합니다.
 
 ## 3. `parseTurns` 요약
 
@@ -66,7 +80,7 @@
 
 - `genit-memory-helper.user.js`
   - `selectors` 정의: 약 130~160행
-  - `detectRole`, `emitPlayerLines`, `emitNpcLines`, `emitNarrationLines`: 약 2700~2860행
+  - `detectRole`, `emitPlayerLines`, `emitNpcLines`, `emitNarrationLines`, `collectStructuredMessage`: 약 2700~3140행
   - `parseTurns`: 4080행대
 - `docs/dom-genit-structure.md`: DOM 구조 및 역할 힌트 요약
 
