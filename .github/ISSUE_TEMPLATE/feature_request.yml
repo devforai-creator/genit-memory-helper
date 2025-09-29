@@ -1,0 +1,22 @@
+name: "Feature request"
+description: "문제 -> 제안 -> 대안 -> 영향 범위 순서로 작성"
+labels: ["help wanted"]
+body:
+  - type: textarea
+    attributes:
+      label: 어떤 문제를 해결하고 싶나요?
+      placeholder: 사용자 여정 상에서 겪는 문제를 써주세요.
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: 제안하는 해결책
+      placeholder: 어떤 동작/변경을 원하나요?
+  - type: textarea
+    attributes:
+      label: 고려한 대안들
+  - type: textarea
+    attributes:
+      label: 영향 범위
+      placeholder: 문서/테스트/릴리스에 미치는 영향

@@ -1,0 +1,23 @@
+name: "Docs / Tier-1 task"
+description: "코드 변경 없이 기여 가능한 태스크"
+labels: ["Level 1: Welcome!", "docs", "good first issue"]
+body:
+  - type: textarea
+    attributes:
+      label: 작업 내용(사실/근거 위주)
+      placeholder: 이슈 목적과 변경 포인트를 간단히 bullet로 작성
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: 수락 기준(Definition of Done)
+      placeholder: 체크리스트 형태(예: 스크린샷 3장, README 섹션 링크 등)
+      render: markdown
+    validations:
+      required: true
+  - type: checkboxes
+    attributes:
+      label: 제출 안내
+      options:
+        - label: PR에 변경 전/후 스크린샷 또는 미리보기 링크 첨부
+        - label: 링크/인용의 출처 표기
