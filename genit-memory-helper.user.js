@@ -1247,6 +1247,165 @@
   };
 
   // -------------------------------
+  // Error Handler
+  // -------------------------------
+  const ERROR_LEVELS = {
+    DEBUG: 'debug',
+    INFO: 'info',
+    WARN: 'warn',
+    ERROR: 'error',
+    FATAL: 'fatal',
+  };
+
+  const ERROR_LOG_KEY = 'gmh_error_log';
+  const ERROR_LOG_MAX = 100;
+
+  const ERROR_CONTEXT_LABELS = {
+    'privacy/load': '프라이버시 설정 로드 실패',
+    'privacy/save': '프라이버시 설정 저장 실패',
+    'privacy/redact': '레다크션 실패',
+    'storage/read': '저장소 읽기 실패',
+    'storage/write': '저장소 쓰기 실패',
+    'snapshot': 'DOM 스냅샷 실패',
+    'parse': '파싱 실패',
+    'parse/structured': '구조화 파싱 실패',
+    'export': '내보내기 실패',
+    'export/file': '파일 다운로드 실패',
+    'export/clipboard': '클립보드 복사 실패',
+    'autoload': '자동 로딩 실패',
+    'autoload/scroll': '자동 스크롤 실패',
+    'ui/panel': '패널 렌더링 실패',
+    'ui/modal': '모달 표시 실패',
+    'adapter': '어댑터 오류',
+    'adapter/detect': '어댑터 감지 실패',
+    'range': '범위 계산 실패',
+    'bookmark': '북마크 오류',
+  };
+
+  GMH.Core.ErrorHandler = {
+    LEVELS: ERROR_LEVELS,
+
+    handle(error, context, level = ERROR_LEVELS.ERROR) {
+      const errorMsg = this._extractMessage(error);
+      const timestamp = new Date().toISOString();
+      const normalizedLevel = this._normalizeLevel(level);
+
+      // 1. Console logging (always)
+      this._logToConsole(context, errorMsg, error, normalizedLevel);
+
+      // 2. UI feedback (error/fatal only)
+      if (normalizedLevel === ERROR_LEVELS.ERROR || normalizedLevel === ERROR_LEVELS.FATAL) {
+        this._updateUIState(context, errorMsg, normalizedLevel);
+      }
+
+      // 3. User alert (fatal only)
+      if (normalizedLevel === ERROR_LEVELS.FATAL) {
+        this._alertUser(context, errorMsg);
+      }
+
+      // 4. Error logging for debugging
+      this._persistError({
+        timestamp,
+        context,
+        level: normalizedLevel,
+        message: errorMsg,
+        stack: error?.stack || null,
+      });
+
+      return errorMsg;
+    },
+
+    _extractMessage(error) {
+      if (!error) return '알 수 없는 오류';
+      if (typeof error === 'string') return error;
+      if (error.message) return error.message;
+      return String(error);
+    },
+
+    _normalizeLevel(level) {
+      const validLevels = Object.values(ERROR_LEVELS);
+      return validLevels.includes(level) ? level : ERROR_LEVELS.ERROR;
+    },
+
+    _logToConsole(context, message, error, level) {
+      const prefix = `[GMH:${context}]`;
+      switch (level) {
+        case ERROR_LEVELS.DEBUG:
+        case ERROR_LEVELS.INFO:
+          console.info(prefix, message, error);
+          break;
+        case ERROR_LEVELS.WARN:
+          console.warn(prefix, message, error);
+          break;
+        case ERROR_LEVELS.ERROR:
+        case ERROR_LEVELS.FATAL:
+          console.error(prefix, message, error);
+          break;
+      }
+    },
+
+    _updateUIState(context, message, level) {
+      const label = ERROR_CONTEXT_LABELS[context] || '오류 발생';
+      const tone = level === ERROR_LEVELS.FATAL ? 'error' : 'error';
+
+      try {
+        GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
+          label,
+          message,
+          tone,
+          progress: { value: 1 },
+        });
+      } catch (err) {
+        console.error('[GMH] Failed to update UI state', err);
+      }
+    },
+
+    _alertUser(context, message) {
+      const label = ERROR_CONTEXT_LABELS[context] || '오류';
+      try {
+        alert(`${label}\n\n${message}`);
+      } catch (err) {
+        console.error('[GMH] Failed to show alert', err);
+      }
+    },
+
+    _persistError(errorData) {
+      try {
+        const stored = localStorage.getItem(ERROR_LOG_KEY);
+        const errors = stored ? JSON.parse(stored) : [];
+        errors.push(errorData);
+        if (errors.length > ERROR_LOG_MAX) {
+          errors.splice(0, errors.length - ERROR_LOG_MAX);
+        }
+        localStorage.setItem(ERROR_LOG_KEY, JSON.stringify(errors));
+      } catch (err) {
+        // Silently fail if error logging fails
+        console.warn('[GMH] Failed to persist error log', err);
+      }
+    },
+
+    getErrorLog() {
+      try {
+        const stored = localStorage.getItem(ERROR_LOG_KEY);
+        return stored ? JSON.parse(stored) : [];
+      } catch (err) {
+        console.warn('[GMH] Failed to read error log', err);
+        return [];
+      }
+    },
+
+    clearErrorLog() {
+      try {
+        localStorage.removeItem(ERROR_LOG_KEY);
+        return true;
+      } catch (err) {
+        console.warn('[GMH] Failed to clear error log', err);
+        return false;
+      }
+    },
+  };
+
+  // -------------------------------
   // 0) Constants & utils
   // -------------------------------
   const PLAYER_MARK = '⟦PLAYER⟧ ';
@@ -1292,13 +1451,13 @@
       const rawBlack = localStorage.getItem(STORAGE_KEYS.privacyBlacklist);
       if (rawBlack) blacklist = JSON.parse(rawBlack);
     } catch (err) {
-      console.warn('[GMH] privacy blacklist load failed', err);
+      GMH.Core.ErrorHandler.handle(err, 'privacy/load', GMH.Core.ErrorHandler.LEVELS.WARN);
     }
     try {
       const rawWhite = localStorage.getItem(STORAGE_KEYS.privacyWhitelist);
       if (rawWhite) whitelist = JSON.parse(rawWhite);
     } catch (err) {
-      console.warn('[GMH] privacy whitelist load failed', err);
+      GMH.Core.ErrorHandler.handle(err, 'privacy/load', GMH.Core.ErrorHandler.LEVELS.WARN);
     }
     const normalizedBlack = Array.isArray(blacklist)
       ? blacklist.map((item) => collapseSpaces(item)).filter(Boolean)
@@ -1326,7 +1485,7 @@
         JSON.stringify(PRIVACY_CFG.whitelist || []),
       );
     } catch (err) {
-      console.warn('[GMH] privacy settings persist failed', err);
+      GMH.Core.ErrorHandler.handle(err, 'privacy/save', GMH.Core.ErrorHandler.LEVELS.WARN);
     }
   }
 
@@ -4527,8 +4686,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       triggerDownload(blob, `genit-snapshot-${Date.now()}.json`);
       setPanelStatus('DOM 스냅샷이 저장되었습니다.', 'success');
     } catch (error) {
-      console.error('[GMH] snapshot error', error);
-      setPanelStatus(`스냅샷 실패: ${(error && error.message) || error}`, 'error');
+      const errorMsg = GMH.Core.ErrorHandler.handle(error, 'snapshot', GMH.Core.ErrorHandler.LEVELS.ERROR);
+      setPanelStatus(`스냅샷 실패: ${errorMsg}`, 'error');
     }
   }
 
@@ -4575,13 +4734,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           return await autoLoadUntilPlayerTurns(goal);
         }
       } catch (error) {
-        console.error('[GMH] auto loader error', error);
-        GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
-          label: '자동 로딩 오류',
-          message: `자동 로딩 오류: ${(error && error.message) || error}`,
-          tone: 'error',
-          progress: { value: 1 },
-        });
+        GMH.Core.ErrorHandler.handle(error, 'autoload', GMH.Core.ErrorHandler.LEVELS.ERROR);
         throw error;
       }
       return null;
@@ -7005,13 +7158,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           if (privacy.sanitizedSession.warnings.length)
             console.warn('[GMH] warnings:', privacy.sanitizedSession.warnings);
         } catch (e) {
-          alert(`오류: ${(e && e.message) || e}`);
-          GMH.Core.State.setState(GMH.Core.STATE.ERROR, {
-            label: '재파싱 실패',
-            message: '재파싱 실패',
-            tone: 'error',
-            progress: { value: 1 },
-          });
+          const errorMsg = GMH.Core.ErrorHandler.handle(e, 'parse', GMH.Core.ErrorHandler.LEVELS.ERROR);
+          alert(`오류: ${errorMsg}`);
         }
       };
     }
