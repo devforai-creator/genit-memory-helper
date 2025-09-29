@@ -5138,6 +5138,119 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     return JSON.stringify(payload, null, 2);
   }
 
+  function toStructuredTXT(options = {}) {
+    const {
+      messages = [],
+      session,
+      profile,
+      rangeInfo,
+      playerNames = PLAYER_NAMES,
+    } = options;
+
+    const lines = [];
+    lines.push('=== Conversation Export ===');
+    const meta = session?.meta || {};
+    if (meta.title) lines.push(`Title: ${meta.title}`);
+    if (meta.date) lines.push(`Date: ${meta.date}`);
+    if (meta.place) lines.push(`Place: ${meta.place}`);
+    if (profile) lines.push(`Profile: ${profile.toUpperCase()}`);
+    if (playerNames?.length) lines.push(`Players: ${playerNames.join(', ')}`);
+    if (rangeInfo?.active) {
+      lines.push(
+        `Range: messages ${rangeInfo.start}-${rangeInfo.end} / ${
+          rangeInfo.total || rangeInfo.messageTotal || messages.length || 0
+        }`,
+      );
+    }
+    lines.push('');
+
+    const formatSpeakerTag = (message) => {
+      const ordinalLabel = Number.isFinite(message?.ordinal) ? `#${message.ordinal}` : '#?';
+      const speaker =
+        message?.role === 'narration' ? '내레이션' : message?.speaker || message?.role || '메시지';
+      const roleLabel = message?.role || message?.channel || 'message';
+      return `[${ordinalLabel}][${speaker}][${roleLabel}]`;
+    };
+
+    const appendPartLines = (part, messageSpeaker) => {
+      const partLines = Array.isArray(part?.lines) && part.lines.length
+        ? part.lines
+        : Array.isArray(part?.legacyLines)
+        ? part.legacyLines
+        : [];
+      const speakerName = part?.speaker || messageSpeaker || '화자';
+      switch (part?.type) {
+        case 'info': {
+          partLines.forEach((line) => {
+            lines.push(`[INFO] ${line}`);
+          });
+          break;
+        }
+        case 'blockquote': {
+          partLines.forEach((line) => lines.push(`> ${line}`));
+          break;
+        }
+        case 'list': {
+          const ordered = Boolean(part?.ordered);
+          partLines.forEach((line, idx) => {
+            lines.push(`${ordered ? idx + 1 : '-'} ${line}`);
+          });
+          break;
+        }
+        case 'code': {
+          lines.push('```' + (part?.language || ''));
+          const text =
+            typeof part?.text === 'string' && part.text.trim()
+              ? part.text
+              : partLines.join('\n');
+          lines.push(text);
+          lines.push('```');
+          break;
+        }
+        case 'image': {
+          const alt = part?.alt || '이미지';
+          const src = part?.src || '';
+          lines.push(`[IMAGE] ${alt}${src ? ` <${src}>` : ''}`);
+          break;
+        }
+        case 'heading': {
+          partLines.forEach((line) => lines.push(`== ${line} ==`));
+          break;
+        }
+        case 'paragraph':
+        default: {
+          const isSpeech = part?.flavor === 'speech';
+          partLines.forEach((line) => {
+            if (isSpeech) lines.push(`- ${speakerName}: ${line}`);
+            else lines.push(`- ${line}`);
+          });
+          break;
+        }
+      }
+    };
+
+    messages.forEach((message, idx) => {
+      const header = formatSpeakerTag(message);
+      lines.push(header);
+      const messageSpeaker =
+        message?.role === 'narration' ? '내레이션' : message?.speaker || '화자';
+      const parts = Array.isArray(message?.parts) && message.parts.length
+        ? message.parts
+        : [
+            {
+              type: 'paragraph',
+              flavor: message?.role === 'narration' ? 'narration' : 'speech',
+              speaker: messageSpeaker,
+              lines: Array.isArray(message?.legacyLines) ? message.legacyLines : [],
+            },
+          ];
+      parts.forEach((part) => appendPartLines(part, messageSpeaker));
+      if (idx !== messages.length - 1) lines.push('');
+    });
+
+    return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
   function buildExportBundle(session, normalizedRaw, format, stamp, options = {}) {
     const stampToken = stamp || new Date().toISOString().replace(/[:.]/g, '-');
     const base = `genit_turns_${stampToken}`;
@@ -5179,6 +5292,22 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         filename: `${base}_structured.json`,
         mime: 'application/json',
         content: jsonPayload,
+        stamp: stampToken,
+        format,
+      };
+    }
+    if (format === 'structured-txt') {
+      const txtPayload = toStructuredTXT({
+        messages: structuredSelection?.messages || [],
+        session,
+        profile,
+        rangeInfo,
+        playerNames,
+      });
+      return {
+        filename: `${base}_structured.txt`,
+        mime: 'text/plain',
+        content: txtPayload,
         stamp: stampToken,
         format,
       };
@@ -6624,10 +6753,16 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         try {
           bundle = buildExportBundle(sessionForExport, selectionRaw, targetFormat, stamp, bundleOptions);
         } catch (error) {
-          if (targetFormat === 'structured-json' || targetFormat === 'structured-md') {
+          if (
+            targetFormat === 'structured-json' ||
+            targetFormat === 'structured-md' ||
+            targetFormat === 'structured-txt'
+          ) {
             console.warn('[GMH] structured export failed, falling back', error);
             structuredFallback = true;
-            targetFormat = targetFormat === 'structured-json' ? 'json' : 'md';
+            if (targetFormat === 'structured-json') targetFormat = 'json';
+            else if (targetFormat === 'structured-md') targetFormat = 'md';
+            else targetFormat = 'txt';
             bundle = buildExportBundle(
               sessionForExport,
               selectionRaw,
@@ -7028,6 +7163,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           <select id="gmh-export-format" class="gmh-select">
             <option value="structured-md" selected>Rich Markdown (.md) — 추천</option>
             <option value="structured-json">Rich JSON (.json)</option>
+            <option value="structured-txt">Rich TXT (.txt)</option>
             <optgroup label="Classic (경량/호환)">
               <option value="json">Classic JSON (.json)</option>
               <option value="md">Classic Markdown (.md)</option>
@@ -7111,6 +7247,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         <select id="gmh-export-format" style="flex:1; background:#111827; color:#f1f5f9; border:1px solid #1f2937; border-radius:8px; padding:8px;">
           <option value="structured-md" selected>Rich Markdown (.md) — 추천</option>
           <option value="structured-json">Rich JSON (.json)</option>
+          <option value="structured-txt">Rich TXT (.txt)</option>
           <optgroup label="Classic (경량/호환)">
             <option value="json">Classic JSON (.json)</option>
             <option value="md">Classic Markdown (.md)</option>
@@ -7250,6 +7387,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     toMarkdownExport,
     toStructuredJSON,
     toStructuredMarkdown,
+    toStructuredTXT,
     buildExportBundle,
     buildExportManifest,
   });

@@ -157,6 +157,18 @@ describe('GMH.Export structured writers', () => {
     expect(markdown).toContain('조력자: 어서 와');
   });
 
+  it('renders structured txt with lightweight markers', () => {
+    const txt = GMH.Export.toStructuredTXT({
+      messages: structuredMessages,
+      session: baseSession,
+      profile: 'safe',
+      playerNames: ['플레이어'],
+    });
+    expect(txt).toContain('=== Conversation Export ===');
+    expect(txt).toContain('[#2][플레이어][player]');
+    expect(txt).toContain('- 플레이어: 안녕');
+  });
+
   it('skips info descendants when collecting structured parts', () => {
     const block = testWindow.document.createElement('div');
     block.setAttribute('data-gmh-message-role', 'npc');
