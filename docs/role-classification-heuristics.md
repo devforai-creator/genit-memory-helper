@@ -54,6 +54,8 @@
 >
 > 2025-10-04 추가 조정: 라벨 전용 텍스트(한 단어 이름)는 구조/Classic 모두에서 제외해 INFO 카드나 문단 앞뒤에 이름만 덩그러니 남지 않도록 했습니다.
 
+> 2025-10-07 업데이트: NPC 말풍선 이후에 등장하는 회색/묘사 문단(`.last:mb-0.mb-3` 등 Tailwind 변형 포함)은 기본 셀렉터에 걸리지 않아도 fallback으로 수집됩니다. `isInfoRelatedNode` 마커로 INFO 카드 중복을 막고, 플레이어 스코프나 NPC 버블 안쪽은 계속 제외합니다.
+
 ### 2.4 구조 보존 Export 연동
 
 - `GMH.Adapters.genit.collectStructuredMessage(block)`가 위 `emit*` 로직과 동일한 셀렉터/필터를 공유하며, 메시지별 파트를 구성합니다.
@@ -85,3 +87,106 @@
 - `docs/dom-genit-structure.md`: DOM 구조 및 역할 힌트 요약
 
 필요 시 이 문서를 업데이트하고, 휴리스틱 변경 시 반드시 날짜와 근거를 기록해 주세요.
+
+---
+
+## 6. 주요 버그 수정 이력
+
+### 2025-10-01: NPC 블록 내 Narration 누락 및 순서 문제 해결
+
+#### 문제 1: Narration이 수집되지 않음
+
+**증상:** NPC 역할 블록에서 narration 텍스트가 export에 포함되지 않음. 특히 ordinal 199와 같이 NPC 대사와 narration이 같은 블록에 있을 때 narration이 완전히 누락됨.
+
+**DOM 구조:**
+```html
+<div data-gmh-message-ordinal="199" data-gmh-message-role="npc">
+  <div class="flex w-full">
+    <div class="p-4 rounded-xl bg-background">NPC 대사 1</div>
+  </div>
+  <div class="flex w-full">
+    <div class="p-4 rounded-xl bg-background">NPC 대사 2</div>
+  </div>
+  <div class="flex w-full">
+    <div class="markdown-content text-muted-foreground text-sm">
+      <p class="last:mb-0 mb-3">성아현은 한심하다는 듯... (narration 텍스트)</p>
+      <div class="bg-card">
+        <pre><code class="hljs language-INFO">INFO 카드 내용</code></pre>
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+**원인:** `markInfoNodeTree()` 함수가 INFO 카드를 마킹할 때 **상위 `.markdown-content` 전체**를 `infoNodeRegistry`에 추가했습니다 (라인 406):
+
+```javascript
+// 문제가 있던 코드
+const infoContainer = node.closest?.('.markdown-content, .info-card, .info-block, .gmh-info') || null;
+if (infoContainer) markSubtree(infoContainer);  // ← .markdown-content 전체를 INFO로 마킹
+```
+
+이로 인해 같은 `.markdown-content` 안의 narration `<p>` 태그도 INFO로 간주되어 `isInfoRelatedNode(node)`가 true를 반환하고, `emitNarrationLines`에서 스킵됨.
+
+**해결:** `.markdown-content`를 INFO 마킹 대상에서 제거 (src/adapters/genit.js:405):
+
+```javascript
+// 수정된 코드
+const infoContainer = node.closest?.('.info-card, .info-block, .gmh-info') || null;
+if (infoContainer) markSubtree(infoContainer);  // ← INFO 카드만 마킹
+```
+
+#### 문제 2: Narration이 INFO보다 뒤에 정렬됨
+
+**증상:** Export 결과에서 narration이 DOM 순서와 다르게 INFO 카드 다음에 배치됨.
+
+**DOM 순서:**
+```
+<p>narration</p>         ← DOM 순서: 먼저
+<div class="bg-card">    ← DOM 순서: 나중
+  <pre><code>INFO</code></pre>
+</div>
+```
+
+**Export 결과 (문제):**
+```json
+[
+  { "type": "info", ... },        // INFO가 먼저 나옴
+  { "flavor": "narration", ... }  // narration이 나중
+]
+```
+
+**원인:** `emitInfo()` 함수가 `collector.push()`에 전달하는 `node`를 **부모 `.markdown-content`**로 지정했습니다 (라인 431-435):
+
+```javascript
+// 문제가 있던 코드
+const infoContainer = infoNode.closest('.markdown-content') || infoNode.closest('pre') || infoNode;
+collector.push({ type: 'info', ... }, { node: infoContainer });
+```
+
+`getOrderPath()`는 DOM 트리에서 부모-자식 관계를 기준으로 정렬하므로, INFO가 **부모** `.markdown-content`를 가리키면 자식인 narration `<p>`보다 먼저 정렬됩니다.
+
+**해결:** INFO 카드 wrapper (`.bg-card`)만 가리키도록 수정 (src/adapters/genit.js:431-436):
+
+```javascript
+// 수정된 코드
+const infoCardWrapper = infoNode instanceof Element
+  ? infoNode.closest('.bg-card, .info-card, .info-block') ||
+    infoNode.closest('pre') ||
+    infoNode
+  : infoNode.parentElement || block;
+collector.push({ type: 'info', ... }, { node: infoCardWrapper });
+```
+
+이제 narration `<p>`와 INFO 카드 `.bg-card`가 **형제 관계**가 되어 DOM 순서대로 정렬됩니다.
+
+#### 핵심 교훈
+
+두 문제 모두 **"너무 넓은 범위를 가리켰다"**가 원인이었습니다:
+1. INFO 마킹: **INFO 카드만** 마킹해야 하는데 **`.markdown-content` 전체**를 마킹
+2. 순서 정렬: **INFO 카드 wrapper**를 가리켜야 하는데 **부모 `.markdown-content`**를 가리킴
+
+**DOM 어댑터 수정 시 주의사항:**
+- 셀렉터는 가능한 한 **구체적이고 좁은 범위**로 지정
+- 컨테이너보다는 **실제 콘텐츠 노드**를 가리키도록 설계
+- 특히 INFO 카드처럼 **다른 콘텐츠와 공존**하는 요소는 형제 관계를 유지해야 함

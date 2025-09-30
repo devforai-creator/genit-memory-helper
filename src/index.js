@@ -162,10 +162,13 @@ import { createGuideControls } from './ui/guide-controls.js';
         '[data-username]',
         '.text-sm.text-muted-foreground.mb-1.ml-1',
       ],
-      npcBubble: ['.p-4.rounded-xl.bg-background p', '.markdown-content:not(.text-right)'],
+      npcBubble: [
+        '.p-4.rounded-xl.bg-background',
+        '.p-3.rounded-lg.bg-muted\\/50',
+      ],
       narrationBlocks: [
-        '.markdown-content.text-muted-foreground',
-        '.text-muted-foreground.text-sm',
+        '.markdown-content.text-muted-foreground > p',
+        '.text-muted-foreground.text-sm > p',
       ],
       panelAnchor: ['[data-testid="app-root"]', '#__next', '#root', 'main'],
       playerNameHints: [

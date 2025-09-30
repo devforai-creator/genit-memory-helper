@@ -140,7 +140,9 @@ export function createStructuredSnapshotReader({
     const signature = getBlockSignature(block);
     if (!forceReparse && blockCache.has(block)) {
       const cached = blockCache.get(block);
-      if (cached && cached.signature === signature) return cached;
+      if (cached && cached.signature === signature) {
+        return cached;
+      }
     }
 
     const localSeen = new Set();
@@ -339,7 +341,9 @@ export function createStructuredSnapshotReader({
       });
     }
 
-    if (!filtered.length) filtered = messages.slice();
+    if (!filtered.length) {
+      filtered = messages.slice();
+    }
 
     return {
       messages: filtered,
@@ -358,7 +362,7 @@ export function createStructuredSnapshotReader({
         ? latestStructuredSnapshot.messages.slice()
         : [];
     }
-    const snapshot = captureStructuredSnapshot();
+    const snapshot = captureStructuredSnapshot(options);
     return Array.isArray(snapshot.messages) ? snapshot.messages.slice() : [];
   };
 

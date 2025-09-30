@@ -403,7 +403,7 @@ export const createGenitAdapter = ({
       markSubtree(node);
       if (node instanceof Element) {
         const infoContainer =
-          node.closest?.('.markdown-content, .info-card, .info-block, .gmh-info') || null;
+          node.closest?.('.info-card, .info-block, .gmh-info') || null;
         if (infoContainer) markSubtree(infoContainer);
         const preContainer = node.closest?.('pre, code');
         if (preContainer) markSubtree(preContainer);
@@ -428,11 +428,12 @@ export const createGenitAdapter = ({
     infoLines.forEach((seg) => pushLine(seg));
     markInfoNodeTree(infoNode);
     if (collector) {
-      const infoContainer =
-        (infoNode instanceof Element &&
-          (infoNode.closest('.markdown-content') || infoNode.closest('pre') || infoNode)) ||
-        infoNode.parentElement ||
-        block;
+      const infoCardWrapper =
+        infoNode instanceof Element
+          ? infoNode.closest('.bg-card, .info-card, .info-block') ||
+            infoNode.closest('pre') ||
+            infoNode
+          : infoNode.parentElement || block;
       collector.push({
         type: 'info',
         flavor: 'meta',
@@ -441,7 +442,7 @@ export const createGenitAdapter = ({
         lines: infoLines.slice(),
         legacyLines: ['INFO', ...infoLines],
         legacyFormat: 'meta',
-      }, { node: infoContainer });
+      }, { node: infoCardWrapper });
     }
   };
 
@@ -567,9 +568,24 @@ export const createGenitAdapter = ({
 
   const emitNarrationLines = (block, pushLine, collector = null) => {
     const blockRole = block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
-    if (blockRole === 'player') return;
-    const nodes = collectAll(selectors.narrationBlocks, block);
-    if (!nodes.length) return;
+
+    if (blockRole === 'player') {
+      return;
+    }
+
+    const targets = [];
+    const seenNodes = new Set();
+    const queueNode = (node, loose = false) => {
+      if (!node || seenNodes.has(node)) return;
+      seenNodes.add(node);
+      targets.push({ node, loose });
+    };
+
+    const collected = collectAll(selectors.narrationBlocks, block);
+    collected.forEach((node, i) => {
+      queueNode(node, false);
+    });
+
     const playerNames = resolvePlayerNames();
     const knownLabels = new Set(
       [collector?.defaults?.playerName]
@@ -591,7 +607,61 @@ export const createGenitAdapter = ({
         return true;
       return false;
     };
-    nodes.forEach((node) => {
+
+    if (!targets.length) {
+      const fallbackParagraphs = Array.from(block.querySelectorAll('p'));
+      fallbackParagraphs.forEach((node) => {
+        if (seenNodes.has(node)) return;
+        if (isInfoRelatedNode(node)) return;
+        if (node.closest('code, pre')) return;
+        if (playerScopeSelector && node.closest(playerScopeSelector)) return;
+        if (npcScopeSelector) {
+          const npcContainer = node.closest(npcScopeSelector);
+          if (npcContainer) {
+            const withinNpcBubble =
+              matchesSelectorList(node, selectors.npcBubble) ||
+              closestMatchInList(node, selectors.npcBubble) ||
+              containsSelector(node, selectors.npcBubble);
+            if (withinNpcBubble) return;
+          }
+        }
+        const text = node.textContent?.trim();
+        if (!text || text.length < 6) return;
+        queueNode(node, true);
+      });
+
+      const npcGroups = collectAll(selectors.npcGroups, block);
+      npcGroups.forEach((group) => {
+        let sibling = group?.nextElementSibling || null;
+        let steps = 0;
+        while (sibling && steps < 4) {
+          steps += 1;
+          if (!(sibling instanceof Element)) break;
+          if (seenNodes.has(sibling)) {
+            sibling = sibling.nextElementSibling;
+            continue;
+          }
+          if (isInfoRelatedNode(sibling)) {
+            sibling = sibling.nextElementSibling;
+            continue;
+          }
+          if (playerScopeSelector && sibling.closest(playerScopeSelector)) break;
+          const text = sibling.textContent?.trim();
+          if (!text || text.length < 6) break;
+          queueNode(sibling, true);
+          sibling = sibling.nextElementSibling;
+        }
+      });
+    }
+
+    if (!targets.length) {
+      return;
+    }
+
+
+    targets.forEach(({ node, loose }) => {
+      const nodePreview = node.textContent?.substring(0, 30);
+
       if (npcScopeSelector) {
         const npcContainer = node.closest(npcScopeSelector);
         if (npcContainer) {
@@ -603,17 +673,24 @@ export const createGenitAdapter = ({
             node instanceof Element && node.classList?.contains('text-muted-foreground');
           if (withinNpcBubble && !mutedNarration) {
             const hostBlock = node.closest('[data-gmh-message-index]') || block;
-            if (!isPrologueBlockFn(hostBlock)) return;
+            if (!isPrologueBlockFn(hostBlock)) {
+              return;
+            }
           }
         }
       }
-      if (isInfoRelatedNode(node)) return;
+      if (isInfoRelatedNode(node)) {
+        return;
+      }
       const partLines = [];
-      textSegmentsFromNode(node).forEach((seg) => {
+      const segments = textSegmentsFromNode(node);
+      segments.forEach((seg, i) => {
         if (!seg) return;
         const clean = seg.trim();
         if (!clean) return;
-        if (shouldSkipNarrationLine(clean)) return;
+        if (!loose && shouldSkipNarrationLine(clean)) {
+          return;
+        }
         pushLine(clean);
         partLines.push(clean);
       });

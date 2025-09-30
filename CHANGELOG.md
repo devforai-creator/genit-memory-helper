@@ -4,6 +4,33 @@
 
 - _No changes yet_
 
+## v1.6.4 (2025-10-01)
+
+### 주요 버그 수정
+
+- **NPC 블록 내 narration 누락 문제 해결**: NPC 대사와 narration이 같은 블록에 있을 때 narration이 export에서 완전히 누락되던 심각한 버그를 수정했습니다.
+  - 원인: `markInfoNodeTree()`가 INFO 카드 마킹 시 상위 `.markdown-content` 전체를 INFO로 간주해, 같은 컨테이너의 narration `<p>` 태그도 걸러냄
+  - 해결: INFO 카드(`.bg-card`, `.info-card`)만 선별적으로 마킹하도록 수정 (src/adapters/genit.js:405)
+
+- **Narration-INFO 순서 문제 해결**: Narration이 DOM 순서와 다르게 INFO 카드보다 뒤에 배치되던 문제를 수정했습니다.
+  - 원인: `emitInfo()`가 부모 `.markdown-content`를 `node`로 지정해, `getOrderPath()` 정렬 시 부모-자식 우선순위로 INFO가 먼저 옴
+  - 해결: INFO 카드 wrapper(`.bg-card`)를 가리키도록 수정해 narration `<p>`와 형제 관계로 만들어 DOM 순서 유지 (src/adapters/genit.js:431-436)
+
+### 성능 최적화 (Phase 1.5)
+
+- **증분 스냅샷 캐싱**: DOM에 로드된 메시지만 파싱하도록 최적화해 대규모 대화에서 성능 개선
+  - WeakMap 기반 블록 캐시로 재파싱 방지
+  - `force: true` 플래그로 export 시 캐시 강제 갱신
+
+- **자동 로더 캐싱 개선**: 스크롤 중 중복 파싱 방지 및 통계 계산 최적화
+
+- **프라이버시 검증 강화**: 미성년자 콘텐츠 필터 및 레다크션 파이프라인 안정성 개선
+
+### 문서 개선
+
+- `docs/role-classification-heuristics.md`에 버그 수정 이력 및 DOM 구조 상세 기록 추가
+- 핵심 교훈: "너무 넓은 범위를 가리켰다" - DOM 어댑터는 가능한 한 구체적이고 좁은 셀렉터 사용 필요
+
 ## npm run bump:patch  # v1.6.3
  - Fix: Markdown code fence rendering (Codex)
  - Fix: Duplicate line deduplication (Codex)

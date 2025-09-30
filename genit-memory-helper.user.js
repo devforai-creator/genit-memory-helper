@@ -1722,7 +1722,7 @@ var GMHBundle = (function (exports) {
         markSubtree(node);
         if (node instanceof Element) {
           const infoContainer =
-            node.closest?.('.markdown-content, .info-card, .info-block, .gmh-info') || null;
+            node.closest?.('.info-card, .info-block, .gmh-info') || null;
           if (infoContainer) markSubtree(infoContainer);
           const preContainer = node.closest?.('pre, code');
           if (preContainer) markSubtree(preContainer);
@@ -1747,11 +1747,12 @@ var GMHBundle = (function (exports) {
       infoLines.forEach((seg) => pushLine(seg));
       markInfoNodeTree(infoNode);
       if (collector) {
-        const infoContainer =
-          (infoNode instanceof Element &&
-            (infoNode.closest('.markdown-content') || infoNode.closest('pre') || infoNode)) ||
-          infoNode.parentElement ||
-          block;
+        const infoCardWrapper =
+          infoNode instanceof Element
+            ? infoNode.closest('.bg-card, .info-card, .info-block') ||
+              infoNode.closest('pre') ||
+              infoNode
+            : infoNode.parentElement || block;
         collector.push({
           type: 'info',
           flavor: 'meta',
@@ -1760,7 +1761,7 @@ var GMHBundle = (function (exports) {
           lines: infoLines.slice(),
           legacyLines: ['INFO', ...infoLines],
           legacyFormat: 'meta',
-        }, { node: infoContainer });
+        }, { node: infoCardWrapper });
       }
     };
 
@@ -1886,9 +1887,24 @@ var GMHBundle = (function (exports) {
 
     const emitNarrationLines = (block, pushLine, collector = null) => {
       const blockRole = block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
-      if (blockRole === 'player') return;
-      const nodes = collectAll(selectors.narrationBlocks, block);
-      if (!nodes.length) return;
+
+      if (blockRole === 'player') {
+        return;
+      }
+
+      const targets = [];
+      const seenNodes = new Set();
+      const queueNode = (node, loose = false) => {
+        if (!node || seenNodes.has(node)) return;
+        seenNodes.add(node);
+        targets.push({ node, loose });
+      };
+
+      const collected = collectAll(selectors.narrationBlocks, block);
+      collected.forEach((node, i) => {
+        queueNode(node, false);
+      });
+
       const playerNames = resolvePlayerNames();
       const knownLabels = new Set(
         [collector?.defaults?.playerName]
@@ -1910,7 +1926,61 @@ var GMHBundle = (function (exports) {
           return true;
         return false;
       };
-      nodes.forEach((node) => {
+
+      if (!targets.length) {
+        const fallbackParagraphs = Array.from(block.querySelectorAll('p'));
+        fallbackParagraphs.forEach((node) => {
+          if (seenNodes.has(node)) return;
+          if (isInfoRelatedNode(node)) return;
+          if (node.closest('code, pre')) return;
+          if (playerScopeSelector && node.closest(playerScopeSelector)) return;
+          if (npcScopeSelector) {
+            const npcContainer = node.closest(npcScopeSelector);
+            if (npcContainer) {
+              const withinNpcBubble =
+                matchesSelectorList(node, selectors.npcBubble) ||
+                closestMatchInList(node, selectors.npcBubble) ||
+                containsSelector(node, selectors.npcBubble);
+              if (withinNpcBubble) return;
+            }
+          }
+          const text = node.textContent?.trim();
+          if (!text || text.length < 6) return;
+          queueNode(node, true);
+        });
+
+        const npcGroups = collectAll(selectors.npcGroups, block);
+        npcGroups.forEach((group) => {
+          let sibling = group?.nextElementSibling || null;
+          let steps = 0;
+          while (sibling && steps < 4) {
+            steps += 1;
+            if (!(sibling instanceof Element)) break;
+            if (seenNodes.has(sibling)) {
+              sibling = sibling.nextElementSibling;
+              continue;
+            }
+            if (isInfoRelatedNode(sibling)) {
+              sibling = sibling.nextElementSibling;
+              continue;
+            }
+            if (playerScopeSelector && sibling.closest(playerScopeSelector)) break;
+            const text = sibling.textContent?.trim();
+            if (!text || text.length < 6) break;
+            queueNode(sibling, true);
+            sibling = sibling.nextElementSibling;
+          }
+        });
+      }
+
+      if (!targets.length) {
+        return;
+      }
+
+
+      targets.forEach(({ node, loose }) => {
+        node.textContent?.substring(0, 30);
+
         if (npcScopeSelector) {
           const npcContainer = node.closest(npcScopeSelector);
           if (npcContainer) {
@@ -1922,17 +1992,24 @@ var GMHBundle = (function (exports) {
               node instanceof Element && node.classList?.contains('text-muted-foreground');
             if (withinNpcBubble && !mutedNarration) {
               const hostBlock = node.closest('[data-gmh-message-index]') || block;
-              if (!isPrologueBlockFn(hostBlock)) return;
+              if (!isPrologueBlockFn(hostBlock)) {
+                return;
+              }
             }
           }
         }
-        if (isInfoRelatedNode(node)) return;
+        if (isInfoRelatedNode(node)) {
+          return;
+        }
         const partLines = [];
-        textSegmentsFromNode(node).forEach((seg) => {
+        const segments = textSegmentsFromNode(node);
+        segments.forEach((seg, i) => {
           if (!seg) return;
           const clean = seg.trim();
           if (!clean) return;
-          if (shouldSkipNarrationLine(clean)) return;
+          if (!loose && shouldSkipNarrationLine(clean)) {
+            return;
+          }
           pushLine(clean);
           partLines.push(clean);
         });
@@ -5033,7 +5110,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const signature = getBlockSignature(block);
       if (!forceReparse && blockCache.has(block)) {
         const cached = blockCache.get(block);
-        if (cached && cached.signature === signature) return cached;
+        if (cached && cached.signature === signature) {
+          return cached;
+        }
       }
 
       const localSeen = new Set();
@@ -5232,7 +5311,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         });
       }
 
-      if (!filtered.length) filtered = messages.slice();
+      if (!filtered.length) {
+        filtered = messages.slice();
+      }
 
       return {
         messages: filtered,
@@ -5251,7 +5332,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           ? latestStructuredSnapshot.messages.slice()
           : [];
       }
-      const snapshot = captureStructuredSnapshot();
+      const snapshot = captureStructuredSnapshot(options);
       return Array.isArray(snapshot.messages) ? snapshot.messages.slice() : [];
     };
 
@@ -8451,10 +8532,13 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           '[data-username]',
           '.text-sm.text-muted-foreground.mb-1.ml-1',
         ],
-        npcBubble: ['.p-4.rounded-xl.bg-background p', '.markdown-content:not(.text-right)'],
+        npcBubble: [
+          '.p-4.rounded-xl.bg-background',
+          '.p-3.rounded-lg.bg-muted\\/50',
+        ],
         narrationBlocks: [
-          '.markdown-content.text-muted-foreground',
-          '.text-muted-foreground.text-sm',
+          '.markdown-content.text-muted-foreground > p',
+          '.text-muted-foreground.text-sm > p',
         ],
         panelAnchor: ['[data-testid="app-root"]', '#__next', '#root', 'main'],
         playerNameHints: [
