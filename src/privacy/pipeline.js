@@ -73,9 +73,16 @@ const sanitizeStructuredSnapshot = (snapshot, profileKey, counts, redactText) =>
               .map((part) => sanitizeStructuredPart(part, profileKey, counts, redactText))
               .filter(Boolean)
           : [];
-        sanitizedMessage.legacyLines = Array.isArray(message.legacyLines)
-          ? message.legacyLines.map((line) => redactText(line, profileKey, counts))
-          : [];
+        if (Array.isArray(message.legacyLines) && message.legacyLines.length) {
+          Object.defineProperty(sanitizedMessage, 'legacyLines', {
+            value: message.legacyLines.map((line) => redactText(line, profileKey, counts)),
+            enumerable: false,
+            writable: true,
+            configurable: true,
+          });
+        } else {
+          delete sanitizedMessage.legacyLines;
+        }
         return sanitizedMessage;
       })
     : [];

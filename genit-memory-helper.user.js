@@ -1582,9 +1582,6 @@ var GMHBundle = (function (exports) {
 
     const buildStructuredPart = (node, context = {}, options = {}) => {
       const baseLines = Array.isArray(options.lines) ? options.lines.slice() : [];
-      const legacyLines = Array.isArray(options.legacyLines)
-        ? options.legacyLines.slice()
-        : baseLines.slice();
       const partType = options.type || resolvePartType(node);
       const part = {
         type: partType,
@@ -1592,9 +1589,11 @@ var GMHBundle = (function (exports) {
         role: context.role || null,
         speaker: context.speaker || null,
         lines: baseLines,
-        legacyLines,
         legacyFormat: options.legacyFormat || context.legacyFormat || null,
       };
+      if (Array.isArray(options.legacyLines)) {
+        part.legacyLines = options.legacyLines.slice();
+      }
       if (partType === 'code') {
         const codeNode =
           node instanceof Element && node.matches('pre') ? node.querySelector('code') || node : node;
@@ -1606,7 +1605,6 @@ var GMHBundle = (function (exports) {
             .split(/\n/)
             .map((line) => line.replace(/\s+$/g, '').trim())
             .filter(Boolean);
-          part.legacyLines = part.lines.slice();
         }
       } else if (partType === 'list' && node instanceof Element) {
         const ordered = node.tagName?.toLowerCase() === 'ol';
@@ -1617,7 +1615,6 @@ var GMHBundle = (function (exports) {
         part.items = items;
         if (!part.lines.length) {
           part.lines = items.slice();
-          part.legacyLines = items.slice();
         }
       } else if (partType === 'image') {
         const imgEl =
@@ -1629,7 +1626,6 @@ var GMHBundle = (function (exports) {
         }
         if (!part.lines.length && part.alt) {
           part.lines = [part.alt];
-          part.legacyLines = [part.alt];
         }
       } else if (partType === 'heading' && node instanceof Element) {
         const levelMatch = node.tagName?.match(/h(\d)/i);
@@ -1638,15 +1634,12 @@ var GMHBundle = (function (exports) {
         part.text = headingText;
         if (!part.lines.length && headingText) {
           part.lines = [headingText];
-          part.legacyLines = [headingText];
         }
       } else if (partType === 'horizontal-rule') {
         if (!part.lines.length) part.lines = [];
-        if (!part.legacyLines.length) part.legacyLines = [];
       } else if (!part.lines.length) {
         const fallbackLines = textSegmentsFromNode(node);
         part.lines = fallbackLines;
-        part.legacyLines = fallbackLines.slice();
       }
       return part;
     };
@@ -1698,18 +1691,28 @@ var GMHBundle = (function (exports) {
           if (!part) return;
           const next = { ...part };
           if (!Array.isArray(next.lines)) next.lines = [];
-          if (!Array.isArray(next.legacyLines)) next.legacyLines = next.lines.slice();
           if (!next.role && next.flavor === 'speech') next.role = 'unknown';
           if (!next.speaker && next.role === 'player') next.speaker = snapshotDefaults.playerName;
           if (next.type === 'info') {
             next.lines = next.lines.map((line) => normalizeLine(line)).filter(Boolean);
-            next.legacyLines = next.legacyLines.map((line) => normalizeLine(line)).filter(Boolean);
+            next.legacyLines = Array.isArray(next.legacyLines)
+              ? next.legacyLines.map((line) => normalizeLine(line)).filter(Boolean)
+              : [];
             next.lines.forEach((line) => infoLineSet.add(line));
             next.legacyLines.forEach((line) => infoLineSet.add(line));
           } else if (infoLineSet.size) {
             next.lines = filterInfoLines(next.lines);
-            next.legacyLines = filterInfoLines(next.legacyLines);
-            if (!next.lines.length && !next.legacyLines.length) return;
+            if (Array.isArray(next.legacyLines)) {
+              next.legacyLines = filterInfoLines(next.legacyLines);
+              if (!next.lines.length && !next.legacyLines.length) return;
+            } else if (!next.lines.length) {
+              return;
+            }
+          }
+          if (next.type !== 'info' && !Array.isArray(next.legacyLines)) {
+            delete next.legacyLines;
+          } else if (next.type !== 'info' && Array.isArray(next.legacyLines) && !next.legacyLines.length) {
+            delete next.legacyLines;
           }
           const orderNode = meta?.node instanceof Node ? meta.node : null;
           const orderPathRaw = orderNode && rootNode ? getOrderPath(orderNode, rootNode) : null;
@@ -1853,7 +1856,6 @@ var GMHBundle = (function (exports) {
             legacyFormat: 'player',
           }, {
             lines: partLines,
-            legacyLines: partLines,
             legacyFormat: 'player',
           });
           collector.push(part, { node });
@@ -1901,7 +1903,6 @@ var GMHBundle = (function (exports) {
               legacyFormat: 'npc',
             }, {
               lines: partLines,
-              legacyLines: partLines,
               legacyFormat: 'npc',
             });
             collector.push(part, { node });
@@ -1970,7 +1971,6 @@ var GMHBundle = (function (exports) {
             legacyFormat: 'plain',
           }, {
             lines: partLines,
-            legacyLines: partLines,
             legacyFormat: 'plain',
           });
           collector.push(part, { node });
@@ -2025,7 +2025,7 @@ var GMHBundle = (function (exports) {
           : role === 'npc'
           ? 'NPC'
           : null);
-      return {
+      const message = {
         id: idAttr,
         index: Number.isFinite(indexAttr) ? indexAttr : null,
         ordinal: Number.isFinite(ordinalAttr) ? ordinalAttr : null,
@@ -2035,8 +2035,16 @@ var GMHBundle = (function (exports) {
           channelAttr || (role === 'player' ? 'user' : role === 'npc' ? 'llm' : 'system'),
         speaker,
         parts,
-        legacyLines: localLines,
       };
+      if (localLines.length) {
+        Object.defineProperty(message, 'legacyLines', {
+          value: localLines.slice(),
+          enumerable: false,
+          writable: true,
+          configurable: true,
+        });
+      }
+      return message;
     };
 
     const guessPlayerNames = () => {
@@ -2461,9 +2469,16 @@ var GMHBundle = (function (exports) {
                 .map((part) => sanitizeStructuredPart(part, profileKey, counts, redactText))
                 .filter(Boolean)
             : [];
-          sanitizedMessage.legacyLines = Array.isArray(message.legacyLines)
-            ? message.legacyLines.map((line) => redactText(line, profileKey, counts))
-            : [];
+          if (Array.isArray(message.legacyLines) && message.legacyLines.length) {
+            Object.defineProperty(sanitizedMessage, 'legacyLines', {
+              value: message.legacyLines.map((line) => redactText(line, profileKey, counts)),
+              enumerable: false,
+              writable: true,
+              configurable: true,
+            });
+          } else {
+            delete sanitizedMessage.legacyLines;
+          }
           return sanitizedMessage;
         })
       : [];
@@ -2820,7 +2835,7 @@ var GMHBundle = (function (exports) {
       total_messages:
         structuredSelection?.sourceTotal ?? structuredSnapshot?.messages?.length ?? messages.length,
       exported_messages: messages.length,
-      range: structuredSelection?.range || rangeInfo || null,
+      selection: structuredSelection?.range || rangeInfo || null,
       errors: structuredSnapshot?.errors || [],
     };
     const metaBase = session?.meta || {};
@@ -2832,7 +2847,6 @@ var GMHBundle = (function (exports) {
       player_names: playerNames,
       meta: {
         ...metaBase,
-        turn_range: session?.meta?.turn_range || rangeInfo || null,
         structured: structuredMeta,
       },
       messages,
@@ -6858,26 +6872,18 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
         exportSession.meta = {
           ...(exportSession.meta || {}),
-          turn_range: {
-            active: selection.info?.active,
-            axis: 'message',
-            count: selection.info?.count,
-            total: selection.info?.total,
-            start: selection.info?.start,
-            end: selection.info?.end,
-            message_start_index: selection.info?.messageStartIndex ?? selection.info?.startIndex,
-            message_end_index: selection.info?.messageEndIndex ?? selection.info?.endIndex,
-            turn_start_index: selection.info?.startIndex,
-            turn_end_index: selection.info?.endIndex,
-            selected_ordinals: selection.ordinals || [],
-            selected_indices: selection.indices || [],
-            player_total: selection.info?.userTotal ?? null,
-            entry_total: selection.info?.messageTotal ?? selection.info?.total,
-            entry_start_index: selection.info?.messageStartIndex ?? selection.info?.startIndex,
-            entry_end_index: selection.info?.messageEndIndex ?? selection.info?.endIndex,
-            entry_start_ordinal: selection.info?.start,
-            entry_end_ordinal: selection.info?.end,
-            turn_indices: selection.indices || [],
+          selection: {
+            active: Boolean(selection.info?.active),
+            range: {
+              start: selection.info?.start ?? null,
+              end: selection.info?.end ?? null,
+              count: selection.info?.count ?? null,
+              total: selection.info?.total ?? null,
+            },
+            indices: {
+              start: selection.info?.startIndex ?? null,
+              end: selection.info?.endIndex ?? null,
+            },
           },
         };
 
@@ -7004,7 +7010,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           format: targetFormat,
           warnings: privacy.sanitizedSession.warnings,
           source: privacy.sanitizedSession.source,
-          range: sessionForExport.meta?.turn_range || rangeInfo,
+          range: sessionForExport.meta?.selection || rangeInfo,
         });
         const manifestBlob = new Blob([JSON.stringify(manifest, null, 2)], {
           type: 'application/json',

@@ -4,6 +4,16 @@
 
 - _No changes yet_
 
+## v1.6.2 (2025-09-30)
+
+- **Structured JSON 최적화**: 중복 데이터를 제거해 내보내기 파일 크기를 26% 축소했습니다.
+  - 일반 part와 message에서 `legacyLines` 필드 제거 (INFO part는 폴백용으로 유지)
+  - `meta.turn_range`를 `meta.selection`으로 통합하고 20개 중복 필드 제거
+  - `selected_ordinals` 배열(중복값 100+ 항목) 완전 삭제
+  - 프라이버시 파이프라인에서 legacy 데이터를 non-enumerable 속성으로 처리
+- **테스트 커버리지 강화**: privacy-redaction 테스트를 Tampermonkey 의존성 없이 직접 모듈 단위 테스트로 재작성하고, structured-export 테스트에 fallback 시나리오 3개 추가했습니다 (총 58개 테스트 통과).
+- **개발자 경험 개선**: JSON 구조가 단순해져 LLM 파싱 효율성과 디버깅 편의성이 향상되었습니다.
+
 ## v1.6.0 (2025-09-30)
 
 - **모듈화 완료**: 7580줄 단일 파일을 46개 모듈(8개 디렉토리)로 분할해 유지보수성과 테스트 격리성을 대폭 개선했습니다.

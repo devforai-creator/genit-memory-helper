@@ -149,26 +149,18 @@ export function createShareWorkflow({
 
       exportSession.meta = {
         ...(exportSession.meta || {}),
-        turn_range: {
-          active: selection.info?.active,
-          axis: 'message',
-          count: selection.info?.count,
-          total: selection.info?.total,
-          start: selection.info?.start,
-          end: selection.info?.end,
-          message_start_index: selection.info?.messageStartIndex ?? selection.info?.startIndex,
-          message_end_index: selection.info?.messageEndIndex ?? selection.info?.endIndex,
-          turn_start_index: selection.info?.startIndex,
-          turn_end_index: selection.info?.endIndex,
-          selected_ordinals: selection.ordinals || [],
-          selected_indices: selection.indices || [],
-          player_total: selection.info?.userTotal ?? null,
-          entry_total: selection.info?.messageTotal ?? selection.info?.total,
-          entry_start_index: selection.info?.messageStartIndex ?? selection.info?.startIndex,
-          entry_end_index: selection.info?.messageEndIndex ?? selection.info?.endIndex,
-          entry_start_ordinal: selection.info?.start,
-          entry_end_ordinal: selection.info?.end,
-          turn_indices: selection.indices || [],
+        selection: {
+          active: Boolean(selection.info?.active),
+          range: {
+            start: selection.info?.start ?? null,
+            end: selection.info?.end ?? null,
+            count: selection.info?.count ?? null,
+            total: selection.info?.total ?? null,
+          },
+          indices: {
+            start: selection.info?.startIndex ?? null,
+            end: selection.info?.endIndex ?? null,
+          },
         },
       };
 
@@ -295,7 +287,7 @@ export function createShareWorkflow({
         format: targetFormat,
         warnings: privacy.sanitizedSession.warnings,
         source: privacy.sanitizedSession.source,
-        range: sessionForExport.meta?.turn_range || rangeInfo,
+        range: sessionForExport.meta?.selection || rangeInfo,
       });
       const manifestBlob = new Blob([JSON.stringify(manifest, null, 2)], {
         type: 'application/json',

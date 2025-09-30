@@ -164,7 +164,7 @@ export const toStructuredJSON = (options = {}) => {
     total_messages:
       structuredSelection?.sourceTotal ?? structuredSnapshot?.messages?.length ?? messages.length,
     exported_messages: messages.length,
-    range: structuredSelection?.range || rangeInfo || null,
+    selection: structuredSelection?.range || rangeInfo || null,
     errors: structuredSnapshot?.errors || [],
   };
   const metaBase = session?.meta || {};
@@ -176,7 +176,6 @@ export const toStructuredJSON = (options = {}) => {
     player_names: playerNames,
     meta: {
       ...metaBase,
-      turn_range: session?.meta?.turn_range || rangeInfo || null,
       structured: structuredMeta,
     },
     messages,
