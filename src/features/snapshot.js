@@ -86,12 +86,118 @@ export function createStructuredSnapshotReader({
 
   let entryOrigin = [];
   let latestStructuredSnapshot = null;
+  let blockCache = new WeakMap();
+  let blockIdRegistry = new WeakMap();
+  let blockIdCounter = 0;
 
   if (typeof setEntryOriginProvider === 'function') {
     setEntryOriginProvider(() => entryOrigin);
   }
 
-  const captureStructuredSnapshot = () => {
+  const getBlockId = (block) => {
+    if (!block) return null;
+    if (!blockIdRegistry.has(block)) {
+      blockIdCounter += 1;
+      blockIdRegistry.set(block, blockIdCounter);
+    }
+    return blockIdRegistry.get(block);
+  };
+
+  const fingerprintText = (value) => {
+    if (!value) return '0:0';
+    let hash = 0;
+    for (let i = 0; i < value.length; i += 1) {
+      hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
+    }
+    return `${value.length}:${hash.toString(16)}`;
+  };
+
+  const getBlockSignature = (block) => {
+    if (!block || typeof block.getAttribute !== 'function') return 'none';
+    const idAttr =
+      block.getAttribute('data-gmh-message-id') ||
+      block.getAttribute('data-message-id') ||
+      block.getAttribute('data-id');
+    if (idAttr) return `id:${idAttr}`;
+    const text = block.textContent || '';
+    return `text:${fingerprintText(text)}`;
+  };
+
+  const cloneStructuredMessage = (message) => {
+    if (!message || typeof message !== 'object') return null;
+    const cloned = { ...message };
+    if (Array.isArray(message.parts)) {
+      cloned.parts = message.parts.map((part) => (part && typeof part === 'object' ? { ...part } : part));
+    }
+    if (Array.isArray(message.legacyLines)) cloned.legacyLines = message.legacyLines.slice();
+    if (Array.isArray(message.__gmhEntries)) cloned.__gmhEntries = message.__gmhEntries.slice();
+    if (Array.isArray(message.__gmhSourceBlocks)) cloned.__gmhSourceBlocks = message.__gmhSourceBlocks.slice();
+    return cloned;
+  };
+
+  const ensureCacheEntry = (adapter, block, forceReparse) => {
+    if (!block) return { structured: null, lines: [], errors: [] };
+    const signature = getBlockSignature(block);
+    if (!forceReparse && blockCache.has(block)) {
+      const cached = blockCache.get(block);
+      if (cached && cached.signature === signature) return cached;
+    }
+
+    const localSeen = new Set();
+    const errors = [];
+    let structured = null;
+    let lines = [];
+
+    try {
+      const collected = adapter?.collectStructuredMessage?.(block);
+      if (collected && typeof collected === 'object') {
+        structured = cloneStructuredMessage(collected);
+        const legacy = Array.isArray(collected.legacyLines) ? collected.legacyLines : [];
+        lines = legacy.reduce((acc, line) => {
+          const trimmed = (line || '').trim();
+          if (!trimmed || localSeen.has(trimmed)) return acc;
+          localSeen.add(trimmed);
+          acc.push(trimmed);
+          return acc;
+        }, []);
+      }
+    } catch (error) {
+      errors.push(error?.message || String(error));
+    }
+
+    if (!structured) {
+      const fallbackLines = [];
+      const pushLine = (line) => {
+        const trimmed = (line || '').trim();
+        if (!trimmed || localSeen.has(trimmed)) return;
+        localSeen.add(trimmed);
+        fallbackLines.push(trimmed);
+      };
+      try {
+        adapter?.emitTranscriptLines?.(block, pushLine);
+      } catch (error) {
+        errors.push(error?.message || String(error));
+      }
+      lines = fallbackLines;
+    }
+
+    const entry = {
+      structured,
+      lines,
+      errors,
+      signature,
+    };
+    blockCache.set(block, entry);
+    return entry;
+  };
+
+  const captureStructuredSnapshot = (options = {}) => {
+    const { force } = options || {};
+    if (force) {
+      blockCache = new WeakMap();
+      blockIdRegistry = new WeakMap();
+      blockIdCounter = 0;
+    }
     const adapter = getActiveAdapter();
     const container = adapter?.findContainer?.(doc);
     const blocks = adapter?.listMessageBlocks?.(container || doc) || [];
@@ -109,10 +215,6 @@ export function createStructuredSnapshotReader({
     }
 
     const seenLine = new Set();
-    const toLineKey = (originIdx, text) => {
-      const originPart = Number.isFinite(originIdx) ? originIdx : 'na';
-      return `${originPart}::${text}`;
-    };
     const legacyLines = [];
     const origins = [];
     const messages = [];
@@ -124,55 +226,46 @@ export function createStructuredSnapshotReader({
     blocks.forEach((block, idx) => {
       const fallbackIndex = Number(block?.getAttribute?.('data-gmh-message-index'));
       const originIndex = Number.isFinite(fallbackIndex) ? fallbackIndex : idx;
-      try {
-        const structured = adapter?.collectStructuredMessage?.(block);
-        if (structured) {
-          if (!Number.isFinite(structured.index)) structured.index = originIndex;
-          if (!Number.isFinite(structured.ordinal)) {
-            const ordinalAttr = Number(block?.getAttribute?.('data-gmh-message-ordinal'));
-            structured.ordinal = Number.isFinite(ordinalAttr) ? ordinalAttr : totalBlocks - idx;
-          }
-          if (!structured.channel) {
-            structured.channel =
-              structured.role === 'player'
-                ? 'user'
-                : structured.role === 'npc'
-                ? 'llm'
-                : 'system';
-          }
-          messages.push(structured);
-          const localLines = Array.isArray(structured.legacyLines) ? structured.legacyLines : [];
-          localLines.forEach((line) => {
-            const trimmed = (line || '').trim();
-            if (!trimmed) return;
-            const lineKey = toLineKey(originIndex, trimmed);
-            if (seenLine.has(lineKey)) return;
-            seenLine.add(lineKey);
-            legacyLines.push(trimmed);
-            origins.push(originIndex);
-          });
-          return;
+      const blockId = getBlockId(block);
+      const cacheEntry = ensureCacheEntry(adapter, block, Boolean(force));
+      const cacheLines = Array.isArray(cacheEntry.lines) ? cacheEntry.lines : [];
+
+      const structured = cacheEntry.structured ? cloneStructuredMessage(cacheEntry.structured) : null;
+      if (structured) {
+        const ordinalAttr = Number(block?.getAttribute?.('data-gmh-message-ordinal'));
+        const indexAttr = Number(block?.getAttribute?.('data-gmh-message-index'));
+        const userOrdinalAttr = Number(block?.getAttribute?.('data-gmh-user-ordinal'));
+        const channelAttr = block?.getAttribute?.('data-gmh-channel');
+        structured.ordinal = Number.isFinite(ordinalAttr) ? ordinalAttr : totalBlocks - idx;
+        structured.index = Number.isFinite(indexAttr) ? indexAttr : originIndex;
+        if (Number.isFinite(userOrdinalAttr)) structured.userOrdinal = userOrdinalAttr;
+        else if (structured.userOrdinal) delete structured.userOrdinal;
+        if (channelAttr) structured.channel = channelAttr;
+        else if (!structured.channel) {
+          structured.channel =
+            structured.role === 'player'
+              ? 'user'
+              : structured.role === 'npc'
+              ? 'llm'
+              : 'system';
         }
-      } catch (error) {
-        errors.push({ index: originIndex, error: error?.message || String(error) });
+        messages.push(structured);
       }
 
-      const localSeen = new Set();
-      const pushLine = (line) => {
+      cacheLines.forEach((line) => {
         const trimmed = (line || '').trim();
-        if (!trimmed || localSeen.has(trimmed)) return;
-        const lineKey = toLineKey(originIndex, trimmed);
+        if (!trimmed) return;
+        const lineKey = `${blockId ?? originIndex}::${trimmed}`;
         if (seenLine.has(lineKey)) return;
-        localSeen.add(trimmed);
         seenLine.add(lineKey);
         legacyLines.push(trimmed);
         origins.push(originIndex);
-      };
+      });
 
-      try {
-        adapter?.emitTranscriptLines?.(block, pushLine);
-      } catch (error) {
-        errors.push({ index: originIndex, error: error?.message || String(error) });
+      if (Array.isArray(cacheEntry.errors)) {
+        cacheEntry.errors.forEach((message) => {
+          errors.push({ index: originIndex, error: message });
+        });
       }
     });
 
@@ -193,7 +286,8 @@ export function createStructuredSnapshotReader({
     return latestStructuredSnapshot;
   };
 
-  const readTranscriptText = () => captureStructuredSnapshot().legacyLines.join('\n');
+  const readTranscriptText = (options = {}) =>
+    captureStructuredSnapshot(options).legacyLines.join('\n');
 
   const projectStructuredMessages = (structuredSnapshot, rangeInfo) => {
     if (!structuredSnapshot) {

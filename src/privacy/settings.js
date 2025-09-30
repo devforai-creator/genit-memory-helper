@@ -1,14 +1,53 @@
 import { STORAGE_KEYS, PRIVACY_PROFILES, DEFAULT_PRIVACY_PROFILE } from './constants.js';
 
 const noop = () => {};
+const MAX_CUSTOM_LIST_ITEMS = 1000;
+const MAX_CUSTOM_ITEM_LENGTH = 200;
 
-const normalizeList = (items = [], collapseSpaces = (value) => value) =>
-  Array.isArray(items)
-    ? items
-        .map((item) => collapseSpaces(item))
-        .map((item) => (typeof item === 'string' ? item.trim() : ''))
-        .filter(Boolean)
-    : [];
+const sanitizeList = (items = [], collapseSpaces = (value) => value) => {
+  if (!Array.isArray(items)) {
+    return {
+      list: [],
+      invalidType: Boolean(items),
+      truncated: false,
+      clipped: false,
+    };
+  }
+
+  const list = [];
+  let invalidType = false;
+  let truncated = false;
+  let clipped = false;
+
+  for (let i = 0; i < items.length; i += 1) {
+    if (list.length >= MAX_CUSTOM_LIST_ITEMS) {
+      truncated = true;
+      break;
+    }
+    const raw = items[i];
+    if (typeof raw !== 'string') {
+      if (raw !== undefined && raw !== null) invalidType = true;
+      continue;
+    }
+    const collapsed = collapseSpaces(raw);
+    const collapsedString = typeof collapsed === 'string' ? collapsed : String(collapsed || '');
+    const trimmed = collapsedString.trim();
+    if (!trimmed) {
+      if (raw.trim?.()) invalidType = true;
+      continue;
+    }
+    let entry = trimmed;
+    if (entry.length > MAX_CUSTOM_ITEM_LENGTH) {
+      entry = entry.slice(0, MAX_CUSTOM_ITEM_LENGTH);
+      clipped = true;
+    }
+    list.push(entry);
+  }
+
+  if (items.length > MAX_CUSTOM_LIST_ITEMS) truncated = true;
+
+  return { list, invalidType, truncated, clipped };
+};
 
 export const createPrivacyStore = ({
   storage,
@@ -33,6 +72,19 @@ export const createPrivacyStore = ({
     }
   };
 
+  const warnListIssue = (type, reason, context) => {
+    const message = `[GMH] ${type} ${reason}`;
+    safeHandle(new Error(message), context, errorHandler?.LEVELS?.WARN);
+  };
+
+  const applySanitizedList = (items, type, context) => {
+    const { list, invalidType, truncated, clipped } = sanitizeList(items, collapseSpaces);
+    if (invalidType) warnListIssue(type, 'contains invalid entries; dropping invalid values.', context);
+    if (truncated) warnListIssue(type, `exceeded ${MAX_CUSTOM_LIST_ITEMS} entries; extra values dropped.`, context);
+    if (clipped) warnListIssue(type, `entries trimmed to ${MAX_CUSTOM_ITEM_LENGTH} characters.`, context);
+    return list;
+  };
+
   const readItem = (key) => {
     if (!storage || typeof storage.getItem !== 'function') return null;
     try {
@@ -55,31 +107,33 @@ export const createPrivacyStore = ({
   const load = () => {
     const profileKey = readItem(STORAGE_KEYS.privacyProfile) || defaultProfile;
 
-    let blacklist = [];
     const rawBlacklist = readItem(STORAGE_KEYS.privacyBlacklist);
-    if (rawBlacklist) {
+    const blacklist = (() => {
+      if (!rawBlacklist) return [];
       try {
         const parsed = JSON.parse(rawBlacklist);
-        blacklist = Array.isArray(parsed) ? parsed : [];
+        return applySanitizedList(parsed, 'privacy blacklist', 'privacy/load');
       } catch (err) {
         safeHandle(err, 'privacy/load');
+        return [];
       }
-    }
+    })();
 
-    let whitelist = [];
     const rawWhitelist = readItem(STORAGE_KEYS.privacyWhitelist);
-    if (rawWhitelist) {
+    const whitelist = (() => {
+      if (!rawWhitelist) return [];
       try {
         const parsed = JSON.parse(rawWhitelist);
-        whitelist = Array.isArray(parsed) ? parsed : [];
+        return applySanitizedList(parsed, 'privacy whitelist', 'privacy/load');
       } catch (err) {
         safeHandle(err, 'privacy/load');
+        return [];
       }
-    }
+    })();
 
     config.profile = profiles[profileKey] ? profileKey : defaultProfile;
-    config.blacklist = normalizeList(blacklist, collapseSpaces);
-    config.whitelist = normalizeList(whitelist, collapseSpaces);
+    config.blacklist = blacklist;
+    config.whitelist = whitelist;
     return config;
   };
 
@@ -96,9 +150,8 @@ export const createPrivacyStore = ({
   };
 
   const setCustomList = (type, items) => {
-    const normalized = normalizeList(items, collapseSpaces);
-    if (type === 'blacklist') config.blacklist = normalized;
-    if (type === 'whitelist') config.whitelist = normalized;
+    if (type === 'blacklist') config.blacklist = applySanitizedList(items, 'privacy blacklist', 'privacy/save');
+    if (type === 'whitelist') config.whitelist = applySanitizedList(items, 'privacy whitelist', 'privacy/save');
     return persist();
   };
 

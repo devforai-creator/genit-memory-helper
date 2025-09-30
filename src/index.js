@@ -92,18 +92,6 @@ import { createGuideControls } from './ui/guide-controls.js';
 
   const scriptVersion = detectScriptVersion();
 
-  try {
-    const killSwitchEnabled = localStorage.getItem('gmh_kill') === '1';
-    if (!killSwitchEnabled) {
-      const currentValue = localStorage.getItem('gmh_flag_newUI');
-      if (currentValue !== '1') {
-        localStorage.setItem('gmh_flag_newUI', '1');
-      }
-    }
-  } catch (err) {
-    console.warn('[GMH] failed to set default UI flag', err);
-  }
-
   GMH.VERSION = scriptVersion;
 
   GMH.Adapters.Registry = adapterRegistry;
@@ -195,6 +183,7 @@ import { createGuideControls } from './ui/guide-controls.js';
     registry: adapterRegistry,
     getPlayerNames,
     isPrologueBlock,
+    errorHandler: GMH.Core.ErrorHandler,
   });
 
   GMH.Adapters.genit = genitAdapter;
@@ -365,6 +354,24 @@ import { createGuideControls } from './ui/guide-controls.js';
   });
 
   GMH.Core.ErrorHandler = errorHandler;
+
+  const ensureDefaultUIFlag = () => {
+    try {
+      const storage = ENV.localStorage || localStorage;
+      if (!storage) return;
+      const killSwitchEnabled = storage.getItem('gmh_kill') === '1';
+      if (killSwitchEnabled) return;
+      const currentValue = storage.getItem('gmh_flag_newUI');
+      if (currentValue !== '1') {
+        storage.setItem('gmh_flag_newUI', '1');
+      }
+    } catch (err) {
+      const level = errorHandler.LEVELS?.WARN || 'warn';
+      errorHandler.handle(err, 'storage/write', level);
+    }
+  };
+
+  ensureDefaultUIFlag();
 
   // -------------------------------
   // 0) Constants & utils
@@ -698,7 +705,8 @@ import { createGuideControls } from './ui/guide-controls.js';
       try {
         if (adapter?.match?.(loc, doc)) return adapter;
       } catch (err) {
-        console.warn('[GMH] adapter match error', err);
+        const level = errorHandler.LEVELS?.WARN || 'warn';
+        errorHandler.handle(err, 'adapter/detect', level);
       }
     }
     return GMH.Adapters.genit;
@@ -761,7 +769,10 @@ function getActiveAdapter() {
     if (isModernUIActive) {
       mountPanelModern();
     } else {
-      if (Flags.killSwitch) console.info('[GMH] modern UI disabled by kill switch');
+      if (Flags.killSwitch) {
+        const level = errorHandler.LEVELS?.INFO || 'info';
+        errorHandler.handle('modern UI disabled by kill switch', 'ui/panel', level);
+      }
       mountPanelLegacy();
     }
   }
@@ -775,7 +786,8 @@ function getActiveAdapter() {
       GMH.Core.MessageIndexer.start();
       bookmarkListener.start();
     } catch (e) {
-      console.error('[GMH] mount error', e);
+      const level = errorHandler.LEVELS?.ERROR || 'error';
+      errorHandler.handle(e, 'ui/panel', level);
     }
   }
 
@@ -790,12 +802,14 @@ function getActiveAdapter() {
       try {
         bookmarkListener.stop();
       } catch (err) {
-        console.warn('[GMH] bookmark listener cleanup failed', err);
+        const level = errorHandler.LEVELS?.WARN || 'warn';
+        errorHandler.handle(err, 'bookmark', level);
       }
       try {
         messageIndexer.stop();
       } catch (err) {
-        console.warn('[GMH] message indexer cleanup failed', err);
+        const level = errorHandler.LEVELS?.WARN || 'warn';
+        errorHandler.handle(err, 'adapter', level);
       }
     };
     window.addEventListener('pagehide', teardown);
@@ -823,7 +837,8 @@ function getActiveAdapter() {
             const session = buildSession(normalized);
             return applyPrivacyPipeline(session, normalized, profileKey, null);
           } catch (error) {
-            console.error('[GMH] runPrivacyCheck error', error);
+            const level = errorHandler.LEVELS?.ERROR || 'error';
+            errorHandler.handle(error, 'privacy/redact', level);
             return { error: error?.message || String(error) };
           }
         },
@@ -904,7 +919,8 @@ function getActiveAdapter() {
         configurable: false,
       });
     } catch (err) {
-      console.warn('[GMH] expose GMH failed', err);
+      const level = errorHandler.LEVELS?.WARN || 'warn';
+      errorHandler.handle(err, 'ui/panel', level);
     }
   }
 })();

@@ -26,13 +26,6 @@ var GMHBundle = (function (exports) {
     Adapters: {},
   };
 
-  const setNamespaceVersion = (version) => {
-    if (typeof version === 'string' && version.trim()) {
-      GMH.VERSION = version.trim();
-    }
-    return GMH.VERSION;
-  };
-
   const clone = (value) => {
     try {
       return JSON.parse(JSON.stringify(value));
@@ -54,11 +47,6 @@ var GMHBundle = (function (exports) {
       }
     });
     return base;
-  };
-
-  var utils = {
-    clone,
-    deepMerge,
   };
 
   const fallbackClipboard = (text) => {
@@ -90,9 +78,7 @@ var GMHBundle = (function (exports) {
       typeof localStorage !== 'undefined' ? localStorage : undefined,
   };
 
-  const getPageWindow = () => ENV.window;
-
-  const noop$6 = () => {};
+  const noop$5 = () => {};
 
   const GMH_STATE = {
     IDLE: 'idle',
@@ -121,10 +107,10 @@ var GMHBundle = (function (exports) {
   };
 
   const createStateManager = ({ console: consoleLike, debug } = {}) => {
-    const logger = consoleLike || (typeof console !== 'undefined' ? console : { warn: noop$6, error: noop$6 });
-    const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$6;
-    const error = typeof logger.error === 'function' ? logger.error.bind(logger) : noop$6;
-    const debugLog = typeof debug === 'function' ? debug : noop$6;
+    const logger = consoleLike || (typeof console !== 'undefined' ? console : { warn: noop$5, error: noop$5 });
+    const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$5;
+    const error = typeof logger.error === 'function' ? logger.error.bind(logger) : noop$5;
+    const debugLog = typeof debug === 'function' ? debug : noop$5;
 
     const subscribers = new Set();
 
@@ -136,7 +122,7 @@ var GMHBundle = (function (exports) {
         return this.current;
       },
       subscribe(listener) {
-        if (typeof listener !== 'function') return noop$6;
+        if (typeof listener !== 'function') return noop$5;
         subscribers.add(listener);
         return () => {
           subscribers.delete(listener);
@@ -181,7 +167,7 @@ var GMHBundle = (function (exports) {
     return state;
   };
 
-  const noop$5 = () => {};
+  const noop$4 = () => {};
 
   const ERROR_LEVELS = {
     DEBUG: 'debug',
@@ -231,7 +217,7 @@ var GMHBundle = (function (exports) {
   const ensureConsole = (consoleLike) => {
     if (consoleLike) return consoleLike;
     if (typeof console !== 'undefined') return console;
-    return { info: noop$5, warn: noop$5, error: noop$5 };
+    return { info: noop$4, warn: noop$4, error: noop$4 };
   };
 
   const createErrorHandler = ({
@@ -241,10 +227,10 @@ var GMHBundle = (function (exports) {
     state,
   } = {}) => {
     const logger = ensureConsole(consoleLike);
-    const info = typeof logger.info === 'function' ? logger.info.bind(logger) : noop$5;
-    const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$5;
-    const error = typeof logger.error === 'function' ? logger.error.bind(logger) : noop$5;
-    const alertFn = typeof alertImpl === 'function' ? alertImpl : noop$5;
+    const info = typeof logger.info === 'function' ? logger.info.bind(logger) : noop$4;
+    const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$4;
+    const error = typeof logger.error === 'function' ? logger.error.bind(logger) : noop$4;
+    const alertFn = typeof alertImpl === 'function' ? alertImpl : noop$4;
     const storage = localStorage;
 
     const logToConsole = (context, message, original, level) => {
@@ -353,7 +339,7 @@ var GMHBundle = (function (exports) {
     return handler;
   };
 
-  const noop$4 = () => {};
+  const noop$3 = () => {};
 
   const createExportRange = ({
     console: consoleLike,
@@ -361,8 +347,8 @@ var GMHBundle = (function (exports) {
     localStorage,
   } = {}) => {
     const logger = consoleLike || (typeof console !== 'undefined' ? console : {});
-    const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$4;
-    const table = typeof logger.table === 'function' ? logger.table.bind(logger) : noop$4;
+    const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$3;
+    const table = typeof logger.table === 'function' ? logger.table.bind(logger) : noop$3;
     const pageWindow = windowLike || (typeof window !== 'undefined' ? window : undefined);
     const storage = localStorage;
 
@@ -810,7 +796,7 @@ var GMHBundle = (function (exports) {
         return snapshot();
       },
       subscribe(listener) {
-        if (typeof listener !== 'function') return noop$4;
+        if (typeof listener !== 'function') return noop$3;
         listeners.add(listener);
         try {
           listener(snapshot());
@@ -823,11 +809,11 @@ var GMHBundle = (function (exports) {
     };
   };
 
-  const noop$3 = () => {};
+  const noop$2 = () => {};
 
   const createTurnBookmarks = ({ console: consoleLike } = {}) => {
     const logger = consoleLike || (typeof console !== 'undefined' ? console : {});
-    const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$3;
+    const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$2;
 
     const HISTORY_LIMIT = 5;
     const history = [];
@@ -929,7 +915,7 @@ var GMHBundle = (function (exports) {
         return history.map(cloneEntry).filter(Boolean);
       },
       subscribe(listener) {
-        if (typeof listener !== 'function') return noop$3;
+        if (typeof listener !== 'function') return noop$2;
         listeners.add(listener);
         try {
           listener(history.map(cloneEntry).filter(Boolean));
@@ -941,7 +927,7 @@ var GMHBundle = (function (exports) {
     };
   };
 
-  const noop$2 = () => {};
+  const noop$1 = () => {};
 
   const createMessageIndexer = ({
     console: consoleLike,
@@ -953,8 +939,8 @@ var GMHBundle = (function (exports) {
     getEntryOrigin,
   } = {}) => {
     const logger = consoleLike || (typeof console !== 'undefined' ? console : {});
-    const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$2;
-    const error = typeof logger.error === 'function' ? logger.error.bind(logger) : noop$2;
+    const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$1;
+    typeof logger.error === 'function' ? logger.error.bind(logger) : noop$1;
     const documentRef = documentLike || (typeof document !== 'undefined' ? document : undefined);
     const MutationObserverRef = MutationObserverLike || (typeof MutationObserver !== 'undefined' ? MutationObserver : undefined);
     const raf = typeof rafLike === 'function'
@@ -1154,7 +1140,7 @@ var GMHBundle = (function (exports) {
         return ordinalCacheById.has(messageId) ? ordinalCacheById.get(messageId) : null;
       },
       subscribe(listener) {
-        if (typeof listener !== 'function') return noop$2;
+        if (typeof listener !== 'function') return noop$1;
         listeners.add(listener);
         try {
           listener(cloneSummary(lastSummary));
@@ -1166,7 +1152,7 @@ var GMHBundle = (function (exports) {
     };
   };
 
-  const noop$1 = () => {};
+  const noop = () => {};
 
   const createBookmarkListener = ({
     document: documentLike,
@@ -1183,7 +1169,7 @@ var GMHBundle = (function (exports) {
     const bookmarks = turnBookmarks;
     const indexer = messageIndexer;
     const logger = consoleLike || (typeof console !== 'undefined' ? console : {});
-    const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$1;
+    const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop;
 
     let active = false;
 
@@ -1297,16 +1283,6 @@ var GMHBundle = (function (exports) {
       .filter(Boolean);
   };
 
-  var text = {
-    normNL,
-    stripTicks,
-    collapseSpaces,
-    stripQuotes,
-    stripBrackets,
-    sanitizeText,
-    parseListInput,
-  };
-
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   const triggerDownload = (blob, filename) => {
@@ -1328,12 +1304,6 @@ var GMHBundle = (function (exports) {
     const overflowY = styles.overflowY;
     const scrollableStyle = overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay';
     return scrollableStyle && element.scrollHeight > element.clientHeight + 4;
-  };
-
-  var dom = {
-    sleep,
-    triggerDownload,
-    isScrollable,
   };
 
   const looksLikeName = (raw) => {
@@ -1363,11 +1333,6 @@ var GMHBundle = (function (exports) {
     return sum % 10 === 0;
   };
 
-  var validation = {
-    looksLikeName,
-    luhnValid,
-  };
-
   const DEFAULT_PLAYER_MARK$2 = '⟦PLAYER⟧ ';
 
   const createGenitAdapter = ({
@@ -1375,16 +1340,24 @@ var GMHBundle = (function (exports) {
     playerMark = DEFAULT_PLAYER_MARK$2,
     getPlayerNames = () => [],
     isPrologueBlock = () => false,
+    errorHandler,
   } = {}) => {
     let infoNodeRegistry = new WeakSet();
     let playerNameAccessor = typeof getPlayerNames === 'function' ? getPlayerNames : () => [];
+
+    const warnWithHandler = (err, context, fallbackMessage) => {
+      if (errorHandler?.handle) {
+        const level = errorHandler.LEVELS?.WARN || 'warn';
+        errorHandler.handle(err, context, level);
+      } else if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+        console.warn(fallbackMessage, err);
+      }
+    };
 
     const resolvePlayerNames = () => {
       const names = playerNameAccessor();
       return Array.isArray(names) ? names : [];
     };
-
-    const primaryPlayerName = () => resolvePlayerNames()[0] || '플레이어';
 
     const registryGet = registry?.get ? registry.get.bind(registry) : getAdapterConfig;
     const adapterConfig = registryGet('genit');
@@ -2001,7 +1974,7 @@ var GMHBundle = (function (exports) {
       try {
         emitTranscriptLines(block, pushLine, collector);
       } catch (err) {
-        console.warn('[GMH] structured emit failed', err);
+        warnWithHandler(err, 'adapter', '[GMH] structured emit failed');
         emitTranscriptLines(block, pushLine);
       }
       const parts = collector.list();
@@ -2129,15 +2102,53 @@ var GMHBundle = (function (exports) {
 
   const DEFAULT_PRIVACY_PROFILE = 'safe';
 
-  const noop = () => {};
+  const MAX_CUSTOM_LIST_ITEMS = 1000;
+  const MAX_CUSTOM_ITEM_LENGTH = 200;
 
-  const normalizeList = (items = [], collapseSpaces = (value) => value) =>
-    Array.isArray(items)
-      ? items
-          .map((item) => collapseSpaces(item))
-          .map((item) => (typeof item === 'string' ? item.trim() : ''))
-          .filter(Boolean)
-      : [];
+  const sanitizeList = (items = [], collapseSpaces = (value) => value) => {
+    if (!Array.isArray(items)) {
+      return {
+        list: [],
+        invalidType: Boolean(items),
+        truncated: false,
+        clipped: false,
+      };
+    }
+
+    const list = [];
+    let invalidType = false;
+    let truncated = false;
+    let clipped = false;
+
+    for (let i = 0; i < items.length; i += 1) {
+      if (list.length >= MAX_CUSTOM_LIST_ITEMS) {
+        truncated = true;
+        break;
+      }
+      const raw = items[i];
+      if (typeof raw !== 'string') {
+        if (raw !== undefined && raw !== null) invalidType = true;
+        continue;
+      }
+      const collapsed = collapseSpaces(raw);
+      const collapsedString = typeof collapsed === 'string' ? collapsed : String(collapsed || '');
+      const trimmed = collapsedString.trim();
+      if (!trimmed) {
+        if (raw.trim?.()) invalidType = true;
+        continue;
+      }
+      let entry = trimmed;
+      if (entry.length > MAX_CUSTOM_ITEM_LENGTH) {
+        entry = entry.slice(0, MAX_CUSTOM_ITEM_LENGTH);
+        clipped = true;
+      }
+      list.push(entry);
+    }
+
+    if (items.length > MAX_CUSTOM_LIST_ITEMS) truncated = true;
+
+    return { list, invalidType, truncated, clipped };
+  };
 
   const createPrivacyStore = ({
     storage,
@@ -2158,8 +2169,20 @@ var GMHBundle = (function (exports) {
       try {
         errorHandler.handle(err, context, severity);
       } catch (noopErr) {
-        noop(noopErr);
       }
+    };
+
+    const warnListIssue = (type, reason, context) => {
+      const message = `[GMH] ${type} ${reason}`;
+      safeHandle(new Error(message), context, errorHandler?.LEVELS?.WARN);
+    };
+
+    const applySanitizedList = (items, type, context) => {
+      const { list, invalidType, truncated, clipped } = sanitizeList(items, collapseSpaces);
+      if (invalidType) warnListIssue(type, 'contains invalid entries; dropping invalid values.', context);
+      if (truncated) warnListIssue(type, `exceeded ${MAX_CUSTOM_LIST_ITEMS} entries; extra values dropped.`, context);
+      if (clipped) warnListIssue(type, `entries trimmed to ${MAX_CUSTOM_ITEM_LENGTH} characters.`, context);
+      return list;
     };
 
     const readItem = (key) => {
@@ -2184,31 +2207,33 @@ var GMHBundle = (function (exports) {
     const load = () => {
       const profileKey = readItem(STORAGE_KEYS.privacyProfile) || defaultProfile;
 
-      let blacklist = [];
       const rawBlacklist = readItem(STORAGE_KEYS.privacyBlacklist);
-      if (rawBlacklist) {
+      const blacklist = (() => {
+        if (!rawBlacklist) return [];
         try {
           const parsed = JSON.parse(rawBlacklist);
-          blacklist = Array.isArray(parsed) ? parsed : [];
+          return applySanitizedList(parsed, 'privacy blacklist', 'privacy/load');
         } catch (err) {
           safeHandle(err, 'privacy/load');
+          return [];
         }
-      }
+      })();
 
-      let whitelist = [];
       const rawWhitelist = readItem(STORAGE_KEYS.privacyWhitelist);
-      if (rawWhitelist) {
+      const whitelist = (() => {
+        if (!rawWhitelist) return [];
         try {
           const parsed = JSON.parse(rawWhitelist);
-          whitelist = Array.isArray(parsed) ? parsed : [];
+          return applySanitizedList(parsed, 'privacy whitelist', 'privacy/load');
         } catch (err) {
           safeHandle(err, 'privacy/load');
+          return [];
         }
-      }
+      })();
 
       config.profile = profiles[profileKey] ? profileKey : defaultProfile;
-      config.blacklist = normalizeList(blacklist, collapseSpaces);
-      config.whitelist = normalizeList(whitelist, collapseSpaces);
+      config.blacklist = blacklist;
+      config.whitelist = whitelist;
       return config;
     };
 
@@ -2225,9 +2250,8 @@ var GMHBundle = (function (exports) {
     };
 
     const setCustomList = (type, items) => {
-      const normalized = normalizeList(items, collapseSpaces);
-      if (type === 'blacklist') config.blacklist = normalized;
-      if (type === 'whitelist') config.whitelist = normalized;
+      if (type === 'blacklist') config.blacklist = applySanitizedList(items, 'privacy blacklist', 'privacy/save');
+      if (type === 'whitelist') config.whitelist = applySanitizedList(items, 'privacy whitelist', 'privacy/save');
       return persist();
     };
 
@@ -2900,7 +2924,7 @@ var GMHBundle = (function (exports) {
         : Array.isArray(part?.legacyLines)
         ? part.legacyLines
         : [];
-      const speakerName = part?.speaker || messageSpeaker || '화자';
+      const speakerName = part?.speaker || messageSpeaker;
       switch (part?.type) {
         case 'info': {
           partLines.forEach((line) => {
@@ -3809,7 +3833,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         doc.addEventListener('keydown', onKeydown, true);
 
         const initialSelector = options.initialFocus || '.gmh-button--primary';
-        let focusTarget = initialSelector ? dialog.querySelector(initialSelector) : null;
+        let focusTarget = dialog.querySelector(initialSelector) ;
         if (!(focusTarget instanceof HTMLElementCtor)) {
           const focusables = getFocusable(dialog);
           focusTarget = focusables[0] || closeBtn;
@@ -4955,12 +4979,118 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     let entryOrigin = [];
     let latestStructuredSnapshot = null;
+    let blockCache = new WeakMap();
+    let blockIdRegistry = new WeakMap();
+    let blockIdCounter = 0;
 
     if (typeof setEntryOriginProvider === 'function') {
       setEntryOriginProvider(() => entryOrigin);
     }
 
-    const captureStructuredSnapshot = () => {
+    const getBlockId = (block) => {
+      if (!block) return null;
+      if (!blockIdRegistry.has(block)) {
+        blockIdCounter += 1;
+        blockIdRegistry.set(block, blockIdCounter);
+      }
+      return blockIdRegistry.get(block);
+    };
+
+    const fingerprintText = (value) => {
+      if (!value) return '0:0';
+      let hash = 0;
+      for (let i = 0; i < value.length; i += 1) {
+        hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
+      }
+      return `${value.length}:${hash.toString(16)}`;
+    };
+
+    const getBlockSignature = (block) => {
+      if (!block || typeof block.getAttribute !== 'function') return 'none';
+      const idAttr =
+        block.getAttribute('data-gmh-message-id') ||
+        block.getAttribute('data-message-id') ||
+        block.getAttribute('data-id');
+      if (idAttr) return `id:${idAttr}`;
+      const text = block.textContent || '';
+      return `text:${fingerprintText(text)}`;
+    };
+
+    const cloneStructuredMessage = (message) => {
+      if (!message || typeof message !== 'object') return null;
+      const cloned = { ...message };
+      if (Array.isArray(message.parts)) {
+        cloned.parts = message.parts.map((part) => (part && typeof part === 'object' ? { ...part } : part));
+      }
+      if (Array.isArray(message.legacyLines)) cloned.legacyLines = message.legacyLines.slice();
+      if (Array.isArray(message.__gmhEntries)) cloned.__gmhEntries = message.__gmhEntries.slice();
+      if (Array.isArray(message.__gmhSourceBlocks)) cloned.__gmhSourceBlocks = message.__gmhSourceBlocks.slice();
+      return cloned;
+    };
+
+    const ensureCacheEntry = (adapter, block, forceReparse) => {
+      if (!block) return { structured: null, lines: [], errors: [] };
+      const signature = getBlockSignature(block);
+      if (!forceReparse && blockCache.has(block)) {
+        const cached = blockCache.get(block);
+        if (cached && cached.signature === signature) return cached;
+      }
+
+      const localSeen = new Set();
+      const errors = [];
+      let structured = null;
+      let lines = [];
+
+      try {
+        const collected = adapter?.collectStructuredMessage?.(block);
+        if (collected && typeof collected === 'object') {
+          structured = cloneStructuredMessage(collected);
+          const legacy = Array.isArray(collected.legacyLines) ? collected.legacyLines : [];
+          lines = legacy.reduce((acc, line) => {
+            const trimmed = (line || '').trim();
+            if (!trimmed || localSeen.has(trimmed)) return acc;
+            localSeen.add(trimmed);
+            acc.push(trimmed);
+            return acc;
+          }, []);
+        }
+      } catch (error) {
+        errors.push(error?.message || String(error));
+      }
+
+      if (!structured) {
+        const fallbackLines = [];
+        const pushLine = (line) => {
+          const trimmed = (line || '').trim();
+          if (!trimmed || localSeen.has(trimmed)) return;
+          localSeen.add(trimmed);
+          fallbackLines.push(trimmed);
+        };
+        try {
+          adapter?.emitTranscriptLines?.(block, pushLine);
+        } catch (error) {
+          errors.push(error?.message || String(error));
+        }
+        lines = fallbackLines;
+      }
+
+      const entry = {
+        structured,
+        lines,
+        errors,
+        signature,
+      };
+      blockCache.set(block, entry);
+      return entry;
+    };
+
+    const captureStructuredSnapshot = (options = {}) => {
+      const { force } = options || {};
+      if (force) {
+        blockCache = new WeakMap();
+        blockIdRegistry = new WeakMap();
+        blockIdCounter = 0;
+      }
       const adapter = getActiveAdapter();
       const container = adapter?.findContainer?.(doc);
       const blocks = adapter?.listMessageBlocks?.(container || doc) || [];
@@ -4978,10 +5108,6 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       }
 
       const seenLine = new Set();
-      const toLineKey = (originIdx, text) => {
-        const originPart = Number.isFinite(originIdx) ? originIdx : 'na';
-        return `${originPart}::${text}`;
-      };
       const legacyLines = [];
       const origins = [];
       const messages = [];
@@ -4993,55 +5119,46 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       blocks.forEach((block, idx) => {
         const fallbackIndex = Number(block?.getAttribute?.('data-gmh-message-index'));
         const originIndex = Number.isFinite(fallbackIndex) ? fallbackIndex : idx;
-        try {
-          const structured = adapter?.collectStructuredMessage?.(block);
-          if (structured) {
-            if (!Number.isFinite(structured.index)) structured.index = originIndex;
-            if (!Number.isFinite(structured.ordinal)) {
-              const ordinalAttr = Number(block?.getAttribute?.('data-gmh-message-ordinal'));
-              structured.ordinal = Number.isFinite(ordinalAttr) ? ordinalAttr : totalBlocks - idx;
-            }
-            if (!structured.channel) {
-              structured.channel =
-                structured.role === 'player'
-                  ? 'user'
-                  : structured.role === 'npc'
-                  ? 'llm'
-                  : 'system';
-            }
-            messages.push(structured);
-            const localLines = Array.isArray(structured.legacyLines) ? structured.legacyLines : [];
-            localLines.forEach((line) => {
-              const trimmed = (line || '').trim();
-              if (!trimmed) return;
-              const lineKey = toLineKey(originIndex, trimmed);
-              if (seenLine.has(lineKey)) return;
-              seenLine.add(lineKey);
-              legacyLines.push(trimmed);
-              origins.push(originIndex);
-            });
-            return;
+        const blockId = getBlockId(block);
+        const cacheEntry = ensureCacheEntry(adapter, block, Boolean(force));
+        const cacheLines = Array.isArray(cacheEntry.lines) ? cacheEntry.lines : [];
+
+        const structured = cacheEntry.structured ? cloneStructuredMessage(cacheEntry.structured) : null;
+        if (structured) {
+          const ordinalAttr = Number(block?.getAttribute?.('data-gmh-message-ordinal'));
+          const indexAttr = Number(block?.getAttribute?.('data-gmh-message-index'));
+          const userOrdinalAttr = Number(block?.getAttribute?.('data-gmh-user-ordinal'));
+          const channelAttr = block?.getAttribute?.('data-gmh-channel');
+          structured.ordinal = Number.isFinite(ordinalAttr) ? ordinalAttr : totalBlocks - idx;
+          structured.index = Number.isFinite(indexAttr) ? indexAttr : originIndex;
+          if (Number.isFinite(userOrdinalAttr)) structured.userOrdinal = userOrdinalAttr;
+          else if (structured.userOrdinal) delete structured.userOrdinal;
+          if (channelAttr) structured.channel = channelAttr;
+          else if (!structured.channel) {
+            structured.channel =
+              structured.role === 'player'
+                ? 'user'
+                : structured.role === 'npc'
+                ? 'llm'
+                : 'system';
           }
-        } catch (error) {
-          errors.push({ index: originIndex, error: error?.message || String(error) });
+          messages.push(structured);
         }
 
-        const localSeen = new Set();
-        const pushLine = (line) => {
+        cacheLines.forEach((line) => {
           const trimmed = (line || '').trim();
-          if (!trimmed || localSeen.has(trimmed)) return;
-          const lineKey = toLineKey(originIndex, trimmed);
+          if (!trimmed) return;
+          const lineKey = `${blockId ?? originIndex}::${trimmed}`;
           if (seenLine.has(lineKey)) return;
-          localSeen.add(trimmed);
           seenLine.add(lineKey);
           legacyLines.push(trimmed);
           origins.push(originIndex);
-        };
+        });
 
-        try {
-          adapter?.emitTranscriptLines?.(block, pushLine);
-        } catch (error) {
-          errors.push({ index: originIndex, error: error?.message || String(error) });
+        if (Array.isArray(cacheEntry.errors)) {
+          cacheEntry.errors.forEach((message) => {
+            errors.push({ index: originIndex, error: message });
+          });
         }
       });
 
@@ -5062,7 +5179,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       return latestStructuredSnapshot;
     };
 
-    const readTranscriptText = () => captureStructuredSnapshot().legacyLines.join('\n');
+    const readTranscriptText = (options = {}) =>
+      captureStructuredSnapshot(options).legacyLines.join('\n');
 
     const projectStructuredMessages = (structuredSnapshot, rangeInfo) => {
       if (!structuredSnapshot) {
@@ -5437,12 +5555,21 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     };
 
     const profileListeners = new Set();
+    const warnWithHandler = (err, context, fallbackMessage) => {
+      if (errorHandler?.handle) {
+        const level = errorHandler.LEVELS?.WARN || 'warn';
+        errorHandler.handle(err, context, level);
+      } else if (logger?.warn) {
+        logger.warn(fallbackMessage, err);
+      }
+    };
+
     const notifyProfileChange = () => {
       profileListeners.forEach((listener) => {
         try {
           listener(AUTO_CFG.profile);
         } catch (err) {
-          logger?.warn?.('[GMH] auto profile listener failed', err);
+          warnWithHandler(err, 'autoload', '[GMH] auto profile listener failed');
         }
       });
     };
@@ -5507,15 +5634,54 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       return { grew, before, after: container.scrollHeight };
     }
 
-    function collectTurnStats() {
+    const statsCache = {
+      summaryKey: null,
+      rawKey: null,
+      data: null,
+    };
+
+    const clearStatsCache = () => {
+      statsCache.summaryKey = null;
+      statsCache.rawKey = null;
+      statsCache.data = null;
+    };
+
+    const makeSummaryKey = (summary) => {
+      if (!summary) return null;
+      const total = Number.isFinite(summary.totalMessages) ? summary.totalMessages : 'na';
+      const user = Number.isFinite(summary.userMessages) ? summary.userMessages : 'na';
+      const stamp = summary.timestamp || 'na';
+      return `${total}:${user}:${stamp}`;
+    };
+
+    function collectTurnStats(options = {}) {
+      const force = Boolean(options?.force);
+      let summary = null;
       try {
         try {
-          messageIndexer?.refresh?.({ immediate: true });
+          summary = messageIndexer?.refresh?.({ immediate: true }) || null;
         } catch (err) {
-          logger?.warn?.('[GMH] message indexing before stats failed', err);
+          warnWithHandler(err, 'autoload', '[GMH] message indexing before stats failed');
         }
-        const raw = readTranscriptText();
-        const normalized = normalizeTranscript(raw);
+        const summaryKey = makeSummaryKey(summary);
+        if (!force && summaryKey && statsCache.data && statsCache.summaryKey === summaryKey) {
+          return statsCache.data;
+        }
+
+        let rawText = null;
+        let rawKey = null;
+        const transcriptOptions = force ? { force: true } : {};
+        if (!summaryKey) {
+          rawText = readTranscriptText(transcriptOptions);
+          rawKey = typeof rawText === 'string' ? rawText : String(rawText ?? '');
+          if (!force && statsCache.data && statsCache.rawKey === rawKey) {
+            return statsCache.data;
+          }
+        } else {
+          rawText = readTranscriptText(transcriptOptions);
+        }
+
+        const normalized = normalizeTranscript(rawText);
         const session = buildSession(normalized);
         const userMessages = session.turns.filter((t) => t.channel === 'user').length;
         const llmMessages = session.turns.filter((t) => t.channel === 'llm').length;
@@ -5539,13 +5705,22 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           llm: Math.max(previousTotals.llm || 0, llmMessages),
           entry: entryCount,
         });
-        return {
+        const stats = {
           session,
           userMessages,
           llmMessages,
           totalMessages: session.turns.length,
         };
+        statsCache.summaryKey = summaryKey;
+        statsCache.rawKey = summaryKey ? null : rawKey;
+        statsCache.data = stats;
+        return stats;
       } catch (error) {
+        clearStatsCache();
+        if (errorHandler?.handle) {
+          const level = errorHandler.LEVELS?.ERROR || 'error';
+          errorHandler.handle(error, 'autoload', level);
+        }
         return {
           session: null,
           userMessages: 0,
@@ -6228,7 +6403,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       if (actions.dataset.ready === 'true') return;
       actions.dataset.ready = 'true';
       actions.innerHTML = createStatusActionsMarkup(true);
-      bindStatusActions(actions, true);
+      bindStatusActions(actions);
     };
 
     const mountStatusActionsLegacy = (panel) => {
@@ -6238,7 +6413,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       actions.style.cssText =
         'display:grid; gap:6px; border-top:1px solid rgba(148,163,184,0.25); padding-top:6px;';
       actions.innerHTML = createStatusActionsMarkup(false);
-      bindStatusActions(actions, false);
+      bindStatusActions(actions);
       panel.appendChild(actions);
     };
 
@@ -6715,8 +6890,6 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             event.preventDefault();
             panel.querySelector('#gmh-export')?.click();
             break;
-          default:
-            break;
         }
       };
 
@@ -6789,7 +6962,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     }
 
     const parseAll = () => {
-      const snapshot = captureStructuredSnapshot();
+      const snapshot = captureStructuredSnapshot({ force: true });
       const raw = snapshot.legacyLines.join('\n');
       const normalized = normalizeTranscript(raw);
       const session = buildSession(normalized);
@@ -8194,7 +8367,6 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   }
 
   (function () {
-    'use strict';
 
     const PAGE_WINDOW =
       ENV.window || (typeof unsafeWindow !== 'undefined' ? unsafeWindow : window);
@@ -8208,18 +8380,6 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     };
 
     const scriptVersion = detectScriptVersion();
-
-    try {
-      const killSwitchEnabled = localStorage.getItem('gmh_kill') === '1';
-      if (!killSwitchEnabled) {
-        const currentValue = localStorage.getItem('gmh_flag_newUI');
-        if (currentValue !== '1') {
-          localStorage.setItem('gmh_flag_newUI', '1');
-        }
-      }
-    } catch (err) {
-      console.warn('[GMH] failed to set default UI flag', err);
-    }
 
     GMH.VERSION = scriptVersion;
 
@@ -8312,6 +8472,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       registry: adapterRegistry,
       getPlayerNames,
       isPrologueBlock,
+      errorHandler: GMH.Core.ErrorHandler,
     });
 
     GMH.Adapters.genit = genitAdapter;
@@ -8465,12 +8626,6 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       },
     });
 
-    const normalizeState = (value) => {
-      if (!value) return null;
-      const next = String(value).toLowerCase();
-      return Object.values(GMH_STATE).includes(next) ? next : null;
-    };
-
     GMH.Core.STATE = GMH_STATE;
     GMH.Core.State = stateManager;
 
@@ -8482,6 +8637,24 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     });
 
     GMH.Core.ErrorHandler = errorHandler;
+
+    const ensureDefaultUIFlag = () => {
+      try {
+        const storage = ENV.localStorage || localStorage;
+        if (!storage) return;
+        const killSwitchEnabled = storage.getItem('gmh_kill') === '1';
+        if (killSwitchEnabled) return;
+        const currentValue = storage.getItem('gmh_flag_newUI');
+        if (currentValue !== '1') {
+          storage.setItem('gmh_flag_newUI', '1');
+        }
+      } catch (err) {
+        const level = errorHandler.LEVELS?.WARN || 'warn';
+        errorHandler.handle(err, 'storage/write', level);
+      }
+    };
+
+    ensureDefaultUIFlag();
 
     // -------------------------------
     // 0) Constants & utils
@@ -8695,7 +8868,6 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       (isModernUIActive ? confirmPrivacyGateModern : confirmPrivacyGateLegacy)(options);
 
     const {
-      parseAll,
       prepareShare,
       performExport,
       copyRecent: copyRecentShare,
@@ -8815,7 +8987,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         try {
           if (adapter?.match?.(loc, doc)) return adapter;
         } catch (err) {
-          console.warn('[GMH] adapter match error', err);
+          const level = errorHandler.LEVELS?.WARN || 'warn';
+          errorHandler.handle(err, 'adapter/detect', level);
         }
       }
       return GMH.Adapters.genit;
@@ -8878,7 +9051,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       if (isModernUIActive) {
         mountPanelModern();
       } else {
-        if (Flags.killSwitch) console.info('[GMH] modern UI disabled by kill switch');
+        if (Flags.killSwitch) {
+          const level = errorHandler.LEVELS?.INFO || 'info';
+          errorHandler.handle('modern UI disabled by kill switch', 'ui/panel', level);
+        }
         mountPanelLegacy();
       }
     }
@@ -8892,7 +9068,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         GMH.Core.MessageIndexer.start();
         bookmarkListener.start();
       } catch (e) {
-        console.error('[GMH] mount error', e);
+        const level = errorHandler.LEVELS?.ERROR || 'error';
+        errorHandler.handle(e, 'ui/panel', level);
       }
     }
 
@@ -8907,12 +9084,14 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         try {
           bookmarkListener.stop();
         } catch (err) {
-          console.warn('[GMH] bookmark listener cleanup failed', err);
+          const level = errorHandler.LEVELS?.WARN || 'warn';
+          errorHandler.handle(err, 'bookmark', level);
         }
         try {
           messageIndexer.stop();
         } catch (err) {
-          console.warn('[GMH] message indexer cleanup failed', err);
+          const level = errorHandler.LEVELS?.WARN || 'warn';
+          errorHandler.handle(err, 'adapter', level);
         }
       };
       window.addEventListener('pagehide', teardown);
@@ -8940,7 +9119,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
               const session = buildSession(normalized);
               return applyPrivacyPipeline(session, normalized, profileKey, null);
             } catch (error) {
-              console.error('[GMH] runPrivacyCheck error', error);
+              const level = errorHandler.LEVELS?.ERROR || 'error';
+              errorHandler.handle(error, 'privacy/redact', level);
               return { error: error?.message || String(error) };
             }
           },
@@ -9021,7 +9201,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           configurable: false,
         });
       } catch (err) {
-        console.warn('[GMH] expose GMH failed', err);
+        const level = errorHandler.LEVELS?.WARN || 'warn';
+        errorHandler.handle(err, 'ui/panel', level);
       }
     }
   })();

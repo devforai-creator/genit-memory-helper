@@ -76,12 +76,21 @@ export function createAutoLoader({
   };
 
   const profileListeners = new Set();
+  const warnWithHandler = (err, context, fallbackMessage) => {
+    if (errorHandler?.handle) {
+      const level = errorHandler.LEVELS?.WARN || 'warn';
+      errorHandler.handle(err, context, level);
+    } else if (logger?.warn) {
+      logger.warn(fallbackMessage, err);
+    }
+  };
+
   const notifyProfileChange = () => {
     profileListeners.forEach((listener) => {
       try {
         listener(AUTO_CFG.profile);
       } catch (err) {
-        logger?.warn?.('[GMH] auto profile listener failed', err);
+        warnWithHandler(err, 'autoload', '[GMH] auto profile listener failed');
       }
     });
   };
@@ -146,15 +155,54 @@ export function createAutoLoader({
     return { grew, before, after: container.scrollHeight };
   }
 
-  function collectTurnStats() {
+  const statsCache = {
+    summaryKey: null,
+    rawKey: null,
+    data: null,
+  };
+
+  const clearStatsCache = () => {
+    statsCache.summaryKey = null;
+    statsCache.rawKey = null;
+    statsCache.data = null;
+  };
+
+  const makeSummaryKey = (summary) => {
+    if (!summary) return null;
+    const total = Number.isFinite(summary.totalMessages) ? summary.totalMessages : 'na';
+    const user = Number.isFinite(summary.userMessages) ? summary.userMessages : 'na';
+    const stamp = summary.timestamp || 'na';
+    return `${total}:${user}:${stamp}`;
+  };
+
+  function collectTurnStats(options = {}) {
+    const force = Boolean(options?.force);
+    let summary = null;
     try {
       try {
-        messageIndexer?.refresh?.({ immediate: true });
+        summary = messageIndexer?.refresh?.({ immediate: true }) || null;
       } catch (err) {
-        logger?.warn?.('[GMH] message indexing before stats failed', err);
+        warnWithHandler(err, 'autoload', '[GMH] message indexing before stats failed');
       }
-      const raw = readTranscriptText();
-      const normalized = normalizeTranscript(raw);
+      const summaryKey = makeSummaryKey(summary);
+      if (!force && summaryKey && statsCache.data && statsCache.summaryKey === summaryKey) {
+        return statsCache.data;
+      }
+
+      let rawText = null;
+      let rawKey = null;
+      const transcriptOptions = force ? { force: true } : {};
+      if (!summaryKey) {
+        rawText = readTranscriptText(transcriptOptions);
+        rawKey = typeof rawText === 'string' ? rawText : String(rawText ?? '');
+        if (!force && statsCache.data && statsCache.rawKey === rawKey) {
+          return statsCache.data;
+        }
+      } else {
+        rawText = readTranscriptText(transcriptOptions);
+      }
+
+      const normalized = normalizeTranscript(rawText);
       const session = buildSession(normalized);
       const userMessages = session.turns.filter((t) => t.channel === 'user').length;
       const llmMessages = session.turns.filter((t) => t.channel === 'llm').length;
@@ -178,13 +226,22 @@ export function createAutoLoader({
         llm: Math.max(previousTotals.llm || 0, llmMessages),
         entry: entryCount,
       });
-      return {
+      const stats = {
         session,
         userMessages,
         llmMessages,
         totalMessages: session.turns.length,
       };
+      statsCache.summaryKey = summaryKey;
+      statsCache.rawKey = summaryKey ? null : rawKey;
+      statsCache.data = stats;
+      return stats;
     } catch (error) {
+      clearStatsCache();
+      if (errorHandler?.handle) {
+        const level = errorHandler.LEVELS?.ERROR || 'error';
+        errorHandler.handle(error, 'autoload', level);
+      }
       return {
         session: null,
         userMessages: 0,

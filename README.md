@@ -96,6 +96,7 @@ localStorage.removeItem("gmh_flag_newUI"); // 플래그 초기화 (다음 로드
   - 공개 데모 URL이 있다면 `GENIT_DEMO_URL`을 지정해 로그인 없이 패널 렌더만 확인할 수 있습니다.
 - 로그인 페이지가 기본 셀렉터와 다르다면 아래 환경변수로 조정하세요.
   - `GENIT_LOGIN_URL`, `GENIT_LOGIN_EMAIL_SELECTOR`, `GENIT_LOGIN_PASSWORD_SELECTOR`, `GENIT_LOGIN_SUBMIT_SELECTOR`, `GENIT_LOGIN_SUCCESS_SELECTOR`
+- 루트 디렉터리의 `.env.example`을 복사해 `.env`를 만들면 위 환경변수를 빠르게 채울 수 있습니다.
 - 버전 릴리스: `npm run bump:patch` / `npm run bump:minor` / `npm run bump:major` → 버전 상승, 메타데이터 동기화, dist 빌드, 태그 푸시가 자동으로 처리됩니다. (로컬 변경이 있다면 먼저 커밋/스태시하세요.)
 
 ### 릴리스 스크립트 메모

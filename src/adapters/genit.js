@@ -19,9 +19,19 @@ export const createGenitAdapter = ({
   playerMark = DEFAULT_PLAYER_MARK,
   getPlayerNames = () => [],
   isPrologueBlock = () => false,
+  errorHandler,
 } = {}) => {
   let infoNodeRegistry = new WeakSet();
   let playerNameAccessor = typeof getPlayerNames === 'function' ? getPlayerNames : () => [];
+
+  const warnWithHandler = (err, context, fallbackMessage) => {
+    if (errorHandler?.handle) {
+      const level = errorHandler.LEVELS?.WARN || 'warn';
+      errorHandler.handle(err, context, level);
+    } else if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+      console.warn(fallbackMessage, err);
+    }
+  };
 
   const resolvePlayerNames = () => {
     const names = playerNameAccessor();
@@ -645,7 +655,7 @@ export const createGenitAdapter = ({
     try {
       emitTranscriptLines(block, pushLine, collector);
     } catch (err) {
-      console.warn('[GMH] structured emit failed', err);
+      warnWithHandler(err, 'adapter', '[GMH] structured emit failed');
       emitTranscriptLines(block, pushLine);
     }
     const parts = collector.list();

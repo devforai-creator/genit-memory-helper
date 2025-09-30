@@ -32,5 +32,8 @@ export default {
     banner: metaBanner,
   },
   plugins: [resolve()],
-  treeshake: false,
+  treeshake: {
+    moduleSideEffects: false,
+    propertyReadSideEffects: false,
+  },
 };

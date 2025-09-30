@@ -58,7 +58,7 @@ export function createShareWorkflow({
   }
 
   const parseAll = () => {
-    const snapshot = captureStructuredSnapshot();
+    const snapshot = captureStructuredSnapshot({ force: true });
     const raw = snapshot.legacyLines.join('\n');
     const normalized = normalizeTranscript(raw);
     const session = buildSession(normalized);
