@@ -12,7 +12,7 @@
     "test:unit": "vitest --run",
     "test:smoke": "playwright test",
     "fingerprint": "node scripts/fingerprint.js",
-    "version": "npm run sync:version && npm run build && git add genit-memory-helper.user.js package.json package-lock.json",
+    "version": "npm run sync:version && USE_ROLLUP=1 npm run build && git add genit-memory-helper.user.js package.json package-lock.json",
     "bump:patch": "npm version patch && git push --follow-tags",
     "bump:minor": "npm version minor && git push --follow-tags",
     "bump:major": "npm version major && git push --follow-tags"
