@@ -25,7 +25,7 @@ const renderStructuredMarkdownPart = (part, message, { playerMark = DEFAULT_PLAY
         typeof part?.text === 'string' && part.text.trim()
           ? part.text
           : safeLines.join('\n');
-      out.push(`\u0060\u0060\u0060${language}`);
+      out.push('```' + language);
       out.push(codeText);
       out.push('```');
       break;

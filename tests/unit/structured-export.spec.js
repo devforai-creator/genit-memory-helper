@@ -177,6 +177,35 @@ describe('GMH.Export structured writers', () => {
     expect(markdown).toContain('조력자: 어서 와');
   });
 
+  it('renders code blocks using literal backticks', () => {
+    const markdown = GMH.Export.toStructuredMarkdown({
+      messages: [
+        {
+          index: 0,
+          ordinal: 1,
+          role: 'npc',
+          speaker: '조력자',
+          parts: [
+            {
+              type: 'code',
+              flavor: 'speech',
+              role: 'npc',
+              speaker: '조력자',
+              language: 'javascript',
+              text: "console.log('test');",
+            },
+          ],
+        },
+      ],
+      session: baseSession,
+      profile: 'safe',
+      playerNames: ['플레이어'],
+    });
+
+    expect(markdown).toContain('```javascript');
+    expect(markdown).not.toContain('\\u0060');
+  });
+
   it('renders structured txt with lightweight markers', () => {
     const txt = GMH.Export.toStructuredTXT({
       messages: structuredMessages,
