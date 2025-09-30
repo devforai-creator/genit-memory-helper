@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Test artifacts
+playwright-report/
+test-results/
+
+# Archived snapshots (read-only reference)
+*.baseline

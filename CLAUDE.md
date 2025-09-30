@@ -137,6 +137,30 @@ All copy/export operations show a confirmation modal displaying:
 
 Users must explicitly confirm before data leaves the browser.
 
+### Single Source of Truth (SoT) Principles
+
+The codebase follows strict SoT patterns to prevent configuration drift:
+
+**Privacy Settings Access**
+- ✅ ALWAYS use `createPrivacyStore()` from `src/privacy/store.js` to read/write settings
+- ✅ Import constants from `src/privacy/constants.js` (STORAGE_KEYS, PRIVACY_PROFILES, etc.)
+- ❌ NEVER access `ENV.localStorage` or `localStorage` directly for privacy settings
+- ❌ NEVER hardcode storage keys or profile names
+
+**Adapter Registry**
+- ✅ ALWAYS use `src/adapters/registry.js` API to register/retrieve adapters
+- ✅ Define selectors in dedicated adapter files (e.g., `src/adapters/genit.js`)
+- ❌ NEVER duplicate selector definitions across files
+
+**Environment Access**
+- ✅ ALWAYS import from `src/env.js` (ENV.window, ENV.localStorage, etc.)
+- ❌ NEVER access `window`, `localStorage`, `GM_info`, or `console` globals directly
+
+**Archived Snapshots**
+- The `*.baseline` files (e.g., `genit-memory-helper.user.js.baseline`) are historical references preserved during major refactors
+- These files are NOT used by the build system, tests, or runtime
+- All current source code lives in `src/` directory
+
 ### Build Process
 The `scripts/build.js` file:
 - Copies `genit-memory-helper.user.js` to `dist/`
