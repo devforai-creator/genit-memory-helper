@@ -21,6 +21,8 @@ npm run build          # Injects version from package.json into userscript
 npm run sync:version   # Syncs version metadata only
 ```
 
+> Tip: set `USE_ROLLUP=1` when running `npm run build` to exercise the Rollup bundle that stitches together the modules under `src/`.
+
 ### Testing
 ```bash
 npm test               # Runs unit tests (Vitest) on built dist output
@@ -63,64 +65,47 @@ npm run fingerprint    # Generate asset hashes (for integrity checks)
 
 ## Architecture
 
-### Single-File Structure
-The entire userscript is contained in **`genit-memory-helper.user.js`** (~7400 lines). This is not a typical Node.js project with separate source files - the userscript is both source and distribution format.
+### Modular Source Layout
+The userscript now composes from modules under `src/`, while the bundled `genit-memory-helper.user.js` remains the Tampermonkey deliverable. `src/index.js` exposes the `GMH` namespace, and `src/legacy.js` orchestrates the existing runtime while modules are gradually extracted.
 
-The code is organized into namespaced modules within a single IIFE:
-
-```javascript
-const GMH = {
-  VERSION: scriptVersion,
-  Util: {},        // Utility functions (DOM queries, debounce, etc.)
-  Privacy: {},     // Redaction engine & PII detection
-  Export: {},      // Format converters (JSON/MD/TXT)
-  UI: {},          // Panel rendering & modals
-  Core: {},        // State management & coordination
-  Adapters: {},    // Platform-specific DOM selectors
-};
 ```
+src/
+├── index.js            # Tampermonkey entry point (exports GMH/ENV)
+├── legacy.js           # Transitional bootstrap that wires modules together
+├── core/               # State machine, error handler, export range, bookmarks
+├── adapters/           # genit.ai adapter registry and DOM selectors
+├── privacy/            # Profiles, settings store, redaction pipeline
+├── export/             # Structured + classic writers, manifest builder, parsers
+├── features/           # Auto-loader, share workflow, snapshot, guide prompts
+├── ui/                 # Panel layout, modal system, range controls, shortcuts
+└── utils/              # Text, DOM, validation helpers
+```
+
+Rollup (see `rollup.config.js`) stitches these modules into the single userscript when `USE_ROLLUP=1 npm run build` is executed. During Phase 5 the remaining UI glue is being migrated out of `src/legacy.js`.
 
 ### Key Modules
 
-**GMH.Adapters** (lines ~79-150)
-- Registry pattern for platform-specific DOM selectors
-- Currently implements `genit` adapter for genit.ai
-- Selectors for conversation containers, message blocks, turn elements
+- `src/core/state.js` / `createStateManager`: centralises progress + status transitions consumed by auto-loader/export routines.
+- `src/core/export-range.js`: range calculator used by UI controls and exporters; coordinates bookmarks via `src/core/turn-bookmarks.js`.
+- `src/features/share.js`: end-to-end export workflow (privacy gate, manifest, download) injected with clipboard + GM APIs.
+- `src/features/guides.js`: houses the 요약/재요약 prompt templates and exposes copy helpers for reuse and testing.
+- `src/ui/panel-interactions.js`: centralises panel wiring (privacy profile select, export buttons, quick export flow) and composes range/guide/shortcut bindings.
+- `src/ui/privacy-gate.js`: renders both legacy overlay and modern modal variants of the privacy confirmation step, accepting injected DOM/style/modals for testing.
+- `src/ui/guide-controls.js`: binds the “Guides & Tools” panel buttons, delegating to injected feature functions.
+- `src/ui/range-controls.js`, `src/ui/auto-loader-controls.js`, `src/ui/panel-shortcuts.js`: modern panel wiring for range selection, auto-load toggles, and keyboard shortcuts.
+- `src/privacy/*`: profile settings, pattern constants, redaction pipeline and validation utilities.
+- `src/export/*`: DOM snapshot parsers plus structured/classic writers and manifest generator.
 
-**GMH.Core.Range** (lines ~400-750)
-- Manages message range selection ("message 1" = latest, "message N" = oldest)
-- Converts user-specified ranges (start/end message numbers) to turn indices
-- Handles bookmarking for quick range selection
-
-**GMH.Privacy** (lines ~3500-4500)
-- Profile-based redaction: SAFE, STANDARD, RESEARCH
-- PII detection patterns (email, phone, national ID, IP, etc.)
-- Customizable blacklist/whitelist for sensitive terms
-- Content safety blocks for CSAM-related content
-
-**GMH.Export** (lines ~4500-5500)
-- Structured export (Rich formats): Preserves message parts (code blocks, quotes, images)
-- Classic export: Simple text-based formats
-- Generates manifest files tracking redaction metadata
-
-**GMH.UI** (lines ~6800-7400)
-- Modern panel UI with drag/resize
-- Modal system for confirmations
-- Auto-collapse behavior
-- Keyboard shortcuts (Alt+M toggle, Alt+G focus, Esc close, Alt+P privacy settings)
-
-**GMH.Core.State** (lines ~1200-1400)
-- Manages UI state transitions (IDLE → LOADING → READY → ERROR)
-- Progress tracking for auto-scroll operations
+`src/legacy.js` still mounts both modern and legacy panels, but it now delegates most behaviour to the modules above. The remaining inline blocks are being trimmed as part of the multi-phase split.
 
 ### Data Flow
 
-1. **DOM Parsing**: Adapter selectors extract conversation structure from genit.ai page
-2. **Turn Processing**: Messages are parsed into turn objects with speaker/role/content
-3. **Range Application**: User-selected range filters which turns to export
-4. **Privacy Pass**: Selected turns undergo redaction based on active profile
-5. **Format Conversion**: Redacted data serialized to JSON/MD/TXT
-6. **Manifest Generation**: Metadata file tracks redaction stats and settings
+1. **DOM Parsing**: `src/adapters/genit.js` describes the host DOM and feeds parsers under `src/export/parsers.js`.
+2. **Turn Processing**: Parsed turns flow through `src/core/export-range.js` and `src/features/share.js`, where bookmarks and range filters are applied.
+3. **Privacy Pass**: `src/privacy/pipeline.js` redacts the selected turns using the active profile/settings store.
+4. **Format Conversion**: `src/export/writers-*.js` serialise the sanitized session into JSON/MD/TXT.
+5. **Manifest Generation**: `src/export/manifest.js` records redaction statistics for reproducibility.
+6. **UI Feedback**: `src/ui/state-view.js` and `src/ui/status-manager.js` mirror state transitions in the panel, while `src/ui/guide-controls.js` and `src/features/guides.js` manage clipboard workflows.
 
 ### Testing Architecture
 
@@ -176,18 +161,18 @@ The script auto-detects genit.ai via URL matching in the userscript header (`@ma
 
 ## Development Workflow
 
-1. Edit `genit-memory-helper.user.js` directly (it's the source file)
-2. Run `npm run build` to copy to dist/ with version injection
-3. Run `npm test` to validate (tests import from dist/)
-4. For smoke tests, ensure `GENIT_TEST_URL` and credentials are set
-5. Use bump scripts for releases (automatically handles versioning and tagging)
+1. Edit modules under `src/` (core/adapters/privacy/export/ui/features). `src/legacy.js` should only glue modules together—avoid re-introducing large inline blocks there.
+2. Run `USE_ROLLUP=1 npm run build` to generate the bundled userscript, then run plain `npm run build` if you also need the legacy copy-with-version step for tests.
+3. Execute `npm test` to validate (Vitest imports the built `dist/genit-memory-helper.user.js`).
+4. For smoke tests, ensure `GENIT_TEST_URL` and related credentials are set, then run `npm run test:smoke`.
+5. Use bump scripts for releases (they sync metadata, build, tag, and push).
 
 ## Common Pitfalls
 
-- **Don't edit `dist/genit-memory-helper.user.js` directly** - changes will be overwritten by build
-- **Tests require a build** - `pretest` script handles this automatically, but manual builds may be needed during development
+- **Don't edit `dist/genit-memory-helper.user.js` directly** - changes will be overwritten by the build pipeline
+- **Tests require a build** - `pretest` runs `npm run build`, but modular changes should also be verified with `USE_ROLLUP=1 npm run build`
 - **Smoke tests need real credentials** - they're skipped in CI if secrets aren't configured
-- **The userscript is the source** - this isn't a compiled project, the .user.js file IS the deliverable
+- **Bypass legacy glue carefully** - new features should live in `src/features/` or `src/ui/`; keep `src/legacy.js` lean and avoid importing Tampermonkey globals directly (use `src/env.js` instead)
 
 ## Documentation
 

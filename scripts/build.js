@@ -3,6 +3,13 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 
+const useRollup = process.env.USE_ROLLUP === '1';
+
+async function runRollupBuild() {
+  const { execSync } = await import('node:child_process');
+  execSync('rollup -c', { stdio: 'inherit' });
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
@@ -24,7 +31,7 @@ function injectVersion(contents) {
   return contents.replace(versionPattern, (_, prefix) => `${prefix}${packageVersion}`);
 }
 
-async function build() {
+async function buildLegacyBundle() {
   const distDir = path.join(repoRoot, 'dist');
   await mkdir(distDir, { recursive: true });
 
@@ -38,7 +45,16 @@ async function build() {
   }
 }
 
-build().catch((error) => {
+async function main() {
+  if (useRollup) {
+    await runRollupBuild();
+    await buildLegacyBundle();
+  } else {
+    await buildLegacyBundle();
+  }
+}
+
+main().catch((error) => {
   console.error('[build] failed:', error);
   process.exitCode = 1;
 });

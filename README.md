@@ -155,6 +155,15 @@ A. 네, 모델에는 **토큰(token)**이라는 입력 한계가 있습니다.
 
 👉 즉, 토큰이 너무 많으면 “나눠서 처리”하는 것이 가장 확실한 방법입니다.
 
+## 개발자 참고 (Developer Notes)
+
+- 소스 코드는 `src/` 아래 모듈로 분리되어 있으며, `src/index.js`가 Tampermonkey 환경에 `GMH` 네임스페이스를 노출합니다. 기존 단일 스크립트와의 호환을 위해 `src/legacy.js`가 단계적으로 모듈을 조립합니다.
+- Privacy/Export 로직은 각각 `src/privacy/`, `src/export/`에 있으며, UI 조립 코드는 `src/ui/`에 위치합니다. 자동 로더, 공유, 요약 가이드 등 독립 기능은 `src/features/`에 배치되어 있습니다.
+- 요약/재요약 프롬프트는 `src/features/guides.js`에서 정의되고, 패널 버튼 바인딩은 `src/ui/guide-controls.js`가 담당합니다. 테스트나 맞춤 프롬프트 주입 시 이 모듈을 사용하세요.
+- 프라이버시 프로필 드롭다운·복사/내보내기·원클릭 공유에 대한 패널 이벤트 바인딩은 `src/ui/panel-interactions.js`에서 관리합니다. 새로운 패널 요소를 추가할 때는 이 모듈을 통해 의존성을 주입하세요.
+- Privacy Gate(모달/legacy 오버레이 포함)는 `src/ui/privacy-gate.js`가 생성합니다. Modern/Legacy UI 모두 여기서 의존성을 주입하므로 Tampermonkey 전역 대신 `ENV`/모듈 API를 연결하세요.
+- `npm run build`는 기존 userscript를 그대로 복사하며, `USE_ROLLUP=1 npm run build`를 사용하면 Rollup 번들을 생성해 Tampermonkey에 주입할 수 있습니다. 새 모듈 작업 시에는 Rollup 경로로도 반드시 점검하세요.
+
 ## 유지보수 정책
 
 이 스크립트는 개인 프로젝트로 제작되었으며, **유지보수는 보장되지 않습니다**.  
