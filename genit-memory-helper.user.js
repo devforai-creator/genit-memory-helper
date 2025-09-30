@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Genit Memory Helper
 // @namespace    local.dev
-// @version      1.6.2
+// @version      1.6.3
 // @description  Genit 대화로그 JSON/TXT/MD 추출 + 요약/재요약 프롬프트 복사 기능
 // @author       devforai-creator
 // @match        https://genit.ai/*
@@ -2696,7 +2696,7 @@ var GMHBundle = (function (exports) {
           typeof part?.text === 'string' && part.text.trim()
             ? part.text
             : safeLines.join('\n');
-        out.push(`\u0060\u0060\u0060${language}`);
+        out.push('```' + language);
         out.push(codeText);
         out.push('```');
         break;
@@ -4978,6 +4978,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       }
 
       const seenLine = new Set();
+      const toLineKey = (originIdx, text) => {
+        const originPart = Number.isFinite(originIdx) ? originIdx : 'na';
+        return `${originPart}::${text}`;
+      };
       const legacyLines = [];
       const origins = [];
       const messages = [];
@@ -5009,8 +5013,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             const localLines = Array.isArray(structured.legacyLines) ? structured.legacyLines : [];
             localLines.forEach((line) => {
               const trimmed = (line || '').trim();
-              if (!trimmed || seenLine.has(trimmed)) return;
-              seenLine.add(trimmed);
+              if (!trimmed) return;
+              const lineKey = toLineKey(originIndex, trimmed);
+              if (seenLine.has(lineKey)) return;
+              seenLine.add(lineKey);
               legacyLines.push(trimmed);
               origins.push(originIndex);
             });
@@ -5023,9 +5029,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         const localSeen = new Set();
         const pushLine = (line) => {
           const trimmed = (line || '').trim();
-          if (!trimmed || localSeen.has(trimmed) || seenLine.has(trimmed)) return;
+          if (!trimmed || localSeen.has(trimmed)) return;
+          const lineKey = toLineKey(originIndex, trimmed);
+          if (seenLine.has(lineKey)) return;
           localSeen.add(trimmed);
-          seenLine.add(trimmed);
+          seenLine.add(lineKey);
           legacyLines.push(trimmed);
           origins.push(originIndex);
         };
