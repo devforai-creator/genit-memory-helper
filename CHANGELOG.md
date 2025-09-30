@@ -4,6 +4,11 @@
 
 - _No changes yet_
 
+## npm run bump:patch  # v1.6.3
+ - Fix: Markdown code fence rendering (Codex)
+ - Fix: Duplicate line deduplication (Codex)
+ - Test: Add regression tests for export accuracy
+
 ## v1.6.2 (2025-09-30)
 
 - **Structured JSON 최적화**: 중복 데이터를 제거해 내보내기 파일 크기를 26% 축소했습니다.
