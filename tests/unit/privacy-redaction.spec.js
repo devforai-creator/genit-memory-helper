@@ -96,6 +96,14 @@ describe('Privacy redaction pipeline', () => {
       expect(hasMinorSexualContext('청소년 성상담 음란 영상')).toBe(true);
     });
 
+    it('considers distance between keywords before blocking', () => {
+      const farApart = '미성년자 보호법 안내. '.repeat(8) + '성적 소수자 인권 보장';
+      expect(hasMinorSexualContext(farApart)).toBe(false);
+
+      const closeBy = '미성년자와의 성관계는 범죄입니다';
+      expect(hasMinorSexualContext(closeBy)).toBe(true);
+    });
+  
     it('detects expanded age expressions and slang', () => {
       expect(hasMinorSexualContext('중딩이랑 성관계')).toBe(true);
       expect(hasMinorSexualContext('고딩 야한 사진')).toBe(true);
