@@ -89,7 +89,18 @@ export function createShareWorkflow({
       const { session, raw, snapshot } = parseAll();
       const privacy = applyPrivacyPipeline(session, raw, privacyConfig.profile, snapshot);
       if (privacy.blocked) {
-        alertFn('미성년자 성적 맥락이 감지되어 작업을 중단했습니다.');
+        alertFn(`미성년자 성적 맥락이 감지되어 작업을 중단했습니다.
+
+차단 이유를 확인하려면:
+1. F12 키를 눌러 개발자 도구 열기
+2. 콘솔(Console) 탭 선택
+3. 다음 명령어 입력 후 Enter:
+   localStorage.setItem('gmh_debug_blocking', '1')
+4. 다시 내보내기/복사 시도
+5. 콘솔에서 상세 정보 확인
+
+※ 정당한 교육/상담 내용이 차단되었다면 GitHub Issues로 신고해주세요.
+https://github.com/devforai-creator/genit-memory-helper/issues`);
         stateApi.setState(stateEnum.ERROR, {
           label: '작업 차단',
           message: blockedStatusMessage || '미성년자 민감 맥락으로 작업이 차단되었습니다.',
