@@ -409,6 +409,8 @@ import { createGuideControls } from './ui/guide-controls.js';
     redactText: boundRedactText,
     hasMinorSexualContext,
     getPlayerNames,
+    logger: ENV.console,
+    storage: ENV.localStorage,
   });
 
   function cloneSession(session) {

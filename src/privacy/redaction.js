@@ -114,12 +114,40 @@ const applyCustomBlacklist = (text, blacklist, counts) => {
   return output;
 };
 
-const MINOR_KEYWORDS = /(미성년|중학생|고등학생|나이\s*1[0-7]|소년|소녀|minor|under\s*18)/i;
+const MINOR_KEYWORDS =
+  /(미성년|중학생|고등학생|나이\s*1[0-7]|소년|소녀|minor|under\s*18|중딩|고딩|중[1-3]|고[1-3]|(?:13|14|15|16|17)\s*살|teen(?:ager)?|underage)/i;
 const SEXUAL_KEYWORDS = /(성관계|성적|섹스|sex|음란|선정|야한|야스|삽입|자위|강간|에로)/i;
+const ACADEMIC_PATTERN = /성적\s*(향상|저하|관리|평가|우수|부진|분석|상승|하락)/i;
+const SEX_ED_PATTERN = /성\s*(교육|상담|발달|정체성|소수자|평등|인지|지식)/i;
+const ORIENTATION_PATTERN = /성적\s*(지향|취향|매력|선호)/i;
+const PROTECTIVE_FORWARD = /(교육|예방|캠페인|세미나|강연|워크샵|보호|지원|상담|치료|개입|법률)\s*.*\s*(미성년|청소년)/i;
+const PROTECTIVE_REVERSE = /(미성년|청소년)\s*.*\s*(교육|예방|캠페인|세미나|강연|워크샵|보호|지원|상담|치료|개입|법률)/i;
+const RIGHTS_PATTERN = /성적\s*(자기결정권|권리|자율성|주체성|건강|동의)/i;
+const EXPLICIT_MEDIA = /(야한|음란|에로)\s*(사진|영상|동영상|이미지|pic|video|gif)/i;
+const EXPLICIT_CRIME = /(강간|성폭행|몰카|아청법)/i;
 
 export const hasMinorSexualContext = (text) => {
   if (!text) return false;
-  return MINOR_KEYWORDS.test(text) && SEXUAL_KEYWORDS.test(text);
+
+  const safeText = String(text);
+  if (!MINOR_KEYWORDS.test(safeText)) return false;
+  if (!SEXUAL_KEYWORDS.test(safeText)) return false;
+
+  const hasLegitimateContext =
+    ACADEMIC_PATTERN.test(safeText) ||
+    SEX_ED_PATTERN.test(safeText) ||
+    ORIENTATION_PATTERN.test(safeText) ||
+    PROTECTIVE_FORWARD.test(safeText) ||
+    PROTECTIVE_REVERSE.test(safeText) ||
+    RIGHTS_PATTERN.test(safeText);
+
+  const hasExplicitDanger = EXPLICIT_CRIME.test(safeText) || EXPLICIT_MEDIA.test(safeText);
+
+  if (hasLegitimateContext && !hasExplicitDanger) {
+    return false;
+  }
+
+  return true;
 };
 
 export const redactText = (

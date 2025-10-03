@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Genit Memory Helper
 // @namespace    local.dev
-// @version      1.6.4
+// @version      1.7.0
 // @description  Genit 대화로그 JSON/TXT/MD 추출 + 요약/재요약 프롬프트 복사 기능
 // @author       devforai-creator
 // @match        https://genit.ai/*
@@ -2456,12 +2456,40 @@ var GMHBundle = (function (exports) {
     return output;
   };
 
-  const MINOR_KEYWORDS = /(미성년|중학생|고등학생|나이\s*1[0-7]|소년|소녀|minor|under\s*18)/i;
+  const MINOR_KEYWORDS =
+    /(미성년|중학생|고등학생|나이\s*1[0-7]|소년|소녀|minor|under\s*18|중딩|고딩|중[1-3]|고[1-3]|(?:13|14|15|16|17)\s*살|teen(?:ager)?|underage)/i;
   const SEXUAL_KEYWORDS = /(성관계|성적|섹스|sex|음란|선정|야한|야스|삽입|자위|강간|에로)/i;
+  const ACADEMIC_PATTERN = /성적\s*(향상|저하|관리|평가|우수|부진|분석|상승|하락)/i;
+  const SEX_ED_PATTERN = /성\s*(교육|상담|발달|정체성|소수자|평등|인지|지식)/i;
+  const ORIENTATION_PATTERN = /성적\s*(지향|취향|매력|선호)/i;
+  const PROTECTIVE_FORWARD = /(교육|예방|캠페인|세미나|강연|워크샵|보호|지원|상담|치료|개입|법률)\s*.*\s*(미성년|청소년)/i;
+  const PROTECTIVE_REVERSE = /(미성년|청소년)\s*.*\s*(교육|예방|캠페인|세미나|강연|워크샵|보호|지원|상담|치료|개입|법률)/i;
+  const RIGHTS_PATTERN = /성적\s*(자기결정권|권리|자율성|주체성|건강|동의)/i;
+  const EXPLICIT_MEDIA = /(야한|음란|에로)\s*(사진|영상|동영상|이미지|pic|video|gif)/i;
+  const EXPLICIT_CRIME = /(강간|성폭행|몰카|아청법)/i;
 
   const hasMinorSexualContext = (text) => {
     if (!text) return false;
-    return MINOR_KEYWORDS.test(text) && SEXUAL_KEYWORDS.test(text);
+
+    const safeText = String(text);
+    if (!MINOR_KEYWORDS.test(safeText)) return false;
+    if (!SEXUAL_KEYWORDS.test(safeText)) return false;
+
+    const hasLegitimateContext =
+      ACADEMIC_PATTERN.test(safeText) ||
+      SEX_ED_PATTERN.test(safeText) ||
+      ORIENTATION_PATTERN.test(safeText) ||
+      PROTECTIVE_FORWARD.test(safeText) ||
+      PROTECTIVE_REVERSE.test(safeText) ||
+      RIGHTS_PATTERN.test(safeText);
+
+    const hasExplicitDanger = EXPLICIT_CRIME.test(safeText) || EXPLICIT_MEDIA.test(safeText);
+
+    if (hasLegitimateContext && !hasExplicitDanger) {
+      return false;
+    }
+
+    return true;
   };
 
   const redactText = (
@@ -2603,6 +2631,8 @@ var GMHBundle = (function (exports) {
     redactText,
     hasMinorSexualContext,
     getPlayerNames = () => [],
+    logger = null,
+    storage = null,
   } = {}) => {
     if (typeof redactText !== 'function') {
       throw new Error('createPrivacyPipeline: redactText function is required');
@@ -2674,6 +2704,16 @@ var GMHBundle = (function (exports) {
 
       const totalRedactions = Object.values(counts).reduce((sum, value) => sum + (value || 0), 0);
       const blocked = typeof hasMinorSexualContext === 'function' ? hasMinorSexualContext(rawText) : false;
+
+      const debugEnabled = typeof storage?.getItem === 'function' && storage.getItem('gmh_debug_blocking');
+      if (logger?.log && (blocked || debugEnabled)) {
+        const textLength = typeof rawText === 'string' ? rawText.length : String(rawText ?? '').length;
+        logger.log('[GMH Privacy] Blocking decision:', {
+          blocked,
+          textLength,
+          timestamp: new Date().toISOString(),
+        });
+      }
 
       return {
         profile: activeProfile,
@@ -8773,6 +8813,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       redactText: boundRedactText,
       hasMinorSexualContext,
       getPlayerNames,
+      logger: ENV.console,
+      storage: ENV.localStorage,
     });
 
     function cloneSession(session) {

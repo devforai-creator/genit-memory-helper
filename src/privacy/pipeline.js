@@ -106,6 +106,8 @@ export const createPrivacyPipeline = ({
   redactText,
   hasMinorSexualContext,
   getPlayerNames = () => [],
+  logger = null,
+  storage = null,
 } = {}) => {
   if (typeof redactText !== 'function') {
     throw new Error('createPrivacyPipeline: redactText function is required');
@@ -177,6 +179,16 @@ export const createPrivacyPipeline = ({
 
     const totalRedactions = Object.values(counts).reduce((sum, value) => sum + (value || 0), 0);
     const blocked = typeof hasMinorSexualContext === 'function' ? hasMinorSexualContext(rawText) : false;
+
+    const debugEnabled = typeof storage?.getItem === 'function' && storage.getItem('gmh_debug_blocking');
+    if (logger?.log && (blocked || debugEnabled)) {
+      const textLength = typeof rawText === 'string' ? rawText.length : String(rawText ?? '').length;
+      logger.log('[GMH Privacy] Blocking decision:', {
+        blocked,
+        textLength,
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     return {
       profile: activeProfile,

@@ -74,10 +74,34 @@ describe('Privacy redaction pipeline', () => {
     expect(counts.EMAIL).toBe(1);
   });
 
-  it('detects minor sexual context combinations', () => {
-    expect(hasMinorSexualContext('미성년자와 성적 접촉')).toBe(true);
-    expect(hasMinorSexualContext('성적 내용만 언급')).toBe(false);
-    expect(hasMinorSexualContext('미성년자 보호 교육')).toBe(false);
+  describe('hasMinorSexualContext guardrails', () => {
+    it('does not break on repeated calls (global regex bug)', () => {
+      const text = '미성년자 성교육';
+      expect(hasMinorSexualContext(text)).toBe(false);
+      expect(hasMinorSexualContext(text)).toBe(false);
+      expect(hasMinorSexualContext(text)).toBe(false);
+    });
+
+    it('allows legitimate educational or rights-focused content', () => {
+      expect(hasMinorSexualContext('고등학생의 성적 향상 방법')).toBe(false);
+      expect(hasMinorSexualContext('미성년자 성교육 프로그램 안내')).toBe(false);
+      expect(hasMinorSexualContext('청소년 성정체성 상담 지원')).toBe(false);
+      expect(hasMinorSexualContext('미성년자 성적 자기결정권 교육')).toBe(false);
+      expect(hasMinorSexualContext('청소년의 성적 자기결정권 존중')).toBe(false);
+    });
+
+    it('blocks attempts that mix legitimate wording with explicit danger', () => {
+      expect(hasMinorSexualContext('미성년자 강간 교육 자료')).toBe(true);
+      expect(hasMinorSexualContext('미성년자 성교육 자료 야한 사진')).toBe(true);
+      expect(hasMinorSexualContext('청소년 성상담 음란 영상')).toBe(true);
+    });
+
+    it('detects expanded age expressions and slang', () => {
+      expect(hasMinorSexualContext('중딩이랑 성관계')).toBe(true);
+      expect(hasMinorSexualContext('고딩 야한 사진')).toBe(true);
+      expect(hasMinorSexualContext('15살 섹스')).toBe(true);
+      expect(hasMinorSexualContext('teenager 음란물')).toBe(true);
+    });
   });
 
   it('summarises redaction counts for privacy gate', () => {
