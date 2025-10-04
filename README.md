@@ -10,13 +10,14 @@ Genit 대화 로그를 **구조 보존 JSON/Markdown**으로 추출하고, LLM �
 이 스크립트는 [Tampermonkey](https://www.tampermonkey.net/) 확장 프로그램을 통해 사용할 수 있습니다.
 
 1. 먼저 Tampermonkey를 설치하세요. (Chrome/Edge/Firefox 지원)
+![설치 화면](assets/images/1.png)
 2. 아래 버튼을 클릭해 스크립트를 설치하세요:
 
 👉 [**최신 버전 다운로드**](https://github.com/devforai-creator/genit-memory-helper/raw/main/genit-memory-helper.user.js)
-
 3. 브라우저가 `.user.js` 파일을 다운로드하면, Tampermonkey가 자동으로 설치 화면을 띄워줍니다.  
    "Install" 버튼을 눌러주면 완료됩니다 ✅
-
+![설치 성공](assets/images/2.png)
+![설치 성공](assets/images/3.png)
 ---
 
 ### 🔄 업데이트
