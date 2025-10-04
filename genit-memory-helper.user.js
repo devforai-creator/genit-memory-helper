@@ -4212,6 +4212,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     let panelEl = null;
     let fabEl = null;
+    let fabLastToggleAt = 0;
     let dragHandle = null;
     let resizeHandle = null;
     let modernMode = false;
@@ -4526,7 +4527,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         doc.body.appendChild(fabEl);
       }
       fabEl.onclick = (event) => {
+        const now = typeof performance?.now === 'function' ? performance.now() : Date.now();
+        if (now - fabLastToggleAt < 350) return;
+
         event.preventDefault();
+        fabLastToggleAt = now;
         toggle();
       };
       fabEl.setAttribute('aria-expanded', isCollapsed() ? 'false' : 'true');

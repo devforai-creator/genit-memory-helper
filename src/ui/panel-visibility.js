@@ -106,6 +106,7 @@ export function createPanelVisibility({
 
   let panelEl = null;
   let fabEl = null;
+  let fabLastToggleAt = 0;
   let dragHandle = null;
   let resizeHandle = null;
   let modernMode = false;
@@ -420,7 +421,11 @@ export function createPanelVisibility({
       doc.body.appendChild(fabEl);
     }
     fabEl.onclick = (event) => {
+      const now = typeof performance?.now === 'function' ? performance.now() : Date.now();
+      if (now - fabLastToggleAt < 350) return;
+
       event.preventDefault();
+      fabLastToggleAt = now;
       toggle();
     };
     fabEl.setAttribute('aria-expanded', isCollapsed() ? 'false' : 'true');
