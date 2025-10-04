@@ -1,6 +1,6 @@
 # Genit Memory Helper (Tampermonkey)
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
-[![All Contributors](https://img.shields.io/badge/all_contributors-1-orange.svg?style=flat-square)](#contributors-)
+[![All Contributors](https://img.shields.io/badge/all_contributors-2-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
 
 Genit 대화 로그를 **구조 보존 JSON/Markdown**으로 추출하고, LLM 요약 프롬프트를 원클릭 복사해 유저노트(2000자)에 넣을 수 있게 하는 사용자 스크립트입니다. 필요하면 고급 옵션에서 기존 Classic(JSON/TXT/MD) 포맷으로 전환할 수 있습니다.
@@ -202,6 +202,7 @@ Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/d
   <tbody>
     <tr>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/devforai-creator"><img src="https://avatars.githubusercontent.com/u/212040505?v=4?s=100" width="100px;" alt="SY Dev"/><br /><sub><b>SY Dev</b></sub></a><br /><a href="#ideas-devforai-creator" title="Ideas, Planning, & Feedback">🤔</a> <a href="https://github.com/devforai-creator/genit-memory-helper/commits?author=devforai-creator" title="Code">💻</a> <a href="https://github.com/devforai-creator/genit-memory-helper/commits?author=devforai-creator" title="Documentation">📖</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/tpalsdhkdwk1"><img src="https://avatars.githubusercontent.com/u/236061945?v=4?s=100" width="100px;" alt="tpalsdhkdwk1"/><br /><sub><b>tpalsdhkdwk1</b></sub></a><br /><a href="https://github.com/devforai-creator/genit-memory-helper/issues?q=author%3Atpalsdhkdwk1" title="Bug reports">🐛</a> <a href="#ideas-tpalsdhkdwk1" title="Ideas, Planning, & Feedback">🤔</a></td>
     </tr>
   </tbody>
 </table>
