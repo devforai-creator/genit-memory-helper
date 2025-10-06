@@ -31,6 +31,9 @@ const RESUMMARY_GUIDE_PROMPT = `
 - 길이는 1200~1800자.
 `;
 
+/**
+ * Builds helpers that supply summary/resummary prompt templates to the clipboard.
+ */
 export function createGuidePrompts({
   clipboard,
   setPanelStatus,

@@ -1,3 +1,6 @@
+/**
+ * Manages panel open/collapse state, coordinating with storage and modal overlays.
+ */
 export function createPanelVisibility({
   panelSettings,
   stateEnum,

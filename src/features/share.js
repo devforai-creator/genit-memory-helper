@@ -1,5 +1,18 @@
 import { requireDeps } from '../utils/validation.js';
 
+/**
+ * @typedef {import('../../types/api').ShareWorkflowOptions} ShareWorkflowOptions
+ * @typedef {import('../../types/api').ShareWorkflowApi} ShareWorkflowApi
+ * @typedef {import('../../types/api').PreparedShareResult} PreparedShareResult
+ */
+
+/**
+ * Builds the share/export workflow orchestrator used by the panel actions.
+ * Validates injected dependencies so downstream flows remain resilient.
+ *
+ * @param {ShareWorkflowOptions} options
+ * @returns {ShareWorkflowApi}
+ */
 export function createShareWorkflow({
   captureStructuredSnapshot,
   normalizeTranscript,
@@ -89,6 +102,11 @@ export function createShareWorkflow({
     },
   );
 
+  /**
+   * Rehydrates the latest transcript snapshot and updates range counters.
+   *
+   * @returns {{ session: import('../../types/api').TranscriptSession; raw: string; snapshot: import('../../types/api').StructuredSnapshot }}
+   */
   const parseAll = () => {
     const snapshot = captureStructuredSnapshot({ force: true });
     const raw = snapshot.legacyLines.join('\n');
@@ -110,7 +128,13 @@ export function createShareWorkflow({
     return { session, raw: normalized, snapshot };
   };
 
-  const prepareShare = async ({ confirmLabel, cancelStatusMessage, blockedStatusMessage }) => {
+  /**
+   * Applies privacy and range selections before export/copy operations.
+   *
+   * @param {{ confirmLabel?: string; cancelStatusMessage?: string; blockedStatusMessage?: string }} [options]
+   * @returns {Promise<PreparedShareResult | null>}
+   */
+  const prepareShare = async ({ confirmLabel, cancelStatusMessage, blockedStatusMessage } = {}) => {
     try {
       stateApi.setState(stateEnum.REDACTING, {
         label: '민감정보 마스킹 중',
@@ -164,7 +188,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       };
       const rangeInfo = selection?.info || exportRange?.describe?.(privacy.sanitizedSession.turns.length);
       const structuredSelection = projectStructuredMessages(privacy.structured, rangeInfo);
-      const exportSession = cloneSession(privacy.sanitizedSession);
+      const exportSession = /** @type {import('../../types/api').TranscriptSession} */ (
+        cloneSession(privacy.sanitizedSession)
+      );
       const entryOrigin = typeof getEntryOrigin === 'function' ? getEntryOrigin() : [];
       const selectedIndices = selection.indices?.length
         ? selection.indices
@@ -172,23 +198,25 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
       const selectedIndexSet = new Set(selectedIndices);
 
-      exportSession.turns = selectedIndices.map((index, localIndex) => {
-        const original = privacy.sanitizedSession.turns[index] || {};
-        const clone = { ...original };
-        Object.defineProperty(clone, '__gmhIndex', {
-          value: index,
-          enumerable: false,
-        });
-        Object.defineProperty(clone, '__gmhOrdinal', {
-          value: selection.ordinals?.[localIndex] ?? null,
-          enumerable: false,
-        });
-        Object.defineProperty(clone, '__gmhSourceBlock', {
-          value: entryOrigin[index] ?? null,
-          enumerable: false,
-        });
-        return clone;
-      });
+      exportSession.turns = /** @type {import('../../types/api').TranscriptTurn[]} */ (
+        selectedIndices.map((index, localIndex) => {
+          const original = privacy.sanitizedSession.turns[index] || {};
+          const clone = { ...original };
+          Object.defineProperty(clone, '__gmhIndex', {
+            value: index,
+            enumerable: false,
+          });
+          Object.defineProperty(clone, '__gmhOrdinal', {
+            value: selection.ordinals?.[localIndex] ?? null,
+            enumerable: false,
+          });
+          Object.defineProperty(clone, '__gmhSourceBlock', {
+            value: entryOrigin[index] ?? null,
+            enumerable: false,
+          });
+          return clone;
+        })
+      );
 
       exportSession.meta = {
         ...(exportSession.meta || {}),
@@ -209,7 +237,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
       const stats = collectSessionStats(exportSession);
       const overallStats = collectSessionStats(privacy.sanitizedSession);
-      const previewTurns = exportSession.turns.slice(-5);
+      const previewTurns = /** @type {import('../../types/api').TranscriptTurn[]} */ (
+        exportSession.turns.slice(-5)
+      );
       stateApi.setState(stateEnum.PREVIEW, {
         label: '미리보기 준비 완료',
         message: '레다크션 결과를 검토하세요.',
@@ -261,6 +291,13 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     }
   };
 
+  /**
+   * Executes the export flow for the selected format.
+   *
+   * @param {PreparedShareResult | null} prepared
+   * @param {string} format
+   * @returns {Promise<boolean>}
+   */
   const performExport = async (prepared, format) => {
     if (!prepared) return false;
     try {
@@ -379,6 +416,12 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     }
   };
 
+  /**
+   * Copies the last 15 sanitized turns to the clipboard.
+   *
+   * @param {ShareWorkflowApi['prepareShare']} prepareShareFn
+   * @returns {Promise<void>}
+   */
   const copyRecent = async (prepareShareFn) => {
     const prepared = await prepareShareFn({
       confirmLabel: '복사 계속',
@@ -426,6 +469,12 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     }
   };
 
+  /**
+   * Copies the full sanitized transcript to the clipboard.
+   *
+   * @param {ShareWorkflowApi['prepareShare']} prepareShareFn
+   * @returns {Promise<void>}
+   */
   const copyAll = async (prepareShareFn) => {
     const prepared = await prepareShareFn({
       confirmLabel: '복사 계속',
@@ -468,6 +517,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     }
   };
 
+  /**
+   * Forces a reparse cycle to refresh sanitized stats without exporting.
+   */
   const reparse = () => {
     try {
       stateApi.setState(stateEnum.REDACTING, {

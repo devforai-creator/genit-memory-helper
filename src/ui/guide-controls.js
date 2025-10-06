@@ -1,3 +1,6 @@
+/**
+ * Wires panel guide buttons to share workflow helpers.
+ */
 export function createGuideControls({
   reparse,
   copySummaryGuide,

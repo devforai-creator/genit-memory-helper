@@ -1,3 +1,6 @@
+/**
+ * Generates UI hooks for controlling the auto-loader and download status buttons.
+ */
 export function createAutoLoaderControls({
   documentRef = typeof document !== 'undefined' ? document : null,
   autoLoader,

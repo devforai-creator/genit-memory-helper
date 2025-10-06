@@ -1,7 +1,19 @@
 import { CONFIG } from '../config.js';
 
+/**
+ * @typedef {import('../../types/api').AutoLoaderOptions} AutoLoaderOptions
+ * @typedef {import('../../types/api').AutoLoaderExports} AutoLoaderExports
+ */
+
 const METER_INTERVAL_MS = CONFIG.TIMING.AUTO_LOADER.METER_INTERVAL_MS;
 
+/**
+ * Creates the auto-loader controller that scrolls and indexes Genit chat messages.
+ * Handles profile-specific timing, range updates, and exposes helpers for UI wiring.
+ *
+ * @param {AutoLoaderOptions} [options]
+ * @returns {AutoLoaderExports}
+ */
 export function createAutoLoader({
   stateApi,
   stateEnum,
@@ -13,12 +25,12 @@ export function createAutoLoader({
   sleep,
   isScrollable,
   documentRef = typeof document !== 'undefined' ? document : null,
-  windowRef = typeof window !== 'undefined' ? window : null,
+  windowRef = typeof window !== 'undefined' ? /** @type {Window & typeof globalThis} */ (window) : null,
   normalizeTranscript,
   buildSession,
   readTranscriptText,
   logger = typeof console !== 'undefined' ? console : null,
-} = {}) {
+} = /** @type {AutoLoaderOptions} */ ({})) {
   if (!stateApi || typeof stateApi.setState !== 'function') {
     throw new Error('createAutoLoader requires stateApi with setState');
   }
@@ -150,6 +162,8 @@ export function createAutoLoader({
     statsCache.data = null;
   };
 
+  let lastSessionSignature = windowRef?.location?.href || (typeof location !== 'undefined' ? location.href : null);
+
   const makeSummaryKey = (summary) => {
     if (!summary) return null;
     const total = Number.isFinite(summary.totalMessages) ? summary.totalMessages : 'na';
@@ -162,6 +176,13 @@ export function createAutoLoader({
     const force = Boolean(options?.force);
     let summary = null;
     try {
+      const currentSignature = windowRef?.location?.href || (typeof location !== 'undefined' ? location.href : null);
+      if (currentSignature && currentSignature !== lastSessionSignature) {
+        lastSessionSignature = currentSignature;
+        clearStatsCache();
+        exportRange?.clear?.();
+        exportRange?.setTotals?.({ message: 0, user: 0, llm: 0, entry: 0 });
+      }
       try {
         summary = messageIndexer?.refresh?.({ immediate: true }) || null;
       } catch (err) {
@@ -227,6 +248,7 @@ export function createAutoLoader({
       statsCache.summaryKey = summaryKey;
       statsCache.rawKey = summaryKey ? null : rawKey;
       statsCache.data = stats;
+      lastSessionSignature = currentSignature || lastSessionSignature;
       return stats;
     } catch (error) {
       clearStatsCache();

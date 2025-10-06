@@ -1,5 +1,8 @@
 const noop = () => {};
 
+/**
+ * Observes Genit chat DOM, annotating blocks with GMH metadata and publishing summaries.
+ */
 export const createMessageIndexer = ({
   console: consoleLike,
   document: documentLike,

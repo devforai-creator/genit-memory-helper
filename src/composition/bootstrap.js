@@ -1,0 +1,122 @@
+/**
+ * Sets up panel mounting, boot sequencing, teardown hooks, and mutation observer.
+ *
+ * @param {object} options - Dependency container.
+ * @param {Document} options.documentRef - Document handle.
+ * @param {Window} options.windowRef - Window handle.
+ * @param {Function} options.mountPanelModern - Modern panel mount function.
+ * @param {Function} options.mountPanelLegacy - Legacy panel mount function.
+ * @param {Function} options.isModernUIActive - Getter describing whether modern UI is active.
+ * @param {object} options.Flags - Feature flags.
+ * @param {object} options.errorHandler - Error handler instance.
+ * @param {object} options.messageIndexer - Message indexer reference.
+ * @param {object} options.bookmarkListener - Bookmark listener reference.
+ */
+export function setupBootstrap({
+  documentRef,
+  windowRef,
+  mountPanelModern,
+  mountPanelLegacy,
+  isModernUIActive,
+  Flags,
+  errorHandler,
+  messageIndexer,
+  bookmarkListener,
+}) {
+  const doc = documentRef;
+  const win = windowRef;
+  const MutationObserverCtor = win.MutationObserver || globalThis.MutationObserver;
+  const requestFrame = typeof win.requestAnimationFrame === 'function'
+    ? win.requestAnimationFrame.bind(win)
+    : (cb) => setTimeout(cb, 16);
+
+  let panelMounted = false;
+  let bootInProgress = false;
+  let observerScheduled = false;
+
+  const mountPanel = () => {
+    if (isModernUIActive()) {
+      mountPanelModern();
+    } else {
+      if (Flags.killSwitch) {
+        const level = errorHandler.LEVELS?.INFO || 'info';
+        errorHandler.handle('modern UI disabled by kill switch', 'ui/panel', level);
+      }
+      mountPanelLegacy();
+    }
+  };
+
+  const boot = () => {
+    if (panelMounted || bootInProgress) return;
+    bootInProgress = true;
+    try {
+      mountPanel();
+      messageIndexer?.start?.();
+      bookmarkListener?.start?.();
+      panelMounted = Boolean(doc.querySelector('#genit-memory-helper-panel'));
+    } catch (e) {
+      const level = errorHandler.LEVELS?.ERROR || 'error';
+      errorHandler.handle(e, 'ui/panel', level);
+    } finally {
+      bootInProgress = false;
+    }
+  };
+
+  const registerReadyHook = () => {
+    if (doc.readyState === 'complete' || doc.readyState === 'interactive') {
+      setTimeout(boot, 1200);
+    } else {
+      win.addEventListener('DOMContentLoaded', () => setTimeout(boot, 1200));
+    }
+  };
+
+  const registerTeardown = () => {
+    if (win.__GMHTeardownHook) return;
+    const teardown = () => {
+      panelMounted = false;
+      bootInProgress = false;
+      try {
+        bookmarkListener?.stop?.();
+      } catch (err) {
+        const level = errorHandler.LEVELS?.WARN || 'warn';
+        errorHandler.handle(err, 'bookmark', level);
+      }
+      try {
+        messageIndexer?.stop?.();
+      } catch (err) {
+        const level = errorHandler.LEVELS?.WARN || 'warn';
+        errorHandler.handle(err, 'adapter', level);
+      }
+    };
+    win.addEventListener('pagehide', teardown);
+    win.addEventListener('beforeunload', teardown);
+    win.__GMHTeardownHook = true;
+  };
+
+  const registerMutationObserver = () => {
+    if (!MutationObserverCtor) return;
+    const observer = new MutationObserverCtor(() => {
+      if (observerScheduled || bootInProgress) return;
+      observerScheduled = true;
+      requestFrame(() => {
+        observerScheduled = false;
+        const panelNode = doc.querySelector('#genit-memory-helper-panel');
+        if (panelNode) {
+          panelMounted = true;
+          return;
+        }
+        panelMounted = false;
+        boot();
+      });
+    });
+    observer.observe(doc.documentElement || doc.body, { subtree: true, childList: true });
+  };
+
+  registerReadyHook();
+  registerTeardown();
+  registerMutationObserver();
+
+  return { boot, mountPanel };
+}
+
+export default setupBootstrap;

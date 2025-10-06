@@ -1,3 +1,6 @@
+/**
+ * Connects panel buttons, share workflow actions, and keyboard shortcuts.
+ */
 export function createPanelInteractions({
   panelVisibility,
   setPanelStatus,

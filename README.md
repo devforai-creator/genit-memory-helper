@@ -90,6 +90,7 @@ localStorage.removeItem("gmh_flag_newUI"); // 플래그 초기화 (다음 로드
 ## 개발 & 테스트
 
 - `npm install`
+- `USE_ROLLUP=1 npm run build`
 - `npm run build`
 - `npm test` (Vitest 기반 단위 테스트 – dist 산출물을 검사합니다)
 - `npm run test:smoke`
@@ -165,6 +166,8 @@ A. 네, 모델에는 **토큰(token)**이라는 입력 한계가 있습니다.
 - 프라이버시 프로필 드롭다운·복사/내보내기·원클릭 공유에 대한 패널 이벤트 바인딩은 `src/ui/panel-interactions.js`에서 관리합니다. 새로운 패널 요소를 추가할 때는 이 모듈을 통해 의존성을 주입하세요.
 - Privacy Gate(모달/legacy 오버레이 포함)는 `src/ui/privacy-gate.js`가 생성합니다. Modern/Legacy UI 모두 여기서 의존성을 주입하므로 Tampermonkey 전역 대신 `ENV`/모듈 API를 연결하세요.
 - `npm run build`는 기존 userscript를 그대로 복사하며, `USE_ROLLUP=1 npm run build`를 사용하면 Rollup 번들을 생성해 Tampermonkey에 주입할 수 있습니다. 새 모듈 작업 시에는 Rollup 경로로도 반드시 점검하세요.
+- `npm run typecheck`는 JSDoc이 적용된 핵심 모듈(자동 로더, 공유 워크플로, 프라이버시 파이프라인, 모달)을 대상으로 TypeScript `checkJs` 검사를 실행합니다. 범위를 넓힐 때는 `tsconfig.json`의 `include`를 조정하고 필요한 typedef를 추가하세요.
+- Tampermonkey/GM 전역과 공유 타입은 `types/` 아래 ambient 선언으로 관리합니다. 새로운 외부 의존성을 추가할 때는 동일 폴더에 선언을 추가하고 `npm run typecheck`로 검증하세요.
 
 ## 유지보수 정책
 

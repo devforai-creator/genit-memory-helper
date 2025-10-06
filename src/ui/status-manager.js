@@ -7,6 +7,9 @@ const STATUS_TONES = {
   muted: { color: '#cbd5f5', icon: '' },
 };
 
+/**
+ * Creates a minimal status manager that updates panel status text and notifies listeners.
+ */
 export function createStatusManager({ panelVisibility } = {}) {
   let statusElement = null;
 

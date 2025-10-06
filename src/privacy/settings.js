@@ -55,6 +55,9 @@ const sanitizeList = (items = [], collapseSpaces = (value) => value) => {
   return { list, invalidType, truncated, clipped };
 };
 
+/**
+ * Persists privacy configuration (profile and custom lists) with validation and logging hooks.
+ */
 export const createPrivacyStore = ({
   storage,
   errorHandler,

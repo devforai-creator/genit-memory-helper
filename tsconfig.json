@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "lib": ["ES2020", "DOM"],
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": false,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "typeRoots": ["./types", "./node_modules/@types"]
+  },
+  "include": [
+    "src/features/auto-loader.js",
+    "src/features/share.js",
+    "src/privacy/pipeline.js",
+    "src/ui/modal.js",
+    "types/**/*.d.ts"
+  ],
+  "exclude": ["dist", "node_modules"]
+}

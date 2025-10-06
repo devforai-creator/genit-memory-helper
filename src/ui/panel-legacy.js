@@ -1,3 +1,6 @@
+/**
+ * Mounts the legacy panel layout for older styling.
+ */
 export function createLegacyPanel({
   documentRef = typeof document !== 'undefined' ? document : null,
   getActiveAdapter,

@@ -1,3 +1,6 @@
+/**
+ * Registers keyboard shortcuts for panel visibility and auto-loader actions.
+ */
 export function createPanelShortcuts({
   windowRef = typeof window !== 'undefined' ? window : null,
   panelVisibility,

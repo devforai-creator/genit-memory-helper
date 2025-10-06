@@ -1,3 +1,6 @@
+/**
+ * Mounts the modern (React-inspired) panel layout.
+ */
 export function createModernPanel({
   documentRef = typeof document !== 'undefined' ? document : null,
   ensureStyles,

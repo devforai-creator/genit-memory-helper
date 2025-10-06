@@ -676,16 +676,24 @@ export const createGenitAdapter = ({
         .filter(Boolean)
         .map((name) => name.trim()),
     );
-    const shouldSkipNarrationLine = (text) => {
+    const shouldSkipNarrationLine = (text, element) => {
       const clean = text.trim();
       if (!clean) return true;
       if (/^INFO$/i.test(clean)) return true;
       if (knownLabels.has(clean)) return true;
       const wordCount = clean.split(/\s+/).length;
+      const mutedContext =
+        element?.classList?.contains('text-muted-foreground') ||
+        element?.closest?.('.text-muted-foreground, .markdown-content.text-muted-foreground');
       if (wordCount === 1) {
         if (knownLabels.has(clean)) return true;
-        if (/^[A-Za-z][A-Za-z .,'’]{0,24}$/.test(clean)) return true;
+        if (/^[A-Za-z][A-Za-z .,'’]{0,24}$/.test(clean)) {
+          return !mutedContext;
+        }
         return false;
+      }
+      if (wordCount <= 3 && looksLikeName(clean) && !/[.!?…:,]/.test(clean)) {
+        return !mutedContext;
       }
       return false;
     };
@@ -764,18 +772,18 @@ export const createGenitAdapter = ({
       if (isInfoRelatedNode(node)) {
         return;
       }
-      const partLines = [];
-      const segments = textSegmentsFromNode(node);
-      segments.forEach((seg, i) => {
-        if (!seg) return;
-        const clean = seg.trim();
-        if (!clean) return;
-        if (!loose && shouldSkipNarrationLine(clean)) {
-          return;
-        }
-        pushLine(clean);
-        partLines.push(clean);
-      });
+        const partLines = [];
+        const segments = textSegmentsFromNode(node);
+        segments.forEach((seg) => {
+          if (!seg) return;
+          const clean = seg.trim();
+          if (!clean) return;
+          if (!loose && shouldSkipNarrationLine(clean, node)) {
+            return;
+          }
+          pushLine(clean);
+          partLines.push(clean);
+        });
       if (collector && partLines.length) {
         const part = buildStructuredPart(node, {
           flavor: 'narration',

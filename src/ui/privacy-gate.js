@@ -167,6 +167,9 @@ const buildSummaryBox = ({
   return container;
 };
 
+/**
+ * Builds the classic privacy confirmation dialog rendered inside the legacy panel.
+ */
 export function createLegacyPrivacyGate({
   documentRef = typeof document !== 'undefined' ? document : null,
   formatRedactionCounts,
@@ -301,6 +304,9 @@ export function createLegacyPrivacyGate({
   return { confirm };
 }
 
+/**
+ * Builds the modern privacy confirmation modal using design-system styles.
+ */
 export function createModernPrivacyGate({
   documentRef = typeof document !== 'undefined' ? document : null,
   formatRedactionCounts,

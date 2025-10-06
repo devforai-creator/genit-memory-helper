@@ -43,6 +43,9 @@ export const STATE_PRESETS = {
   },
 };
 
+/**
+ * Builds the state view binder so the panel shows current workflow progress.
+ */
 export function createStateView({ stateApi, statusManager, stateEnum }) {
   if (!stateApi) throw new Error('createStateView requires stateApi');
   if (!statusManager) throw new Error('createStateView requires statusManager');

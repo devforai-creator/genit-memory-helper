@@ -1,5 +1,8 @@
 const noop = () => {};
 
+/**
+ * Factory for managing export range selection and projections across transcripts.
+ */
 export const createExportRange = ({
   console: consoleLike,
   window: windowLike,

@@ -1,8 +1,19 @@
 import { ensureDesignSystemStyles } from './styles.js';
 
-export function createModal({ documentRef = typeof document !== 'undefined' ? document : null, windowRef = typeof window !== 'undefined' ? window : null } = {}) {
+/**
+ * @typedef {import('../../types/api').ModalController} ModalController
+ * @typedef {import('../../types/api').ModalOpenOptions} ModalOpenOptions
+ */
+
+/**
+ * Creates the shared modal controller used across classic/modern panels.
+ *
+ * @param {{ documentRef?: Document | null; windowRef?: (Window & typeof globalThis) | null }} [options]
+ * @returns {ModalController}
+ */
+export function createModal({ documentRef = typeof document !== 'undefined' ? document : null, windowRef = typeof window !== 'undefined' ? /** @type {Window & typeof globalThis} */ (window) : null } = {}) {
   const doc = documentRef;
-  const win = windowRef;
+  const win = /** @type {(Window & typeof globalThis) | null} */ (windowRef);
   if (!doc || !win) {
     return {
       open: async () => false,
@@ -11,12 +22,22 @@ export function createModal({ documentRef = typeof document !== 'undefined' ? do
     };
   }
 
-  const HTMLElementCtor = win.HTMLElement || (typeof HTMLElement !== 'undefined' ? HTMLElement : null);
-  const NodeCtor = win.Node || (typeof Node !== 'undefined' ? Node : null);
+  const HTMLElementCtor = /** @type {typeof HTMLElement | null} */ (
+    win.HTMLElement || (typeof HTMLElement !== 'undefined' ? HTMLElement : null)
+  );
+  const NodeCtor = /** @type {typeof Node | null} */ (
+    win.Node || (typeof Node !== 'undefined' ? Node : null)
+  );
 
   let activeModal = null;
   let modalIdCounter = 0;
 
+  /**
+   * Sanitises markup snippets before injecting them into the modal body.
+   *
+   * @param {string} markup
+   * @returns {DocumentFragment}
+   */
   const sanitizeMarkupFragment = (markup) => {
     const template = doc.createElement('template');
     template.innerHTML = String(markup ?? '');
@@ -51,13 +72,19 @@ export function createModal({ documentRef = typeof document !== 'undefined' ? do
     '[tabindex]:not([tabindex="-1"])',
   ].join(',');
 
+  /**
+   * @param {Element | null} root
+   * @returns {HTMLElement[]}
+   */
   const getFocusable = (root) => {
     if (!root) return [];
-    return Array.from(root.querySelectorAll(focusableSelector)).filter((el) => {
-      if (!(el instanceof HTMLElementCtor)) return false;
-      const style = win.getComputedStyle(el);
-      return style.visibility !== 'hidden' && style.display !== 'none';
-    });
+    return /** @type {HTMLElement[]} */ (
+      Array.from(root.querySelectorAll(focusableSelector)).filter((el) => {
+        if (!(HTMLElementCtor && el instanceof HTMLElementCtor)) return false;
+        const style = win.getComputedStyle(el);
+        return style.visibility !== 'hidden' && style.display !== 'none';
+      })
+    );
   };
 
   function buildButton(action, finalize) {
@@ -89,7 +116,13 @@ export function createModal({ documentRef = typeof document !== 'undefined' ? do
     }
   }
 
-  function open(options = {}) {
+  /**
+   * Opens a modal dialog with sanitized markup and focus trapping.
+   *
+   * @param {ModalOpenOptions} [options]
+   * @returns {Promise<unknown>}
+   */
+  function open(options = /** @type {ModalOpenOptions} */ ({})) {
     ensureDesignSystemStyles();
     closeActive(false);
 
@@ -147,7 +180,7 @@ export function createModal({ documentRef = typeof document !== 'undefined' ? do
       const body = doc.createElement('div');
       body.className = 'gmh-modal__body gmh-modal__body--scroll';
       if (options.bodyClass) body.classList.add(options.bodyClass);
-      if (options.content instanceof NodeCtor) {
+      if (NodeCtor && options.content instanceof NodeCtor) {
         body.appendChild(options.content);
       } else if (typeof options.content === 'string') {
         body.appendChild(sanitizeMarkupFragment(options.content));
@@ -181,7 +214,9 @@ export function createModal({ documentRef = typeof document !== 'undefined' ? do
       const bodyEl = doc.body;
       const prevOverflow = bodyEl.style.overflow;
       const restoreTarget =
-        doc.activeElement instanceof HTMLElementCtor ? doc.activeElement : null;
+        HTMLElementCtor && doc.activeElement instanceof HTMLElementCtor
+          ? /** @type {HTMLElement} */ (doc.activeElement)
+          : null;
       bodyEl.style.overflow = 'hidden';
       bodyEl.appendChild(overlay);
       overlay.setAttribute('role', 'presentation');
@@ -232,8 +267,10 @@ export function createModal({ documentRef = typeof document !== 'undefined' ? do
       doc.addEventListener('keydown', onKeydown, true);
 
       const initialSelector = options.initialFocus || '.gmh-button--primary';
-      let focusTarget = initialSelector ? dialog.querySelector(initialSelector) : null;
-      if (!(focusTarget instanceof HTMLElementCtor)) {
+      let focusTarget = /** @type {HTMLElement | null} */ (
+        initialSelector ? dialog.querySelector(initialSelector) : null
+      );
+      if (!(focusTarget && HTMLElementCtor && focusTarget instanceof HTMLElementCtor)) {
         const focusables = getFocusable(dialog);
         focusTarget = focusables[0] || closeBtn;
       }

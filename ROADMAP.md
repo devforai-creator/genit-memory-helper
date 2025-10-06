@@ -501,53 +501,32 @@ function boot() {
 **기간**: 3-4주 (20-25시간)
 **릴리스 조건**: JSDoc 커버리지 50% + 테스트 통과
 
-### Issue #6: index.js 분리 (912줄 → ~200줄)
+### Issue #6: index.js 분리 (유지보수성 확보)
 
-**목표 구조**:
-```
-src/
-├── composition/
-│   ├── adapter-composition.js
-│   ├── privacy-composition.js
-│   ├── ui-composition.js
-│   ├── share-composition.js
-│   └── bootstrap.js
-├── index.js  ← <200줄
-```
+**현황 (2025-10-06)**: adapter/privacy/share/bootstrap 층은 이미 `src/composition/`로 이동했고, `src/index.js`는 약 600줄 수준으로 안정화됨. 추가 분리는 DX·성능 저하 우려가 있어 즉시 진행하지 않음.
 
-**예상 시간**: 8-10시간
+**결정**: “200줄” 목표는 지표로만 남기고, 현재 구조가 이해 가능하다면 유지한다. 앞으로 신규 기능이 UI 배선에 영향을 줄 때마다 모듈 경계를 재평가하고 필요한 부분만 점진적으로 추출한다.
+
+**남은 작업**:
+- `index.js`를 “부트스트랩 + 의존성 주입” 레이어로 정의하고, 세부 책임 목록을 문서화한다.
+- modern/legacy 패널 묶음을 위한 조립 헬퍼가 필요해질 때 `ui-composition.js`/`bootstrap.js` 확장을 검토한다.
+- 2.0.0 범위에서 TypeScript 전환을 준비할 때 다시 줄 수 목표를 재검토한다.
 
 ---
 
 ### Issue #7: JSDoc 타입 주석 추가
 
-**대상**: 상위 30개 공개 API
+**현황 (2025-10-06)**: `createAutoLoader`, `createShareWorkflow`, `createPrivacyPipeline`, `createModal`에 상세 JSDoc 옵션·반환 타입을 추가하고, 공용 타입/GM 선언을 `types/api.d.ts`, `types/globals.d.ts`로 분리했다. `tsconfig.json`의 `checkJs`를 다시 활성화하되 현재는 위 핵심 모듈만 포함해 타입 경고를 모두 해결한 상태다.
 
-**tsconfig.json 추가**:
-```json
-{
-  "compilerOptions": {
-    "target": "ES2020",
-    "module": "ESNext",
-    "allowJs": true,
-    "checkJs": true,
-    "noEmit": true,
-    "strict": false
-  }
-}
-```
+**구현 메모**:
+- 새 `npm run typecheck`는 pretest 사전 단계에서 실행되며 Tampermonkey 전역을 위한 ambient 선언을 포함한다.
+- `tsconfig` `include`에 점진적 확장을 위한 주석을 남기고, 추가 JSDoc이 준비될 때마다 모듈을 편입할 계획.
 
-**package.json**:
-```json
-{
-  "scripts": {
-    "typecheck": "tsc --noEmit",
-    "pretest": "npm run typecheck && npm run build"
-  }
-}
-```
+**다음 단계**:
+- `core/`, `ui/` 주요 조립기(`panel-interactions`, `panel-visibility`, `state-view` 등)에 typedef를 추가하고 `tsconfig` include 범위를 확장.
+- GM/Tampermonkey 외부 API 선언을 `types/` 하위로 계속 축적해 2.0.0 전환 시 `declare global` 문을 재활용.
 
-**예상 시간**: 6-8시간
+**예상 시간**: 누적 6-8시간 (추가 모듈 편입 시 별도 산정)
 
 ---
 

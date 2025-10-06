@@ -341,6 +341,9 @@ var GMHBundle = (function (exports) {
 
   const noop$3 = () => {};
 
+  /**
+   * Factory for managing export range selection and projections across transcripts.
+   */
   const createExportRange = ({
     console: consoleLike,
     window: windowLike,
@@ -929,6 +932,9 @@ var GMHBundle = (function (exports) {
 
   const noop$1 = () => {};
 
+  /**
+   * Observes Genit chat DOM, annotating blocks with GMH metadata and publishing summaries.
+   */
   const createMessageIndexer = ({
     console: consoleLike,
     document: documentLike,
@@ -2018,16 +2024,24 @@ var GMHBundle = (function (exports) {
           .filter(Boolean)
           .map((name) => name.trim()),
       );
-      const shouldSkipNarrationLine = (text) => {
+      const shouldSkipNarrationLine = (text, element) => {
         const clean = text.trim();
         if (!clean) return true;
         if (/^INFO$/i.test(clean)) return true;
         if (knownLabels.has(clean)) return true;
         const wordCount = clean.split(/\s+/).length;
+        const mutedContext =
+          element?.classList?.contains('text-muted-foreground') ||
+          element?.closest?.('.text-muted-foreground, .markdown-content.text-muted-foreground');
         if (wordCount === 1) {
           if (knownLabels.has(clean)) return true;
-          if (/^[A-Za-z][A-Za-z .,'’]{0,24}$/.test(clean)) return true;
+          if (/^[A-Za-z][A-Za-z .,'’]{0,24}$/.test(clean)) {
+            return !mutedContext;
+          }
           return false;
+        }
+        if (wordCount <= 3 && looksLikeName(clean) && !/[.!?…:,]/.test(clean)) {
+          return !mutedContext;
         }
         return false;
       };
@@ -2106,18 +2120,18 @@ var GMHBundle = (function (exports) {
         if (isInfoRelatedNode(node)) {
           return;
         }
-        const partLines = [];
-        const segments = textSegmentsFromNode(node);
-        segments.forEach((seg, i) => {
-          if (!seg) return;
-          const clean = seg.trim();
-          if (!clean) return;
-          if (!loose && shouldSkipNarrationLine(clean)) {
-            return;
-          }
-          pushLine(clean);
-          partLines.push(clean);
-        });
+          const partLines = [];
+          const segments = textSegmentsFromNode(node);
+          segments.forEach((seg) => {
+            if (!seg) return;
+            const clean = seg.trim();
+            if (!clean) return;
+            if (!loose && shouldSkipNarrationLine(clean, node)) {
+              return;
+            }
+            pushLine(clean);
+            partLines.push(clean);
+          });
         if (collector && partLines.length) {
           const part = buildStructuredPart(node, {
             flavor: 'narration',
@@ -2367,6 +2381,9 @@ var GMHBundle = (function (exports) {
     return { list, invalidType, truncated, clipped };
   };
 
+  /**
+   * Persists privacy configuration (profile and custom lists) with validation and logging hooks.
+   */
   const createPrivacyStore = ({
     storage,
     errorHandler,
@@ -2790,6 +2807,9 @@ var GMHBundle = (function (exports) {
     };
   };
 
+  /**
+   * Builds the privacy pipeline that redacts content according to active profile policies.
+   */
   const createPrivacyPipeline = ({
     profiles = PRIVACY_PROFILES,
     getConfig,
@@ -3731,6 +3751,16 @@ var GMHBundle = (function (exports) {
     };
   };
 
+  /**
+   * Wraps export functions so they automatically receive current player name context.
+   */
+  const withPlayerNames = (getPlayerNames, exportFn) =>
+    (session, raw, options = {}) =>
+      exportFn(session, raw, {
+        playerNames: getPlayerNames(),
+        ...options,
+      });
+
   const LEGACY_PREVIEW_CSS = `
 .gmh-preview-overlay{position:fixed;inset:0;background:rgba(15,23,42,0.72);z-index:9999999;display:flex;align-items:center;justify-content:center;padding:24px;}
 .gmh-preview-card{background:#0f172a;color:#e2e8f0;border-radius:14px;box-shadow:0 18px 48px rgba(8,15,30,0.55);width:min(520px,94vw);max-height:94vh;display:flex;flex-direction:column;overflow:hidden;font:13px/1.5 'Inter',system-ui,sans-serif;}
@@ -3883,6 +3913,3763 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     doc.head.appendChild(style);
   }
 
+  const PANEL_SETTINGS_STORAGE_KEY = 'gmh_panel_settings_v1';
+
+  /**
+   * Creates the panel settings store with persistence, change notifications, and defaults.
+   */
+  function createPanelSettings({
+    clone,
+    deepMerge,
+    storage = typeof localStorage !== 'undefined' ? localStorage : null,
+    logger = typeof console !== 'undefined' ? console : null,
+  } = {}) {
+    if (typeof clone !== 'function' || typeof deepMerge !== 'function') {
+      throw new Error('createPanelSettings requires clone and deepMerge helpers');
+    }
+
+    const DEFAULTS = {
+      layout: {
+        anchor: 'right',
+        offset: 16,
+        bottom: 16,
+        width: null,
+        height: null,
+      },
+      behavior: {
+        autoHideEnabled: true,
+        autoHideDelayMs: 10000,
+        collapseOnOutside: false,
+        collapseOnFocus: false,
+        allowDrag: true,
+        allowResize: true,
+      },
+    };
+
+    const log = logger || { warn: () => {} };
+    const settingsStore = storage;
+
+    let settings = clone(DEFAULTS);
+
+    if (settingsStore) {
+      try {
+        const raw = settingsStore.getItem(PANEL_SETTINGS_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          settings = deepMerge(clone(DEFAULTS), parsed);
+        }
+      } catch (err) {
+        log?.warn?.('[GMH] failed to load panel settings', err);
+        settings = clone(DEFAULTS);
+      }
+    }
+
+    const listeners = new Set();
+
+    const persist = () => {
+      if (!settingsStore) return;
+      try {
+        settingsStore.setItem(PANEL_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+      } catch (err) {
+        log?.warn?.('[GMH] failed to persist panel settings', err);
+      }
+    };
+
+    const notify = () => {
+      const snapshot = clone(settings);
+      listeners.forEach((listener) => {
+        try {
+          listener(snapshot);
+        } catch (err) {
+          log?.warn?.('[GMH] panel settings listener failed', err);
+        }
+      });
+    };
+
+    return {
+      STORAGE_KEY: PANEL_SETTINGS_STORAGE_KEY,
+      defaults: clone(DEFAULTS),
+      get() {
+        return clone(settings);
+      },
+      update(patch) {
+        if (!patch || typeof patch !== 'object') return clone(settings);
+        const nextSettings = deepMerge(settings, patch);
+        const before = JSON.stringify(settings);
+        const after = JSON.stringify(nextSettings);
+        if (after === before) return clone(settings);
+        settings = nextSettings;
+        persist();
+        notify();
+        return clone(settings);
+      },
+      reset() {
+        const before = JSON.stringify(settings);
+        const defaultsString = JSON.stringify(DEFAULTS);
+        if (before === defaultsString) {
+          settings = clone(DEFAULTS);
+          return clone(settings);
+        }
+        settings = clone(DEFAULTS);
+        persist();
+        notify();
+        return clone(settings);
+      },
+      onChange(listener) {
+        if (typeof listener !== 'function') return () => {};
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    };
+  }
+
+  const ensureDocument$1 = (documentRef) => {
+    if (!documentRef || typeof documentRef.createElement !== 'function') {
+      throw new Error('snapshot feature requires a document reference');
+    }
+    return documentRef;
+  };
+
+  const createDescribeNode = (documentRef) => {
+    const doc = ensureDocument$1(documentRef);
+    const ElementCtor = doc?.defaultView?.Element || (typeof Element !== 'undefined' ? Element : null);
+    return (node) => {
+      if (!ElementCtor || !node || !(node instanceof ElementCtor)) return null;
+      const parts = [];
+      let current = node;
+      let depth = 0;
+      while (current && depth < 5) {
+        let part = current.tagName.toLowerCase();
+        if (current.id) part += `#${current.id}`;
+        if (current.classList?.length)
+          part += `.${Array.from(current.classList).slice(0, 3).join('.')}`;
+        parts.unshift(part);
+        current = current.parentElement;
+        depth += 1;
+      }
+      return parts.join(' > ');
+    };
+  };
+
+  /**
+   * Produces utilities for capturing DOM snapshots for diagnostics/export workflows.
+   */
+  function createSnapshotFeature({
+    getActiveAdapter,
+    triggerDownload,
+    setPanelStatus,
+    errorHandler,
+    documentRef = typeof document !== 'undefined' ? document : null,
+    locationRef = typeof location !== 'undefined' ? location : null,
+  }) {
+    if (!getActiveAdapter || !triggerDownload || !setPanelStatus || !errorHandler) {
+      throw new Error('createSnapshotFeature missing required dependencies');
+    }
+
+    const describeNode = createDescribeNode(documentRef);
+
+    const downloadDomSnapshot = () => {
+      const doc = documentRef;
+      const loc = locationRef;
+      if (!doc || !loc) return;
+      try {
+        const adapter = getActiveAdapter();
+        const container = adapter?.findContainer?.(doc);
+        const blocks = adapter?.listMessageBlocks?.(container || doc) || [];
+        const snapshot = {
+          url: loc.href,
+          captured_at: new Date().toISOString(),
+          container_path: describeNode(container),
+          block_count: blocks.length,
+          selector_strategies: adapter?.dumpSelectors?.(),
+          container_html_sample: container ? (container.innerHTML || '').slice(0, 40000) : null,
+        };
+        const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
+          type: 'application/json',
+        });
+        triggerDownload(blob, `genit-snapshot-${Date.now()}.json`);
+        setPanelStatus('DOM 스냅샷이 저장되었습니다.', 'success');
+      } catch (error) {
+        const handler = errorHandler?.handle ? errorHandler : null;
+        const message = handler?.handle
+          ? handler.handle(error, 'snapshot', handler.LEVELS?.ERROR)
+          : error?.message || String(error);
+        setPanelStatus(`스냅샷 실패: ${message}`, 'error');
+      }
+    };
+
+    return {
+      describeNode,
+      downloadDomSnapshot,
+    };
+  }
+
+  /**
+   * Caches structured transcript snapshots, exposing helpers used by share/export flows.
+   */
+  function createStructuredSnapshotReader({
+    getActiveAdapter,
+    setEntryOriginProvider,
+    documentRef = typeof document !== 'undefined' ? document : null,
+  } = {}) {
+    if (!getActiveAdapter) throw new Error('createStructuredSnapshotReader requires getActiveAdapter');
+    const doc = ensureDocument$1(documentRef);
+
+    let entryOrigin = [];
+    let latestStructuredSnapshot = null;
+    let blockCache = new WeakMap();
+    let blockIdRegistry = new WeakMap();
+    let blockIdCounter = 0;
+
+    if (typeof setEntryOriginProvider === 'function') {
+      setEntryOriginProvider(() => entryOrigin);
+    }
+
+    const getBlockId = (block) => {
+      if (!block) return null;
+      if (!blockIdRegistry.has(block)) {
+        blockIdCounter += 1;
+        blockIdRegistry.set(block, blockIdCounter);
+      }
+      return blockIdRegistry.get(block);
+    };
+
+    const fingerprintText = (value) => {
+      if (!value) return '0:0';
+      let hash = 0;
+      for (let i = 0; i < value.length; i += 1) {
+        hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
+      }
+      return `${value.length}:${hash.toString(16)}`;
+    };
+
+    const getBlockSignature = (block) => {
+      if (!block || typeof block.getAttribute !== 'function') return 'none';
+      const idAttr =
+        block.getAttribute('data-gmh-message-id') ||
+        block.getAttribute('data-message-id') ||
+        block.getAttribute('data-id');
+      if (idAttr) return `id:${idAttr}`;
+      const text = block.textContent || '';
+      return `text:${fingerprintText(text)}`;
+    };
+
+    const cloneStructuredMessage = (message) => {
+      if (!message || typeof message !== 'object') return null;
+      const cloned = { ...message };
+      if (Array.isArray(message.parts)) {
+        cloned.parts = message.parts.map((part) => (part && typeof part === 'object' ? { ...part } : part));
+      }
+      if (Array.isArray(message.legacyLines)) cloned.legacyLines = message.legacyLines.slice();
+      if (Array.isArray(message.__gmhEntries)) cloned.__gmhEntries = message.__gmhEntries.slice();
+      if (Array.isArray(message.__gmhSourceBlocks)) cloned.__gmhSourceBlocks = message.__gmhSourceBlocks.slice();
+      return cloned;
+    };
+
+    const ensureCacheEntry = (adapter, block, forceReparse) => {
+      if (!block) return { structured: null, lines: [], errors: [] };
+      const signature = getBlockSignature(block);
+      if (!forceReparse && blockCache.has(block)) {
+        const cached = blockCache.get(block);
+        if (cached && cached.signature === signature) {
+          return cached;
+        }
+      }
+
+      const localSeen = new Set();
+      const errors = [];
+      let structured = null;
+      let lines = [];
+
+      try {
+        const collected = adapter?.collectStructuredMessage?.(block);
+        if (collected && typeof collected === 'object') {
+          structured = cloneStructuredMessage(collected);
+          const legacy = Array.isArray(collected.legacyLines) ? collected.legacyLines : [];
+          lines = legacy.reduce((acc, line) => {
+            const trimmed = (line || '').trim();
+            if (!trimmed || localSeen.has(trimmed)) return acc;
+            localSeen.add(trimmed);
+            acc.push(trimmed);
+            return acc;
+          }, []);
+        }
+      } catch (error) {
+        errors.push(error?.message || String(error));
+      }
+
+      if (!structured) {
+        const fallbackLines = [];
+        const pushLine = (line) => {
+          const trimmed = (line || '').trim();
+          if (!trimmed || localSeen.has(trimmed)) return;
+          localSeen.add(trimmed);
+          fallbackLines.push(trimmed);
+        };
+        try {
+          adapter?.emitTranscriptLines?.(block, pushLine);
+        } catch (error) {
+          errors.push(error?.message || String(error));
+        }
+        lines = fallbackLines;
+      }
+
+      const entry = {
+        structured,
+        lines,
+        errors,
+        signature,
+      };
+      blockCache.set(block, entry);
+      return entry;
+    };
+
+    const captureStructuredSnapshot = (options = {}) => {
+      const { force } = options || {};
+      if (force) {
+        blockCache = new WeakMap();
+        blockIdRegistry = new WeakMap();
+        blockIdCounter = 0;
+      }
+      const adapter = getActiveAdapter();
+      const container = adapter?.findContainer?.(doc);
+      const blocks = adapter?.listMessageBlocks?.(container || doc) || [];
+      if (!container && !blocks.length) throw new Error('채팅 컨테이너를 찾을 수 없습니다.');
+      if (!blocks.length) {
+        entryOrigin = [];
+        latestStructuredSnapshot = {
+          messages: [],
+          legacyLines: [],
+          entryOrigin: [],
+          errors: [],
+          generatedAt: Date.now(),
+        };
+        return latestStructuredSnapshot;
+      }
+
+      const seenLine = new Set();
+      const legacyLines = [];
+      const origins = [];
+      const messages = [];
+      const errors = [];
+      const totalBlocks = blocks.length;
+
+      adapter?.resetInfoRegistry?.();
+
+      blocks.forEach((block, idx) => {
+        const fallbackIndex = Number(block?.getAttribute?.('data-gmh-message-index'));
+        const originIndex = Number.isFinite(fallbackIndex) ? fallbackIndex : idx;
+        const blockId = getBlockId(block);
+        const cacheEntry = ensureCacheEntry(adapter, block, Boolean(force));
+        const cacheLines = Array.isArray(cacheEntry.lines) ? cacheEntry.lines : [];
+
+        const structured = cacheEntry.structured ? cloneStructuredMessage(cacheEntry.structured) : null;
+        if (structured) {
+          const ordinalAttr = Number(block?.getAttribute?.('data-gmh-message-ordinal'));
+          const indexAttr = Number(block?.getAttribute?.('data-gmh-message-index'));
+          const userOrdinalAttr = Number(block?.getAttribute?.('data-gmh-user-ordinal'));
+          const channelAttr = block?.getAttribute?.('data-gmh-channel');
+          structured.ordinal = Number.isFinite(ordinalAttr) ? ordinalAttr : totalBlocks - idx;
+          structured.index = Number.isFinite(indexAttr) ? indexAttr : originIndex;
+          if (Number.isFinite(userOrdinalAttr)) structured.userOrdinal = userOrdinalAttr;
+          else if (structured.userOrdinal) delete structured.userOrdinal;
+          if (channelAttr) structured.channel = channelAttr;
+          else if (!structured.channel) {
+            structured.channel =
+              structured.role === 'player'
+                ? 'user'
+                : structured.role === 'npc'
+                ? 'llm'
+                : 'system';
+          }
+          messages.push(structured);
+        }
+
+        cacheLines.forEach((line) => {
+          const trimmed = (line || '').trim();
+          if (!trimmed) return;
+          const lineKey = `${blockId ?? originIndex}::${trimmed}`;
+          if (seenLine.has(lineKey)) return;
+          seenLine.add(lineKey);
+          legacyLines.push(trimmed);
+          origins.push(originIndex);
+        });
+
+        if (Array.isArray(cacheEntry.errors)) {
+          cacheEntry.errors.forEach((message) => {
+            errors.push({ index: originIndex, error: message });
+          });
+        }
+      });
+
+      if (origins.length < legacyLines.length) {
+        while (origins.length < legacyLines.length) origins.push(null);
+      } else if (origins.length > legacyLines.length) {
+        origins.length = legacyLines.length;
+      }
+
+      entryOrigin = origins.slice();
+      latestStructuredSnapshot = {
+        messages,
+        legacyLines,
+        entryOrigin: origins,
+        errors,
+        generatedAt: Date.now(),
+      };
+      return latestStructuredSnapshot;
+    };
+
+    const readTranscriptText = (options = {}) =>
+      captureStructuredSnapshot(options).legacyLines.join('\n');
+
+    const projectStructuredMessages = (structuredSnapshot, rangeInfo) => {
+      if (!structuredSnapshot) {
+        return {
+          messages: [],
+          sourceTotal: 0,
+          range: {
+            active: false,
+            start: null,
+            end: null,
+            messageStartIndex: null,
+            messageEndIndex: null,
+          },
+        };
+      }
+      const messages = Array.isArray(structuredSnapshot.messages)
+        ? structuredSnapshot.messages.slice()
+        : [];
+      const total = messages.length;
+      const baseRange = {
+        active: Boolean(rangeInfo?.active),
+        start: Number.isFinite(rangeInfo?.start) ? rangeInfo.start : null,
+        end: Number.isFinite(rangeInfo?.end) ? rangeInfo.end : null,
+        messageStartIndex: Number.isFinite(rangeInfo?.messageStartIndex)
+          ? rangeInfo.messageStartIndex
+          : null,
+        messageEndIndex: Number.isFinite(rangeInfo?.messageEndIndex)
+          ? rangeInfo.messageEndIndex
+          : null,
+      };
+      if (!messages.length || !baseRange.active) {
+        return { messages, sourceTotal: total, range: { ...baseRange, active: false } };
+      }
+
+      let filtered = messages;
+      if (Number.isFinite(baseRange.messageStartIndex) && Number.isFinite(baseRange.messageEndIndex)) {
+        const lower = Math.min(baseRange.messageStartIndex, baseRange.messageEndIndex);
+        const upper = Math.max(baseRange.messageStartIndex, baseRange.messageEndIndex);
+        filtered = messages.filter((message) => {
+          const idx = Number(message?.index);
+          return Number.isFinite(idx) ? idx >= lower && idx <= upper : false;
+        });
+      } else if (Number.isFinite(baseRange.start) && Number.isFinite(baseRange.end)) {
+        const lowerOrdinal = Math.min(baseRange.start, baseRange.end);
+        const upperOrdinal = Math.max(baseRange.start, baseRange.end);
+        filtered = messages.filter((message) => {
+          const ord = Number(message?.ordinal);
+          return Number.isFinite(ord) ? ord >= lowerOrdinal && ord <= upperOrdinal : false;
+        });
+      }
+
+      if (!filtered.length) {
+        filtered = messages.slice();
+      }
+
+      return {
+        messages: filtered,
+        sourceTotal: total,
+        range: {
+          ...baseRange,
+          active: Boolean(baseRange.active && filtered.length && filtered.length <= total),
+        },
+      };
+    };
+
+    const readStructuredMessages = (options = {}) => {
+      const { force } = options || {};
+      if (!force && latestStructuredSnapshot) {
+        return Array.isArray(latestStructuredSnapshot.messages)
+          ? latestStructuredSnapshot.messages.slice()
+          : [];
+      }
+      const snapshot = captureStructuredSnapshot(options);
+      return Array.isArray(snapshot.messages) ? snapshot.messages.slice() : [];
+    };
+
+    const getEntryOrigin = () => entryOrigin.slice();
+
+    return {
+      captureStructuredSnapshot,
+      readTranscriptText,
+      projectStructuredMessages,
+      readStructuredMessages,
+      getEntryOrigin,
+    };
+  }
+
+  const METER_INTERVAL_MS = CONFIG.TIMING.AUTO_LOADER.METER_INTERVAL_MS;
+
+  /**
+   * Creates the auto-loader controller that scrolls and indexes Genit chat messages.
+   * Handles profile-specific timing, range updates, and exposes helpers for UI wiring.
+   */
+  function createAutoLoader({
+    stateApi,
+    stateEnum,
+    errorHandler,
+    messageIndexer,
+    exportRange,
+    setPanelStatus,
+    getActiveAdapter,
+    sleep,
+    isScrollable,
+    documentRef = typeof document !== 'undefined' ? document : null,
+    windowRef = typeof window !== 'undefined' ? window : null,
+    normalizeTranscript,
+    buildSession,
+    readTranscriptText,
+    logger = typeof console !== 'undefined' ? console : null,
+  } = {}) {
+    if (!stateApi || typeof stateApi.setState !== 'function') {
+      throw new Error('createAutoLoader requires stateApi with setState');
+    }
+    if (!stateEnum) throw new Error('createAutoLoader requires stateEnum');
+    if (!errorHandler || typeof errorHandler.handle !== 'function') {
+      throw new Error('createAutoLoader requires errorHandler');
+    }
+    if (!getActiveAdapter) throw new Error('createAutoLoader requires getActiveAdapter');
+    if (!sleep) throw new Error('createAutoLoader requires sleep helper');
+    if (!isScrollable) throw new Error('createAutoLoader requires isScrollable helper');
+    if (!normalizeTranscript || !buildSession || !readTranscriptText) {
+      throw new Error('createAutoLoader requires transcript helpers');
+    }
+    if (!documentRef) throw new Error('createAutoLoader requires document reference');
+    if (!windowRef) throw new Error('createAutoLoader requires window reference');
+
+    const doc = documentRef;
+    const win = windowRef;
+    const ElementCtor = doc?.defaultView?.Element || (typeof Element !== 'undefined' ? Element : null);
+    const MutationObserverCtor =
+      win?.MutationObserver || (typeof MutationObserver !== 'undefined' ? MutationObserver : null);
+    const setTimeoutFn = typeof win?.setTimeout === 'function' ? win.setTimeout.bind(win) : setTimeout;
+    const setIntervalFn =
+      typeof win?.setInterval === 'function' ? win.setInterval.bind(win) : setInterval;
+    const clearIntervalFn =
+      typeof win?.clearInterval === 'function' ? win.clearInterval.bind(win) : clearInterval;
+
+    const AUTO_PROFILES = CONFIG.TIMING.AUTO_LOADER.PROFILES;
+
+    const AUTO_CFG = {
+      profile: 'default',
+    };
+
+    const AUTO_STATE = {
+      running: false,
+      container: null,
+      meterTimer: null,
+    };
+
+    const profileListeners = new Set();
+    const warnWithHandler = (err, context, fallbackMessage) => {
+      if (errorHandler?.handle) {
+        const level = errorHandler.LEVELS?.WARN || 'warn';
+        errorHandler.handle(err, context, level);
+      } else if (logger?.warn) {
+        logger.warn(fallbackMessage, err);
+      }
+    };
+
+    const notifyProfileChange = () => {
+      profileListeners.forEach((listener) => {
+        try {
+          listener(AUTO_CFG.profile);
+        } catch (err) {
+          warnWithHandler(err, 'autoload', '[GMH] auto profile listener failed');
+        }
+      });
+    };
+
+    const getProfile = () => AUTO_CFG.profile;
+
+    function ensureScrollContainer() {
+      const adapter = typeof getActiveAdapter === 'function' ? getActiveAdapter() : null;
+      const adapterContainer = adapter?.findContainer?.(doc);
+      if (adapterContainer) {
+        if (isScrollable(adapterContainer)) return adapterContainer;
+        if (ElementCtor && adapterContainer instanceof ElementCtor) {
+          let ancestor = adapterContainer.parentElement;
+          for (let depth = 0; depth < 6 && ancestor; depth += 1) {
+            if (isScrollable(ancestor)) return ancestor;
+            ancestor = ancestor.parentElement;
+          }
+        }
+        return adapterContainer;
+      }
+      const messageBlocks = adapter?.listMessageBlocks?.(doc) || [];
+      if (messageBlocks.length) {
+        let ancestor = messageBlocks[0]?.parentElement || null;
+        for (let depth = 0; depth < 6 && ancestor; depth += 1) {
+          if (isScrollable(ancestor)) return ancestor;
+          ancestor = ancestor.parentElement;
+        }
+      }
+      return doc.scrollingElement || doc.documentElement || doc.body;
+    }
+
+    function waitForGrowth(el, startHeight, timeout) {
+      if (!MutationObserverCtor) {
+        return new Promise((resolve) => {
+          setTimeoutFn(() => resolve(false), timeout);
+        });
+      }
+      return new Promise((resolve) => {
+        let finished = false;
+        const obs = new MutationObserverCtor(() => {
+          if (el.scrollHeight > startHeight + 4) {
+            finished = true;
+            obs.disconnect();
+            resolve(true);
+          }
+        });
+        obs.observe(el, { childList: true, subtree: true });
+        setTimeoutFn(() => {
+          if (!finished) {
+            obs.disconnect();
+            resolve(false);
+          }
+        }, timeout);
+      });
+    }
+
+    async function scrollUpCycle(container, profile) {
+      if (!container) return { grew: false, before: 0, after: 0 };
+      const before = container.scrollHeight;
+      container.scrollTop = 0;
+      const grew = await waitForGrowth(container, before, profile.settleTimeoutMs);
+      return { grew, before, after: container.scrollHeight };
+    }
+
+    const statsCache = {
+      summaryKey: null,
+      rawKey: null,
+      data: null,
+    };
+
+    const clearStatsCache = () => {
+      statsCache.summaryKey = null;
+      statsCache.rawKey = null;
+      statsCache.data = null;
+    };
+
+    let lastSessionSignature = windowRef?.location?.href || (typeof location !== 'undefined' ? location.href : null);
+
+    const makeSummaryKey = (summary) => {
+      if (!summary) return null;
+      const total = Number.isFinite(summary.totalMessages) ? summary.totalMessages : 'na';
+      const user = Number.isFinite(summary.userMessages) ? summary.userMessages : 'na';
+      const stamp = summary.timestamp || 'na';
+      return `${total}:${user}:${stamp}`;
+    };
+
+    function collectTurnStats(options = {}) {
+      const force = Boolean(options?.force);
+      let summary = null;
+      try {
+        const currentSignature = windowRef?.location?.href || (typeof location !== 'undefined' ? location.href : null);
+        if (currentSignature && currentSignature !== lastSessionSignature) {
+          lastSessionSignature = currentSignature;
+          clearStatsCache();
+          exportRange?.clear?.();
+          exportRange?.setTotals?.({ message: 0, user: 0, llm: 0, entry: 0 });
+        }
+        try {
+          summary = messageIndexer?.refresh?.({ immediate: true }) || null;
+        } catch (err) {
+          warnWithHandler(err, 'autoload', '[GMH] message indexing before stats failed');
+        }
+        const summaryKey = makeSummaryKey(summary);
+        if (!force && summaryKey && statsCache.data && statsCache.summaryKey === summaryKey) {
+          return statsCache.data;
+        }
+
+        let rawText = null;
+        let rawKey = null;
+        const transcriptOptions = force ? { force: true } : {};
+        if (!summaryKey) {
+          rawText = readTranscriptText(transcriptOptions);
+          rawKey = typeof rawText === 'string' ? rawText : String(rawText ?? '');
+          if (!force && statsCache.data && statsCache.rawKey === rawKey) {
+            return statsCache.data;
+          }
+        } else {
+          rawText = readTranscriptText(transcriptOptions);
+        }
+
+        const normalized = normalizeTranscript(rawText);
+        const session = buildSession(normalized);
+        const userMessages = session.turns.filter((t) => t.channel === 'user').length;
+        const llmMessages = session.turns.filter((t) => t.channel === 'llm').length;
+        const previousTotals = exportRange?.getTotals?.() || {
+          message: 0,
+          user: 0,
+          llm: 0,
+          entry: 0,
+        };
+        const blockSet = new Set();
+        session.turns.forEach((turn) => {
+          const blocks = Array.isArray(turn?.__gmhSourceBlocks) ? turn.__gmhSourceBlocks : [];
+          blocks
+            .filter((idx) => Number.isInteger(idx) && idx >= 0)
+            .forEach((idx) => blockSet.add(idx));
+        });
+        const entryCount = blockSet.size || session.turns.length;
+        const nextTotals = {
+          message: session.turns.length,
+          user: userMessages,
+          llm: llmMessages,
+          entry: entryCount,
+        };
+        const totalsShrank =
+          Number.isFinite(previousTotals.message) && previousTotals.message > nextTotals.message;
+        const userShrank = Number.isFinite(previousTotals.user) && previousTotals.user > nextTotals.user;
+        const llmShrank = Number.isFinite(previousTotals.llm) && previousTotals.llm > nextTotals.llm;
+        const entryShrank = Number.isFinite(previousTotals.entry) && previousTotals.entry > nextTotals.entry;
+        if (totalsShrank || userShrank || llmShrank || entryShrank) {
+          exportRange?.clear?.();
+        }
+        exportRange?.setTotals?.(nextTotals);
+        const stats = {
+          session,
+          userMessages,
+          llmMessages,
+          totalMessages: session.turns.length,
+        };
+        statsCache.summaryKey = summaryKey;
+        statsCache.rawKey = summaryKey ? null : rawKey;
+        statsCache.data = stats;
+        lastSessionSignature = currentSignature || lastSessionSignature;
+        return stats;
+      } catch (error) {
+        clearStatsCache();
+        if (errorHandler?.handle) {
+          const level = errorHandler.LEVELS?.ERROR || 'error';
+          errorHandler.handle(error, 'autoload', level);
+        }
+        return {
+          session: null,
+          userMessages: 0,
+          llmMessages: 0,
+          totalMessages: 0,
+          error,
+        };
+      }
+    }
+
+    const notifyScan = (payload) => {
+      stateApi.setState(stateEnum.SCANNING, payload);
+    };
+
+    const notifyDone = (payload) => {
+      stateApi.setState(stateEnum.DONE, payload);
+    };
+
+    const notifyError = (payload) => {
+      stateApi.setState(stateEnum.ERROR, payload);
+    };
+
+    const notifyIdle = (payload) => {
+      stateApi.setState(stateEnum.IDLE, payload);
+    };
+
+    async function autoLoadAll() {
+      const profile = AUTO_PROFILES[getProfile()] || AUTO_PROFILES.default;
+      const container = ensureScrollContainer();
+      if (!container) {
+        notifyError({
+          label: '자동 로딩 실패',
+          message: '채팅 컨테이너를 찾을 수 없습니다.',
+          tone: 'error',
+          progress: { value: 1 },
+        });
+        return { error: new Error('container missing') };
+      }
+      AUTO_STATE.running = true;
+      AUTO_STATE.container = container;
+      let stableRounds = 0;
+      let guard = 0;
+
+      while (AUTO_STATE.running && guard < profile.guardLimit) {
+        guard += 1;
+        notifyScan({
+          label: '위로 끝까지 로딩',
+          message: `추가 수집 중 (${guard}/${profile.guardLimit})`,
+          tone: 'progress',
+          progress: { indeterminate: true },
+        });
+        const { grew, before, after } = await scrollUpCycle(container, profile);
+        if (!AUTO_STATE.running) break;
+        const delta = after - before;
+        stableRounds = !grew || delta < 6 ? stableRounds + 1 : 0;
+        if (stableRounds >= profile.maxStableRounds) break;
+        await sleep(profile.cycleDelayMs);
+      }
+
+      AUTO_STATE.running = false;
+      const stats = collectTurnStats();
+      if (stats.error) {
+        notifyError({
+          label: '자동 로딩 실패',
+          message: '스크롤 후 파싱 실패',
+          tone: 'error',
+          progress: { value: 1 },
+        });
+      } else {
+        notifyDone({
+          label: '자동 로딩 완료',
+          message: `유저 메시지 ${stats.userMessages}개 확보`,
+          tone: 'success',
+          progress: { value: 1 },
+        });
+      }
+      return stats;
+    }
+
+    async function autoLoadUntilPlayerTurns(target) {
+      const profile = AUTO_PROFILES[getProfile()] || AUTO_PROFILES.default;
+      const container = ensureScrollContainer();
+      if (!container) {
+        notifyError({
+          label: '자동 로딩 실패',
+          message: '채팅 컨테이너를 찾을 수 없습니다.',
+          tone: 'error',
+          progress: { value: 1 },
+        });
+        return { error: new Error('container missing') };
+      }
+      AUTO_STATE.running = true;
+      AUTO_STATE.container = container;
+      let stableRounds = 0;
+      let stagnantRounds = 0;
+      let loopCount = 0;
+      let prevUserMessages = -1;
+
+      while (AUTO_STATE.running && loopCount < profile.guardLimit) {
+        loopCount += 1;
+        const stats = collectTurnStats();
+        if (stats.error) {
+          notifyError({
+            label: '자동 로딩 실패',
+            message: '파싱 실패 - DOM 변화를 감지하지 못했습니다.',
+            tone: 'error',
+            progress: { value: 1 },
+          });
+          break;
+        }
+        if (stats.userMessages >= target) {
+          notifyDone({
+            label: '자동 로딩 완료',
+            message: `목표 달성 · 유저 메시지 ${stats.userMessages}개 확보`,
+            tone: 'success',
+            progress: { value: 1 },
+          });
+          break;
+        }
+
+        const ratio = target > 0 ? Math.min(1, stats.userMessages / target) : 0;
+        notifyScan({
+          label: '메시지 확보 중',
+          message: `유저 메시지 ${stats.userMessages}/${target}`,
+          tone: 'progress',
+          progress: { value: ratio },
+        });
+
+        const { grew, before, after } = await scrollUpCycle(container, profile);
+        if (!AUTO_STATE.running) break;
+        const delta = after - before;
+        stableRounds = !grew || delta < 6 ? stableRounds + 1 : 0;
+
+        stagnantRounds = stats.userMessages === prevUserMessages ? stagnantRounds + 1 : 0;
+        prevUserMessages = stats.userMessages;
+
+        if (stableRounds >= profile.maxStableRounds || stagnantRounds >= profile.guardLimit) {
+          notifyDone({
+            label: '자동 로딩 종료',
+            message: '추가 데이터를 불러오지 못했습니다. 더 이상 기록이 없거나 막혀있습니다.',
+            tone: 'warning',
+            progress: { value: ratio },
+          });
+          break;
+        }
+        await sleep(profile.cycleDelayMs);
+      }
+
+      AUTO_STATE.running = false;
+      const finalStats = collectTurnStats();
+      if (finalStats?.error) {
+        notifyError({
+          label: '자동 로딩 실패',
+          message: '메시지 정보를 수집하지 못했습니다.',
+          tone: 'error',
+          progress: { value: 1 },
+        });
+        return finalStats;
+      }
+      if (stateApi.getState?.() === stateEnum.SCANNING) {
+        const ratio = target > 0 ? Math.min(1, finalStats.userMessages / target) : 0;
+        notifyDone({
+          label: '자동 로딩 종료',
+          message: `유저 메시지 ${finalStats.userMessages}/${target}`,
+          tone: 'warning',
+          progress: { value: ratio },
+        });
+      }
+      return finalStats;
+    }
+
+    function stopAutoLoad() {
+      if (!AUTO_STATE.running) return;
+      AUTO_STATE.running = false;
+      notifyIdle({
+        label: '대기 중',
+        message: '자동 로딩을 중지했습니다.',
+        tone: 'info',
+        progress: { value: 0 },
+      });
+    }
+
+    function startTurnMeter(meter) {
+      if (!meter) return;
+      const render = () => {
+        const stats = collectTurnStats();
+        if (stats.error) {
+          meter.textContent = '메시지 측정 실패: DOM을 읽을 수 없습니다.';
+          return;
+        }
+        meter.textContent = `메시지 현황 · 유저 ${stats.userMessages} · LLM ${stats.llmMessages}`;
+      };
+      render();
+      if (AUTO_STATE.meterTimer) return;
+      AUTO_STATE.meterTimer = setIntervalFn(() => {
+        if (!meter.isConnected) {
+          clearIntervalFn(AUTO_STATE.meterTimer);
+          AUTO_STATE.meterTimer = null;
+          return;
+        }
+        render();
+      }, METER_INTERVAL_MS);
+    }
+
+    const autoLoader = {
+      lastMode: null,
+      lastTarget: null,
+      lastProfile: AUTO_CFG.profile,
+      async start(mode, target, opts = {}) {
+        if (AUTO_STATE.running) {
+          setPanelStatus?.('이미 자동 로딩이 진행 중입니다.', 'muted');
+          return null;
+        }
+        if (opts.profile) {
+          AUTO_CFG.profile = AUTO_PROFILES[opts.profile] ? opts.profile : 'default';
+          this.lastProfile = AUTO_CFG.profile;
+          notifyProfileChange();
+        }
+        this.lastMode = mode;
+        this.lastProfile = AUTO_CFG.profile;
+        try {
+          if (mode === 'all') {
+            this.lastTarget = null;
+            return await autoLoadAll();
+          }
+          if (mode === 'turns') {
+            const numericTarget = Number(target);
+            const goal = Number.isFinite(numericTarget) ? numericTarget : Number(target) || 0;
+            if (!goal || goal <= 0) {
+              setPanelStatus?.('유저 메시지 목표가 올바르지 않습니다.', 'error');
+              return null;
+            }
+            this.lastTarget = goal;
+            return await autoLoadUntilPlayerTurns(goal);
+          }
+        } catch (error) {
+          errorHandler.handle(error, 'autoload', errorHandler.LEVELS?.ERROR);
+          throw error;
+        }
+        return null;
+      },
+      async startCurrent(profileName) {
+        if (!this.lastMode) {
+          setPanelStatus?.('재시도할 이전 작업이 없습니다.', 'muted');
+          return null;
+        }
+        if (profileName) {
+          AUTO_CFG.profile = AUTO_PROFILES[profileName] ? profileName : 'default';
+        } else {
+          AUTO_CFG.profile = this.lastProfile || 'default';
+        }
+        this.lastProfile = AUTO_CFG.profile;
+        notifyProfileChange();
+        return this.start(this.lastMode, this.lastTarget);
+      },
+      setProfile(profileName) {
+        const next = AUTO_PROFILES[profileName] ? profileName : 'default';
+        AUTO_CFG.profile = next;
+        this.lastProfile = next;
+        setPanelStatus?.(`프로파일이 '${next}'로 설정되었습니다.`, 'info');
+        notifyProfileChange();
+      },
+      stop() {
+        stopAutoLoad();
+      },
+    };
+
+    const subscribeProfileChange = (listener) => {
+      if (typeof listener !== 'function') return () => {};
+      profileListeners.add(listener);
+      return () => profileListeners.delete(listener);
+    };
+
+    notifyProfileChange();
+
+    return {
+      autoLoader,
+      autoState: AUTO_STATE,
+      autoProfiles: AUTO_PROFILES,
+      getProfile,
+      subscribeProfileChange,
+      startTurnMeter,
+      collectTurnStats,
+    };
+  }
+
+  /**
+   * Generates UI hooks for controlling the auto-loader and download status buttons.
+   */
+  function createAutoLoaderControls({
+    documentRef = typeof document !== 'undefined' ? document : null,
+    autoLoader,
+    autoState,
+    setPanelStatus,
+    startTurnMeter,
+    getAutoProfile,
+    subscribeProfileChange,
+    downloadDomSnapshot,
+  } = {}) {
+    if (!documentRef) throw new Error('createAutoLoaderControls requires document reference');
+    if (!autoLoader) throw new Error('createAutoLoaderControls requires autoLoader');
+    if (!autoState) throw new Error('createAutoLoaderControls requires autoState');
+    if (!startTurnMeter) throw new Error('createAutoLoaderControls requires startTurnMeter');
+    if (!getAutoProfile) throw new Error('createAutoLoaderControls requires getAutoProfile');
+    if (!subscribeProfileChange) {
+      throw new Error('createAutoLoaderControls requires subscribeProfileChange');
+    }
+
+    const doc = documentRef;
+    const profileSelectElements = new Set();
+
+    const syncProfileSelects = () => {
+      const profile = getAutoProfile();
+      for (const el of Array.from(profileSelectElements)) {
+        if (!el || !el.isConnected) {
+          profileSelectElements.delete(el);
+          continue;
+        }
+        el.value = profile;
+      }
+    };
+
+    subscribeProfileChange(syncProfileSelects);
+
+    const registerProfileSelect = (select) => {
+      if (!select) return;
+      profileSelectElements.add(select);
+      syncProfileSelects();
+      select.onchange = (event) => {
+        autoLoader.setProfile(event.target.value);
+      };
+    };
+
+    const ensureAutoLoadControlsModern = (panel) => {
+      if (!panel) return;
+      let wrap = panel.querySelector('#gmh-autoload-controls');
+      if (!wrap) {
+        wrap = doc.createElement('div');
+        wrap.id = 'gmh-autoload-controls';
+        panel.appendChild(wrap);
+      }
+      if (wrap.dataset.ready === 'true') return;
+      wrap.dataset.ready = 'true';
+      wrap.innerHTML = `
+      <div class="gmh-field-row">
+        <button id="gmh-autoload-all" class="gmh-panel-btn gmh-panel-btn--accent">위로 끝까지 로딩</button>
+        <button id="gmh-autoload-stop" class="gmh-panel-btn gmh-panel-btn--warn gmh-panel-btn--compact">정지</button>
+      </div>
+      <div class="gmh-field-row">
+        <input id="gmh-autoload-turns" class="gmh-input" type="number" min="1" step="1" placeholder="최근 유저 메시지 N" />
+        <button id="gmh-autoload-turns-btn" class="gmh-small-btn gmh-small-btn--accent">메시지 확보</button>
+      </div>
+      <div id="gmh-turn-meter" class="gmh-subtext"></div>
+    `;
+
+      const btnAll = wrap.querySelector('#gmh-autoload-all');
+      const btnStop = wrap.querySelector('#gmh-autoload-stop');
+      const btnTurns = wrap.querySelector('#gmh-autoload-turns-btn');
+      const inputTurns = wrap.querySelector('#gmh-autoload-turns');
+      const meter = wrap.querySelector('#gmh-turn-meter');
+
+      const toggleControls = (disabled) => {
+        btnAll.disabled = disabled;
+        btnTurns.disabled = disabled;
+        btnAll.classList.toggle('gmh-disabled', disabled);
+        btnTurns.classList.toggle('gmh-disabled', disabled);
+      };
+
+      btnAll.onclick = async () => {
+        if (autoState.running) return;
+        toggleControls(true);
+        try {
+          await autoLoader.start('all');
+        } finally {
+          toggleControls(false);
+        }
+      };
+
+      btnTurns.onclick = async () => {
+        if (autoState.running) return;
+        const rawVal = inputTurns?.value?.trim();
+        const target = Number.parseInt(rawVal || '0', 10);
+        if (!Number.isFinite(target) || target <= 0) {
+          setPanelStatus?.('유저 메시지 수를 입력해주세요.', 'error');
+          return;
+        }
+        toggleControls(true);
+        try {
+          await autoLoader.start('turns', target);
+        } finally {
+          toggleControls(false);
+        }
+      };
+
+      btnStop.onclick = () => {
+        if (!autoState.running) {
+          setPanelStatus?.('자동 로딩이 실행 중이 아닙니다.', 'muted');
+          return;
+        }
+        autoLoader.stop();
+      };
+
+      startTurnMeter(meter);
+    };
+
+    const ensureAutoLoadControlsLegacy = (panel) => {
+      if (!panel || panel.querySelector('#gmh-autoload-controls')) return;
+
+      const wrap = doc.createElement('div');
+      wrap.id = 'gmh-autoload-controls';
+      wrap.style.cssText = 'display:grid; gap:6px; border-top:1px solid #1f2937; padding-top:6px;';
+      wrap.innerHTML = `
+      <div style="display:flex; gap:8px;">
+        <button id="gmh-autoload-all" style="flex:1; background:#38bdf8; border:0; color:#041; border-radius:8px; padding:6px; cursor:pointer;">위로 끝까지 로딩</button>
+        <button id="gmh-autoload-stop" style="width:88px; background:#ef4444; border:0; color:#fff; border-radius:8px; padding:6px; cursor:pointer;">정지</button>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input id="gmh-autoload-turns" type="number" min="1" step="1" placeholder="최근 유저 메시지 N" style="flex:1; background:#111827; color:#f1f5f9; border:1px solid #1f2937; border-radius:8px; padding:6px;" />
+        <button id="gmh-autoload-turns-btn" style="width:96px; background:#34d399; border:0; color:#041; border-radius:8px; padding:6px; cursor:pointer;">메시지 확보</button>
+      </div>
+      <div id="gmh-turn-meter" style="opacity:.7; font-size:11px;"></div>
+    `;
+
+      panel.appendChild(wrap);
+
+      const btnAll = wrap.querySelector('#gmh-autoload-all');
+      const btnStop = wrap.querySelector('#gmh-autoload-stop');
+      const btnTurns = wrap.querySelector('#gmh-autoload-turns-btn');
+      const inputTurns = wrap.querySelector('#gmh-autoload-turns');
+      const meter = wrap.querySelector('#gmh-turn-meter');
+
+      const toggleControls = (disabled) => {
+        btnAll.disabled = disabled;
+        btnTurns.disabled = disabled;
+        btnAll.style.opacity = disabled ? '0.6' : '1';
+        btnTurns.style.opacity = disabled ? '0.6' : '1';
+      };
+
+      btnAll.onclick = async () => {
+        if (autoState.running) return;
+        toggleControls(true);
+        try {
+          await autoLoader.start('all');
+        } finally {
+          toggleControls(false);
+        }
+      };
+
+      btnTurns.onclick = async () => {
+        if (autoState.running) return;
+        const rawVal = inputTurns?.value?.trim();
+        const target = Number.parseInt(rawVal || '0', 10);
+        if (!Number.isFinite(target) || target <= 0) {
+          setPanelStatus?.('유저 메시지 수를 입력해주세요.', 'error');
+          return;
+        }
+        toggleControls(true);
+        try {
+          const stats = await autoLoader.start('turns', target);
+          if (stats && !stats.error) {
+            setPanelStatus?.(`현재 유저 메시지 ${stats.userMessages}개 확보.`, 'success');
+          }
+        } finally {
+          toggleControls(false);
+        }
+      };
+
+      btnStop.onclick = () => {
+        if (!autoState.running) {
+          setPanelStatus?.('자동 로딩이 실행 중이 아닙니다.', 'muted');
+          return;
+        }
+        autoLoader.stop();
+        setPanelStatus?.('자동 로딩 중지를 요청했습니다.', 'warning');
+      };
+
+      startTurnMeter(meter);
+    };
+
+    const createStatusActionsMarkup = (modern = false) => {
+      if (modern) {
+        return `
+      <div class="gmh-field-row">
+        <label for="gmh-profile-select" class="gmh-subtext gmh-field-label--inline">프로파일</label>
+        <select id="gmh-profile-select" class="gmh-select">
+          <option value="default">기본</option>
+          <option value="stability">안정</option>
+          <option value="fast">빠름</option>
+        </select>
+      </div>
+      <div class="gmh-field-row">
+        <button id="gmh-btn-retry" class="gmh-small-btn gmh-small-btn--muted">재시도</button>
+        <button id="gmh-btn-retry-stable" class="gmh-small-btn gmh-small-btn--muted">안정 모드</button>
+        <button id="gmh-btn-snapshot" class="gmh-small-btn gmh-small-btn--muted">DOM 스냅샷</button>
+      </div>`;
+      }
+      return `
+      <div style="display:flex; gap:6px; align-items:center;">
+        <label for="gmh-profile-select" style="font-size:11px; color:#94a3b8;">프로파일</label>
+        <select id="gmh-profile-select" style="flex:1; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:6px; padding:6px;">
+          <option value="default">기본</option>
+          <option value="stability">안정</option>
+          <option value="fast">빠름</option>
+        </select>
+      </div>
+      <div style="display:flex; gap:6px;">
+        <button id="gmh-btn-retry" style="flex:1; background:#f1f5f9; color:#0f172a; border:0; border-radius:6px; padding:6px; cursor:pointer;">재시도</button>
+        <button id="gmh-btn-retry-stable" style="flex:1; background:#e0e7ff; color:#1e1b4b; border:0; border-radius:6px; padding:6px; cursor:pointer;">안정 모드 재시도</button>
+        <button id="gmh-btn-snapshot" style="flex:1; background:#ffe4e6; color:#881337; border:0; border-radius:6px; padding:6px; cursor:pointer;">DOM 스냅샷</button>
+      </div>`;
+    };
+
+    const bindStatusActions = (actions, modern) => {
+      const select = actions.querySelector('#gmh-profile-select');
+      if (select) registerProfileSelect(select);
+
+      const retryBtn = actions.querySelector('#gmh-btn-retry');
+      if (retryBtn) {
+        retryBtn.onclick = async () => {
+          if (autoState.running) {
+            setPanelStatus?.('이미 자동 로딩이 진행 중입니다.', 'muted');
+            return;
+          }
+          await autoLoader.startCurrent();
+        };
+      }
+
+      const retryStableBtn = actions.querySelector('#gmh-btn-retry-stable');
+      if (retryStableBtn) {
+        retryStableBtn.onclick = async () => {
+          if (autoState.running) {
+            setPanelStatus?.('이미 자동 로딩이 진행 중입니다.', 'muted');
+            return;
+          }
+          await autoLoader.startCurrent('stability');
+        };
+      }
+
+      const snapshotBtn = actions.querySelector('#gmh-btn-snapshot');
+      if (snapshotBtn) {
+        snapshotBtn.onclick = () => downloadDomSnapshot?.();
+      }
+    };
+
+    const mountStatusActionsModern = (panel) => {
+      if (!panel) return;
+      let actions = panel.querySelector('#gmh-status-actions');
+      if (!actions) {
+        actions = doc.createElement('div');
+        actions.id = 'gmh-status-actions';
+        panel.appendChild(actions);
+      }
+      if (actions.dataset.ready === 'true') return;
+      actions.dataset.ready = 'true';
+      actions.innerHTML = createStatusActionsMarkup(true);
+      bindStatusActions(actions);
+    };
+
+    const mountStatusActionsLegacy = (panel) => {
+      if (!panel || panel.querySelector('#gmh-status-actions')) return;
+      const actions = doc.createElement('div');
+      actions.id = 'gmh-status-actions';
+      actions.style.cssText =
+        'display:grid; gap:6px; border-top:1px solid rgba(148,163,184,0.25); padding-top:6px;';
+      actions.innerHTML = createStatusActionsMarkup(false);
+      bindStatusActions(actions);
+      panel.appendChild(actions);
+    };
+
+    return {
+      ensureAutoLoadControlsModern,
+      ensureAutoLoadControlsLegacy,
+      mountStatusActionsModern,
+      mountStatusActionsLegacy,
+    };
+  }
+
+  /**
+   * Creates DOM bindings for export range selectors and bookmark integration.
+   */
+  function createRangeControls({
+    documentRef = typeof document !== 'undefined' ? document : null,
+    windowRef = typeof window !== 'undefined' ? window : null,
+    exportRange,
+    turnBookmarks,
+    messageIndexer,
+    setPanelStatus,
+  }) {
+    if (!documentRef) throw new Error('createRangeControls requires document reference');
+    if (!exportRange) throw new Error('createRangeControls requires exportRange');
+    if (!turnBookmarks) throw new Error('createRangeControls requires turnBookmarks');
+    if (!messageIndexer) throw new Error('createRangeControls requires messageIndexer');
+
+    const doc = documentRef;
+    const win = windowRef;
+    const cssEscape = () => doc?.defaultView?.CSS?.escape || win?.CSS?.escape;
+
+    let rangeUnsubscribe = null;
+    let selectedBookmarkKey = '';
+    let bookmarkSelectionPinned = false;
+
+    const toNumber = (value) => {
+      const num = Number(value);
+      return Number.isFinite(num) ? num : null;
+    };
+
+    const subscribeRange = (handler) => {
+      if (typeof exportRange?.subscribe !== 'function') return;
+      if (typeof rangeUnsubscribe === 'function') rangeUnsubscribe();
+      rangeUnsubscribe = exportRange.subscribe(handler);
+    };
+
+    const updateRangeSnapshot = (handler) => {
+      if (typeof handler !== 'function') return;
+      if (typeof exportRange?.snapshot === 'function') {
+        handler(exportRange.snapshot());
+        return;
+      }
+      if (typeof exportRange?.describe === 'function') {
+        const bounds = exportRange.describe();
+        const totals = typeof exportRange?.getTotals === 'function' ? exportRange.getTotals() : {};
+        const range = typeof exportRange?.getRange === 'function'
+          ? exportRange.getRange()
+          : { start: null, end: null };
+        handler({ bounds, totals, range });
+      }
+    };
+
+    const syncBookmarkSelect = (select, entries = []) => {
+      if (!select) return;
+      const previous = selectedBookmarkKey || select.value || '';
+      select.innerHTML = '';
+      const placeholder = doc.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = entries.length
+        ? '최근 클릭한 메시지를 선택하세요'
+        : '최근 클릭한 메시지가 없습니다';
+      select.appendChild(placeholder);
+      entries.forEach((entry) => {
+        const option = doc.createElement('option');
+        option.value = entry.key;
+        const axisLabel = '메시지';
+        const ordinalText = Number.isFinite(entry.ordinal)
+          ? `${axisLabel} ${entry.ordinal}`
+          : `${axisLabel} ?`;
+        const idText = entry.messageId ? entry.messageId : `index ${entry.index}`;
+        option.textContent = `${ordinalText} · ${idText}`;
+        option.dataset.index = String(entry.index);
+        select.appendChild(option);
+      });
+      let nextValue = '';
+      if (bookmarkSelectionPinned && entries.some((entry) => entry.key === previous)) {
+        nextValue = previous;
+      } else if (entries.length) {
+        nextValue = entries[0].key;
+        bookmarkSelectionPinned = false;
+      }
+      select.value = nextValue;
+      selectedBookmarkKey = nextValue || '';
+      if (!nextValue && !entries.length) {
+        select.selectedIndex = 0;
+      }
+    };
+
+    const registerBookmarkSelect = (select) => {
+      if (!select) return;
+      if (select.dataset.gmhBookmarksReady === 'true') return;
+      select.dataset.gmhBookmarksReady = 'true';
+      select.addEventListener('change', () => {
+        selectedBookmarkKey = select.value || '';
+        bookmarkSelectionPinned = Boolean(selectedBookmarkKey);
+      });
+      if (typeof turnBookmarks?.subscribe === 'function') {
+        turnBookmarks.subscribe((entries) => syncBookmarkSelect(select, entries));
+      }
+      if (typeof turnBookmarks?.list === 'function') {
+        syncBookmarkSelect(select, turnBookmarks.list());
+      }
+    };
+
+    const bindRangeControls = (panel) => {
+      if (!panel) return;
+      const rangeStartInput = panel.querySelector('#gmh-range-start');
+      const rangeEndInput = panel.querySelector('#gmh-range-end');
+      const rangeClearBtn = panel.querySelector('#gmh-range-clear');
+      const rangeMarkStartBtn = panel.querySelector('#gmh-range-mark-start');
+      const rangeMarkEndBtn = panel.querySelector('#gmh-range-mark-end');
+      const rangeSummary = panel.querySelector('#gmh-range-summary');
+      const rangeBookmarkSelect = panel.querySelector('#gmh-range-bookmark-select');
+
+      registerBookmarkSelect(rangeBookmarkSelect);
+
+      const syncRangeControls = (snapshot) => {
+        if (!snapshot) return;
+        const { bounds, totals, range } = snapshot;
+        const messageTotal = totals?.message ?? bounds.messageTotal ?? 0;
+        const userTotal = totals?.user ?? bounds.userTotal ?? 0;
+        const llmTotal = totals?.llm ?? bounds.llmTotal ?? 0;
+        const resolvedStart = bounds.active ? bounds.start : null;
+        const resolvedEnd = bounds.active ? bounds.end : null;
+
+        if (rangeStartInput) {
+          if (messageTotal) rangeStartInput.max = String(messageTotal);
+          else rangeStartInput.removeAttribute('max');
+          rangeStartInput.dataset.gmhAxis = 'message';
+          rangeStartInput.value = resolvedStart ? String(resolvedStart) : '';
+          rangeStartInput.dataset.gmhRequested = range.start ? String(range.start) : '';
+        }
+        if (rangeEndInput) {
+          if (messageTotal) rangeEndInput.max = String(messageTotal);
+          else rangeEndInput.removeAttribute('max');
+          rangeEndInput.dataset.gmhAxis = 'message';
+          rangeEndInput.value = resolvedEnd ? String(resolvedEnd) : '';
+          rangeEndInput.dataset.gmhRequested = range.end ? String(range.end) : '';
+        }
+        if (rangeMarkStartBtn) {
+          if (messageTotal) rangeMarkStartBtn.removeAttribute('disabled');
+          else rangeMarkStartBtn.setAttribute('disabled', 'true');
+        }
+        if (rangeMarkEndBtn) {
+          if (messageTotal) rangeMarkEndBtn.removeAttribute('disabled');
+          else rangeMarkEndBtn.setAttribute('disabled', 'true');
+        }
+        if (rangeSummary) {
+          if (!messageTotal) {
+            rangeSummary.textContent = '로드된 메시지가 없습니다.';
+            rangeSummary.title = '';
+          } else if (!bounds.active) {
+            let textLabel = `최근 메시지 ${messageTotal}개 전체`;
+            if (userTotal) textLabel += ` · 유저 ${userTotal}개`;
+            if (llmTotal) textLabel += ` · LLM ${llmTotal}개`;
+            rangeSummary.textContent = textLabel;
+            rangeSummary.title = '';
+          } else {
+            let textLabel = `최근 메시지 ${bounds.start}-${bounds.end} · ${bounds.count}개 / 전체 ${bounds.total}개`;
+            if (userTotal) textLabel += ` · 유저 ${userTotal}개`;
+            if (llmTotal) textLabel += ` · LLM ${llmTotal}개`;
+            rangeSummary.textContent = textLabel;
+            rangeSummary.title = '';
+          }
+        }
+      };
+
+      if (rangeStartInput || rangeEndInput || rangeSummary || rangeMarkStartBtn || rangeMarkEndBtn) {
+        subscribeRange(syncRangeControls);
+        updateRangeSnapshot(syncRangeControls);
+
+        const handleStartChange = () => {
+          if (!rangeStartInput) return;
+          const value = toNumber(rangeStartInput.value);
+          if (value && value > 0) {
+            exportRange?.setStart?.(value);
+          } else {
+            exportRange?.setStart?.(null);
+            rangeStartInput.value = '';
+          }
+        };
+
+        const handleEndChange = () => {
+          if (!rangeEndInput) return;
+          const value = toNumber(rangeEndInput.value);
+          if (value && value > 0) {
+            exportRange?.setEnd?.(value);
+          } else {
+            exportRange?.setEnd?.(null);
+            rangeEndInput.value = '';
+          }
+        };
+
+        if (rangeStartInput && rangeStartInput.dataset.gmhRangeReady !== 'true') {
+          rangeStartInput.dataset.gmhRangeReady = 'true';
+          rangeStartInput.addEventListener('change', handleStartChange);
+          rangeStartInput.addEventListener('blur', handleStartChange);
+        }
+        if (rangeEndInput && rangeEndInput.dataset.gmhRangeReady !== 'true') {
+          rangeEndInput.dataset.gmhRangeReady = 'true';
+          rangeEndInput.addEventListener('change', handleEndChange);
+          rangeEndInput.addEventListener('blur', handleEndChange);
+        }
+        if (rangeClearBtn && rangeClearBtn.dataset.gmhRangeReady !== 'true') {
+          rangeClearBtn.dataset.gmhRangeReady = 'true';
+          rangeClearBtn.addEventListener('click', () => {
+            exportRange?.clear?.();
+            turnBookmarks?.clear?.();
+            selectedBookmarkKey = '';
+            bookmarkSelectionPinned = false;
+            if (rangeBookmarkSelect) rangeBookmarkSelect.value = '';
+          });
+        }
+
+        const getActiveBookmark = () => {
+          if (rangeBookmarkSelect) {
+            const key = rangeBookmarkSelect.value || selectedBookmarkKey || '';
+            if (key) {
+              const picked = turnBookmarks?.pick?.(key);
+              if (picked) return picked;
+            }
+          }
+          return turnBookmarks?.latest?.();
+        };
+
+        const doBookmark = (mode) => {
+          const lookupOrdinalByIndex = messageIndexer?.lookupOrdinalByIndex;
+          const lookupOrdinalByMessageId = messageIndexer?.lookupOrdinalByMessageId;
+
+          const buildContextFromElement = (element) => {
+            if (!(element instanceof Element)) return null;
+            const messageEl = element.closest('[data-gmh-message-index]');
+            if (!messageEl) return null;
+            const indexAttr = messageEl.getAttribute('data-gmh-message-index');
+            const messageIdAttr =
+              messageEl.getAttribute('data-gmh-message-id') ||
+              messageEl.getAttribute('data-message-id');
+            const index = toNumber(indexAttr);
+
+            const resolvedOrdinal = [
+              Number.isFinite(index) && typeof lookupOrdinalByIndex === 'function'
+                ? lookupOrdinalByIndex(index)
+                : null,
+              messageIdAttr && typeof lookupOrdinalByMessageId === 'function'
+                ? lookupOrdinalByMessageId(messageIdAttr)
+                : null,
+              toNumber(messageEl.getAttribute('data-gmh-message-ordinal')),
+            ].find((value) => Number.isFinite(value) && value > 0);
+
+            return {
+              element: messageEl,
+              index: Number.isFinite(index) ? index : null,
+              ordinal: Number.isFinite(resolvedOrdinal) ? resolvedOrdinal : null,
+              messageId: messageIdAttr || null,
+            };
+          };
+
+          const resolveFromElement = (element) => buildContextFromElement(element);
+
+          const escapeForAttr = (value) => {
+            if (typeof value !== 'string') return '';
+            const esc = cssEscape();
+            return typeof esc === 'function' ? esc(value) : value.replace(/"/g, '\\"');
+          };
+
+          const listByMessageId = (messageId) => {
+            if (!messageId) return [];
+            try {
+              const selector = `[data-gmh-message-id="${escapeForAttr(messageId)}"]`;
+              return Array.from(doc.querySelectorAll(selector));
+            } catch (err) {
+              return [];
+            }
+          };
+
+          const selectBestCandidate = (candidates, preferredIndex = null) => {
+            const elements = Array.from(new Set(candidates.filter((el) => el instanceof Element)));
+            if (!elements.length) return null;
+            if (Number.isFinite(preferredIndex)) {
+              const exact = elements.find(
+                (el) => Number(el.getAttribute('data-gmh-message-index')) === preferredIndex,
+              );
+              if (exact) return exact;
+            }
+            const withOrdinal = elements
+              .map((el) => ({
+                el,
+                ord: toNumber(el.getAttribute('data-gmh-message-ordinal')),
+                idx: toNumber(el.getAttribute('data-gmh-message-index')),
+              }))
+              .sort((a, b) => {
+                if (Number.isFinite(a.ord) && Number.isFinite(b.ord)) return a.ord - b.ord;
+                if (Number.isFinite(a.idx) && Number.isFinite(b.idx)) return b.idx - a.idx;
+                return 0;
+              });
+            return withOrdinal[0]?.el || elements[elements.length - 1];
+          };
+
+          const safeQueryById = (messageId, preferredIndex = null) => {
+            const candidates = listByMessageId(messageId);
+            return selectBestCandidate(candidates, preferredIndex);
+          };
+
+          const getCandidateContext = () => {
+            const bookmark = getActiveBookmark();
+            if (bookmark) {
+              const fromBookmark =
+                safeQueryById(bookmark.messageId, bookmark.index) ||
+                (Number.isFinite(bookmark.index)
+                  ? selectBestCandidate(
+                      Array.from(doc.querySelectorAll(`[data-gmh-message-index="${bookmark.index}"]`)),
+                      bookmark.index,
+                    )
+                  : null);
+              const resolvedBookmark = resolveFromElement(fromBookmark);
+              if (resolvedBookmark) return resolvedBookmark;
+            }
+            const active = doc.activeElement;
+            const resolvedActive = resolveFromElement(active);
+            if (resolvedActive) return resolvedActive;
+            const latest = doc.querySelector('[data-gmh-message-ordinal="1"]');
+            return resolveFromElement(latest);
+          };
+
+          const context = getCandidateContext();
+          if (!context) {
+            setPanelStatus?.('메시지를 찾을 수 없습니다.', 'warning');
+            return;
+          }
+
+          try {
+            messageIndexer?.refresh?.({ immediate: true });
+          } catch (err) {
+            win?.console?.warn?.('[GMH] ordinal refresh failed', err);
+          }
+
+          const reselectElement = () => {
+            if (context.element instanceof Element && context.element.isConnected) {
+              const current = buildContextFromElement(context.element);
+              if (current) return current;
+            }
+
+            const candidates = [];
+            if (context.messageId) candidates.push(...listByMessageId(context.messageId));
+            if (Number.isFinite(context.index)) {
+              candidates.push(...doc.querySelectorAll(`[data-gmh-message-index="${context.index}"]`));
+            }
+
+            const chosen = selectBestCandidate(candidates, context.index);
+            return chosen ? buildContextFromElement(chosen) : null;
+          };
+
+          const refreshedContext = reselectElement() || context;
+
+          const ordinalFromIndex =
+            Number.isFinite(refreshedContext.index) && typeof messageIndexer?.lookupOrdinalByIndex === 'function'
+              ? messageIndexer.lookupOrdinalByIndex(refreshedContext.index)
+              : null;
+          const ordinalFromId =
+            refreshedContext.messageId && typeof messageIndexer?.lookupOrdinalByMessageId === 'function'
+              ? messageIndexer.lookupOrdinalByMessageId(refreshedContext.messageId)
+              : null;
+          const ordinalFromAttr = toNumber(
+            refreshedContext.element?.getAttribute?.('data-gmh-message-ordinal') ?? refreshedContext.ordinal,
+          );
+          const resolvedOrdinal = [ordinalFromIndex, ordinalFromId, ordinalFromAttr].find(
+            (value) => Number.isFinite(value) && value > 0,
+          );
+          if (!Number.isFinite(resolvedOrdinal) || resolvedOrdinal <= 0) {
+            setPanelStatus?.('메시지 순서를 찾을 수 없습니다. 화면을 새로고침해 주세요.', 'warning');
+            return;
+          }
+
+          if (mode === 'start') {
+            exportRange?.setStart?.(resolvedOrdinal);
+            if (rangeStartInput) rangeStartInput.value = String(resolvedOrdinal);
+            setPanelStatus?.(`메시지 ${resolvedOrdinal}을 시작으로 지정했습니다.`, 'info');
+          } else {
+            exportRange?.setEnd?.(resolvedOrdinal);
+            if (rangeEndInput) rangeEndInput.value = String(resolvedOrdinal);
+            setPanelStatus?.(`메시지 ${resolvedOrdinal}을 끝으로 지정했습니다.`, 'info');
+          }
+
+          const recorded = turnBookmarks?.record?.(
+            refreshedContext.index,
+            resolvedOrdinal,
+            refreshedContext.messageId,
+            'message',
+          );
+          if (recorded?.key) {
+            selectedBookmarkKey = recorded.key;
+            bookmarkSelectionPinned = false;
+            if (rangeBookmarkSelect) rangeBookmarkSelect.value = recorded.key;
+          }
+        };
+
+        if (rangeMarkStartBtn && rangeMarkStartBtn.dataset.gmhRangeReady !== 'true') {
+          rangeMarkStartBtn.dataset.gmhRangeReady = 'true';
+          rangeMarkStartBtn.addEventListener('click', () => doBookmark('start'));
+        }
+        if (rangeMarkEndBtn && rangeMarkEndBtn.dataset.gmhRangeReady !== 'true') {
+          rangeMarkEndBtn.dataset.gmhRangeReady = 'true';
+          rangeMarkEndBtn.addEventListener('click', () => doBookmark('end'));
+        }
+      }
+    };
+
+    return {
+      bindRangeControls,
+    };
+  }
+
+  /**
+   * Registers keyboard shortcuts for panel visibility and auto-loader actions.
+   */
+  function createPanelShortcuts({
+    windowRef = typeof window !== 'undefined' ? window : null,
+    panelVisibility,
+    autoLoader,
+    autoState,
+    configurePrivacyLists,
+    modal,
+  }) {
+    if (!windowRef) throw new Error('createPanelShortcuts requires window reference');
+    if (!panelVisibility) throw new Error('createPanelShortcuts requires panelVisibility');
+    if (!autoLoader) throw new Error('createPanelShortcuts requires autoLoader');
+    if (!autoState) throw new Error('createPanelShortcuts requires autoState');
+    if (!configurePrivacyLists) throw new Error('createPanelShortcuts requires configurePrivacyLists');
+
+    let shortcutsBound = false;
+
+    const bindShortcuts = (panel, { modern }) => {
+      if (!modern || shortcutsBound) return;
+      if (!panel) return;
+
+      const win = windowRef;
+      const handler = (event) => {
+        if (!event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
+        const key = event.key?.toLowerCase();
+        const target = event.target;
+        if (target instanceof win.HTMLElement) {
+          const tag = target.tagName.toLowerCase();
+          const isInputLike =
+            ['input', 'textarea', 'select'].includes(tag) || target.isContentEditable;
+          if (isInputLike && !['g', 'm'].includes(key)) return;
+        }
+        if (modal?.isOpen?.()) return;
+        switch (key) {
+          case 'g':
+            event.preventDefault();
+            panelVisibility.open({ focus: true, persist: true });
+            break;
+          case 'm':
+            event.preventDefault();
+            panelVisibility.toggle();
+            break;
+          case 's':
+            event.preventDefault();
+            if (!autoState.running) {
+              autoLoader
+                .start('all')
+                .catch((error) => win.console?.warn?.('[GMH] auto shortcut', error));
+            }
+            break;
+          case 'p':
+            event.preventDefault();
+            configurePrivacyLists();
+            break;
+          case 'e':
+            event.preventDefault();
+            panel.querySelector('#gmh-export')?.click();
+            break;
+        }
+      };
+
+      win.addEventListener('keydown', handler);
+      shortcutsBound = true;
+    };
+
+    return {
+      bindShortcuts,
+    };
+  }
+
+  /**
+   * Builds the share/export workflow orchestrator used by the panel actions.
+   * Validates injected dependencies so downstream flows remain resilient.
+   */
+  function createShareWorkflow({
+    captureStructuredSnapshot,
+    normalizeTranscript,
+    buildSession,
+    exportRange,
+    projectStructuredMessages,
+    cloneSession,
+    applyPrivacyPipeline,
+    privacyConfig,
+    privacyProfiles,
+    formatRedactionCounts,
+    setPanelStatus,
+    toMarkdownExport,
+    toJSONExport,
+    toTXTExport,
+    toStructuredMarkdown,
+    toStructuredJSON,
+    toStructuredTXT,
+    buildExportBundle,
+    buildExportManifest,
+    triggerDownload,
+    clipboard,
+    stateApi,
+    stateEnum,
+    confirmPrivacyGate,
+    getEntryOrigin,
+    collectSessionStats,
+    alert: alertFn = (msg) => globalThis.alert?.(msg),
+    logger = typeof console !== 'undefined' ? console : null,
+  }) {
+    requireDeps(
+      {
+        captureStructuredSnapshot,
+        normalizeTranscript,
+        buildSession,
+        exportRange,
+        projectStructuredMessages,
+        cloneSession,
+        applyPrivacyPipeline,
+        privacyConfig,
+        privacyProfiles,
+        formatRedactionCounts,
+        setPanelStatus,
+        toMarkdownExport,
+        toJSONExport,
+        toTXTExport,
+        toStructuredMarkdown,
+        toStructuredJSON,
+        toStructuredTXT,
+        buildExportBundle,
+        buildExportManifest,
+        triggerDownload,
+        clipboard,
+        stateApi,
+        stateEnum,
+        confirmPrivacyGate,
+        getEntryOrigin,
+        collectSessionStats,
+      },
+      {
+        captureStructuredSnapshot: (fn) => typeof fn === 'function',
+        normalizeTranscript: (fn) => typeof fn === 'function',
+        buildSession: (fn) => typeof fn === 'function',
+        exportRange: (value) => Boolean(value?.setTotals),
+        projectStructuredMessages: (fn) => typeof fn === 'function',
+        cloneSession: (fn) => typeof fn === 'function',
+        applyPrivacyPipeline: (fn) => typeof fn === 'function',
+        privacyConfig: (value) => Boolean(value),
+        privacyProfiles: (value) => Boolean(value),
+        formatRedactionCounts: (fn) => typeof fn === 'function',
+        setPanelStatus: (fn) => typeof fn === 'function',
+        toMarkdownExport: (fn) => typeof fn === 'function',
+        toJSONExport: (fn) => typeof fn === 'function',
+        toTXTExport: (fn) => typeof fn === 'function',
+        toStructuredMarkdown: (fn) => typeof fn === 'function',
+        toStructuredJSON: (fn) => typeof fn === 'function',
+        toStructuredTXT: (fn) => typeof fn === 'function',
+        buildExportBundle: (fn) => typeof fn === 'function',
+        buildExportManifest: (fn) => typeof fn === 'function',
+        triggerDownload: (fn) => typeof fn === 'function',
+        'clipboard.set': (fn) => typeof fn === 'function',
+        stateApi: (value) => Boolean(value?.setState),
+        stateEnum: (value) => Boolean(value),
+        confirmPrivacyGate: (fn) => typeof fn === 'function',
+        getEntryOrigin: (fn) => typeof fn === 'function',
+        collectSessionStats: (fn) => typeof fn === 'function',
+      },
+    );
+
+    const parseAll = () => {
+      const snapshot = captureStructuredSnapshot({ force: true });
+      const raw = snapshot.legacyLines.join('\n');
+      const normalized = normalizeTranscript(raw);
+      const session = buildSession(normalized);
+      if (!session.turns.length) throw new Error('대화 메시지를 찾을 수 없습니다.');
+      const userCount = session.turns.filter((turn) => turn.channel === 'user').length;
+      const llmCount = session.turns.filter((turn) => turn.channel === 'llm').length;
+      const entryCount = session.turns.reduce((sum, turn) => {
+        if (Array.isArray(turn?.__gmhEntries)) return sum + turn.__gmhEntries.length;
+        return sum + 1;
+      }, 0);
+      exportRange?.setTotals?.({
+        message: session.turns.length,
+        user: userCount,
+        llm: llmCount,
+        entry: entryCount,
+      });
+      return { session, raw: normalized, snapshot };
+    };
+
+    const prepareShare = async ({ confirmLabel, cancelStatusMessage, blockedStatusMessage }) => {
+      try {
+        stateApi.setState(stateEnum.REDACTING, {
+          label: '민감정보 마스킹 중',
+          message: '레다크션 파이프라인 적용 중...',
+          tone: 'progress',
+          progress: { indeterminate: true },
+        });
+        const { session, raw, snapshot } = parseAll();
+        const privacy = applyPrivacyPipeline(session, raw, privacyConfig.profile, snapshot);
+        if (privacy.blocked) {
+          alertFn(`미성년자 성적 맥락이 감지되어 작업을 중단했습니다.
+
+차단 이유를 확인하려면:
+1. F12 키를 눌러 개발자 도구 열기
+2. 콘솔(Console) 탭 선택
+3. 다음 명령어 입력 후 Enter:
+   localStorage.setItem('gmh_debug_blocking', '1')
+4. 다시 내보내기/복사 시도
+5. 콘솔에서 상세 정보 확인
+
+※ 정당한 교육/상담 내용이 차단되었다면 GitHub Issues로 신고해주세요.
+https://github.com/devforai-creator/genit-memory-helper/issues`);
+          stateApi.setState(stateEnum.ERROR, {
+            label: '작업 차단',
+            message: blockedStatusMessage || '미성년자 민감 맥락으로 작업이 차단되었습니다.',
+            tone: 'error',
+            progress: { value: 1 },
+          });
+          return null;
+        }
+        const requestedRange = exportRange?.getRange?.() || {};
+        const sanitizedUserCount = privacy.sanitizedSession.turns.filter((turn) => turn.channel === 'user').length;
+        const sanitizedLlmCount = privacy.sanitizedSession.turns.filter((turn) => turn.channel === 'llm').length;
+        const sanitizedEntryCount = privacy.sanitizedSession.turns.reduce(
+          (sum, turn) => sum + (Array.isArray(turn?.__gmhEntries) ? turn.__gmhEntries.length : 1),
+          0,
+        );
+        exportRange?.setTotals?.({
+          message: privacy.sanitizedSession.turns.length,
+          user: sanitizedUserCount,
+          llm: sanitizedLlmCount,
+          entry: sanitizedEntryCount,
+        });
+        if (requestedRange.start || requestedRange.end) {
+          exportRange?.setRange?.(requestedRange.start, requestedRange.end);
+        }
+        const selection = exportRange?.apply?.(privacy.sanitizedSession.turns) || {
+          indices: [],
+          ordinals: [],
+          info: exportRange?.describe?.(privacy.sanitizedSession.turns.length),
+        };
+        const rangeInfo = selection?.info || exportRange?.describe?.(privacy.sanitizedSession.turns.length);
+        const structuredSelection = projectStructuredMessages(privacy.structured, rangeInfo);
+        const exportSession = cloneSession(privacy.sanitizedSession);
+        const entryOrigin = typeof getEntryOrigin === 'function' ? getEntryOrigin() : [];
+        const selectedIndices = selection.indices?.length
+          ? selection.indices
+          : privacy.sanitizedSession.turns.map((_, idx) => idx);
+
+        const selectedIndexSet = new Set(selectedIndices);
+
+        exportSession.turns = selectedIndices.map((index, localIndex) => {
+          const original = privacy.sanitizedSession.turns[index] || {};
+          const clone = { ...original };
+          Object.defineProperty(clone, '__gmhIndex', {
+            value: index,
+            enumerable: false,
+          });
+          Object.defineProperty(clone, '__gmhOrdinal', {
+            value: selection.ordinals?.[localIndex] ?? null,
+            enumerable: false,
+          });
+          Object.defineProperty(clone, '__gmhSourceBlock', {
+            value: entryOrigin[index] ?? null,
+            enumerable: false,
+          });
+          return clone;
+        });
+
+        exportSession.meta = {
+          ...(exportSession.meta || {}),
+          selection: {
+            active: Boolean(selection.info?.active),
+            range: {
+              start: selection.info?.start ?? null,
+              end: selection.info?.end ?? null,
+              count: selection.info?.count ?? null,
+              total: selection.info?.total ?? null,
+            },
+            indices: {
+              start: selection.info?.startIndex ?? null,
+              end: selection.info?.endIndex ?? null,
+            },
+          },
+        };
+
+        const stats = collectSessionStats(exportSession);
+        const overallStats = collectSessionStats(privacy.sanitizedSession);
+        const previewTurns = exportSession.turns.slice(-5);
+        stateApi.setState(stateEnum.PREVIEW, {
+          label: '미리보기 준비 완료',
+          message: '레다크션 결과를 검토하세요.',
+          tone: 'info',
+          progress: { value: 0.75 },
+        });
+
+        const ok = await confirmPrivacyGate({
+          profile: privacy.profile,
+          counts: privacy.counts,
+          stats,
+          overallStats,
+          rangeInfo,
+          selectedIndices: Array.from(selectedIndexSet),
+          selectedOrdinals: selection.ordinals || [],
+          previewTurns,
+          actionLabel: confirmLabel || '계속',
+        });
+        if (!ok) {
+          stateApi.setState(stateEnum.IDLE, {
+            label: '대기 중',
+            message: cancelStatusMessage || '작업을 취소했습니다.',
+            tone: cancelStatusMessage ? 'muted' : 'info',
+            progress: { value: 0 },
+          });
+          if (cancelStatusMessage) setPanelStatus?.(cancelStatusMessage, 'muted');
+          return null;
+        }
+
+        return {
+          privacy,
+          stats,
+          overallStats,
+          selection,
+          rangeInfo,
+          exportSession,
+          structuredSelection,
+        };
+      } catch (error) {
+        const errorMsg = error?.message || String(error);
+        alertFn(`오류: ${errorMsg}`);
+        stateApi.setState(stateEnum.ERROR, {
+          label: '작업 실패',
+          message: '작업 준비 중 오류가 발생했습니다.',
+          tone: 'error',
+          progress: { value: 1 },
+        });
+        return null;
+      }
+    };
+
+    const performExport = async (prepared, format) => {
+      if (!prepared) return false;
+      try {
+        stateApi.setState(stateEnum.EXPORTING, {
+          label: '내보내기 진행 중',
+          message: `${format.toUpperCase()} 내보내기를 준비하는 중입니다...`,
+          tone: 'progress',
+          progress: { indeterminate: true },
+        });
+        const {
+          privacy,
+          stats,
+          exportSession,
+          selection,
+          overallStats,
+          structuredSelection,
+          rangeInfo: preparedRangeInfo,
+        } = prepared;
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const sessionForExport = exportSession || privacy.sanitizedSession;
+        const rangeInfo = preparedRangeInfo || selection?.info || exportRange?.describe?.();
+        const hasCustomRange = Boolean(rangeInfo?.active);
+        const selectionRaw = hasCustomRange
+          ? sessionForExport.turns
+              .map((turn) => {
+                const label = turn.role === 'narration' ? '내레이션' : turn.speaker || turn.role || '메시지';
+                return `${label}: ${turn.text}`;
+              })
+              .join('\n')
+          : privacy.sanitizedRaw;
+        const bundleOptions = {
+          structuredSelection,
+          structuredSnapshot: privacy.structured,
+          profile: privacy.profile,
+          playerNames: privacy.playerNames,
+          rangeInfo,
+        };
+        let targetFormat = format;
+        let bundle;
+        let structuredFallback = false;
+        try {
+          bundle = buildExportBundle(sessionForExport, selectionRaw, targetFormat, stamp, bundleOptions);
+        } catch (error) {
+          if (
+            targetFormat === 'structured-json' ||
+            targetFormat === 'structured-md' ||
+            targetFormat === 'structured-txt'
+          ) {
+            logger?.warn?.('[GMH] structured export failed, falling back', error);
+            structuredFallback = true;
+            if (targetFormat === 'structured-json') targetFormat = 'json';
+            else if (targetFormat === 'structured-md') targetFormat = 'md';
+            else targetFormat = 'txt';
+            bundle = buildExportBundle(sessionForExport, selectionRaw, targetFormat, stamp, bundleOptions);
+          } else {
+            throw error;
+          }
+        }
+        const fileBlob = new Blob([bundle.content], { type: bundle.mime });
+        triggerDownload(fileBlob, bundle.filename);
+
+        const manifest = buildExportManifest({
+          profile: privacy.profile,
+          counts: { ...privacy.counts },
+          stats,
+          overallStats,
+          format: targetFormat,
+          warnings: privacy.sanitizedSession.warnings,
+          source: privacy.sanitizedSession.source,
+          range: sessionForExport.meta?.selection || rangeInfo,
+        });
+        const manifestBlob = new Blob([JSON.stringify(manifest, null, 2)], {
+          type: 'application/json',
+        });
+        const manifestName = `${bundle.filename.replace(/\.[^.]+$/, '')}.manifest.json`;
+        triggerDownload(manifestBlob, manifestName);
+
+        const summary = formatRedactionCounts(privacy.counts);
+        const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
+        const messageTotalAvailable = rangeInfo?.messageTotal || sessionForExport.turns.length;
+        const userTotalAvailable = rangeInfo?.userTotal || overallStats?.userMessages || stats.userMessages;
+        const llmTotalAvailable = rangeInfo?.llmTotal || overallStats?.llmMessages || stats.llmMessages;
+        let rangeNote = hasCustomRange
+          ? ` · (선택) 메시지 ${rangeInfo.start}-${rangeInfo.end}/${rangeInfo.total}`
+          : ` · 전체 메시지 ${messageTotalAvailable}개`;
+        if (Number.isFinite(userTotalAvailable)) {
+          rangeNote += ` · 유저 ${stats.userMessages}개`;
+        }
+        if (Number.isFinite(llmTotalAvailable)) {
+          rangeNote += ` · LLM ${stats.llmMessages}개`;
+        }
+        const message = `${targetFormat.toUpperCase()} 내보내기 완료${rangeNote} · ${profileLabel} · ${summary}`;
+        stateApi.setState(stateEnum.DONE, {
+          label: '내보내기 완료',
+          message,
+          tone: 'success',
+          progress: { value: 1 },
+        });
+        if (structuredFallback) {
+          setPanelStatus?.('구조 보존 내보내기에 실패하여 Classic 포맷으로 전환했습니다.', 'warning');
+        }
+        if (privacy.sanitizedSession.warnings.length) {
+          logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
+        }
+        return true;
+      } catch (error) {
+        const errorMsg = error?.message || String(error);
+        alertFn(`오류: ${errorMsg}`);
+        stateApi.setState(stateEnum.ERROR, {
+          label: '내보내기 실패',
+          message: '내보내기 실패',
+          tone: 'error',
+          progress: { value: 1 },
+        });
+        return false;
+      }
+    };
+
+    const copyRecent = async (prepareShareFn) => {
+      const prepared = await prepareShareFn({
+        confirmLabel: '복사 계속',
+        cancelStatusMessage: '복사를 취소했습니다.',
+        blockedStatusMessage: '미성년자 민감 맥락으로 복사가 차단되었습니다.',
+      });
+      if (!prepared) return;
+      try {
+        stateApi.setState(stateEnum.EXPORTING, {
+          label: '복사 진행 중',
+          message: '최근 15메시지를 복사하는 중입니다...',
+          tone: 'progress',
+          progress: { indeterminate: true },
+        });
+        const { privacy, overallStats, stats } = prepared;
+        const effectiveStats = overallStats || stats;
+        const turns = privacy.sanitizedSession.turns.slice(-15);
+        const md = toMarkdownExport(privacy.sanitizedSession, {
+          turns,
+          includeMeta: false,
+          heading: '## 최근 15메시지',
+        });
+        clipboard.set(md, { type: 'text', mimetype: 'text/plain' });
+        const summary = formatRedactionCounts(privacy.counts);
+        const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
+        const message = `최근 15메시지 복사 완료 · 유저 ${effectiveStats.userMessages}개 · LLM ${effectiveStats.llmMessages}개 · ${profileLabel} · ${summary}`;
+        stateApi.setState(stateEnum.DONE, {
+          label: '복사 완료',
+          message,
+          tone: 'success',
+          progress: { value: 1 },
+        });
+        if (privacy.sanitizedSession.warnings.length) {
+          logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
+        }
+      } catch (error) {
+        const errorMsg = error?.message || String(error);
+        alertFn(`오류: ${errorMsg}`);
+        stateApi.setState(stateEnum.ERROR, {
+          label: '복사 실패',
+          message: '복사 실패',
+          tone: 'error',
+          progress: { value: 1 },
+        });
+      }
+    };
+
+    const copyAll = async (prepareShareFn) => {
+      const prepared = await prepareShareFn({
+        confirmLabel: '복사 계속',
+        cancelStatusMessage: '복사를 취소했습니다.',
+        blockedStatusMessage: '미성년자 민감 맥락으로 복사가 차단되었습니다.',
+      });
+      if (!prepared) return;
+      try {
+        stateApi.setState(stateEnum.EXPORTING, {
+          label: '복사 진행 중',
+          message: '전체 Markdown을 복사하는 중입니다...',
+          tone: 'progress',
+          progress: { indeterminate: true },
+        });
+        const { privacy, overallStats, stats } = prepared;
+        const effectiveStats = overallStats || stats;
+        const md = toMarkdownExport(privacy.sanitizedSession);
+        clipboard.set(md, { type: 'text', mimetype: 'text/plain' });
+        const summary = formatRedactionCounts(privacy.counts);
+        const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
+        const message = `전체 Markdown 복사 완료 · 유저 ${effectiveStats.userMessages}개 · LLM ${effectiveStats.llmMessages}개 · ${profileLabel} · ${summary}`;
+        stateApi.setState(stateEnum.DONE, {
+          label: '복사 완료',
+          message,
+          tone: 'success',
+          progress: { value: 1 },
+        });
+        if (privacy.sanitizedSession.warnings.length) {
+          logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
+        }
+      } catch (error) {
+        const errorMsg = error?.message || String(error);
+        alertFn(`오류: ${errorMsg}`);
+        stateApi.setState(stateEnum.ERROR, {
+          label: '복사 실패',
+          message: '복사 실패',
+          tone: 'error',
+          progress: { value: 1 },
+        });
+      }
+    };
+
+    const reparse = () => {
+      try {
+        stateApi.setState(stateEnum.REDACTING, {
+          label: '재파싱 중',
+          message: '대화 로그를 다시 분석하는 중입니다...',
+          tone: 'progress',
+          progress: { indeterminate: true },
+        });
+        const { session, raw, snapshot } = parseAll();
+        const privacy = applyPrivacyPipeline(session, raw, privacyConfig.profile, snapshot);
+        const stats = collectSessionStats(privacy.sanitizedSession);
+        const summary = formatRedactionCounts(privacy.counts);
+        const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
+        const extra = privacy.blocked ? ' · ⚠️ 미성년자 맥락 감지' : '';
+        const message = `재파싱 완료 · 유저 ${stats.userMessages}개 · LLM ${stats.llmMessages}개 · 경고 ${
+        privacy.sanitizedSession.warnings.length
+      }건 · ${profileLabel} · ${summary}${extra}`;
+        stateApi.setState(stateEnum.DONE, {
+          label: '재파싱 완료',
+          message,
+          tone: 'info',
+          progress: { value: 1 },
+        });
+        if (privacy.sanitizedSession.warnings.length) {
+          logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
+        }
+      } catch (error) {
+        const errorMsg = error?.message || String(error);
+        alertFn(`오류: ${errorMsg}`);
+      }
+    };
+
+    return {
+      parseAll,
+      prepareShare,
+      performExport,
+      copyRecent,
+      copyAll,
+      reparse,
+    };
+  }
+
+  /**
+   * Connects panel buttons, share workflow actions, and keyboard shortcuts.
+   */
+  function createPanelInteractions({
+    panelVisibility,
+    setPanelStatus,
+    setPrivacyProfile,
+    getPrivacyProfile,
+    privacyProfiles,
+    configurePrivacyLists,
+    openPanelSettings,
+    ensureAutoLoadControlsModern,
+    ensureAutoLoadControlsLegacy,
+    mountStatusActionsModern,
+    mountStatusActionsLegacy,
+    bindRangeControls,
+    bindShortcuts,
+    bindGuideControls,
+    prepareShare,
+    performExport,
+    copyRecentShare,
+    copyAllShare,
+    autoLoader,
+    autoState,
+    stateApi,
+    stateEnum,
+    alert: alertFn = (message) => globalThis.alert?.(message),
+    logger = typeof console !== 'undefined' ? console : null,
+  } = {}) {
+    if (!panelVisibility) throw new Error('createPanelInteractions requires panelVisibility');
+    if (!setPrivacyProfile) throw new Error('createPanelInteractions requires setPrivacyProfile');
+    if (!bindRangeControls) throw new Error('createPanelInteractions requires bindRangeControls');
+    if (!bindShortcuts) throw new Error('createPanelInteractions requires bindShortcuts');
+    if (!prepareShare || !performExport || !copyRecentShare || !copyAllShare) {
+      throw new Error('createPanelInteractions requires share workflow helpers');
+    }
+    if (!stateApi || !stateEnum) {
+      throw new Error('createPanelInteractions requires state helpers');
+    }
+
+    let privacySelect = null;
+
+    const syncPrivacyProfileSelect = (profileKey) => {
+      if (!privacySelect) return;
+      const nextValue = profileKey ?? getPrivacyProfile?.();
+      if (typeof nextValue === 'string' && privacySelect.value !== nextValue) {
+        privacySelect.value = nextValue;
+      }
+    };
+
+    const notify = (message, tone) => {
+      if (typeof setPanelStatus === 'function' && message) {
+        setPanelStatus(message, tone);
+      }
+    };
+
+    const attachShareHandlers = (panel, { modern = false } = {}) => {
+      const exportFormatSelect = panel.querySelector('#gmh-export-format');
+      const quickExportBtn = panel.querySelector('#gmh-quick-export');
+
+      const prepareShareWithDialog = (options = {}) =>
+        prepareShare({
+          confirmLabel: options.confirmLabel,
+          cancelStatusMessage: options.cancelStatusMessage,
+          blockedStatusMessage: options.blockedStatusMessage,
+        });
+
+      const exportWithFormat = async (format, options = {}) => {
+        const prepared = await prepareShareWithDialog(options);
+        if (!prepared) return;
+        await performExport(prepared, format);
+      };
+
+      const copyRecent = () => copyRecentShare(prepareShareWithDialog);
+      const copyAll = () => copyAllShare(prepareShareWithDialog);
+
+      const copyRecentBtn = panel.querySelector('#gmh-copy-recent');
+      if (copyRecentBtn) {
+        copyRecentBtn.onclick = () => copyRecent();
+      }
+
+      const copyAllBtn = panel.querySelector('#gmh-copy-all');
+      if (copyAllBtn) {
+        copyAllBtn.onclick = () => copyAll();
+      }
+
+      const exportBtn = panel.querySelector('#gmh-export');
+      if (exportBtn) {
+        exportBtn.onclick = async () => {
+          const format = exportFormatSelect?.value || 'json';
+          await exportWithFormat(format, {
+            confirmLabel: '내보내기 진행',
+            cancelStatusMessage: '내보내기를 취소했습니다.',
+            blockedStatusMessage: '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
+          });
+        };
+      }
+
+      if (quickExportBtn) {
+        quickExportBtn.onclick = async () => {
+          if (autoState?.running) {
+            notify('이미 자동 로딩이 진행 중입니다.', 'muted');
+            return;
+          }
+          const originalText = quickExportBtn.textContent;
+          quickExportBtn.disabled = true;
+          quickExportBtn.textContent = '진행 중...';
+          try {
+            stateApi.setState(stateEnum.SCANNING, {
+              label: '원클릭 내보내기',
+              message: '전체 로딩 중...',
+              tone: 'progress',
+              progress: { indeterminate: true },
+            });
+            await autoLoader?.start?.('all');
+            const format = exportFormatSelect?.value || 'json';
+            await exportWithFormat(format, {
+              confirmLabel: `${format.toUpperCase()} 내보내기`,
+              cancelStatusMessage: '내보내기를 취소했습니다.',
+              blockedStatusMessage: '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
+            });
+          } catch (error) {
+            alertFn?.(`오류: ${(error && error.message) || error}`);
+            stateApi.setState(stateEnum.ERROR, {
+              label: '원클릭 실패',
+              message: '원클릭 내보내기 실패',
+              tone: 'error',
+              progress: { value: 1 },
+            });
+          } finally {
+            quickExportBtn.disabled = false;
+            quickExportBtn.textContent = originalText;
+          }
+        };
+      }
+    };
+
+    const bindPanelInteractions = (panel, { modern = false } = {}) => {
+      if (!panel || typeof panel.querySelector !== 'function') {
+        if (logger?.warn) {
+          logger.warn('[GMH] panel interactions: invalid panel element');
+        }
+        return;
+      }
+
+      panelVisibility.bind(panel, { modern });
+
+      privacySelect = panel.querySelector('#gmh-privacy-profile');
+      if (privacySelect) {
+        syncPrivacyProfileSelect();
+        privacySelect.onchange = (event) => {
+          const value = event.target.value;
+          setPrivacyProfile(value);
+          const label = privacyProfiles?.[value]?.label || value;
+          notify(`프라이버시 프로필이 ${label}로 설정되었습니다.`, 'info');
+        };
+      }
+
+      const privacyConfigBtn = panel.querySelector('#gmh-privacy-config');
+      if (privacyConfigBtn) {
+        privacyConfigBtn.onclick = () => configurePrivacyLists?.();
+      }
+
+      const settingsBtn = panel.querySelector('#gmh-panel-settings');
+      if (settingsBtn) {
+        settingsBtn.onclick = () => openPanelSettings?.();
+      }
+
+      if (modern) {
+        ensureAutoLoadControlsModern?.(panel);
+        mountStatusActionsModern?.(panel);
+      } else {
+        ensureAutoLoadControlsLegacy?.(panel);
+        mountStatusActionsLegacy?.(panel);
+      }
+
+      bindRangeControls(panel);
+      bindShortcuts(panel, { modern });
+      bindGuideControls?.(panel);
+
+      attachShareHandlers(panel, { modern });
+    };
+
+    return {
+      bindPanelInteractions,
+      syncPrivacyProfileSelect,
+    };
+  }
+
+  /**
+   * Mounts the modern (React-inspired) panel layout.
+   */
+  function createModernPanel({
+    documentRef = typeof document !== 'undefined' ? document : null,
+    ensureStyles,
+    version = '0.0.0-dev',
+    getActiveAdapter,
+    attachStatusElement,
+    stateView,
+    bindPanelInteractions,
+    panelId = 'genit-memory-helper-panel',
+    logger = typeof console !== 'undefined' ? console : null,
+  } = {}) {
+    const doc = documentRef;
+    if (!doc) throw new Error('createModernPanel requires documentRef');
+    if (typeof ensureStyles !== 'function') throw new Error('createModernPanel requires ensureStyles');
+    if (typeof getActiveAdapter !== 'function') throw new Error('createModernPanel requires getActiveAdapter');
+    if (!stateView || typeof stateView.bind !== 'function') {
+      throw new Error('createModernPanel requires stateView with bind');
+    }
+    if (typeof bindPanelInteractions !== 'function') {
+      throw new Error('createModernPanel requires bindPanelInteractions');
+    }
+
+    const log = logger || { warn: () => {} };
+
+    const mount = () => {
+      ensureStyles();
+      const existing = doc.querySelector(`#${panelId}`);
+      if (existing) return existing;
+
+      const panel = doc.createElement('div');
+      panel.id = panelId;
+      panel.className = 'gmh-panel';
+      panel.setAttribute('role', 'region');
+      panel.setAttribute('aria-label', 'Genit Memory Helper');
+      panel.tabIndex = -1;
+      panel.dataset.version = version;
+      panel.innerHTML = `
+      <div class="gmh-panel__header">
+        <button
+          id="gmh-panel-drag-handle"
+          class="gmh-panel__drag-handle"
+          type="button"
+          aria-label="패널 이동"
+          title="패널 끌어서 이동"
+        >
+          <span class="gmh-panel__drag-icon" aria-hidden="true">⋮⋮</span>
+        </button>
+        <div class="gmh-panel__headline">
+          <div class="gmh-panel__title">Genit Memory Helper</div>
+          <div class="gmh-panel__tag">v${version}</div>
+        </div>
+        <button id="gmh-panel-settings" class="gmh-small-btn gmh-small-btn--muted" title="설정">⚙</button>
+      </div>
+      <div class="gmh-progress">
+        <div class="gmh-progress__track">
+          <div id="gmh-progress-fill" class="gmh-progress__fill" data-indeterminate="false"></div>
+        </div>
+        <div id="gmh-progress-label" class="gmh-progress__label">대기 중</div>
+      </div>
+      <div id="gmh-status" class="gmh-status-line"></div>
+      <section class="gmh-panel__section" id="gmh-section-privacy">
+        <div class="gmh-panel__section-title">Privacy</div>
+        <div class="gmh-field-row">
+          <select id="gmh-privacy-profile" class="gmh-select">
+            <option value="safe">SAFE (권장)</option>
+            <option value="standard">STANDARD</option>
+            <option value="research">RESEARCH</option>
+          </select>
+          <button id="gmh-privacy-config" class="gmh-small-btn gmh-small-btn--accent">민감어</button>
+        </div>
+      </section>
+      <section class="gmh-panel__section" id="gmh-section-autoload">
+        <div class="gmh-panel__section-title">Auto Load</div>
+        <div id="gmh-autoload-controls"></div>
+      </section>
+      <section class="gmh-panel__section" id="gmh-section-export">
+        <div class="gmh-panel__section-title">Export</div>
+        <div class="gmh-field-row">
+          <button id="gmh-copy-recent" class="gmh-panel-btn gmh-panel-btn--neutral">최근 15메시지 복사</button>
+          <button id="gmh-copy-all" class="gmh-panel-btn gmh-panel-btn--neutral">전체 MD 복사</button>
+        </div>
+        <div class="gmh-field-row gmh-field-row--wrap">
+          <label for="gmh-range-start" class="gmh-field-label">메시지 범위</label>
+          <div class="gmh-range-controls">
+            <input
+              id="gmh-range-start"
+              class="gmh-input gmh-input--compact"
+              type="number"
+              min="1"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              placeholder="시작 메시지"
+            />
+            <span class="gmh-range-sep" aria-hidden="true">~</span>
+            <input
+              id="gmh-range-end"
+              class="gmh-input gmh-input--compact"
+              type="number"
+              min="1"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              placeholder="끝 메시지"
+            />
+            <div class="gmh-bookmark-controls">
+              <button id="gmh-range-mark-start" type="button" class="gmh-small-btn gmh-small-btn--muted" title="현재 메시지를 시작으로 지정">시작지정</button>
+              <button id="gmh-range-mark-end" type="button" class="gmh-small-btn gmh-small-btn--muted" title="현재 메시지를 끝으로 지정">끝지정</button>
+            </div>
+            <button id="gmh-range-clear" type="button" class="gmh-small-btn gmh-small-btn--muted">전체</button>
+          </div>
+        </div>
+        <div class="gmh-field-row gmh-field-row--wrap">
+          <label for="gmh-range-bookmark-select" class="gmh-field-label">최근 북마크</label>
+          <div class="gmh-bookmark-select">
+            <select id="gmh-range-bookmark-select" class="gmh-select gmh-select--compact">
+              <option value="">최근 클릭한 메시지가 없습니다</option>
+            </select>
+          </div>
+        </div>
+        <div id="gmh-range-summary" class="gmh-helper-text">범위 전체 내보내기</div>
+        <div class="gmh-field-row">
+          <select id="gmh-export-format" class="gmh-select">
+            <option value="structured-md" selected>Rich Markdown (.md) — 추천</option>
+            <option value="structured-json">Rich JSON (.json)</option>
+            <option value="structured-txt">Rich TXT (.txt)</option>
+            <optgroup label="Classic (경량/호환)">
+              <option value="json">Classic JSON (.json)</option>
+              <option value="md">Classic Markdown (.md)</option>
+              <option value="txt">Classic TXT (.txt)</option>
+            </optgroup>
+          </select>
+          <button id="gmh-export" class="gmh-small-btn gmh-small-btn--accent">내보내기</button>
+        </div>
+        <button id="gmh-quick-export" class="gmh-panel-btn gmh-panel-btn--accent">원클릭 내보내기</button>
+      </section>
+      <section class="gmh-panel__section" id="gmh-section-guides">
+        <div class="gmh-panel__section-title">Guides & Tools</div>
+        <div class="gmh-field-row">
+          <button id="gmh-reparse" class="gmh-small-btn gmh-small-btn--muted">재파싱</button>
+          <button id="gmh-guide" class="gmh-small-btn gmh-small-btn--muted">요약 가이드</button>
+          <button id="gmh-reguide" class="gmh-small-btn gmh-small-btn--muted">재요약 가이드</button>
+        </div>
+        <div id="gmh-status-actions"></div>
+      </section>
+      <div id="gmh-panel-resize-handle" class="gmh-panel__resize-handle" aria-hidden="true"></div>
+    `;
+
+      const adapter = getActiveAdapter();
+      const anchor = adapter?.getPanelAnchor?.(doc) || doc.body;
+      if (!anchor) {
+        log?.warn?.('[GMH] modern panel anchor missing');
+        return null;
+      }
+      anchor.appendChild(panel);
+
+      const statusEl = panel.querySelector('#gmh-status');
+      if (typeof attachStatusElement === 'function') {
+        attachStatusElement(statusEl);
+      }
+      if (statusEl) {
+        statusEl.setAttribute('role', 'status');
+        statusEl.setAttribute('aria-live', 'polite');
+      }
+
+      const progressFill = panel.querySelector('#gmh-progress-fill');
+      const progressLabel = panel.querySelector('#gmh-progress-label');
+      stateView.bind({ progressFill, progressLabel });
+
+      try {
+        bindPanelInteractions(panel, { modern: true });
+      } catch (err) {
+        log?.warn?.('[GMH] panel interactions init failed', err);
+      }
+
+      return panel;
+    };
+
+    return { mount };
+  }
+
+  /**
+   * Mounts the legacy panel layout for older styling.
+   */
+  function createLegacyPanel({
+    documentRef = typeof document !== 'undefined' ? document : null,
+    getActiveAdapter,
+    attachStatusElement,
+    setPanelStatus,
+    stateView,
+    bindPanelInteractions,
+    panelId = 'genit-memory-helper-panel',
+  } = {}) {
+    const doc = documentRef;
+    if (!doc) throw new Error('createLegacyPanel requires documentRef');
+    if (typeof getActiveAdapter !== 'function') {
+      throw new Error('createLegacyPanel requires getActiveAdapter');
+    }
+    if (typeof attachStatusElement !== 'function') {
+      throw new Error('createLegacyPanel requires attachStatusElement');
+    }
+    if (typeof setPanelStatus !== 'function') {
+      throw new Error('createLegacyPanel requires setPanelStatus');
+    }
+    if (!stateView || typeof stateView.bind !== 'function') {
+      throw new Error('createLegacyPanel requires stateView with bind');
+    }
+    if (typeof bindPanelInteractions !== 'function') {
+      throw new Error('createLegacyPanel requires bindPanelInteractions');
+    }
+
+    const mount = () => {
+      const existing = doc.querySelector(`#${panelId}`);
+      if (existing) return existing;
+
+      const panel = doc.createElement('div');
+      panel.id = panelId;
+      panel.style.cssText = `
+      position: fixed; right: 16px; bottom: 16px; z-index: 999999;
+      background: #0b1020; color: #fff; padding: 10px 12px; border-radius: 10px;
+      font: 12px/1.3 ui-sans-serif, system-ui; box-shadow: 0 8px 20px rgba(0,0,0,.4);
+      display: grid; gap: 8px; min-width: 260px;
+    `;
+      panel.innerHTML = `
+      <div style="font-weight:600">Genit Memory Helper</div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <select id="gmh-privacy-profile" style="flex:1; background:#111827; color:#f1f5f9; border:1px solid #1f2937; border-radius:8px; padding:8px;">
+          <option value="safe">SAFE (권장)</option>
+          <option value="standard">STANDARD</option>
+          <option value="research">RESEARCH</option>
+        </select>
+        <button id="gmh-privacy-config" style="background:#c084fc; border:0; color:#210; border-radius:8px; padding:8px; cursor:pointer;">민감어</button>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button id="gmh-copy-recent" style="flex:1; background:#22c55e; border:0; color:#051; border-radius:8px; padding:8px; cursor:pointer;">최근 15메시지 복사</button>
+        <button id="gmh-copy-all" style="flex:1; background:#60a5fa; border:0; color:#031; border-radius:8px; padding:8px; cursor:pointer;">전체 MD 복사</button>
+      </div>
+      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+        <label for="gmh-range-start" style="font-size:11px; color:#94a3b8; font-weight:600;">메시지 범위</label>
+        <div style="display:flex; gap:6px; align-items:center; flex:1;">
+          <input id="gmh-range-start" type="number" min="1" inputmode="numeric" pattern="[0-9]*" placeholder="시작 메시지" style="width:70px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;" />
+          <span style="color:#94a3b8;">~</span>
+          <input id="gmh-range-end" type="number" min="1" inputmode="numeric" pattern="[0-9]*" placeholder="끝 메시지" style="width:70px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;" />
+          <button id="gmh-range-mark-start" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;" title="현재 메시지를 시작으로 지정">시작지정</button>
+          <button id="gmh-range-mark-end" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;" title="현재 메시지를 끝으로 지정">끝지정</button>
+          <button id="gmh-range-clear" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;">전체</button>
+        </div>
+      </div>
+      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+        <label for="gmh-range-bookmark-select" style="font-size:11px; color:#94a3b8; font-weight:600;">최근 북마크</label>
+        <select id="gmh-range-bookmark-select" style="flex:1; min-width:160px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;">
+          <option value="">최근 클릭한 메시지가 없습니다</option>
+        </select>
+      </div>
+      <div id="gmh-range-summary" style="font-size:11px; color:#94a3b8;">범위 전체 내보내기</div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <select id="gmh-export-format" style="flex:1; background:#111827; color:#f1f5f9; border:1px solid #1f2937; border-radius:8px; padding:8px;">
+          <option value="structured-md" selected>Rich Markdown (.md) — 추천</option>
+          <option value="structured-json">Rich JSON (.json)</option>
+          <option value="structured-txt">Rich TXT (.txt)</option>
+          <optgroup label="Classic (경량/호환)">
+            <option value="json">Classic JSON (.json)</option>
+            <option value="md">Classic Markdown (.md)</option>
+            <option value="txt">Classic TXT (.txt)</option>
+          </optgroup>
+        </select>
+        <button id="gmh-export" style="flex:1; background:#2dd4bf; border:0; color:#052; border-radius:8px; padding:8px; cursor:pointer;">내보내기</button>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button id="gmh-quick-export" style="flex:1; background:#38bdf8; border:0; color:#031; border-radius:8px; padding:8px; cursor:pointer;">원클릭 내보내기</button>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button id="gmh-reparse" style="flex:1; background:#f59e0b; border:0; color:#210; border-radius:8px; padding:8px; cursor:pointer;">재파싱</button>
+        <button id="gmh-guide" style="flex:1; background:#a78bfa; border:0; color:#210; border-radius:8px; padding:8px; cursor:pointer;">요약 가이드</button>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button id="gmh-reguide" style="flex:1; background:#fbbf24; border:0; color:#210; border-radius:8px; padding:8px; cursor:pointer;">재요약 가이드</button>
+      </div>
+      <div id="gmh-status" style="opacity:.85"></div>
+    `;
+
+      const adapter = getActiveAdapter();
+      const anchor = adapter?.getPanelAnchor?.(doc) || doc.body;
+      if (!anchor) return null;
+      anchor.appendChild(panel);
+
+      const statusEl = panel.querySelector('#gmh-status');
+      attachStatusElement(statusEl);
+      setPanelStatus('준비 완료', 'info');
+      stateView.bind();
+      bindPanelInteractions(panel, { modern: false });
+
+      return panel;
+    };
+
+    return { mount };
+  }
+
+  const DEFAULT_PREVIEW_LIMIT = 5;
+
+  const ensureDocument = (documentRef) => {
+    if (!documentRef || typeof documentRef.createElement !== 'function') {
+      throw new Error('privacy gate requires a document reference');
+    }
+    return documentRef;
+  };
+
+  const defaultTruncate = (value, max = 220) => {
+    const text = String(value || '').trim();
+    if (text.length <= max) return text;
+    return `${text.slice(0, max - 1)}…`;
+  };
+
+  const buildTurns = ({
+    documentRef,
+    previewTurns,
+    previewLimit,
+    rangeInfo,
+    selectedIndices,
+    selectedOrdinals,
+    truncateText,
+    modern,
+  }) => {
+    const doc = ensureDocument(documentRef);
+    const list = doc.createElement('ul');
+    list.className = modern ? 'gmh-turn-list' : 'gmh-preview-turns';
+    const highlightActive = rangeInfo?.active;
+    const selectedIndexSet = new Set(selectedIndices || []);
+    const ordinalLookup = new Map();
+    (selectedIndices || []).forEach((idx, i) => {
+      const ord = selectedOrdinals?.[i] ?? null;
+      ordinalLookup.set(idx, ord);
+    });
+
+    const turns = Array.isArray(previewTurns) ? previewTurns : [];
+    turns.slice(-previewLimit).forEach((turn) => {
+      if (!turn) return;
+      const item = doc.createElement('li');
+      item.className = modern ? 'gmh-turn-list__item' : 'gmh-preview-turn';
+      item.tabIndex = 0;
+
+      const sourceIndex = typeof turn.__gmhIndex === 'number' ? turn.__gmhIndex : null;
+      if (sourceIndex !== null) item.dataset.turnIndex = String(sourceIndex);
+
+      const playerOrdinal = (() => {
+        if (typeof turn.__gmhOrdinal === 'number') return turn.__gmhOrdinal;
+        if (sourceIndex !== null && ordinalLookup.has(sourceIndex)) {
+          return ordinalLookup.get(sourceIndex);
+        }
+        return null;
+      })();
+      if (typeof playerOrdinal === 'number') {
+        item.dataset.playerTurn = String(playerOrdinal);
+      }
+
+      if (highlightActive && sourceIndex !== null && selectedIndexSet.has(sourceIndex)) {
+        item.classList.add(modern ? 'gmh-turn-list__item--selected' : 'gmh-preview-turn--selected');
+      }
+
+      const speaker = doc.createElement('div');
+      speaker.className = modern ? 'gmh-turn-list__speaker' : 'gmh-preview-turn-speaker';
+      const speakerLabel = doc.createElement('span');
+      speakerLabel.textContent = `${turn.speaker || '??'} · ${turn.role}`;
+      speaker.appendChild(speakerLabel);
+
+      if (typeof playerOrdinal === 'number' && playerOrdinal > 0) {
+        const badge = doc.createElement('span');
+        badge.className = modern ? 'gmh-turn-list__badge' : 'gmh-turn-list__badge';
+        badge.textContent = `메시지 ${playerOrdinal}`;
+        speaker.appendChild(badge);
+      }
+
+      const text = doc.createElement('div');
+      text.className = modern ? 'gmh-turn-list__text' : 'gmh-preview-turn-text';
+      const truncate = typeof truncateText === 'function' ? truncateText : defaultTruncate;
+      text.textContent = truncate(turn.text || '');
+
+      item.appendChild(speaker);
+      item.appendChild(text);
+      list.appendChild(item);
+    });
+
+    if (!list.children.length) {
+      const empty = doc.createElement(modern ? 'li' : 'div');
+      empty.className = modern
+        ? 'gmh-turn-list__item gmh-turn-list__empty'
+        : 'gmh-preview-turn';
+      const emptyText = modern ? empty : doc.createElement('div');
+      if (!modern) {
+        emptyText.className = 'gmh-preview-turn-text';
+        emptyText.textContent = '표시할 메시지가 없습니다. 상단 요약만 확인해주세요.';
+        empty.appendChild(emptyText);
+      } else {
+        empty.textContent = '표시할 메시지가 없습니다. 상단 요약만 확인해주세요.';
+      }
+      list.appendChild(empty);
+    }
+
+    return list;
+  };
+
+  const buildSummaryBox = ({
+    documentRef,
+    formatRedactionCounts,
+    privacyProfiles,
+    profile,
+    counts,
+    stats,
+    overallStats,
+    rangeInfo,
+    modern,
+  }) => {
+    const doc = ensureDocument(documentRef);
+    const summary = typeof formatRedactionCounts === 'function'
+      ? formatRedactionCounts(counts)
+      : '';
+    const profileLabel = privacyProfiles?.[profile]?.label || profile;
+    const turnsLabel = overallStats
+      ? `유저 메시지 ${stats.userMessages}/${overallStats.userMessages} · 전체 메시지 ${stats.totalMessages}/${overallStats.totalMessages}`
+      : `유저 메시지 ${stats.userMessages} · 전체 메시지 ${stats.totalMessages}`;
+
+    const container = doc.createElement('div');
+    container.className = modern ? 'gmh-privacy-summary' : 'gmh-preview-summary';
+
+    const createRow = (labelText, valueText) => {
+      const row = doc.createElement('div');
+      if (modern) {
+        row.className = 'gmh-privacy-summary__row';
+        const labelEl = doc.createElement('span');
+        labelEl.className = 'gmh-privacy-summary__label';
+        labelEl.textContent = labelText;
+        const valueEl = doc.createElement('span');
+        valueEl.textContent = valueText;
+        row.appendChild(labelEl);
+        row.appendChild(valueEl);
+      } else {
+        const strong = doc.createElement('strong');
+        strong.textContent = labelText;
+        const value = doc.createElement('span');
+        value.textContent = valueText;
+        row.appendChild(strong);
+        row.appendChild(value);
+      }
+      return row;
+    };
+
+    [
+      createRow('프로필', profileLabel),
+      createRow('메시지 수', turnsLabel),
+      createRow('레다크션', summary),
+    ].forEach((row) => container.appendChild(row));
+
+    if (rangeInfo?.total) {
+      const messageTotal = rangeInfo.messageTotal ?? rangeInfo.total;
+      const rangeText = rangeInfo.active
+        ? `메시지 ${rangeInfo.start}-${rangeInfo.end} · ${rangeInfo.count}/${messageTotal}`
+        : `메시지 ${messageTotal}개 전체`;
+      const extraParts = [];
+      if (Number.isFinite(rangeInfo.userTotal)) extraParts.push(`유저 ${rangeInfo.userTotal}개`);
+      if (Number.isFinite(rangeInfo.llmTotal)) extraParts.push(`LLM ${rangeInfo.llmTotal}개`);
+      const complement = extraParts.length ? ` · ${extraParts.join(' · ')}` : '';
+      container.appendChild(createRow('범위', rangeText + complement));
+    }
+
+    return container;
+  };
+
+  /**
+   * Builds the classic privacy confirmation dialog rendered inside the legacy panel.
+   */
+  function createLegacyPrivacyGate({
+    documentRef = typeof document !== 'undefined' ? document : null,
+    formatRedactionCounts,
+    privacyProfiles,
+    ensureLegacyPreviewStyles,
+    truncateText = defaultTruncate,
+    previewLimit = DEFAULT_PREVIEW_LIMIT,
+  } = {}) {
+    const doc = ensureDocument(documentRef);
+    if (typeof ensureLegacyPreviewStyles !== 'function') {
+      throw new Error('legacy privacy gate requires ensureLegacyPreviewStyles');
+    }
+
+    const confirm = ({
+      profile,
+      counts,
+      stats,
+      overallStats = null,
+      rangeInfo = null,
+      selectedIndices = [],
+      selectedOrdinals = [],
+      previewTurns = [],
+      actionLabel = '계속',
+      heading = '공유 전 확인',
+      subheading = '외부로 공유하기 전에 민감정보가 없는지 확인하세요.',
+    } = {}) => {
+      ensureLegacyPreviewStyles();
+
+      const overlay = doc.createElement('div');
+      overlay.className = 'gmh-preview-overlay';
+      const card = doc.createElement('div');
+      card.className = 'gmh-preview-card';
+      overlay.appendChild(card);
+
+      const header = doc.createElement('div');
+      header.className = 'gmh-preview-header';
+      const headerLabel = doc.createElement('span');
+      headerLabel.textContent = heading;
+      header.appendChild(headerLabel);
+      const closeBtn = doc.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'gmh-preview-close';
+      closeBtn.setAttribute('aria-label', '닫기');
+      closeBtn.textContent = '✕';
+      header.appendChild(closeBtn);
+      card.appendChild(header);
+
+      const body = doc.createElement('div');
+      body.className = 'gmh-preview-body';
+      body.appendChild(
+        buildSummaryBox({
+          documentRef: doc,
+          formatRedactionCounts,
+          privacyProfiles,
+          profile,
+          counts,
+          stats,
+          overallStats,
+          rangeInfo,
+          modern: false,
+        }),
+      );
+
+      const previewTitle = doc.createElement('div');
+      previewTitle.style.fontWeight = '600';
+      previewTitle.style.color = '#cbd5f5';
+      previewTitle.textContent = `미리보기 (${Math.min(previewTurns.length, previewLimit)}메시지)`;
+      body.appendChild(previewTitle);
+
+      body.appendChild(
+        buildTurns({
+          documentRef: doc,
+          previewTurns,
+          previewLimit,
+          rangeInfo,
+          selectedIndices,
+          selectedOrdinals,
+          truncateText,
+          modern: false,
+        }),
+      );
+
+      const footnote = doc.createElement('div');
+      footnote.className = 'gmh-preview-footnote';
+      footnote.textContent = subheading;
+      body.appendChild(footnote);
+
+      card.appendChild(body);
+
+      const actions = doc.createElement('div');
+      actions.className = 'gmh-preview-actions';
+      const cancelBtn = doc.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.className = 'gmh-preview-cancel';
+      cancelBtn.textContent = '취소';
+      const confirmBtn = doc.createElement('button');
+      confirmBtn.type = 'button';
+      confirmBtn.className = 'gmh-preview-confirm';
+      confirmBtn.textContent = actionLabel;
+      actions.appendChild(cancelBtn);
+      actions.appendChild(confirmBtn);
+      card.appendChild(actions);
+
+      const bodyEl = doc.body || doc.querySelector('body');
+      if (!bodyEl) throw new Error('document body missing');
+      const prevOverflow = bodyEl.style.overflow;
+      bodyEl.style.overflow = 'hidden';
+      bodyEl.appendChild(overlay);
+
+      return new Promise((resolve) => {
+        const cleanup = (result) => {
+          bodyEl.style.overflow = prevOverflow;
+          overlay.remove();
+          doc.removeEventListener('keydown', onKey);
+          resolve(result);
+        };
+
+        const onKey = (event) => {
+          if (event.key === 'Escape') cleanup(false);
+        };
+        doc.addEventListener('keydown', onKey);
+
+        overlay.addEventListener('click', (event) => {
+          if (event.target === overlay) cleanup(false);
+        });
+        closeBtn.addEventListener('click', () => cleanup(false));
+        cancelBtn.addEventListener('click', () => cleanup(false));
+        confirmBtn.addEventListener('click', () => cleanup(true));
+      });
+    };
+
+    return { confirm };
+  }
+
+  /**
+   * Builds the modern privacy confirmation modal using design-system styles.
+   */
+  function createModernPrivacyGate({
+    documentRef = typeof document !== 'undefined' ? document : null,
+    formatRedactionCounts,
+    privacyProfiles,
+    ensureDesignSystemStyles,
+    modal,
+    truncateText = defaultTruncate,
+    previewLimit = DEFAULT_PREVIEW_LIMIT,
+  } = {}) {
+    const doc = ensureDocument(documentRef);
+    if (typeof ensureDesignSystemStyles !== 'function') {
+      throw new Error('modern privacy gate requires ensureDesignSystemStyles');
+    }
+    if (!modal || typeof modal.open !== 'function') {
+      throw new Error('modern privacy gate requires modal.open');
+    }
+
+    const confirm = ({
+      profile,
+      counts,
+      stats,
+      overallStats = null,
+      rangeInfo = null,
+      selectedIndices = [],
+      selectedOrdinals = [],
+      previewTurns = [],
+      actionLabel = '계속',
+      heading = '공유 전 확인',
+      subheading = '외부로 공유하기 전에 민감정보가 없는지 확인하세요.',
+    } = {}) => {
+      ensureDesignSystemStyles();
+
+      const stack = doc.createElement('div');
+      stack.className = 'gmh-modal-stack';
+
+      stack.appendChild(
+        buildSummaryBox({
+          documentRef: doc,
+          formatRedactionCounts,
+          privacyProfiles,
+          profile,
+          counts,
+          stats,
+          overallStats,
+          rangeInfo,
+          modern: true,
+        }),
+      );
+
+      const previewTitle = doc.createElement('div');
+      previewTitle.className = 'gmh-section-title';
+      previewTitle.textContent = `미리보기 (${Math.min(previewTurns.length, previewLimit)}메시지)`;
+      stack.appendChild(previewTitle);
+
+      stack.appendChild(
+        buildTurns({
+          documentRef: doc,
+          previewTurns,
+          previewLimit,
+          rangeInfo,
+          selectedIndices,
+          selectedOrdinals,
+          truncateText,
+          modern: true,
+        }),
+      );
+
+      const footnote = doc.createElement('div');
+      footnote.className = 'gmh-modal-footnote';
+      footnote.textContent = subheading;
+      stack.appendChild(footnote);
+
+      return modal
+        .open({
+          title: heading,
+          description: '',
+          content: stack,
+          size: 'medium',
+          initialFocus: '[data-action="confirm"]',
+          actions: [
+            {
+              id: 'cancel',
+              label: '취소',
+              variant: 'secondary',
+              value: false,
+              attrs: { 'data-action': 'cancel' },
+            },
+            {
+              id: 'confirm',
+              label: actionLabel,
+              variant: 'primary',
+              value: true,
+              attrs: { 'data-action': 'confirm' },
+            },
+          ],
+        })
+        .then((result) => Boolean(result));
+    };
+
+    return { confirm };
+  }
+
+  const SUMMARY_GUIDE_PROMPT = `
+당신은 "장기기억 보관용 사서"입니다.
+아래 파일은 캐릭터 채팅 로그를 정형화한 것입니다.
+목표는 이 데이터를 2000자 이내로 요약하여, 캐릭터 플랫폼의 "유저노트"에 넣을 수 있는 형식으로 정리하는 것입니다.
+
+조건:
+1. 중요도 기준
+   - 플레이어와 NPC 관계 변화, 약속, 목표, 갈등, 선호/금기만 포함.
+   - 사소한 농담·잡담은 제외.
+   - 최근일수록 더 비중 있게 반영.
+
+2. 출력 구조
+   - [전체 줄거리 요약]: 주요 사건 흐름을 3~6개 항목으로.
+   - [주요 관계 변화]: NPC별 감정/태도 변화를 정리.
+   - [핵심 테마]: 반복된 규칙, 세계관 요소, 목표.
+
+3. 형식 규칙
+   - 전체 길이는 1200~1800자.
+   - 문장은 간결하게.
+   - 플레이어 이름은 "플레이어"로 통일.
+`;
+
+  const RESUMMARY_GUIDE_PROMPT = `
+아래에는 [이전 요약본]과 [새 로그 파일]이 있습니다.
+이 둘을 통합하여, 2000자 이내의 "최신 장기기억 요약본"을 만드세요.
+
+규칙:
+- 이전 요약본에서 이미 있는 사실은 유지하되, 새 로그 파일에 나온 사건/관계 변화로 업데이트.
+- 모순되면 "최근 사건"을 우선.
+- 출력 구조는 [전체 줄거리 요약] / [주요 관계 변화] / [핵심 테마].
+- 길이는 1200~1800자.
+`;
+
+  /**
+   * Builds helpers that supply summary/resummary prompt templates to the clipboard.
+   */
+  function createGuidePrompts({
+    clipboard,
+    setPanelStatus,
+    statusMessages = {},
+  } = {}) {
+    if (!clipboard || typeof clipboard.set !== 'function') {
+      throw new Error('createGuidePrompts requires clipboard helper');
+    }
+
+    const notify = (message, tone) => {
+      if (typeof setPanelStatus === 'function' && message) {
+        setPanelStatus(message, tone);
+      }
+    };
+
+    const summaryMessage = statusMessages.summaryCopied || '요약 프롬프트가 클립보드에 복사되었습니다.';
+    const resummaryMessage =
+      statusMessages.resummaryCopied || '재요약 프롬프트가 클립보드에 복사되었습니다.';
+
+    const copySummaryGuide = () => {
+      clipboard.set(SUMMARY_GUIDE_PROMPT, { type: 'text', mimetype: 'text/plain' });
+      notify(summaryMessage, 'success');
+      return SUMMARY_GUIDE_PROMPT;
+    };
+
+    const copyResummaryGuide = () => {
+      clipboard.set(RESUMMARY_GUIDE_PROMPT, { type: 'text', mimetype: 'text/plain' });
+      notify(resummaryMessage, 'success');
+      return RESUMMARY_GUIDE_PROMPT;
+    };
+
+    return {
+      copySummaryGuide,
+      copyResummaryGuide,
+      prompts: {
+        summary: SUMMARY_GUIDE_PROMPT,
+        resummary: RESUMMARY_GUIDE_PROMPT,
+      },
+    };
+  }
+
+  /**
+   * Wires panel guide buttons to share workflow helpers.
+   */
+  function createGuideControls({
+    reparse,
+    copySummaryGuide,
+    copyResummaryGuide,
+    logger = typeof console !== 'undefined' ? console : null,
+  } = {}) {
+    if (typeof copySummaryGuide !== 'function' || typeof copyResummaryGuide !== 'function') {
+      throw new Error('createGuideControls requires summary and resummary copy functions');
+    }
+
+    const bindGuideControls = (panel) => {
+      if (!panel || typeof panel.querySelector !== 'function') {
+        if (logger?.warn) {
+          logger.warn('[GMH] guide controls: panel missing querySelector');
+        }
+        return;
+      }
+
+      const reparseBtn = panel.querySelector('#gmh-reparse');
+      if (reparseBtn && typeof reparse === 'function') {
+        reparseBtn.onclick = () => reparse();
+      }
+
+      const guideBtn = panel.querySelector('#gmh-guide');
+      if (guideBtn) {
+        guideBtn.onclick = () => copySummaryGuide();
+      }
+
+      const reguideBtn = panel.querySelector('#gmh-reguide');
+      if (reguideBtn) {
+        reguideBtn.onclick = () => copyResummaryGuide();
+      }
+    };
+
+    return { bindGuideControls };
+  }
+
+  function registerGenitConfig(registerAdapterConfig) {
+    registerAdapterConfig('genit', {
+      selectors: {
+        chatContainers: [
+          '[data-chat-container]',
+          '[data-testid="chat-scroll-region"]',
+          '[data-testid="conversation-scroll"]',
+          '[data-testid="chat-container"]',
+          '[data-role="conversation"]',
+          '[data-overlayscrollbars]',
+          '.flex-1.min-h-0.overflow-y-auto',
+          'main [class*="overflow-y"]',
+        ],
+        messageRoot: [
+          '[data-message-id]',
+          '[role="listitem"][data-id]',
+          '[data-testid="message-wrapper"]',
+        ],
+        infoCode: ['code.language-INFO', 'pre code.language-INFO'],
+        playerScopes: [
+          '[data-role="user"]',
+          '[data-from-user="true"]',
+          '[data-author-role="user"]',
+          '.flex.w-full.justify-end',
+          '.flex.flex-col.items-end',
+        ],
+        playerText: [
+          '.space-y-3.mb-6 > .markdown-content:nth-of-type(1)',
+          '[data-role="user"] .markdown-content:not(.text-muted-foreground)',
+          '[data-author-role="user"] .markdown-content:not(.text-muted-foreground)',
+          '.flex.w-full.justify-end .markdown-content:not(.text-muted-foreground)',
+          '.flex.flex-col.items-end .markdown-content:not(.text-muted-foreground)',
+          '.markdown-content.text-right',
+          '.p-4.rounded-xl.bg-background p',
+          '[data-role="user"] .markdown-content.text-muted-foreground',
+          '[data-author-role="user"] .markdown-content.text-muted-foreground',
+          '.flex.w-full.justify-end .markdown-content.text-muted-foreground',
+          '.flex.flex-col.items-end .markdown-content.text-muted-foreground',
+          '.flex.justify-end .text-muted-foreground.text-sm',
+          '.flex.justify-end .text-muted-foreground',
+          '.flex.flex-col.items-end .text-muted-foreground',
+          '.p-3.rounded-lg.bg-muted\\/50 p',
+          '.flex.justify-end .p-3.rounded-lg.bg-muted\\/50 p',
+          '.flex.flex-col.items-end .p-3.rounded-lg.bg-muted\\/50 p',
+        ],
+        npcGroups: ['[data-role="assistant"]', '.flex.flex-col.w-full.group'],
+        npcName: [
+          '[data-author-name]',
+          '[data-author]',
+          '[data-username]',
+          '.text-sm.text-muted-foreground.mb-1.ml-1',
+        ],
+        npcBubble: ['.p-4.rounded-xl.bg-background', '.p-3.rounded-lg.bg-muted\\/50'],
+        narrationBlocks: [
+          '.markdown-content.text-muted-foreground > p',
+          '.text-muted-foreground.text-sm > p',
+        ],
+        panelAnchor: ['[data-testid="app-root"]', '#__next', '#root', 'main'],
+        playerNameHints: [
+          '[data-role="user"] [data-username]',
+          '[data-profile-name]',
+          '[data-user-name]',
+          '[data-testid="profile-name"]',
+          'header [data-username]',
+        ],
+        textHints: ['메시지', '채팅', '대화'],
+      },
+    });
+  }
+
+  function isPrologueBlock(element) {
+    let current = element instanceof Element ? element : null;
+    let hops = 0;
+    while (current && hops < 400) {
+      if (current.hasAttribute?.('data-gmh-player-turn')) return false;
+      if (current.previousElementSibling) {
+        current = current.previousElementSibling;
+      } else {
+        current = current.parentElement;
+      }
+      hops += 1;
+    }
+    return true;
+  }
+
+  function createAdapterAPI({ GMH, errorHandler, PLAYER_NAME_FALLBACKS, setPlayerNames, getPlayerNames }) {
+    GMH.Adapters = GMH.Adapters || {};
+    GMH.Core = GMH.Core || {};
+
+    GMH.Adapters.Registry = GMH.Adapters.Registry ?? null;
+    GMH.Adapters.register = GMH.Adapters.register ?? (() => {});
+    GMH.Adapters.getSelectors = GMH.Adapters.getSelectors ?? (() => null);
+    GMH.Adapters.getMetadata = GMH.Adapters.getMetadata ?? (() => null);
+    GMH.Adapters.list = GMH.Adapters.list ?? (() => []);
+
+    const warnDetectFailure = (err) => {
+      const level = errorHandler?.LEVELS?.WARN || 'warn';
+      errorHandler?.handle?.(err, 'adapter/detect', level);
+    };
+
+    const pickAdapter = (loc = location, doc = document) => {
+      const candidates = Array.isArray(GMH.Core.adapters) ? GMH.Core.adapters : [];
+      for (const adapter of candidates) {
+        try {
+          if (adapter?.match?.(loc, doc)) return adapter;
+        } catch (err) {
+          warnDetectFailure(err);
+        }
+      }
+      return GMH.Adapters.genit;
+    };
+
+    GMH.Core.pickAdapter = pickAdapter;
+
+    let activeAdapter = null;
+    const getActiveAdapter = () => {
+      if (!activeAdapter) {
+        activeAdapter = pickAdapter(location, document);
+      }
+      return activeAdapter;
+    };
+
+    GMH.Core.getActiveAdapter = getActiveAdapter;
+
+    const guessPlayerNamesFromDOM = () => {
+      const adapter = getActiveAdapter();
+      return adapter?.guessPlayerNames?.() || [];
+    };
+
+    const updatePlayerNames = () => {
+      const names = Array.from(
+        new Set([...PLAYER_NAME_FALLBACKS, ...guessPlayerNamesFromDOM()].filter(Boolean)),
+      );
+      setPlayerNames(names);
+      GMH.Adapters.genit?.setPlayerNameAccessor?.(() => getPlayerNames());
+    };
+
+    return {
+      pickAdapter,
+      getActiveAdapter,
+      guessPlayerNamesFromDOM,
+      updatePlayerNames,
+      resetActiveAdapter() {
+        activeAdapter = null;
+      },
+    };
+  }
+
+  /**
+   * Registers available DOM adapters and exposes helper APIs for adapter selection.
+   *
+   * @param {object} options - Injection container.
+   * @param {typeof import('../core/namespace.js').GMH} options.GMH - Global namespace handle.
+   * @param {Map} options.adapterRegistry - Registry backing store.
+   * @param {Function} options.registerAdapterConfig - Adapter registration helper.
+   * @param {Function} options.getAdapterSelectors - Accessor for adapter selectors.
+   * @param {Function} options.getAdapterMetadata - Accessor for adapter metadata.
+   * @param {Function} options.listAdapterNames - Lists registered adapter identifiers.
+   * @param {Function} options.createGenitAdapter - Factory for Genit adapter.
+   * @param {object} [options.errorHandler] - Optional error handler for logging.
+   * @param {Function} options.getPlayerNames - Retrieves configured player names.
+   * @param {Function} options.setPlayerNames - Persists player names.
+   * @param {Array<string>} options.PLAYER_NAME_FALLBACKS - Default player name list.
+   * @returns {object} Adapter utilities bound to the GMH namespace.
+   */
+  function composeAdapters({
+    GMH,
+    adapterRegistry,
+    registerAdapterConfig,
+    getAdapterSelectors,
+    getAdapterMetadata,
+    listAdapterNames,
+    createGenitAdapter,
+    errorHandler,
+    getPlayerNames,
+    setPlayerNames,
+    PLAYER_NAME_FALLBACKS,
+  }) {
+    GMH.Adapters = GMH.Adapters || {};
+    GMH.Core = GMH.Core || {};
+
+    GMH.Adapters.Registry = adapterRegistry;
+    GMH.Adapters.register = (name, config) => registerAdapterConfig(name, config);
+    GMH.Adapters.getSelectors = (name) => getAdapterSelectors(name);
+    GMH.Adapters.getMetadata = (name) => getAdapterMetadata(name);
+    GMH.Adapters.list = () => listAdapterNames();
+
+    registerGenitConfig(registerAdapterConfig);
+
+    const genitAdapter = createGenitAdapter({
+      registry: adapterRegistry,
+      getPlayerNames,
+      isPrologueBlock,
+      errorHandler,
+    });
+
+    GMH.Adapters.genit = genitAdapter;
+    GMH.Core.adapters = [genitAdapter];
+
+    const api = createAdapterAPI({
+      GMH,
+      errorHandler,
+      PLAYER_NAME_FALLBACKS,
+      setPlayerNames,
+      getPlayerNames,
+    });
+    api.updatePlayerNames();
+
+    return {
+      genitAdapter,
+      ...api,
+    };
+  }
+
+  /**
+   * Builds the privacy configuration pipeline and persistence store.
+   *
+   * @param {object} options - Dependency container.
+   * @param {Function} options.createPrivacyStore - Factory for privacy store.
+   * @param {Function} options.createPrivacyPipeline - Factory for redaction pipeline.
+   * @param {object} options.PRIVACY_PROFILES - Available privacy profile definitions.
+   * @param {string} options.DEFAULT_PRIVACY_PROFILE - Default profile key.
+   * @param {Function} options.collapseSpaces - Text normaliser.
+   * @param {Function} options.privacyRedactText - Redaction function.
+   * @param {Function} options.hasMinorSexualContext - Minor detection helper.
+   * @param {Function} options.getPlayerNames - Player name accessor.
+   * @param {object} options.ENV - Environment shims (console/storage).
+   * @param {object} options.errorHandler - Error handler instance.
+   * @returns {object} Privacy helpers bound to runtime configuration.
+   */
+  function composePrivacy({
+    createPrivacyStore,
+    createPrivacyPipeline,
+    PRIVACY_PROFILES,
+    DEFAULT_PRIVACY_PROFILE,
+    collapseSpaces,
+    privacyRedactText,
+    hasMinorSexualContext,
+    getPlayerNames,
+    ENV,
+    errorHandler,
+  }) {
+    const privacyStore = createPrivacyStore({
+      storage: ENV.localStorage,
+      errorHandler,
+      collapseSpaces,
+      defaultProfile: DEFAULT_PRIVACY_PROFILE,
+      profiles: PRIVACY_PROFILES,
+    });
+
+    const privacyConfig = privacyStore.config;
+
+    const setPrivacyProfile = (profileKey) => {
+      privacyStore.setProfile(profileKey);
+      return privacyConfig.profile;
+    };
+
+    const setCustomList = (type, items) => {
+      privacyStore.setCustomList(type, items);
+      return privacyConfig;
+    };
+
+    const boundRedactText = (text, profileKey, counts) =>
+      privacyRedactText(text, profileKey, counts, privacyConfig, PRIVACY_PROFILES);
+
+    const { applyPrivacyPipeline } = createPrivacyPipeline({
+      profiles: PRIVACY_PROFILES,
+      getConfig: () => privacyConfig,
+      redactText: boundRedactText,
+      hasMinorSexualContext,
+      getPlayerNames,
+      logger: ENV.console,
+      storage: ENV.localStorage,
+    });
+
+    return {
+      privacyStore,
+      privacyConfig,
+      setPrivacyProfile,
+      setCustomList,
+      applyPrivacyPipeline,
+      boundRedactText,
+    };
+  }
+
+  function cloneSession(session) {
+    const clonedTurns = Array.isArray(session?.turns)
+      ? session.turns.map((turn) => {
+          const clone = { ...turn };
+          if (Array.isArray(turn.__gmhEntries)) {
+            Object.defineProperty(clone, '__gmhEntries', {
+              value: turn.__gmhEntries.slice(),
+              enumerable: false,
+              writable: true,
+              configurable: true,
+            });
+          }
+          if (Array.isArray(turn.__gmhSourceBlocks)) {
+            Object.defineProperty(clone, '__gmhSourceBlocks', {
+              value: turn.__gmhSourceBlocks.slice(),
+              enumerable: false,
+              writable: true,
+              configurable: true,
+            });
+          }
+          return clone;
+        })
+      : [];
+    return {
+      meta: { ...(session?.meta || {}) },
+      turns: clonedTurns,
+      warnings: Array.isArray(session?.warnings) ? [...session.warnings] : [],
+      source: session?.source,
+    };
+  }
+
+  function collectSessionStats(session) {
+    if (!session) return { userMessages: 0, llmMessages: 0, totalMessages: 0, warnings: 0 };
+    const userMessages = session.turns?.filter((turn) => turn.channel === 'user')?.length || 0;
+    const llmMessages = session.turns?.filter((turn) => turn.channel === 'llm')?.length || 0;
+    const totalMessages = session.turns?.length || 0;
+    const warnings = session.warnings?.length || 0;
+    return { userMessages, llmMessages, totalMessages, warnings };
+  }
+
+  /**
+   * Wires the share workflow with grouped dependencies returned from index.
+   *
+   * @param {object} options - Dependency container.
+   * @param {Function} options.createShareWorkflow - Share workflow factory.
+   * @param {Function} options.captureStructuredSnapshot - Structured snapshot capture helper.
+   * @param {Function} options.normalizeTranscript - Transcript normaliser.
+   * @param {Function} options.buildSession - Session builder.
+   * @param {object} options.exportRange - Export range controller.
+   * @param {Function} options.projectStructuredMessages - Structured message projector.
+   * @param {Function} options.applyPrivacyPipeline - Privacy pipeline executor.
+   * @param {object} options.privacyConfig - Active privacy configuration reference.
+   * @param {object} options.privacyProfiles - Supported privacy profiles.
+   * @param {Function} options.formatRedactionCounts - Formatter for redaction metrics.
+   * @param {Function} options.setPanelStatus - Panel status setter.
+   * @param {Function} options.toMarkdownExport - Classic markdown exporter.
+   * @param {Function} options.toJSONExport - Classic JSON exporter.
+   * @param {Function} options.toTXTExport - Classic TXT exporter.
+   * @param {Function} options.toStructuredMarkdown - Structured markdown exporter.
+   * @param {Function} options.toStructuredJSON - Structured JSON exporter.
+   * @param {Function} options.toStructuredTXT - Structured TXT exporter.
+   * @param {Function} options.buildExportBundle - Bundle builder.
+   * @param {Function} options.buildExportManifest - Manifest builder.
+   * @param {Function} options.triggerDownload - Download helper.
+   * @param {object} options.clipboard - Clipboard helpers.
+   * @param {object} options.stateApi - State manager API.
+   * @param {object} options.stateEnum - State enum reference.
+   * @param {Function} options.confirmPrivacyGate - Privacy confirmation helper.
+   * @param {Function} options.getEntryOrigin - Entry origin accessor.
+   * @param {object} options.logger - Logger implementation.
+   * @returns {object} Share workflow API with helper statistics.
+   */
+  function composeShareWorkflow({
+    createShareWorkflow,
+    captureStructuredSnapshot,
+    normalizeTranscript,
+    buildSession,
+    exportRange,
+    projectStructuredMessages,
+    applyPrivacyPipeline,
+    privacyConfig,
+    privacyProfiles,
+    formatRedactionCounts,
+    setPanelStatus,
+    toMarkdownExport,
+    toJSONExport,
+    toTXTExport,
+    toStructuredMarkdown,
+    toStructuredJSON,
+    toStructuredTXT,
+    buildExportBundle,
+    buildExportManifest,
+    triggerDownload,
+    clipboard,
+    stateApi,
+    stateEnum,
+    confirmPrivacyGate,
+    getEntryOrigin,
+    logger,
+  }) {
+    const shareApi = createShareWorkflow({
+      captureStructuredSnapshot,
+      normalizeTranscript,
+      buildSession,
+      exportRange,
+      projectStructuredMessages,
+      cloneSession,
+      applyPrivacyPipeline,
+      privacyConfig,
+      privacyProfiles,
+      formatRedactionCounts,
+      setPanelStatus,
+      toMarkdownExport,
+      toJSONExport,
+      toTXTExport,
+      toStructuredMarkdown,
+      toStructuredJSON,
+      toStructuredTXT,
+      buildExportBundle,
+      buildExportManifest,
+      triggerDownload,
+      clipboard,
+      stateApi,
+      stateEnum,
+      confirmPrivacyGate,
+      getEntryOrigin,
+      collectSessionStats,
+      logger,
+    });
+
+    return {
+      ...shareApi,
+      collectSessionStats,
+    };
+  }
+
+  /**
+   * Creates the shared modal controller used across classic/modern panels.
+   */
   function createModal({ documentRef = typeof document !== 'undefined' ? document : null, windowRef = typeof window !== 'undefined' ? window : null } = {}) {
     const doc = documentRef;
     const win = windowRef;
@@ -4137,113 +7924,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     };
   }
 
-  const PANEL_SETTINGS_STORAGE_KEY = 'gmh_panel_settings_v1';
-
-  function createPanelSettings({
-    clone,
-    deepMerge,
-    storage = typeof localStorage !== 'undefined' ? localStorage : null,
-    logger = typeof console !== 'undefined' ? console : null,
-  } = {}) {
-    if (typeof clone !== 'function' || typeof deepMerge !== 'function') {
-      throw new Error('createPanelSettings requires clone and deepMerge helpers');
-    }
-
-    const DEFAULTS = {
-      layout: {
-        anchor: 'right',
-        offset: 16,
-        bottom: 16,
-        width: null,
-        height: null,
-      },
-      behavior: {
-        autoHideEnabled: true,
-        autoHideDelayMs: 10000,
-        collapseOnOutside: false,
-        collapseOnFocus: false,
-        allowDrag: true,
-        allowResize: true,
-      },
-    };
-
-    const log = logger || { warn: () => {} };
-    const settingsStore = storage;
-
-    let settings = clone(DEFAULTS);
-
-    if (settingsStore) {
-      try {
-        const raw = settingsStore.getItem(PANEL_SETTINGS_STORAGE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          settings = deepMerge(clone(DEFAULTS), parsed);
-        }
-      } catch (err) {
-        log?.warn?.('[GMH] failed to load panel settings', err);
-        settings = clone(DEFAULTS);
-      }
-    }
-
-    const listeners = new Set();
-
-    const persist = () => {
-      if (!settingsStore) return;
-      try {
-        settingsStore.setItem(PANEL_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
-      } catch (err) {
-        log?.warn?.('[GMH] failed to persist panel settings', err);
-      }
-    };
-
-    const notify = () => {
-      const snapshot = clone(settings);
-      listeners.forEach((listener) => {
-        try {
-          listener(snapshot);
-        } catch (err) {
-          log?.warn?.('[GMH] panel settings listener failed', err);
-        }
-      });
-    };
-
-    return {
-      STORAGE_KEY: PANEL_SETTINGS_STORAGE_KEY,
-      defaults: clone(DEFAULTS),
-      get() {
-        return clone(settings);
-      },
-      update(patch) {
-        if (!patch || typeof patch !== 'object') return clone(settings);
-        const nextSettings = deepMerge(settings, patch);
-        const before = JSON.stringify(settings);
-        const after = JSON.stringify(nextSettings);
-        if (after === before) return clone(settings);
-        settings = nextSettings;
-        persist();
-        notify();
-        return clone(settings);
-      },
-      reset() {
-        const before = JSON.stringify(settings);
-        const defaultsString = JSON.stringify(DEFAULTS);
-        if (before === defaultsString) {
-          settings = clone(DEFAULTS);
-          return clone(settings);
-        }
-        settings = clone(DEFAULTS);
-        persist();
-        notify();
-        return clone(settings);
-      },
-      onChange(listener) {
-        if (typeof listener !== 'function') return () => {};
-        listeners.add(listener);
-        return () => listeners.delete(listener);
-      },
-    };
-  }
-
+  /**
+   * Manages panel open/collapse state, coordinating with storage and modal overlays.
+   */
   function createPanelVisibility({
     panelSettings,
     stateEnum,
@@ -5021,6 +8704,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     muted: { color: '#cbd5f5', icon: '' },
   };
 
+  /**
+   * Creates a minimal status manager that updates panel status text and notifies listeners.
+   */
   function createStatusManager({ panelVisibility } = {}) {
     let statusElement = null;
 
@@ -5109,6 +8795,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     },
   };
 
+  /**
+   * Builds the state view binder so the panel shows current workflow progress.
+   */
   function createStateView({ stateApi, statusManager, stateEnum }) {
     if (!stateApi) throw new Error('createStateView requires stateApi');
     if (!statusManager) throw new Error('createStateView requires statusManager');
@@ -5178,385 +8867,139 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     return { bind };
   }
 
-  const ensureDocument$1 = (documentRef) => {
-    if (!documentRef || typeof documentRef.createElement !== 'function') {
-      throw new Error('snapshot feature requires a document reference');
-    }
-    return documentRef;
-  };
-
-  const createDescribeNode = (documentRef) => {
-    const doc = ensureDocument$1(documentRef);
-    const ElementCtor = doc?.defaultView?.Element || (typeof Element !== 'undefined' ? Element : null);
-    return (node) => {
-      if (!ElementCtor || !node || !(node instanceof ElementCtor)) return null;
-      const parts = [];
-      let current = node;
-      let depth = 0;
-      while (current && depth < 5) {
-        let part = current.tagName.toLowerCase();
-        if (current.id) part += `#${current.id}`;
-        if (current.classList?.length)
-          part += `.${Array.from(current.classList).slice(0, 3).join('.')}`;
-        parts.unshift(part);
-        current = current.parentElement;
-        depth += 1;
-      }
-      return parts.join(' > ');
-    };
-  };
-
-  function createSnapshotFeature({
-    getActiveAdapter,
-    triggerDownload,
+  function createPrivacyConfigurator({
+    privacyConfig,
+    setCustomList,
+    parseListInput,
     setPanelStatus,
-    errorHandler,
+    modal,
+    isModernUIActive,
     documentRef = typeof document !== 'undefined' ? document : null,
-    locationRef = typeof location !== 'undefined' ? location : null,
-  }) {
-    if (!getActiveAdapter || !triggerDownload || !setPanelStatus || !errorHandler) {
-      throw new Error('createSnapshotFeature missing required dependencies');
-    }
-
-    const describeNode = createDescribeNode(documentRef);
-
-    const downloadDomSnapshot = () => {
-      const doc = documentRef;
-      const loc = locationRef;
-      if (!doc || !loc) return;
-      try {
-        const adapter = getActiveAdapter();
-        const container = adapter?.findContainer?.(doc);
-        const blocks = adapter?.listMessageBlocks?.(container || doc) || [];
-        const snapshot = {
-          url: loc.href,
-          captured_at: new Date().toISOString(),
-          container_path: describeNode(container),
-          block_count: blocks.length,
-          selector_strategies: adapter?.dumpSelectors?.(),
-          container_html_sample: container ? (container.innerHTML || '').slice(0, 40000) : null,
-        };
-        const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
-          type: 'application/json',
-        });
-        triggerDownload(blob, `genit-snapshot-${Date.now()}.json`);
-        setPanelStatus('DOM 스냅샷이 저장되었습니다.', 'success');
-      } catch (error) {
-        const handler = errorHandler?.handle ? errorHandler : null;
-        const message = handler?.handle
-          ? handler.handle(error, 'snapshot', handler.LEVELS?.ERROR)
-          : error?.message || String(error);
-        setPanelStatus(`스냅샷 실패: ${message}`, 'error');
-      }
-    };
-
-    return {
-      describeNode,
-      downloadDomSnapshot,
-    };
-  }
-
-  function createStructuredSnapshotReader({
-    getActiveAdapter,
-    setEntryOriginProvider,
-    documentRef = typeof document !== 'undefined' ? document : null,
+    windowRef = typeof window !== 'undefined' ? window : null,
   } = {}) {
-    if (!getActiveAdapter) throw new Error('createStructuredSnapshotReader requires getActiveAdapter');
-    const doc = ensureDocument$1(documentRef);
+    if (!privacyConfig) throw new Error('createPrivacyConfigurator requires privacyConfig');
+    if (!setCustomList) throw new Error('createPrivacyConfigurator requires setCustomList');
+    if (!parseListInput) throw new Error('createPrivacyConfigurator requires parseListInput');
+    if (!setPanelStatus) throw new Error('createPrivacyConfigurator requires setPanelStatus');
+    if (!modal) throw new Error('createPrivacyConfigurator requires modal');
+    if (!documentRef) throw new Error('createPrivacyConfigurator requires document');
 
-    let entryOrigin = [];
-    let latestStructuredSnapshot = null;
-    let blockCache = new WeakMap();
-    let blockIdRegistry = new WeakMap();
-    let blockIdCounter = 0;
+    const doc = documentRef;
+    const win = windowRef;
 
-    if (typeof setEntryOriginProvider === 'function') {
-      setEntryOriginProvider(() => entryOrigin);
-    }
+    const resolveModernActive = () =>
+      typeof isModernUIActive === 'function' ? isModernUIActive() : Boolean(isModernUIActive);
 
-    const getBlockId = (block) => {
-      if (!block) return null;
-      if (!blockIdRegistry.has(block)) {
-        blockIdCounter += 1;
-        blockIdRegistry.set(block, blockIdCounter);
-      }
-      return blockIdRegistry.get(block);
-    };
+    const configurePrivacyListsModern = async () => {
+      ensureDesignSystemStyles(doc);
 
-    const fingerprintText = (value) => {
-      if (!value) return '0:0';
-      let hash = 0;
-      for (let i = 0; i < value.length; i += 1) {
-        hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
-      }
-      return `${value.length}:${hash.toString(16)}`;
-    };
+      const stack = doc.createElement('div');
+      stack.className = 'gmh-modal-stack';
 
-    const getBlockSignature = (block) => {
-      if (!block || typeof block.getAttribute !== 'function') return 'none';
-      const idAttr =
-        block.getAttribute('data-gmh-message-id') ||
-        block.getAttribute('data-message-id') ||
-        block.getAttribute('data-id');
-      if (idAttr) return `id:${idAttr}`;
-      const text = block.textContent || '';
-      return `text:${fingerprintText(text)}`;
-    };
+      const intro = doc.createElement('p');
+      intro.className = 'gmh-subtext';
+      intro.textContent =
+        '쉼표 또는 줄바꿈으로 여러 항목을 구분하세요. 블랙리스트는 강제 마스킹, 화이트리스트는 예외 처리됩니다.';
+      stack.appendChild(intro);
 
-    const cloneStructuredMessage = (message) => {
-      if (!message || typeof message !== 'object') return null;
-      const cloned = { ...message };
-      if (Array.isArray(message.parts)) {
-        cloned.parts = message.parts.map((part) => (part && typeof part === 'object' ? { ...part } : part));
-      }
-      if (Array.isArray(message.legacyLines)) cloned.legacyLines = message.legacyLines.slice();
-      if (Array.isArray(message.__gmhEntries)) cloned.__gmhEntries = message.__gmhEntries.slice();
-      if (Array.isArray(message.__gmhSourceBlocks)) cloned.__gmhSourceBlocks = message.__gmhSourceBlocks.slice();
-      return cloned;
-    };
-
-    const ensureCacheEntry = (adapter, block, forceReparse) => {
-      if (!block) return { structured: null, lines: [], errors: [] };
-      const signature = getBlockSignature(block);
-      if (!forceReparse && blockCache.has(block)) {
-        const cached = blockCache.get(block);
-        if (cached && cached.signature === signature) {
-          return cached;
-        }
-      }
-
-      const localSeen = new Set();
-      const errors = [];
-      let structured = null;
-      let lines = [];
-
-      try {
-        const collected = adapter?.collectStructuredMessage?.(block);
-        if (collected && typeof collected === 'object') {
-          structured = cloneStructuredMessage(collected);
-          const legacy = Array.isArray(collected.legacyLines) ? collected.legacyLines : [];
-          lines = legacy.reduce((acc, line) => {
-            const trimmed = (line || '').trim();
-            if (!trimmed || localSeen.has(trimmed)) return acc;
-            localSeen.add(trimmed);
-            acc.push(trimmed);
-            return acc;
-          }, []);
-        }
-      } catch (error) {
-        errors.push(error?.message || String(error));
-      }
-
-      if (!structured) {
-        const fallbackLines = [];
-        const pushLine = (line) => {
-          const trimmed = (line || '').trim();
-          if (!trimmed || localSeen.has(trimmed)) return;
-          localSeen.add(trimmed);
-          fallbackLines.push(trimmed);
-        };
-        try {
-          adapter?.emitTranscriptLines?.(block, pushLine);
-        } catch (error) {
-          errors.push(error?.message || String(error));
-        }
-        lines = fallbackLines;
-      }
-
-      const entry = {
-        structured,
-        lines,
-        errors,
-        signature,
+      const makeLabel = (text) => {
+        const label = doc.createElement('div');
+        label.className = 'gmh-field-label';
+        label.textContent = text;
+        return label;
       };
-      blockCache.set(block, entry);
-      return entry;
-    };
 
-    const captureStructuredSnapshot = (options = {}) => {
-      const { force } = options || {};
-      if (force) {
-        blockCache = new WeakMap();
-        blockIdRegistry = new WeakMap();
-        blockIdCounter = 0;
-      }
-      const adapter = getActiveAdapter();
-      const container = adapter?.findContainer?.(doc);
-      const blocks = adapter?.listMessageBlocks?.(container || doc) || [];
-      if (!container && !blocks.length) throw new Error('채팅 컨테이너를 찾을 수 없습니다.');
-      if (!blocks.length) {
-        entryOrigin = [];
-        latestStructuredSnapshot = {
-          messages: [],
-          legacyLines: [],
-          entryOrigin: [],
-          errors: [],
-          generatedAt: Date.now(),
-        };
-        return latestStructuredSnapshot;
-      }
+      const blackLabel = makeLabel(`블랙리스트 (${privacyConfig.blacklist?.length || 0})`);
+      stack.appendChild(blackLabel);
 
-      const seenLine = new Set();
-      const legacyLines = [];
-      const origins = [];
-      const messages = [];
-      const errors = [];
-      const totalBlocks = blocks.length;
+      const blackTextarea = doc.createElement('textarea');
+      blackTextarea.id = 'gmh-privacy-blacklist';
+      blackTextarea.className = 'gmh-textarea';
+      blackTextarea.placeholder = '예: 서울시, 010-1234-5678';
+      blackTextarea.value = privacyConfig.blacklist?.join('\n') || '';
+      stack.appendChild(blackTextarea);
 
-      adapter?.resetInfoRegistry?.();
+      const whiteLabel = makeLabel(`화이트리스트 (${privacyConfig.whitelist?.length || 0})`);
+      stack.appendChild(whiteLabel);
 
-      blocks.forEach((block, idx) => {
-        const fallbackIndex = Number(block?.getAttribute?.('data-gmh-message-index'));
-        const originIndex = Number.isFinite(fallbackIndex) ? fallbackIndex : idx;
-        const blockId = getBlockId(block);
-        const cacheEntry = ensureCacheEntry(adapter, block, Boolean(force));
-        const cacheLines = Array.isArray(cacheEntry.lines) ? cacheEntry.lines : [];
+      const whiteTextarea = doc.createElement('textarea');
+      whiteTextarea.id = 'gmh-privacy-whitelist';
+      whiteTextarea.className = 'gmh-textarea';
+      whiteTextarea.placeholder = '예: 공식 길드명, 공개 닉네임';
+      whiteTextarea.value = privacyConfig.whitelist?.join('\n') || '';
+      stack.appendChild(whiteTextarea);
 
-        const structured = cacheEntry.structured ? cloneStructuredMessage(cacheEntry.structured) : null;
-        if (structured) {
-          const ordinalAttr = Number(block?.getAttribute?.('data-gmh-message-ordinal'));
-          const indexAttr = Number(block?.getAttribute?.('data-gmh-message-index'));
-          const userOrdinalAttr = Number(block?.getAttribute?.('data-gmh-user-ordinal'));
-          const channelAttr = block?.getAttribute?.('data-gmh-channel');
-          structured.ordinal = Number.isFinite(ordinalAttr) ? ordinalAttr : totalBlocks - idx;
-          structured.index = Number.isFinite(indexAttr) ? indexAttr : originIndex;
-          if (Number.isFinite(userOrdinalAttr)) structured.userOrdinal = userOrdinalAttr;
-          else if (structured.userOrdinal) delete structured.userOrdinal;
-          if (channelAttr) structured.channel = channelAttr;
-          else if (!structured.channel) {
-            structured.channel =
-              structured.role === 'player'
-                ? 'user'
-                : structured.role === 'npc'
-                ? 'llm'
-                : 'system';
-          }
-          messages.push(structured);
-        }
-
-        cacheLines.forEach((line) => {
-          const trimmed = (line || '').trim();
-          if (!trimmed) return;
-          const lineKey = `${blockId ?? originIndex}::${trimmed}`;
-          if (seenLine.has(lineKey)) return;
-          seenLine.add(lineKey);
-          legacyLines.push(trimmed);
-          origins.push(originIndex);
-        });
-
-        if (Array.isArray(cacheEntry.errors)) {
-          cacheEntry.errors.forEach((message) => {
-            errors.push({ index: originIndex, error: message });
-          });
-        }
+      const confirmed = await modal.open({
+        title: '프라이버시 민감어 관리',
+        size: 'large',
+        content: stack,
+        actions: [
+          {
+            id: 'cancel',
+            label: '취소',
+            variant: 'secondary',
+            value: false,
+            attrs: { 'data-action': 'cancel' },
+          },
+          {
+            id: 'save',
+            label: '저장',
+            variant: 'primary',
+            value: true,
+            attrs: { 'data-action': 'save' },
+          },
+        ],
+        initialFocus: '#gmh-privacy-blacklist',
       });
 
-      if (origins.length < legacyLines.length) {
-        while (origins.length < legacyLines.length) origins.push(null);
-      } else if (origins.length > legacyLines.length) {
-        origins.length = legacyLines.length;
+      if (!confirmed) {
+        setPanelStatus('프라이버시 설정 변경을 취소했습니다.', 'muted');
+        return;
       }
 
-      entryOrigin = origins.slice();
-      latestStructuredSnapshot = {
-        messages,
-        legacyLines,
-        entryOrigin: origins,
-        errors,
-        generatedAt: Date.now(),
-      };
-      return latestStructuredSnapshot;
+      setCustomList('blacklist', parseListInput(blackTextarea.value));
+      setCustomList('whitelist', parseListInput(whiteTextarea.value));
+      setPanelStatus('프라이버시 사용자 목록을 저장했습니다.', 'success');
     };
 
-    const readTranscriptText = (options = {}) =>
-      captureStructuredSnapshot(options).legacyLines.join('\n');
-
-    const projectStructuredMessages = (structuredSnapshot, rangeInfo) => {
-      if (!structuredSnapshot) {
-        return {
-          messages: [],
-          sourceTotal: 0,
-          range: {
-            active: false,
-            start: null,
-            end: null,
-            messageStartIndex: null,
-            messageEndIndex: null,
-          },
-        };
-      }
-      const messages = Array.isArray(structuredSnapshot.messages)
-        ? structuredSnapshot.messages.slice()
-        : [];
-      const total = messages.length;
-      const baseRange = {
-        active: Boolean(rangeInfo?.active),
-        start: Number.isFinite(rangeInfo?.start) ? rangeInfo.start : null,
-        end: Number.isFinite(rangeInfo?.end) ? rangeInfo.end : null,
-        messageStartIndex: Number.isFinite(rangeInfo?.messageStartIndex)
-          ? rangeInfo.messageStartIndex
-          : null,
-        messageEndIndex: Number.isFinite(rangeInfo?.messageEndIndex)
-          ? rangeInfo.messageEndIndex
-          : null,
-      };
-      if (!messages.length || !baseRange.active) {
-        return { messages, sourceTotal: total, range: { ...baseRange, active: false } };
+    const configurePrivacyListsLegacy = () => {
+      const currentBlack = privacyConfig.blacklist?.join('\n') || '';
+      const nextBlack = win?.prompt
+        ? win.prompt(
+            '레다크션 강제 대상(블랙리스트)을 줄바꿈 또는 쉼표로 구분해 입력하세요.\n비워두면 목록을 초기화합니다.',
+            currentBlack,
+          )
+        : null;
+      if (nextBlack !== null) {
+        setCustomList('blacklist', parseListInput(nextBlack));
       }
 
-      let filtered = messages;
-      if (Number.isFinite(baseRange.messageStartIndex) && Number.isFinite(baseRange.messageEndIndex)) {
-        const lower = Math.min(baseRange.messageStartIndex, baseRange.messageEndIndex);
-        const upper = Math.max(baseRange.messageStartIndex, baseRange.messageEndIndex);
-        filtered = messages.filter((message) => {
-          const idx = Number(message?.index);
-          return Number.isFinite(idx) ? idx >= lower && idx <= upper : false;
-        });
-      } else if (Number.isFinite(baseRange.start) && Number.isFinite(baseRange.end)) {
-        const lowerOrdinal = Math.min(baseRange.start, baseRange.end);
-        const upperOrdinal = Math.max(baseRange.start, baseRange.end);
-        filtered = messages.filter((message) => {
-          const ord = Number(message?.ordinal);
-          return Number.isFinite(ord) ? ord >= lowerOrdinal && ord <= upperOrdinal : false;
-        });
+      const currentWhite = privacyConfig.whitelist?.join('\n') || '';
+      const nextWhite = win?.prompt
+        ? win.prompt(
+            '레다크션 예외 대상(화이트리스트)을 줄바꿈 또는 쉼표로 구분해 입력하세요.\n비워두면 목록을 초기화합니다.',
+            currentWhite,
+          )
+        : null;
+      if (nextWhite !== null) {
+        setCustomList('whitelist', parseListInput(nextWhite));
       }
-
-      if (!filtered.length) {
-        filtered = messages.slice();
-      }
-
-      return {
-        messages: filtered,
-        sourceTotal: total,
-        range: {
-          ...baseRange,
-          active: Boolean(baseRange.active && filtered.length && filtered.length <= total),
-        },
-      };
+      setPanelStatus('프라이버시 사용자 목록을 저장했습니다.', 'info');
     };
 
-    const readStructuredMessages = (options = {}) => {
-      const { force } = options || {};
-      if (!force && latestStructuredSnapshot) {
-        return Array.isArray(latestStructuredSnapshot.messages)
-          ? latestStructuredSnapshot.messages.slice()
-          : [];
-      }
-      const snapshot = captureStructuredSnapshot(options);
-      return Array.isArray(snapshot.messages) ? snapshot.messages.slice() : [];
+    const configurePrivacyLists = async () => {
+      if (resolveModernActive()) return configurePrivacyListsModern();
+      return configurePrivacyListsLegacy();
     };
-
-    const getEntryOrigin = () => entryOrigin.slice();
 
     return {
-      captureStructuredSnapshot,
-      readTranscriptText,
-      projectStructuredMessages,
-      readStructuredMessages,
-      getEntryOrigin,
+      configurePrivacyLists,
     };
   }
 
+  /**
+   * Provides the modal workflow for editing panel settings and privacy lists.
+   */
   function createPanelSettingsController({
     panelSettings,
     modal,
@@ -5768,3345 +9211,212 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     };
   }
 
-  const METER_INTERVAL_MS = CONFIG.TIMING.AUTO_LOADER.METER_INTERVAL_MS;
-
-  function createAutoLoader({
-    stateApi,
+  /**
+   * Composes core UI helpers (modal, panel visibility, status view, privacy controls).
+   *
+   * @param {object} options - Dependency container.
+   * @param {typeof import('../core/namespace.js').GMH} options.GMH - Global namespace reference.
+   * @param {Document} options.documentRef - Document handle.
+   * @param {Window} options.windowRef - Window handle.
+   * @param {object} options.PanelSettings - Panel settings API.
+   * @param {object} options.stateManager - State manager instance.
+   * @param {object} options.stateEnum - State enum map.
+   * @param {object} options.ENV - Environment shims (console/storage).
+   * @param {object} options.privacyConfig - Active privacy configuration object.
+   * @param {object} options.privacyProfiles - Privacy profile definitions.
+   * @param {Function} options.setCustomList - Setter for custom privacy lists.
+   * @param {Function} options.parseListInput - Parser for list inputs.
+   * @param {Function} options.isModernUIActive - Getter returning whether modern UI is enabled.
+   * @returns {object} Composed UI helpers.
+   */
+  function composeUI({
+    GMH,
+    documentRef,
+    windowRef,
+    PanelSettings,
+    stateManager,
     stateEnum,
-    errorHandler,
-    messageIndexer,
-    exportRange,
-    setPanelStatus,
-    getActiveAdapter,
-    sleep,
-    isScrollable,
-    documentRef = typeof document !== 'undefined' ? document : null,
-    windowRef = typeof window !== 'undefined' ? window : null,
-    normalizeTranscript,
-    buildSession,
-    readTranscriptText,
-    logger = typeof console !== 'undefined' ? console : null,
-  } = {}) {
-    if (!stateApi || typeof stateApi.setState !== 'function') {
-      throw new Error('createAutoLoader requires stateApi with setState');
-    }
-    if (!stateEnum) throw new Error('createAutoLoader requires stateEnum');
-    if (!errorHandler || typeof errorHandler.handle !== 'function') {
-      throw new Error('createAutoLoader requires errorHandler');
-    }
-    if (!getActiveAdapter) throw new Error('createAutoLoader requires getActiveAdapter');
-    if (!sleep) throw new Error('createAutoLoader requires sleep helper');
-    if (!isScrollable) throw new Error('createAutoLoader requires isScrollable helper');
-    if (!normalizeTranscript || !buildSession || !readTranscriptText) {
-      throw new Error('createAutoLoader requires transcript helpers');
-    }
-    if (!documentRef) throw new Error('createAutoLoader requires document reference');
-    if (!windowRef) throw new Error('createAutoLoader requires window reference');
-
-    const doc = documentRef;
-    const win = windowRef;
-    const ElementCtor = doc?.defaultView?.Element || (typeof Element !== 'undefined' ? Element : null);
-    const MutationObserverCtor =
-      win?.MutationObserver || (typeof MutationObserver !== 'undefined' ? MutationObserver : null);
-    const setTimeoutFn = typeof win?.setTimeout === 'function' ? win.setTimeout.bind(win) : setTimeout;
-    const setIntervalFn =
-      typeof win?.setInterval === 'function' ? win.setInterval.bind(win) : setInterval;
-    const clearIntervalFn =
-      typeof win?.clearInterval === 'function' ? win.clearInterval.bind(win) : clearInterval;
-
-    const AUTO_PROFILES = CONFIG.TIMING.AUTO_LOADER.PROFILES;
-
-    const AUTO_CFG = {
-      profile: 'default',
-    };
-
-    const AUTO_STATE = {
-      running: false,
-      container: null,
-      meterTimer: null,
-    };
-
-    const profileListeners = new Set();
-    const warnWithHandler = (err, context, fallbackMessage) => {
-      if (errorHandler?.handle) {
-        const level = errorHandler.LEVELS?.WARN || 'warn';
-        errorHandler.handle(err, context, level);
-      } else if (logger?.warn) {
-        logger.warn(fallbackMessage, err);
-      }
-    };
-
-    const notifyProfileChange = () => {
-      profileListeners.forEach((listener) => {
-        try {
-          listener(AUTO_CFG.profile);
-        } catch (err) {
-          warnWithHandler(err, 'autoload', '[GMH] auto profile listener failed');
-        }
-      });
-    };
-
-    const getProfile = () => AUTO_CFG.profile;
-
-    function ensureScrollContainer() {
-      const adapter = typeof getActiveAdapter === 'function' ? getActiveAdapter() : null;
-      const adapterContainer = adapter?.findContainer?.(doc);
-      if (adapterContainer) {
-        if (isScrollable(adapterContainer)) return adapterContainer;
-        if (ElementCtor && adapterContainer instanceof ElementCtor) {
-          let ancestor = adapterContainer.parentElement;
-          for (let depth = 0; depth < 6 && ancestor; depth += 1) {
-            if (isScrollable(ancestor)) return ancestor;
-            ancestor = ancestor.parentElement;
-          }
-        }
-        return adapterContainer;
-      }
-      const messageBlocks = adapter?.listMessageBlocks?.(doc) || [];
-      if (messageBlocks.length) {
-        let ancestor = messageBlocks[0]?.parentElement || null;
-        for (let depth = 0; depth < 6 && ancestor; depth += 1) {
-          if (isScrollable(ancestor)) return ancestor;
-          ancestor = ancestor.parentElement;
-        }
-      }
-      return doc.scrollingElement || doc.documentElement || doc.body;
-    }
-
-    function waitForGrowth(el, startHeight, timeout) {
-      if (!MutationObserverCtor) {
-        return new Promise((resolve) => {
-          setTimeoutFn(() => resolve(false), timeout);
-        });
-      }
-      return new Promise((resolve) => {
-        let finished = false;
-        const obs = new MutationObserverCtor(() => {
-          if (el.scrollHeight > startHeight + 4) {
-            finished = true;
-            obs.disconnect();
-            resolve(true);
-          }
-        });
-        obs.observe(el, { childList: true, subtree: true });
-        setTimeoutFn(() => {
-          if (!finished) {
-            obs.disconnect();
-            resolve(false);
-          }
-        }, timeout);
-      });
-    }
-
-    async function scrollUpCycle(container, profile) {
-      if (!container) return { grew: false, before: 0, after: 0 };
-      const before = container.scrollHeight;
-      container.scrollTop = 0;
-      const grew = await waitForGrowth(container, before, profile.settleTimeoutMs);
-      return { grew, before, after: container.scrollHeight };
-    }
-
-    const statsCache = {
-      summaryKey: null,
-      rawKey: null,
-      data: null,
-    };
-
-    const clearStatsCache = () => {
-      statsCache.summaryKey = null;
-      statsCache.rawKey = null;
-      statsCache.data = null;
-    };
-
-    const makeSummaryKey = (summary) => {
-      if (!summary) return null;
-      const total = Number.isFinite(summary.totalMessages) ? summary.totalMessages : 'na';
-      const user = Number.isFinite(summary.userMessages) ? summary.userMessages : 'na';
-      const stamp = summary.timestamp || 'na';
-      return `${total}:${user}:${stamp}`;
-    };
-
-    function collectTurnStats(options = {}) {
-      const force = Boolean(options?.force);
-      let summary = null;
-      try {
-        try {
-          summary = messageIndexer?.refresh?.({ immediate: true }) || null;
-        } catch (err) {
-          warnWithHandler(err, 'autoload', '[GMH] message indexing before stats failed');
-        }
-        const summaryKey = makeSummaryKey(summary);
-        if (!force && summaryKey && statsCache.data && statsCache.summaryKey === summaryKey) {
-          return statsCache.data;
-        }
-
-        let rawText = null;
-        let rawKey = null;
-        const transcriptOptions = force ? { force: true } : {};
-        if (!summaryKey) {
-          rawText = readTranscriptText(transcriptOptions);
-          rawKey = typeof rawText === 'string' ? rawText : String(rawText ?? '');
-          if (!force && statsCache.data && statsCache.rawKey === rawKey) {
-            return statsCache.data;
-          }
-        } else {
-          rawText = readTranscriptText(transcriptOptions);
-        }
-
-        const normalized = normalizeTranscript(rawText);
-        const session = buildSession(normalized);
-        const userMessages = session.turns.filter((t) => t.channel === 'user').length;
-        const llmMessages = session.turns.filter((t) => t.channel === 'llm').length;
-        const previousTotals = exportRange?.getTotals?.() || {
-          message: 0,
-          user: 0,
-          llm: 0,
-          entry: 0,
-        };
-        const blockSet = new Set();
-        session.turns.forEach((turn) => {
-          const blocks = Array.isArray(turn?.__gmhSourceBlocks) ? turn.__gmhSourceBlocks : [];
-          blocks
-            .filter((idx) => Number.isInteger(idx) && idx >= 0)
-            .forEach((idx) => blockSet.add(idx));
-        });
-        const entryCount = blockSet.size || session.turns.length;
-        const nextTotals = {
-          message: session.turns.length,
-          user: userMessages,
-          llm: llmMessages,
-          entry: entryCount,
-        };
-        const totalsShrank =
-          Number.isFinite(previousTotals.message) && previousTotals.message > nextTotals.message;
-        const userShrank = Number.isFinite(previousTotals.user) && previousTotals.user > nextTotals.user;
-        const llmShrank = Number.isFinite(previousTotals.llm) && previousTotals.llm > nextTotals.llm;
-        const entryShrank = Number.isFinite(previousTotals.entry) && previousTotals.entry > nextTotals.entry;
-        if (totalsShrank || userShrank || llmShrank || entryShrank) {
-          exportRange?.clear?.();
-        }
-        exportRange?.setTotals?.(nextTotals);
-        const stats = {
-          session,
-          userMessages,
-          llmMessages,
-          totalMessages: session.turns.length,
-        };
-        statsCache.summaryKey = summaryKey;
-        statsCache.rawKey = summaryKey ? null : rawKey;
-        statsCache.data = stats;
-        return stats;
-      } catch (error) {
-        clearStatsCache();
-        if (errorHandler?.handle) {
-          const level = errorHandler.LEVELS?.ERROR || 'error';
-          errorHandler.handle(error, 'autoload', level);
-        }
-        return {
-          session: null,
-          userMessages: 0,
-          llmMessages: 0,
-          totalMessages: 0,
-          error,
-        };
-      }
-    }
-
-    const notifyScan = (payload) => {
-      stateApi.setState(stateEnum.SCANNING, payload);
-    };
-
-    const notifyDone = (payload) => {
-      stateApi.setState(stateEnum.DONE, payload);
-    };
-
-    const notifyError = (payload) => {
-      stateApi.setState(stateEnum.ERROR, payload);
-    };
-
-    const notifyIdle = (payload) => {
-      stateApi.setState(stateEnum.IDLE, payload);
-    };
-
-    async function autoLoadAll() {
-      const profile = AUTO_PROFILES[getProfile()] || AUTO_PROFILES.default;
-      const container = ensureScrollContainer();
-      if (!container) {
-        notifyError({
-          label: '자동 로딩 실패',
-          message: '채팅 컨테이너를 찾을 수 없습니다.',
-          tone: 'error',
-          progress: { value: 1 },
-        });
-        return { error: new Error('container missing') };
-      }
-      AUTO_STATE.running = true;
-      AUTO_STATE.container = container;
-      let stableRounds = 0;
-      let guard = 0;
-
-      while (AUTO_STATE.running && guard < profile.guardLimit) {
-        guard += 1;
-        notifyScan({
-          label: '위로 끝까지 로딩',
-          message: `추가 수집 중 (${guard}/${profile.guardLimit})`,
-          tone: 'progress',
-          progress: { indeterminate: true },
-        });
-        const { grew, before, after } = await scrollUpCycle(container, profile);
-        if (!AUTO_STATE.running) break;
-        const delta = after - before;
-        stableRounds = !grew || delta < 6 ? stableRounds + 1 : 0;
-        if (stableRounds >= profile.maxStableRounds) break;
-        await sleep(profile.cycleDelayMs);
-      }
-
-      AUTO_STATE.running = false;
-      const stats = collectTurnStats();
-      if (stats.error) {
-        notifyError({
-          label: '자동 로딩 실패',
-          message: '스크롤 후 파싱 실패',
-          tone: 'error',
-          progress: { value: 1 },
-        });
-      } else {
-        notifyDone({
-          label: '자동 로딩 완료',
-          message: `유저 메시지 ${stats.userMessages}개 확보`,
-          tone: 'success',
-          progress: { value: 1 },
-        });
-      }
-      return stats;
-    }
-
-    async function autoLoadUntilPlayerTurns(target) {
-      const profile = AUTO_PROFILES[getProfile()] || AUTO_PROFILES.default;
-      const container = ensureScrollContainer();
-      if (!container) {
-        notifyError({
-          label: '자동 로딩 실패',
-          message: '채팅 컨테이너를 찾을 수 없습니다.',
-          tone: 'error',
-          progress: { value: 1 },
-        });
-        return { error: new Error('container missing') };
-      }
-      AUTO_STATE.running = true;
-      AUTO_STATE.container = container;
-      let stableRounds = 0;
-      let stagnantRounds = 0;
-      let loopCount = 0;
-      let prevUserMessages = -1;
-
-      while (AUTO_STATE.running && loopCount < profile.guardLimit) {
-        loopCount += 1;
-        const stats = collectTurnStats();
-        if (stats.error) {
-          notifyError({
-            label: '자동 로딩 실패',
-            message: '파싱 실패 - DOM 변화를 감지하지 못했습니다.',
-            tone: 'error',
-            progress: { value: 1 },
-          });
-          break;
-        }
-        if (stats.userMessages >= target) {
-          notifyDone({
-            label: '자동 로딩 완료',
-            message: `목표 달성 · 유저 메시지 ${stats.userMessages}개 확보`,
-            tone: 'success',
-            progress: { value: 1 },
-          });
-          break;
-        }
-
-        const ratio = target > 0 ? Math.min(1, stats.userMessages / target) : 0;
-        notifyScan({
-          label: '메시지 확보 중',
-          message: `유저 메시지 ${stats.userMessages}/${target}`,
-          tone: 'progress',
-          progress: { value: ratio },
-        });
-
-        const { grew, before, after } = await scrollUpCycle(container, profile);
-        if (!AUTO_STATE.running) break;
-        const delta = after - before;
-        stableRounds = !grew || delta < 6 ? stableRounds + 1 : 0;
-
-        stagnantRounds = stats.userMessages === prevUserMessages ? stagnantRounds + 1 : 0;
-        prevUserMessages = stats.userMessages;
-
-        if (stableRounds >= profile.maxStableRounds || stagnantRounds >= profile.guardLimit) {
-          notifyDone({
-            label: '자동 로딩 종료',
-            message: '추가 데이터를 불러오지 못했습니다. 더 이상 기록이 없거나 막혀있습니다.',
-            tone: 'warning',
-            progress: { value: ratio },
-          });
-          break;
-        }
-        await sleep(profile.cycleDelayMs);
-      }
-
-      AUTO_STATE.running = false;
-      const finalStats = collectTurnStats();
-      if (finalStats?.error) {
-        notifyError({
-          label: '자동 로딩 실패',
-          message: '메시지 정보를 수집하지 못했습니다.',
-          tone: 'error',
-          progress: { value: 1 },
-        });
-        return finalStats;
-      }
-      if (stateApi.getState?.() === stateEnum.SCANNING) {
-        const ratio = target > 0 ? Math.min(1, finalStats.userMessages / target) : 0;
-        notifyDone({
-          label: '자동 로딩 종료',
-          message: `유저 메시지 ${finalStats.userMessages}/${target}`,
-          tone: 'warning',
-          progress: { value: ratio },
-        });
-      }
-      return finalStats;
-    }
-
-    function stopAutoLoad() {
-      if (!AUTO_STATE.running) return;
-      AUTO_STATE.running = false;
-      notifyIdle({
-        label: '대기 중',
-        message: '자동 로딩을 중지했습니다.',
-        tone: 'info',
-        progress: { value: 0 },
-      });
-    }
-
-    function startTurnMeter(meter) {
-      if (!meter) return;
-      const render = () => {
-        const stats = collectTurnStats();
-        if (stats.error) {
-          meter.textContent = '메시지 측정 실패: DOM을 읽을 수 없습니다.';
-          return;
-        }
-        meter.textContent = `메시지 현황 · 유저 ${stats.userMessages} · LLM ${stats.llmMessages}`;
-      };
-      render();
-      if (AUTO_STATE.meterTimer) return;
-      AUTO_STATE.meterTimer = setIntervalFn(() => {
-        if (!meter.isConnected) {
-          clearIntervalFn(AUTO_STATE.meterTimer);
-          AUTO_STATE.meterTimer = null;
-          return;
-        }
-        render();
-      }, METER_INTERVAL_MS);
-    }
-
-    const autoLoader = {
-      lastMode: null,
-      lastTarget: null,
-      lastProfile: AUTO_CFG.profile,
-      async start(mode, target, opts = {}) {
-        if (AUTO_STATE.running) {
-          setPanelStatus?.('이미 자동 로딩이 진행 중입니다.', 'muted');
-          return null;
-        }
-        if (opts.profile) {
-          AUTO_CFG.profile = AUTO_PROFILES[opts.profile] ? opts.profile : 'default';
-          this.lastProfile = AUTO_CFG.profile;
-          notifyProfileChange();
-        }
-        this.lastMode = mode;
-        this.lastProfile = AUTO_CFG.profile;
-        try {
-          if (mode === 'all') {
-            this.lastTarget = null;
-            return await autoLoadAll();
-          }
-          if (mode === 'turns') {
-            const numericTarget = Number(target);
-            const goal = Number.isFinite(numericTarget) ? numericTarget : Number(target) || 0;
-            if (!goal || goal <= 0) {
-              setPanelStatus?.('유저 메시지 목표가 올바르지 않습니다.', 'error');
-              return null;
-            }
-            this.lastTarget = goal;
-            return await autoLoadUntilPlayerTurns(goal);
-          }
-        } catch (error) {
-          errorHandler.handle(error, 'autoload', errorHandler.LEVELS?.ERROR);
-          throw error;
-        }
-        return null;
-      },
-      async startCurrent(profileName) {
-        if (!this.lastMode) {
-          setPanelStatus?.('재시도할 이전 작업이 없습니다.', 'muted');
-          return null;
-        }
-        if (profileName) {
-          AUTO_CFG.profile = AUTO_PROFILES[profileName] ? profileName : 'default';
-        } else {
-          AUTO_CFG.profile = this.lastProfile || 'default';
-        }
-        this.lastProfile = AUTO_CFG.profile;
-        notifyProfileChange();
-        return this.start(this.lastMode, this.lastTarget);
-      },
-      setProfile(profileName) {
-        const next = AUTO_PROFILES[profileName] ? profileName : 'default';
-        AUTO_CFG.profile = next;
-        this.lastProfile = next;
-        setPanelStatus?.(`프로파일이 '${next}'로 설정되었습니다.`, 'info');
-        notifyProfileChange();
-      },
-      stop() {
-        stopAutoLoad();
-      },
-    };
-
-    const subscribeProfileChange = (listener) => {
-      if (typeof listener !== 'function') return () => {};
-      profileListeners.add(listener);
-      return () => profileListeners.delete(listener);
-    };
-
-    notifyProfileChange();
-
-    return {
-      autoLoader,
-      autoState: AUTO_STATE,
-      autoProfiles: AUTO_PROFILES,
-      getProfile,
-      subscribeProfileChange,
-      startTurnMeter,
-      collectTurnStats,
-    };
-  }
-
-  function createPrivacyConfigurator({
+    ENV,
     privacyConfig,
+    privacyProfiles,
     setCustomList,
     parseListInput,
-    setPanelStatus,
-    modal,
     isModernUIActive,
-    documentRef = typeof document !== 'undefined' ? document : null,
-    windowRef = typeof window !== 'undefined' ? window : null,
-  } = {}) {
-    if (!privacyConfig) throw new Error('createPrivacyConfigurator requires privacyConfig');
-    if (!setCustomList) throw new Error('createPrivacyConfigurator requires setCustomList');
-    if (!parseListInput) throw new Error('createPrivacyConfigurator requires parseListInput');
-    if (!setPanelStatus) throw new Error('createPrivacyConfigurator requires setPanelStatus');
-    if (!modal) throw new Error('createPrivacyConfigurator requires modal');
-    if (!documentRef) throw new Error('createPrivacyConfigurator requires document');
-
-    const doc = documentRef;
-    const win = windowRef;
-
-    const resolveModernActive = () =>
-      typeof isModernUIActive === 'function' ? isModernUIActive() : Boolean(isModernUIActive);
-
-    const configurePrivacyListsModern = async () => {
-      ensureDesignSystemStyles(doc);
-
-      const stack = doc.createElement('div');
-      stack.className = 'gmh-modal-stack';
-
-      const intro = doc.createElement('p');
-      intro.className = 'gmh-subtext';
-      intro.textContent =
-        '쉼표 또는 줄바꿈으로 여러 항목을 구분하세요. 블랙리스트는 강제 마스킹, 화이트리스트는 예외 처리됩니다.';
-      stack.appendChild(intro);
-
-      const makeLabel = (text) => {
-        const label = doc.createElement('div');
-        label.className = 'gmh-field-label';
-        label.textContent = text;
-        return label;
-      };
-
-      const blackLabel = makeLabel(`블랙리스트 (${privacyConfig.blacklist?.length || 0})`);
-      stack.appendChild(blackLabel);
-
-      const blackTextarea = doc.createElement('textarea');
-      blackTextarea.id = 'gmh-privacy-blacklist';
-      blackTextarea.className = 'gmh-textarea';
-      blackTextarea.placeholder = '예: 서울시, 010-1234-5678';
-      blackTextarea.value = privacyConfig.blacklist?.join('\n') || '';
-      stack.appendChild(blackTextarea);
-
-      const whiteLabel = makeLabel(`화이트리스트 (${privacyConfig.whitelist?.length || 0})`);
-      stack.appendChild(whiteLabel);
-
-      const whiteTextarea = doc.createElement('textarea');
-      whiteTextarea.id = 'gmh-privacy-whitelist';
-      whiteTextarea.className = 'gmh-textarea';
-      whiteTextarea.placeholder = '예: 공식 길드명, 공개 닉네임';
-      whiteTextarea.value = privacyConfig.whitelist?.join('\n') || '';
-      stack.appendChild(whiteTextarea);
-
-      const confirmed = await modal.open({
-        title: '프라이버시 민감어 관리',
-        size: 'large',
-        content: stack,
-        actions: [
-          {
-            id: 'cancel',
-            label: '취소',
-            variant: 'secondary',
-            value: false,
-            attrs: { 'data-action': 'cancel' },
-          },
-          {
-            id: 'save',
-            label: '저장',
-            variant: 'primary',
-            value: true,
-            attrs: { 'data-action': 'save' },
-          },
-        ],
-        initialFocus: '#gmh-privacy-blacklist',
-      });
-
-      if (!confirmed) {
-        setPanelStatus('프라이버시 설정 변경을 취소했습니다.', 'muted');
-        return;
-      }
-
-      setCustomList('blacklist', parseListInput(blackTextarea.value));
-      setCustomList('whitelist', parseListInput(whiteTextarea.value));
-      setPanelStatus('프라이버시 사용자 목록을 저장했습니다.', 'success');
-    };
-
-    const configurePrivacyListsLegacy = () => {
-      const currentBlack = privacyConfig.blacklist?.join('\n') || '';
-      const nextBlack = win?.prompt
-        ? win.prompt(
-            '레다크션 강제 대상(블랙리스트)을 줄바꿈 또는 쉼표로 구분해 입력하세요.\n비워두면 목록을 초기화합니다.',
-            currentBlack,
-          )
-        : null;
-      if (nextBlack !== null) {
-        setCustomList('blacklist', parseListInput(nextBlack));
-      }
-
-      const currentWhite = privacyConfig.whitelist?.join('\n') || '';
-      const nextWhite = win?.prompt
-        ? win.prompt(
-            '레다크션 예외 대상(화이트리스트)을 줄바꿈 또는 쉼표로 구분해 입력하세요.\n비워두면 목록을 초기화합니다.',
-            currentWhite,
-          )
-        : null;
-      if (nextWhite !== null) {
-        setCustomList('whitelist', parseListInput(nextWhite));
-      }
-      setPanelStatus('프라이버시 사용자 목록을 저장했습니다.', 'info');
-    };
-
-    const configurePrivacyLists = async () => {
-      if (resolveModernActive()) return configurePrivacyListsModern();
-      return configurePrivacyListsLegacy();
-    };
-
-    return {
-      configurePrivacyLists,
-    };
-  }
-
-  function createAutoLoaderControls({
-    documentRef = typeof document !== 'undefined' ? document : null,
-    autoLoader,
-    autoState,
-    setPanelStatus,
-    startTurnMeter,
-    getAutoProfile,
-    subscribeProfileChange,
-    downloadDomSnapshot,
-  } = {}) {
-    if (!documentRef) throw new Error('createAutoLoaderControls requires document reference');
-    if (!autoLoader) throw new Error('createAutoLoaderControls requires autoLoader');
-    if (!autoState) throw new Error('createAutoLoaderControls requires autoState');
-    if (!startTurnMeter) throw new Error('createAutoLoaderControls requires startTurnMeter');
-    if (!getAutoProfile) throw new Error('createAutoLoaderControls requires getAutoProfile');
-    if (!subscribeProfileChange) {
-      throw new Error('createAutoLoaderControls requires subscribeProfileChange');
-    }
-
-    const doc = documentRef;
-    const profileSelectElements = new Set();
-
-    const syncProfileSelects = () => {
-      const profile = getAutoProfile();
-      for (const el of Array.from(profileSelectElements)) {
-        if (!el || !el.isConnected) {
-          profileSelectElements.delete(el);
-          continue;
-        }
-        el.value = profile;
-      }
-    };
-
-    subscribeProfileChange(syncProfileSelects);
-
-    const registerProfileSelect = (select) => {
-      if (!select) return;
-      profileSelectElements.add(select);
-      syncProfileSelects();
-      select.onchange = (event) => {
-        autoLoader.setProfile(event.target.value);
-      };
-    };
-
-    const ensureAutoLoadControlsModern = (panel) => {
-      if (!panel) return;
-      let wrap = panel.querySelector('#gmh-autoload-controls');
-      if (!wrap) {
-        wrap = doc.createElement('div');
-        wrap.id = 'gmh-autoload-controls';
-        panel.appendChild(wrap);
-      }
-      if (wrap.dataset.ready === 'true') return;
-      wrap.dataset.ready = 'true';
-      wrap.innerHTML = `
-      <div class="gmh-field-row">
-        <button id="gmh-autoload-all" class="gmh-panel-btn gmh-panel-btn--accent">위로 끝까지 로딩</button>
-        <button id="gmh-autoload-stop" class="gmh-panel-btn gmh-panel-btn--warn gmh-panel-btn--compact">정지</button>
-      </div>
-      <div class="gmh-field-row">
-        <input id="gmh-autoload-turns" class="gmh-input" type="number" min="1" step="1" placeholder="최근 유저 메시지 N" />
-        <button id="gmh-autoload-turns-btn" class="gmh-small-btn gmh-small-btn--accent">메시지 확보</button>
-      </div>
-      <div id="gmh-turn-meter" class="gmh-subtext"></div>
-    `;
-
-      const btnAll = wrap.querySelector('#gmh-autoload-all');
-      const btnStop = wrap.querySelector('#gmh-autoload-stop');
-      const btnTurns = wrap.querySelector('#gmh-autoload-turns-btn');
-      const inputTurns = wrap.querySelector('#gmh-autoload-turns');
-      const meter = wrap.querySelector('#gmh-turn-meter');
-
-      const toggleControls = (disabled) => {
-        btnAll.disabled = disabled;
-        btnTurns.disabled = disabled;
-        btnAll.classList.toggle('gmh-disabled', disabled);
-        btnTurns.classList.toggle('gmh-disabled', disabled);
-      };
-
-      btnAll.onclick = async () => {
-        if (autoState.running) return;
-        toggleControls(true);
-        try {
-          await autoLoader.start('all');
-        } finally {
-          toggleControls(false);
-        }
-      };
-
-      btnTurns.onclick = async () => {
-        if (autoState.running) return;
-        const rawVal = inputTurns?.value?.trim();
-        const target = Number.parseInt(rawVal || '0', 10);
-        if (!Number.isFinite(target) || target <= 0) {
-          setPanelStatus?.('유저 메시지 수를 입력해주세요.', 'error');
-          return;
-        }
-        toggleControls(true);
-        try {
-          await autoLoader.start('turns', target);
-        } finally {
-          toggleControls(false);
-        }
-      };
-
-      btnStop.onclick = () => {
-        if (!autoState.running) {
-          setPanelStatus?.('자동 로딩이 실행 중이 아닙니다.', 'muted');
-          return;
-        }
-        autoLoader.stop();
-      };
-
-      startTurnMeter(meter);
-    };
-
-    const ensureAutoLoadControlsLegacy = (panel) => {
-      if (!panel || panel.querySelector('#gmh-autoload-controls')) return;
-
-      const wrap = doc.createElement('div');
-      wrap.id = 'gmh-autoload-controls';
-      wrap.style.cssText = 'display:grid; gap:6px; border-top:1px solid #1f2937; padding-top:6px;';
-      wrap.innerHTML = `
-      <div style="display:flex; gap:8px;">
-        <button id="gmh-autoload-all" style="flex:1; background:#38bdf8; border:0; color:#041; border-radius:8px; padding:6px; cursor:pointer;">위로 끝까지 로딩</button>
-        <button id="gmh-autoload-stop" style="width:88px; background:#ef4444; border:0; color:#fff; border-radius:8px; padding:6px; cursor:pointer;">정지</button>
-      </div>
-      <div style="display:flex; gap:8px; align-items:center;">
-        <input id="gmh-autoload-turns" type="number" min="1" step="1" placeholder="최근 유저 메시지 N" style="flex:1; background:#111827; color:#f1f5f9; border:1px solid #1f2937; border-radius:8px; padding:6px;" />
-        <button id="gmh-autoload-turns-btn" style="width:96px; background:#34d399; border:0; color:#041; border-radius:8px; padding:6px; cursor:pointer;">메시지 확보</button>
-      </div>
-      <div id="gmh-turn-meter" style="opacity:.7; font-size:11px;"></div>
-    `;
-
-      panel.appendChild(wrap);
-
-      const btnAll = wrap.querySelector('#gmh-autoload-all');
-      const btnStop = wrap.querySelector('#gmh-autoload-stop');
-      const btnTurns = wrap.querySelector('#gmh-autoload-turns-btn');
-      const inputTurns = wrap.querySelector('#gmh-autoload-turns');
-      const meter = wrap.querySelector('#gmh-turn-meter');
-
-      const toggleControls = (disabled) => {
-        btnAll.disabled = disabled;
-        btnTurns.disabled = disabled;
-        btnAll.style.opacity = disabled ? '0.6' : '1';
-        btnTurns.style.opacity = disabled ? '0.6' : '1';
-      };
-
-      btnAll.onclick = async () => {
-        if (autoState.running) return;
-        toggleControls(true);
-        try {
-          await autoLoader.start('all');
-        } finally {
-          toggleControls(false);
-        }
-      };
-
-      btnTurns.onclick = async () => {
-        if (autoState.running) return;
-        const rawVal = inputTurns?.value?.trim();
-        const target = Number.parseInt(rawVal || '0', 10);
-        if (!Number.isFinite(target) || target <= 0) {
-          setPanelStatus?.('유저 메시지 수를 입력해주세요.', 'error');
-          return;
-        }
-        toggleControls(true);
-        try {
-          const stats = await autoLoader.start('turns', target);
-          if (stats && !stats.error) {
-            setPanelStatus?.(`현재 유저 메시지 ${stats.userMessages}개 확보.`, 'success');
-          }
-        } finally {
-          toggleControls(false);
-        }
-      };
-
-      btnStop.onclick = () => {
-        if (!autoState.running) {
-          setPanelStatus?.('자동 로딩이 실행 중이 아닙니다.', 'muted');
-          return;
-        }
-        autoLoader.stop();
-        setPanelStatus?.('자동 로딩 중지를 요청했습니다.', 'warning');
-      };
-
-      startTurnMeter(meter);
-    };
-
-    const createStatusActionsMarkup = (modern = false) => {
-      if (modern) {
-        return `
-      <div class="gmh-field-row">
-        <label for="gmh-profile-select" class="gmh-subtext gmh-field-label--inline">프로파일</label>
-        <select id="gmh-profile-select" class="gmh-select">
-          <option value="default">기본</option>
-          <option value="stability">안정</option>
-          <option value="fast">빠름</option>
-        </select>
-      </div>
-      <div class="gmh-field-row">
-        <button id="gmh-btn-retry" class="gmh-small-btn gmh-small-btn--muted">재시도</button>
-        <button id="gmh-btn-retry-stable" class="gmh-small-btn gmh-small-btn--muted">안정 모드</button>
-        <button id="gmh-btn-snapshot" class="gmh-small-btn gmh-small-btn--muted">DOM 스냅샷</button>
-      </div>`;
-      }
-      return `
-      <div style="display:flex; gap:6px; align-items:center;">
-        <label for="gmh-profile-select" style="font-size:11px; color:#94a3b8;">프로파일</label>
-        <select id="gmh-profile-select" style="flex:1; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:6px; padding:6px;">
-          <option value="default">기본</option>
-          <option value="stability">안정</option>
-          <option value="fast">빠름</option>
-        </select>
-      </div>
-      <div style="display:flex; gap:6px;">
-        <button id="gmh-btn-retry" style="flex:1; background:#f1f5f9; color:#0f172a; border:0; border-radius:6px; padding:6px; cursor:pointer;">재시도</button>
-        <button id="gmh-btn-retry-stable" style="flex:1; background:#e0e7ff; color:#1e1b4b; border:0; border-radius:6px; padding:6px; cursor:pointer;">안정 모드 재시도</button>
-        <button id="gmh-btn-snapshot" style="flex:1; background:#ffe4e6; color:#881337; border:0; border-radius:6px; padding:6px; cursor:pointer;">DOM 스냅샷</button>
-      </div>`;
-    };
-
-    const bindStatusActions = (actions, modern) => {
-      const select = actions.querySelector('#gmh-profile-select');
-      if (select) registerProfileSelect(select);
-
-      const retryBtn = actions.querySelector('#gmh-btn-retry');
-      if (retryBtn) {
-        retryBtn.onclick = async () => {
-          if (autoState.running) {
-            setPanelStatus?.('이미 자동 로딩이 진행 중입니다.', 'muted');
-            return;
-          }
-          await autoLoader.startCurrent();
-        };
-      }
-
-      const retryStableBtn = actions.querySelector('#gmh-btn-retry-stable');
-      if (retryStableBtn) {
-        retryStableBtn.onclick = async () => {
-          if (autoState.running) {
-            setPanelStatus?.('이미 자동 로딩이 진행 중입니다.', 'muted');
-            return;
-          }
-          await autoLoader.startCurrent('stability');
-        };
-      }
-
-      const snapshotBtn = actions.querySelector('#gmh-btn-snapshot');
-      if (snapshotBtn) {
-        snapshotBtn.onclick = () => downloadDomSnapshot?.();
-      }
-    };
-
-    const mountStatusActionsModern = (panel) => {
-      if (!panel) return;
-      let actions = panel.querySelector('#gmh-status-actions');
-      if (!actions) {
-        actions = doc.createElement('div');
-        actions.id = 'gmh-status-actions';
-        panel.appendChild(actions);
-      }
-      if (actions.dataset.ready === 'true') return;
-      actions.dataset.ready = 'true';
-      actions.innerHTML = createStatusActionsMarkup(true);
-      bindStatusActions(actions);
-    };
-
-    const mountStatusActionsLegacy = (panel) => {
-      if (!panel || panel.querySelector('#gmh-status-actions')) return;
-      const actions = doc.createElement('div');
-      actions.id = 'gmh-status-actions';
-      actions.style.cssText =
-        'display:grid; gap:6px; border-top:1px solid rgba(148,163,184,0.25); padding-top:6px;';
-      actions.innerHTML = createStatusActionsMarkup(false);
-      bindStatusActions(actions);
-      panel.appendChild(actions);
-    };
-
-    return {
-      ensureAutoLoadControlsModern,
-      ensureAutoLoadControlsLegacy,
-      mountStatusActionsModern,
-      mountStatusActionsLegacy,
-    };
-  }
-
-  function createRangeControls({
-    documentRef = typeof document !== 'undefined' ? document : null,
-    windowRef = typeof window !== 'undefined' ? window : null,
-    exportRange,
-    turnBookmarks,
-    messageIndexer,
-    setPanelStatus,
   }) {
-    if (!documentRef) throw new Error('createRangeControls requires document reference');
-    if (!exportRange) throw new Error('createRangeControls requires exportRange');
-    if (!turnBookmarks) throw new Error('createRangeControls requires turnBookmarks');
-    if (!messageIndexer) throw new Error('createRangeControls requires messageIndexer');
-
-    const doc = documentRef;
-    const win = windowRef;
-    const cssEscape = () => doc?.defaultView?.CSS?.escape || win?.CSS?.escape;
-
-    let rangeUnsubscribe = null;
-    let selectedBookmarkKey = '';
-    let bookmarkSelectionPinned = false;
-
-    const toNumber = (value) => {
-      const num = Number(value);
-      return Number.isFinite(num) ? num : null;
-    };
-
-    const subscribeRange = (handler) => {
-      if (typeof exportRange?.subscribe !== 'function') return;
-      if (typeof rangeUnsubscribe === 'function') rangeUnsubscribe();
-      rangeUnsubscribe = exportRange.subscribe(handler);
-    };
-
-    const updateRangeSnapshot = (handler) => {
-      if (typeof handler !== 'function') return;
-      if (typeof exportRange?.snapshot === 'function') {
-        handler(exportRange.snapshot());
-        return;
-      }
-      if (typeof exportRange?.describe === 'function') {
-        const bounds = exportRange.describe();
-        const totals = typeof exportRange?.getTotals === 'function' ? exportRange.getTotals() : {};
-        const range = typeof exportRange?.getRange === 'function'
-          ? exportRange.getRange()
-          : { start: null, end: null };
-        handler({ bounds, totals, range });
-      }
-    };
-
-    const syncBookmarkSelect = (select, entries = []) => {
-      if (!select) return;
-      const previous = selectedBookmarkKey || select.value || '';
-      select.innerHTML = '';
-      const placeholder = doc.createElement('option');
-      placeholder.value = '';
-      placeholder.textContent = entries.length
-        ? '최근 클릭한 메시지를 선택하세요'
-        : '최근 클릭한 메시지가 없습니다';
-      select.appendChild(placeholder);
-      entries.forEach((entry) => {
-        const option = doc.createElement('option');
-        option.value = entry.key;
-        const axisLabel = '메시지';
-        const ordinalText = Number.isFinite(entry.ordinal)
-          ? `${axisLabel} ${entry.ordinal}`
-          : `${axisLabel} ?`;
-        const idText = entry.messageId ? entry.messageId : `index ${entry.index}`;
-        option.textContent = `${ordinalText} · ${idText}`;
-        option.dataset.index = String(entry.index);
-        select.appendChild(option);
-      });
-      let nextValue = '';
-      if (bookmarkSelectionPinned && entries.some((entry) => entry.key === previous)) {
-        nextValue = previous;
-      } else if (entries.length) {
-        nextValue = entries[0].key;
-        bookmarkSelectionPinned = false;
-      }
-      select.value = nextValue;
-      selectedBookmarkKey = nextValue || '';
-      if (!nextValue && !entries.length) {
-        select.selectedIndex = 0;
-      }
-    };
-
-    const registerBookmarkSelect = (select) => {
-      if (!select) return;
-      if (select.dataset.gmhBookmarksReady === 'true') return;
-      select.dataset.gmhBookmarksReady = 'true';
-      select.addEventListener('change', () => {
-        selectedBookmarkKey = select.value || '';
-        bookmarkSelectionPinned = Boolean(selectedBookmarkKey);
-      });
-      if (typeof turnBookmarks?.subscribe === 'function') {
-        turnBookmarks.subscribe((entries) => syncBookmarkSelect(select, entries));
-      }
-      if (typeof turnBookmarks?.list === 'function') {
-        syncBookmarkSelect(select, turnBookmarks.list());
-      }
-    };
-
-    const bindRangeControls = (panel) => {
-      if (!panel) return;
-      const rangeStartInput = panel.querySelector('#gmh-range-start');
-      const rangeEndInput = panel.querySelector('#gmh-range-end');
-      const rangeClearBtn = panel.querySelector('#gmh-range-clear');
-      const rangeMarkStartBtn = panel.querySelector('#gmh-range-mark-start');
-      const rangeMarkEndBtn = panel.querySelector('#gmh-range-mark-end');
-      const rangeSummary = panel.querySelector('#gmh-range-summary');
-      const rangeBookmarkSelect = panel.querySelector('#gmh-range-bookmark-select');
-
-      registerBookmarkSelect(rangeBookmarkSelect);
-
-      const syncRangeControls = (snapshot) => {
-        if (!snapshot) return;
-        const { bounds, totals, range } = snapshot;
-        const messageTotal = totals?.message ?? bounds.messageTotal ?? 0;
-        const userTotal = totals?.user ?? bounds.userTotal ?? 0;
-        const llmTotal = totals?.llm ?? bounds.llmTotal ?? 0;
-        const resolvedStart = bounds.active ? bounds.start : null;
-        const resolvedEnd = bounds.active ? bounds.end : null;
-
-        if (rangeStartInput) {
-          if (messageTotal) rangeStartInput.max = String(messageTotal);
-          else rangeStartInput.removeAttribute('max');
-          rangeStartInput.dataset.gmhAxis = 'message';
-          rangeStartInput.value = resolvedStart ? String(resolvedStart) : '';
-          rangeStartInput.dataset.gmhRequested = range.start ? String(range.start) : '';
-        }
-        if (rangeEndInput) {
-          if (messageTotal) rangeEndInput.max = String(messageTotal);
-          else rangeEndInput.removeAttribute('max');
-          rangeEndInput.dataset.gmhAxis = 'message';
-          rangeEndInput.value = resolvedEnd ? String(resolvedEnd) : '';
-          rangeEndInput.dataset.gmhRequested = range.end ? String(range.end) : '';
-        }
-        if (rangeMarkStartBtn) {
-          if (messageTotal) rangeMarkStartBtn.removeAttribute('disabled');
-          else rangeMarkStartBtn.setAttribute('disabled', 'true');
-        }
-        if (rangeMarkEndBtn) {
-          if (messageTotal) rangeMarkEndBtn.removeAttribute('disabled');
-          else rangeMarkEndBtn.setAttribute('disabled', 'true');
-        }
-        if (rangeSummary) {
-          if (!messageTotal) {
-            rangeSummary.textContent = '로드된 메시지가 없습니다.';
-            rangeSummary.title = '';
-          } else if (!bounds.active) {
-            let textLabel = `최근 메시지 ${messageTotal}개 전체`;
-            if (userTotal) textLabel += ` · 유저 ${userTotal}개`;
-            if (llmTotal) textLabel += ` · LLM ${llmTotal}개`;
-            rangeSummary.textContent = textLabel;
-            rangeSummary.title = '';
-          } else {
-            let textLabel = `최근 메시지 ${bounds.start}-${bounds.end} · ${bounds.count}개 / 전체 ${bounds.total}개`;
-            if (userTotal) textLabel += ` · 유저 ${userTotal}개`;
-            if (llmTotal) textLabel += ` · LLM ${llmTotal}개`;
-            rangeSummary.textContent = textLabel;
-            rangeSummary.title = '';
-          }
-        }
-      };
-
-      if (rangeStartInput || rangeEndInput || rangeSummary || rangeMarkStartBtn || rangeMarkEndBtn) {
-        subscribeRange(syncRangeControls);
-        updateRangeSnapshot(syncRangeControls);
-
-        const handleStartChange = () => {
-          if (!rangeStartInput) return;
-          const value = toNumber(rangeStartInput.value);
-          if (value && value > 0) {
-            exportRange?.setStart?.(value);
-          } else {
-            exportRange?.setStart?.(null);
-            rangeStartInput.value = '';
-          }
-        };
-
-        const handleEndChange = () => {
-          if (!rangeEndInput) return;
-          const value = toNumber(rangeEndInput.value);
-          if (value && value > 0) {
-            exportRange?.setEnd?.(value);
-          } else {
-            exportRange?.setEnd?.(null);
-            rangeEndInput.value = '';
-          }
-        };
-
-        if (rangeStartInput && rangeStartInput.dataset.gmhRangeReady !== 'true') {
-          rangeStartInput.dataset.gmhRangeReady = 'true';
-          rangeStartInput.addEventListener('change', handleStartChange);
-          rangeStartInput.addEventListener('blur', handleStartChange);
-        }
-        if (rangeEndInput && rangeEndInput.dataset.gmhRangeReady !== 'true') {
-          rangeEndInput.dataset.gmhRangeReady = 'true';
-          rangeEndInput.addEventListener('change', handleEndChange);
-          rangeEndInput.addEventListener('blur', handleEndChange);
-        }
-        if (rangeClearBtn && rangeClearBtn.dataset.gmhRangeReady !== 'true') {
-          rangeClearBtn.dataset.gmhRangeReady = 'true';
-          rangeClearBtn.addEventListener('click', () => {
-            exportRange?.clear?.();
-            turnBookmarks?.clear?.();
-            selectedBookmarkKey = '';
-            bookmarkSelectionPinned = false;
-            if (rangeBookmarkSelect) rangeBookmarkSelect.value = '';
-          });
-        }
-
-        const getActiveBookmark = () => {
-          if (rangeBookmarkSelect) {
-            const key = rangeBookmarkSelect.value || selectedBookmarkKey || '';
-            if (key) {
-              const picked = turnBookmarks?.pick?.(key);
-              if (picked) return picked;
-            }
-          }
-          return turnBookmarks?.latest?.();
-        };
-
-        const doBookmark = (mode) => {
-          const lookupOrdinalByIndex = messageIndexer?.lookupOrdinalByIndex;
-          const lookupOrdinalByMessageId = messageIndexer?.lookupOrdinalByMessageId;
-
-          const buildContextFromElement = (element) => {
-            if (!(element instanceof Element)) return null;
-            const messageEl = element.closest('[data-gmh-message-index]');
-            if (!messageEl) return null;
-            const indexAttr = messageEl.getAttribute('data-gmh-message-index');
-            const messageIdAttr =
-              messageEl.getAttribute('data-gmh-message-id') ||
-              messageEl.getAttribute('data-message-id');
-            const index = toNumber(indexAttr);
-
-            const resolvedOrdinal = [
-              Number.isFinite(index) && typeof lookupOrdinalByIndex === 'function'
-                ? lookupOrdinalByIndex(index)
-                : null,
-              messageIdAttr && typeof lookupOrdinalByMessageId === 'function'
-                ? lookupOrdinalByMessageId(messageIdAttr)
-                : null,
-              toNumber(messageEl.getAttribute('data-gmh-message-ordinal')),
-            ].find((value) => Number.isFinite(value) && value > 0);
-
-            return {
-              element: messageEl,
-              index: Number.isFinite(index) ? index : null,
-              ordinal: Number.isFinite(resolvedOrdinal) ? resolvedOrdinal : null,
-              messageId: messageIdAttr || null,
-            };
-          };
-
-          const resolveFromElement = (element) => buildContextFromElement(element);
-
-          const escapeForAttr = (value) => {
-            if (typeof value !== 'string') return '';
-            const esc = cssEscape();
-            return typeof esc === 'function' ? esc(value) : value.replace(/"/g, '\\"');
-          };
-
-          const listByMessageId = (messageId) => {
-            if (!messageId) return [];
-            try {
-              const selector = `[data-gmh-message-id="${escapeForAttr(messageId)}"]`;
-              return Array.from(doc.querySelectorAll(selector));
-            } catch (err) {
-              return [];
-            }
-          };
-
-          const selectBestCandidate = (candidates, preferredIndex = null) => {
-            const elements = Array.from(new Set(candidates.filter((el) => el instanceof Element)));
-            if (!elements.length) return null;
-            if (Number.isFinite(preferredIndex)) {
-              const exact = elements.find(
-                (el) => Number(el.getAttribute('data-gmh-message-index')) === preferredIndex,
-              );
-              if (exact) return exact;
-            }
-            const withOrdinal = elements
-              .map((el) => ({
-                el,
-                ord: toNumber(el.getAttribute('data-gmh-message-ordinal')),
-                idx: toNumber(el.getAttribute('data-gmh-message-index')),
-              }))
-              .sort((a, b) => {
-                if (Number.isFinite(a.ord) && Number.isFinite(b.ord)) return a.ord - b.ord;
-                if (Number.isFinite(a.idx) && Number.isFinite(b.idx)) return b.idx - a.idx;
-                return 0;
-              });
-            return withOrdinal[0]?.el || elements[elements.length - 1];
-          };
-
-          const safeQueryById = (messageId, preferredIndex = null) => {
-            const candidates = listByMessageId(messageId);
-            return selectBestCandidate(candidates, preferredIndex);
-          };
-
-          const getCandidateContext = () => {
-            const bookmark = getActiveBookmark();
-            if (bookmark) {
-              const fromBookmark =
-                safeQueryById(bookmark.messageId, bookmark.index) ||
-                (Number.isFinite(bookmark.index)
-                  ? selectBestCandidate(
-                      Array.from(doc.querySelectorAll(`[data-gmh-message-index="${bookmark.index}"]`)),
-                      bookmark.index,
-                    )
-                  : null);
-              const resolvedBookmark = resolveFromElement(fromBookmark);
-              if (resolvedBookmark) return resolvedBookmark;
-            }
-            const active = doc.activeElement;
-            const resolvedActive = resolveFromElement(active);
-            if (resolvedActive) return resolvedActive;
-            const latest = doc.querySelector('[data-gmh-message-ordinal="1"]');
-            return resolveFromElement(latest);
-          };
-
-          const context = getCandidateContext();
-          if (!context) {
-            setPanelStatus?.('메시지를 찾을 수 없습니다.', 'warning');
-            return;
-          }
-
-          try {
-            messageIndexer?.refresh?.({ immediate: true });
-          } catch (err) {
-            win?.console?.warn?.('[GMH] ordinal refresh failed', err);
-          }
-
-          const reselectElement = () => {
-            if (context.element instanceof Element && context.element.isConnected) {
-              const current = buildContextFromElement(context.element);
-              if (current) return current;
-            }
-
-            const candidates = [];
-            if (context.messageId) candidates.push(...listByMessageId(context.messageId));
-            if (Number.isFinite(context.index)) {
-              candidates.push(...doc.querySelectorAll(`[data-gmh-message-index="${context.index}"]`));
-            }
-
-            const chosen = selectBestCandidate(candidates, context.index);
-            return chosen ? buildContextFromElement(chosen) : null;
-          };
-
-          const refreshedContext = reselectElement() || context;
-
-          const ordinalFromIndex =
-            Number.isFinite(refreshedContext.index) && typeof messageIndexer?.lookupOrdinalByIndex === 'function'
-              ? messageIndexer.lookupOrdinalByIndex(refreshedContext.index)
-              : null;
-          const ordinalFromId =
-            refreshedContext.messageId && typeof messageIndexer?.lookupOrdinalByMessageId === 'function'
-              ? messageIndexer.lookupOrdinalByMessageId(refreshedContext.messageId)
-              : null;
-          const ordinalFromAttr = toNumber(
-            refreshedContext.element?.getAttribute?.('data-gmh-message-ordinal') ?? refreshedContext.ordinal,
-          );
-          const resolvedOrdinal = [ordinalFromIndex, ordinalFromId, ordinalFromAttr].find(
-            (value) => Number.isFinite(value) && value > 0,
-          );
-          if (!Number.isFinite(resolvedOrdinal) || resolvedOrdinal <= 0) {
-            setPanelStatus?.('메시지 순서를 찾을 수 없습니다. 화면을 새로고침해 주세요.', 'warning');
-            return;
-          }
-
-          if (mode === 'start') {
-            exportRange?.setStart?.(resolvedOrdinal);
-            if (rangeStartInput) rangeStartInput.value = String(resolvedOrdinal);
-            setPanelStatus?.(`메시지 ${resolvedOrdinal}을 시작으로 지정했습니다.`, 'info');
-          } else {
-            exportRange?.setEnd?.(resolvedOrdinal);
-            if (rangeEndInput) rangeEndInput.value = String(resolvedOrdinal);
-            setPanelStatus?.(`메시지 ${resolvedOrdinal}을 끝으로 지정했습니다.`, 'info');
-          }
-
-          const recorded = turnBookmarks?.record?.(
-            refreshedContext.index,
-            resolvedOrdinal,
-            refreshedContext.messageId,
-            'message',
-          );
-          if (recorded?.key) {
-            selectedBookmarkKey = recorded.key;
-            bookmarkSelectionPinned = false;
-            if (rangeBookmarkSelect) rangeBookmarkSelect.value = recorded.key;
-          }
-        };
-
-        if (rangeMarkStartBtn && rangeMarkStartBtn.dataset.gmhRangeReady !== 'true') {
-          rangeMarkStartBtn.dataset.gmhRangeReady = 'true';
-          rangeMarkStartBtn.addEventListener('click', () => doBookmark('start'));
-        }
-        if (rangeMarkEndBtn && rangeMarkEndBtn.dataset.gmhRangeReady !== 'true') {
-          rangeMarkEndBtn.dataset.gmhRangeReady = 'true';
-          rangeMarkEndBtn.addEventListener('click', () => doBookmark('end'));
-        }
-      }
-    };
-
-    return {
-      bindRangeControls,
-    };
-  }
-
-  function createPanelShortcuts({
-    windowRef = typeof window !== 'undefined' ? window : null,
-    panelVisibility,
-    autoLoader,
-    autoState,
-    configurePrivacyLists,
-    modal,
-  }) {
-    if (!windowRef) throw new Error('createPanelShortcuts requires window reference');
-    if (!panelVisibility) throw new Error('createPanelShortcuts requires panelVisibility');
-    if (!autoLoader) throw new Error('createPanelShortcuts requires autoLoader');
-    if (!autoState) throw new Error('createPanelShortcuts requires autoState');
-    if (!configurePrivacyLists) throw new Error('createPanelShortcuts requires configurePrivacyLists');
-
-    let shortcutsBound = false;
-
-    const bindShortcuts = (panel, { modern }) => {
-      if (!modern || shortcutsBound) return;
-      if (!panel) return;
-
-      const win = windowRef;
-      const handler = (event) => {
-        if (!event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
-        const key = event.key?.toLowerCase();
-        const target = event.target;
-        if (target instanceof win.HTMLElement) {
-          const tag = target.tagName.toLowerCase();
-          const isInputLike =
-            ['input', 'textarea', 'select'].includes(tag) || target.isContentEditable;
-          if (isInputLike && !['g', 'm'].includes(key)) return;
-        }
-        if (modal?.isOpen?.()) return;
-        switch (key) {
-          case 'g':
-            event.preventDefault();
-            panelVisibility.open({ focus: true, persist: true });
-            break;
-          case 'm':
-            event.preventDefault();
-            panelVisibility.toggle();
-            break;
-          case 's':
-            event.preventDefault();
-            if (!autoState.running) {
-              autoLoader
-                .start('all')
-                .catch((error) => win.console?.warn?.('[GMH] auto shortcut', error));
-            }
-            break;
-          case 'p':
-            event.preventDefault();
-            configurePrivacyLists();
-            break;
-          case 'e':
-            event.preventDefault();
-            panel.querySelector('#gmh-export')?.click();
-            break;
-        }
-      };
-
-      win.addEventListener('keydown', handler);
-      shortcutsBound = true;
-    };
-
-    return {
-      bindShortcuts,
-    };
-  }
-
-  function createShareWorkflow({
-    captureStructuredSnapshot,
-    normalizeTranscript,
-    buildSession,
-    exportRange,
-    projectStructuredMessages,
-    cloneSession,
-    applyPrivacyPipeline,
-    privacyConfig,
-    privacyProfiles,
-    formatRedactionCounts,
-    setPanelStatus,
-    toMarkdownExport,
-    toJSONExport,
-    toTXTExport,
-    toStructuredMarkdown,
-    toStructuredJSON,
-    toStructuredTXT,
-    buildExportBundle,
-    buildExportManifest,
-    triggerDownload,
-    clipboard,
-    stateApi,
-    stateEnum,
-    confirmPrivacyGate,
-    getEntryOrigin,
-    collectSessionStats,
-    alert: alertFn = (msg) => globalThis.alert?.(msg),
-    logger = typeof console !== 'undefined' ? console : null,
-  }) {
-    requireDeps(
-      {
-        captureStructuredSnapshot,
-        normalizeTranscript,
-        buildSession,
-        exportRange,
-        projectStructuredMessages,
-        cloneSession,
-        applyPrivacyPipeline,
-        privacyConfig,
-        privacyProfiles,
-        formatRedactionCounts,
-        setPanelStatus,
-        toMarkdownExport,
-        toJSONExport,
-        toTXTExport,
-        toStructuredMarkdown,
-        toStructuredJSON,
-        toStructuredTXT,
-        buildExportBundle,
-        buildExportManifest,
-        triggerDownload,
-        clipboard,
-        stateApi,
-        stateEnum,
-        confirmPrivacyGate,
-        getEntryOrigin,
-        collectSessionStats,
-      },
-      {
-        captureStructuredSnapshot: (fn) => typeof fn === 'function',
-        normalizeTranscript: (fn) => typeof fn === 'function',
-        buildSession: (fn) => typeof fn === 'function',
-        exportRange: (value) => Boolean(value?.setTotals),
-        projectStructuredMessages: (fn) => typeof fn === 'function',
-        cloneSession: (fn) => typeof fn === 'function',
-        applyPrivacyPipeline: (fn) => typeof fn === 'function',
-        privacyConfig: (value) => Boolean(value),
-        privacyProfiles: (value) => Boolean(value),
-        formatRedactionCounts: (fn) => typeof fn === 'function',
-        setPanelStatus: (fn) => typeof fn === 'function',
-        toMarkdownExport: (fn) => typeof fn === 'function',
-        toJSONExport: (fn) => typeof fn === 'function',
-        toTXTExport: (fn) => typeof fn === 'function',
-        toStructuredMarkdown: (fn) => typeof fn === 'function',
-        toStructuredJSON: (fn) => typeof fn === 'function',
-        toStructuredTXT: (fn) => typeof fn === 'function',
-        buildExportBundle: (fn) => typeof fn === 'function',
-        buildExportManifest: (fn) => typeof fn === 'function',
-        triggerDownload: (fn) => typeof fn === 'function',
-        'clipboard.set': (fn) => typeof fn === 'function',
-        stateApi: (value) => Boolean(value?.setState),
-        stateEnum: (value) => Boolean(value),
-        confirmPrivacyGate: (fn) => typeof fn === 'function',
-        getEntryOrigin: (fn) => typeof fn === 'function',
-        collectSessionStats: (fn) => typeof fn === 'function',
-      },
-    );
-
-    const parseAll = () => {
-      const snapshot = captureStructuredSnapshot({ force: true });
-      const raw = snapshot.legacyLines.join('\n');
-      const normalized = normalizeTranscript(raw);
-      const session = buildSession(normalized);
-      if (!session.turns.length) throw new Error('대화 메시지를 찾을 수 없습니다.');
-      const userCount = session.turns.filter((turn) => turn.channel === 'user').length;
-      const llmCount = session.turns.filter((turn) => turn.channel === 'llm').length;
-      const entryCount = session.turns.reduce((sum, turn) => {
-        if (Array.isArray(turn?.__gmhEntries)) return sum + turn.__gmhEntries.length;
-        return sum + 1;
-      }, 0);
-      exportRange?.setTotals?.({
-        message: session.turns.length,
-        user: userCount,
-        llm: llmCount,
-        entry: entryCount,
-      });
-      return { session, raw: normalized, snapshot };
-    };
-
-    const prepareShare = async ({ confirmLabel, cancelStatusMessage, blockedStatusMessage }) => {
-      try {
-        stateApi.setState(stateEnum.REDACTING, {
-          label: '민감정보 마스킹 중',
-          message: '레다크션 파이프라인 적용 중...',
-          tone: 'progress',
-          progress: { indeterminate: true },
-        });
-        const { session, raw, snapshot } = parseAll();
-        const privacy = applyPrivacyPipeline(session, raw, privacyConfig.profile, snapshot);
-        if (privacy.blocked) {
-          alertFn(`미성년자 성적 맥락이 감지되어 작업을 중단했습니다.
-
-차단 이유를 확인하려면:
-1. F12 키를 눌러 개발자 도구 열기
-2. 콘솔(Console) 탭 선택
-3. 다음 명령어 입력 후 Enter:
-   localStorage.setItem('gmh_debug_blocking', '1')
-4. 다시 내보내기/복사 시도
-5. 콘솔에서 상세 정보 확인
-
-※ 정당한 교육/상담 내용이 차단되었다면 GitHub Issues로 신고해주세요.
-https://github.com/devforai-creator/genit-memory-helper/issues`);
-          stateApi.setState(stateEnum.ERROR, {
-            label: '작업 차단',
-            message: blockedStatusMessage || '미성년자 민감 맥락으로 작업이 차단되었습니다.',
-            tone: 'error',
-            progress: { value: 1 },
-          });
-          return null;
-        }
-        const requestedRange = exportRange?.getRange?.() || {};
-        const sanitizedUserCount = privacy.sanitizedSession.turns.filter((turn) => turn.channel === 'user').length;
-        const sanitizedLlmCount = privacy.sanitizedSession.turns.filter((turn) => turn.channel === 'llm').length;
-        const sanitizedEntryCount = privacy.sanitizedSession.turns.reduce(
-          (sum, turn) => sum + (Array.isArray(turn?.__gmhEntries) ? turn.__gmhEntries.length : 1),
-          0,
-        );
-        exportRange?.setTotals?.({
-          message: privacy.sanitizedSession.turns.length,
-          user: sanitizedUserCount,
-          llm: sanitizedLlmCount,
-          entry: sanitizedEntryCount,
-        });
-        if (requestedRange.start || requestedRange.end) {
-          exportRange?.setRange?.(requestedRange.start, requestedRange.end);
-        }
-        const selection = exportRange?.apply?.(privacy.sanitizedSession.turns) || {
-          indices: [],
-          ordinals: [],
-          info: exportRange?.describe?.(privacy.sanitizedSession.turns.length),
-        };
-        const rangeInfo = selection?.info || exportRange?.describe?.(privacy.sanitizedSession.turns.length);
-        const structuredSelection = projectStructuredMessages(privacy.structured, rangeInfo);
-        const exportSession = cloneSession(privacy.sanitizedSession);
-        const entryOrigin = typeof getEntryOrigin === 'function' ? getEntryOrigin() : [];
-        const selectedIndices = selection.indices?.length
-          ? selection.indices
-          : privacy.sanitizedSession.turns.map((_, idx) => idx);
-
-        const selectedIndexSet = new Set(selectedIndices);
-
-        exportSession.turns = selectedIndices.map((index, localIndex) => {
-          const original = privacy.sanitizedSession.turns[index] || {};
-          const clone = { ...original };
-          Object.defineProperty(clone, '__gmhIndex', {
-            value: index,
-            enumerable: false,
-          });
-          Object.defineProperty(clone, '__gmhOrdinal', {
-            value: selection.ordinals?.[localIndex] ?? null,
-            enumerable: false,
-          });
-          Object.defineProperty(clone, '__gmhSourceBlock', {
-            value: entryOrigin[index] ?? null,
-            enumerable: false,
-          });
-          return clone;
-        });
-
-        exportSession.meta = {
-          ...(exportSession.meta || {}),
-          selection: {
-            active: Boolean(selection.info?.active),
-            range: {
-              start: selection.info?.start ?? null,
-              end: selection.info?.end ?? null,
-              count: selection.info?.count ?? null,
-              total: selection.info?.total ?? null,
-            },
-            indices: {
-              start: selection.info?.startIndex ?? null,
-              end: selection.info?.endIndex ?? null,
-            },
-          },
-        };
-
-        const stats = collectSessionStats(exportSession);
-        const overallStats = collectSessionStats(privacy.sanitizedSession);
-        const previewTurns = exportSession.turns.slice(-5);
-        stateApi.setState(stateEnum.PREVIEW, {
-          label: '미리보기 준비 완료',
-          message: '레다크션 결과를 검토하세요.',
-          tone: 'info',
-          progress: { value: 0.75 },
-        });
-
-        const ok = await confirmPrivacyGate({
-          profile: privacy.profile,
-          counts: privacy.counts,
-          stats,
-          overallStats,
-          rangeInfo,
-          selectedIndices: Array.from(selectedIndexSet),
-          selectedOrdinals: selection.ordinals || [],
-          previewTurns,
-          actionLabel: confirmLabel || '계속',
-        });
-        if (!ok) {
-          stateApi.setState(stateEnum.IDLE, {
-            label: '대기 중',
-            message: cancelStatusMessage || '작업을 취소했습니다.',
-            tone: cancelStatusMessage ? 'muted' : 'info',
-            progress: { value: 0 },
-          });
-          if (cancelStatusMessage) setPanelStatus?.(cancelStatusMessage, 'muted');
-          return null;
-        }
-
-        return {
-          privacy,
-          stats,
-          overallStats,
-          selection,
-          rangeInfo,
-          exportSession,
-          structuredSelection,
-        };
-      } catch (error) {
-        const errorMsg = error?.message || String(error);
-        alertFn(`오류: ${errorMsg}`);
-        stateApi.setState(stateEnum.ERROR, {
-          label: '작업 실패',
-          message: '작업 준비 중 오류가 발생했습니다.',
-          tone: 'error',
-          progress: { value: 1 },
-        });
-        return null;
-      }
-    };
-
-    const performExport = async (prepared, format) => {
-      if (!prepared) return false;
-      try {
-        stateApi.setState(stateEnum.EXPORTING, {
-          label: '내보내기 진행 중',
-          message: `${format.toUpperCase()} 내보내기를 준비하는 중입니다...`,
-          tone: 'progress',
-          progress: { indeterminate: true },
-        });
-        const {
-          privacy,
-          stats,
-          exportSession,
-          selection,
-          overallStats,
-          structuredSelection,
-          rangeInfo: preparedRangeInfo,
-        } = prepared;
-        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const sessionForExport = exportSession || privacy.sanitizedSession;
-        const rangeInfo = preparedRangeInfo || selection?.info || exportRange?.describe?.();
-        const hasCustomRange = Boolean(rangeInfo?.active);
-        const selectionRaw = hasCustomRange
-          ? sessionForExport.turns
-              .map((turn) => {
-                const label = turn.role === 'narration' ? '내레이션' : turn.speaker || turn.role || '메시지';
-                return `${label}: ${turn.text}`;
-              })
-              .join('\n')
-          : privacy.sanitizedRaw;
-        const bundleOptions = {
-          structuredSelection,
-          structuredSnapshot: privacy.structured,
-          profile: privacy.profile,
-          playerNames: privacy.playerNames,
-          rangeInfo,
-        };
-        let targetFormat = format;
-        let bundle;
-        let structuredFallback = false;
-        try {
-          bundle = buildExportBundle(sessionForExport, selectionRaw, targetFormat, stamp, bundleOptions);
-        } catch (error) {
-          if (
-            targetFormat === 'structured-json' ||
-            targetFormat === 'structured-md' ||
-            targetFormat === 'structured-txt'
-          ) {
-            logger?.warn?.('[GMH] structured export failed, falling back', error);
-            structuredFallback = true;
-            if (targetFormat === 'structured-json') targetFormat = 'json';
-            else if (targetFormat === 'structured-md') targetFormat = 'md';
-            else targetFormat = 'txt';
-            bundle = buildExportBundle(sessionForExport, selectionRaw, targetFormat, stamp, bundleOptions);
-          } else {
-            throw error;
-          }
-        }
-        const fileBlob = new Blob([bundle.content], { type: bundle.mime });
-        triggerDownload(fileBlob, bundle.filename);
-
-        const manifest = buildExportManifest({
-          profile: privacy.profile,
-          counts: { ...privacy.counts },
-          stats,
-          overallStats,
-          format: targetFormat,
-          warnings: privacy.sanitizedSession.warnings,
-          source: privacy.sanitizedSession.source,
-          range: sessionForExport.meta?.selection || rangeInfo,
-        });
-        const manifestBlob = new Blob([JSON.stringify(manifest, null, 2)], {
-          type: 'application/json',
-        });
-        const manifestName = `${bundle.filename.replace(/\.[^.]+$/, '')}.manifest.json`;
-        triggerDownload(manifestBlob, manifestName);
-
-        const summary = formatRedactionCounts(privacy.counts);
-        const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
-        const messageTotalAvailable = rangeInfo?.messageTotal || sessionForExport.turns.length;
-        const userTotalAvailable = rangeInfo?.userTotal || overallStats?.userMessages || stats.userMessages;
-        const llmTotalAvailable = rangeInfo?.llmTotal || overallStats?.llmMessages || stats.llmMessages;
-        let rangeNote = hasCustomRange
-          ? ` · (선택) 메시지 ${rangeInfo.start}-${rangeInfo.end}/${rangeInfo.total}`
-          : ` · 전체 메시지 ${messageTotalAvailable}개`;
-        if (Number.isFinite(userTotalAvailable)) {
-          rangeNote += ` · 유저 ${stats.userMessages}개`;
-        }
-        if (Number.isFinite(llmTotalAvailable)) {
-          rangeNote += ` · LLM ${stats.llmMessages}개`;
-        }
-        const message = `${targetFormat.toUpperCase()} 내보내기 완료${rangeNote} · ${profileLabel} · ${summary}`;
-        stateApi.setState(stateEnum.DONE, {
-          label: '내보내기 완료',
-          message,
-          tone: 'success',
-          progress: { value: 1 },
-        });
-        if (structuredFallback) {
-          setPanelStatus?.('구조 보존 내보내기에 실패하여 Classic 포맷으로 전환했습니다.', 'warning');
-        }
-        if (privacy.sanitizedSession.warnings.length) {
-          logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
-        }
-        return true;
-      } catch (error) {
-        const errorMsg = error?.message || String(error);
-        alertFn(`오류: ${errorMsg}`);
-        stateApi.setState(stateEnum.ERROR, {
-          label: '내보내기 실패',
-          message: '내보내기 실패',
-          tone: 'error',
-          progress: { value: 1 },
-        });
-        return false;
-      }
-    };
-
-    const copyRecent = async (prepareShareFn) => {
-      const prepared = await prepareShareFn({
-        confirmLabel: '복사 계속',
-        cancelStatusMessage: '복사를 취소했습니다.',
-        blockedStatusMessage: '미성년자 민감 맥락으로 복사가 차단되었습니다.',
-      });
-      if (!prepared) return;
-      try {
-        stateApi.setState(stateEnum.EXPORTING, {
-          label: '복사 진행 중',
-          message: '최근 15메시지를 복사하는 중입니다...',
-          tone: 'progress',
-          progress: { indeterminate: true },
-        });
-        const { privacy, overallStats, stats } = prepared;
-        const effectiveStats = overallStats || stats;
-        const turns = privacy.sanitizedSession.turns.slice(-15);
-        const md = toMarkdownExport(privacy.sanitizedSession, {
-          turns,
-          includeMeta: false,
-          heading: '## 최근 15메시지',
-        });
-        clipboard.set(md, { type: 'text', mimetype: 'text/plain' });
-        const summary = formatRedactionCounts(privacy.counts);
-        const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
-        const message = `최근 15메시지 복사 완료 · 유저 ${effectiveStats.userMessages}개 · LLM ${effectiveStats.llmMessages}개 · ${profileLabel} · ${summary}`;
-        stateApi.setState(stateEnum.DONE, {
-          label: '복사 완료',
-          message,
-          tone: 'success',
-          progress: { value: 1 },
-        });
-        if (privacy.sanitizedSession.warnings.length) {
-          logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
-        }
-      } catch (error) {
-        const errorMsg = error?.message || String(error);
-        alertFn(`오류: ${errorMsg}`);
-        stateApi.setState(stateEnum.ERROR, {
-          label: '복사 실패',
-          message: '복사 실패',
-          tone: 'error',
-          progress: { value: 1 },
-        });
-      }
-    };
-
-    const copyAll = async (prepareShareFn) => {
-      const prepared = await prepareShareFn({
-        confirmLabel: '복사 계속',
-        cancelStatusMessage: '복사를 취소했습니다.',
-        blockedStatusMessage: '미성년자 민감 맥락으로 복사가 차단되었습니다.',
-      });
-      if (!prepared) return;
-      try {
-        stateApi.setState(stateEnum.EXPORTING, {
-          label: '복사 진행 중',
-          message: '전체 Markdown을 복사하는 중입니다...',
-          tone: 'progress',
-          progress: { indeterminate: true },
-        });
-        const { privacy, overallStats, stats } = prepared;
-        const effectiveStats = overallStats || stats;
-        const md = toMarkdownExport(privacy.sanitizedSession);
-        clipboard.set(md, { type: 'text', mimetype: 'text/plain' });
-        const summary = formatRedactionCounts(privacy.counts);
-        const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
-        const message = `전체 Markdown 복사 완료 · 유저 ${effectiveStats.userMessages}개 · LLM ${effectiveStats.llmMessages}개 · ${profileLabel} · ${summary}`;
-        stateApi.setState(stateEnum.DONE, {
-          label: '복사 완료',
-          message,
-          tone: 'success',
-          progress: { value: 1 },
-        });
-        if (privacy.sanitizedSession.warnings.length) {
-          logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
-        }
-      } catch (error) {
-        const errorMsg = error?.message || String(error);
-        alertFn(`오류: ${errorMsg}`);
-        stateApi.setState(stateEnum.ERROR, {
-          label: '복사 실패',
-          message: '복사 실패',
-          tone: 'error',
-          progress: { value: 1 },
-        });
-      }
-    };
-
-    const reparse = () => {
-      try {
-        stateApi.setState(stateEnum.REDACTING, {
-          label: '재파싱 중',
-          message: '대화 로그를 다시 분석하는 중입니다...',
-          tone: 'progress',
-          progress: { indeterminate: true },
-        });
-        const { session, raw, snapshot } = parseAll();
-        const privacy = applyPrivacyPipeline(session, raw, privacyConfig.profile, snapshot);
-        const stats = collectSessionStats(privacy.sanitizedSession);
-        const summary = formatRedactionCounts(privacy.counts);
-        const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
-        const extra = privacy.blocked ? ' · ⚠️ 미성년자 맥락 감지' : '';
-        const message = `재파싱 완료 · 유저 ${stats.userMessages}개 · LLM ${stats.llmMessages}개 · 경고 ${
-        privacy.sanitizedSession.warnings.length
-      }건 · ${profileLabel} · ${summary}${extra}`;
-        stateApi.setState(stateEnum.DONE, {
-          label: '재파싱 완료',
-          message,
-          tone: 'info',
-          progress: { value: 1 },
-        });
-        if (privacy.sanitizedSession.warnings.length) {
-          logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
-        }
-      } catch (error) {
-        const errorMsg = error?.message || String(error);
-        alertFn(`오류: ${errorMsg}`);
-      }
-    };
-
-    return {
-      parseAll,
-      prepareShare,
-      performExport,
-      copyRecent,
-      copyAll,
-      reparse,
-    };
-  }
-
-  function createPanelInteractions({
-    panelVisibility,
-    setPanelStatus,
-    setPrivacyProfile,
-    getPrivacyProfile,
-    privacyProfiles,
-    configurePrivacyLists,
-    openPanelSettings,
-    ensureAutoLoadControlsModern,
-    ensureAutoLoadControlsLegacy,
-    mountStatusActionsModern,
-    mountStatusActionsLegacy,
-    bindRangeControls,
-    bindShortcuts,
-    bindGuideControls,
-    prepareShare,
-    performExport,
-    copyRecentShare,
-    copyAllShare,
-    autoLoader,
-    autoState,
-    stateApi,
-    stateEnum,
-    alert: alertFn = (message) => globalThis.alert?.(message),
-    logger = typeof console !== 'undefined' ? console : null,
-  } = {}) {
-    if (!panelVisibility) throw new Error('createPanelInteractions requires panelVisibility');
-    if (!setPrivacyProfile) throw new Error('createPanelInteractions requires setPrivacyProfile');
-    if (!bindRangeControls) throw new Error('createPanelInteractions requires bindRangeControls');
-    if (!bindShortcuts) throw new Error('createPanelInteractions requires bindShortcuts');
-    if (!prepareShare || !performExport || !copyRecentShare || !copyAllShare) {
-      throw new Error('createPanelInteractions requires share workflow helpers');
-    }
-    if (!stateApi || !stateEnum) {
-      throw new Error('createPanelInteractions requires state helpers');
-    }
-
-    let privacySelect = null;
-
-    const syncPrivacyProfileSelect = (profileKey) => {
-      if (!privacySelect) return;
-      const nextValue = profileKey ?? getPrivacyProfile?.();
-      if (typeof nextValue === 'string' && privacySelect.value !== nextValue) {
-        privacySelect.value = nextValue;
-      }
-    };
-
-    const notify = (message, tone) => {
-      if (typeof setPanelStatus === 'function' && message) {
-        setPanelStatus(message, tone);
-      }
-    };
-
-    const attachShareHandlers = (panel, { modern = false } = {}) => {
-      const exportFormatSelect = panel.querySelector('#gmh-export-format');
-      const quickExportBtn = panel.querySelector('#gmh-quick-export');
-
-      const prepareShareWithDialog = (options = {}) =>
-        prepareShare({
-          confirmLabel: options.confirmLabel,
-          cancelStatusMessage: options.cancelStatusMessage,
-          blockedStatusMessage: options.blockedStatusMessage,
-        });
-
-      const exportWithFormat = async (format, options = {}) => {
-        const prepared = await prepareShareWithDialog(options);
-        if (!prepared) return;
-        await performExport(prepared, format);
-      };
-
-      const copyRecent = () => copyRecentShare(prepareShareWithDialog);
-      const copyAll = () => copyAllShare(prepareShareWithDialog);
-
-      const copyRecentBtn = panel.querySelector('#gmh-copy-recent');
-      if (copyRecentBtn) {
-        copyRecentBtn.onclick = () => copyRecent();
-      }
-
-      const copyAllBtn = panel.querySelector('#gmh-copy-all');
-      if (copyAllBtn) {
-        copyAllBtn.onclick = () => copyAll();
-      }
-
-      const exportBtn = panel.querySelector('#gmh-export');
-      if (exportBtn) {
-        exportBtn.onclick = async () => {
-          const format = exportFormatSelect?.value || 'json';
-          await exportWithFormat(format, {
-            confirmLabel: '내보내기 진행',
-            cancelStatusMessage: '내보내기를 취소했습니다.',
-            blockedStatusMessage: '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
-          });
-        };
-      }
-
-      if (quickExportBtn) {
-        quickExportBtn.onclick = async () => {
-          if (autoState?.running) {
-            notify('이미 자동 로딩이 진행 중입니다.', 'muted');
-            return;
-          }
-          const originalText = quickExportBtn.textContent;
-          quickExportBtn.disabled = true;
-          quickExportBtn.textContent = '진행 중...';
-          try {
-            stateApi.setState(stateEnum.SCANNING, {
-              label: '원클릭 내보내기',
-              message: '전체 로딩 중...',
-              tone: 'progress',
-              progress: { indeterminate: true },
-            });
-            await autoLoader?.start?.('all');
-            const format = exportFormatSelect?.value || 'json';
-            await exportWithFormat(format, {
-              confirmLabel: `${format.toUpperCase()} 내보내기`,
-              cancelStatusMessage: '내보내기를 취소했습니다.',
-              blockedStatusMessage: '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
-            });
-          } catch (error) {
-            alertFn?.(`오류: ${(error && error.message) || error}`);
-            stateApi.setState(stateEnum.ERROR, {
-              label: '원클릭 실패',
-              message: '원클릭 내보내기 실패',
-              tone: 'error',
-              progress: { value: 1 },
-            });
-          } finally {
-            quickExportBtn.disabled = false;
-            quickExportBtn.textContent = originalText;
-          }
-        };
-      }
-    };
-
-    const bindPanelInteractions = (panel, { modern = false } = {}) => {
-      if (!panel || typeof panel.querySelector !== 'function') {
-        if (logger?.warn) {
-          logger.warn('[GMH] panel interactions: invalid panel element');
-        }
-        return;
-      }
-
-      panelVisibility.bind(panel, { modern });
-
-      privacySelect = panel.querySelector('#gmh-privacy-profile');
-      if (privacySelect) {
-        syncPrivacyProfileSelect();
-        privacySelect.onchange = (event) => {
-          const value = event.target.value;
-          setPrivacyProfile(value);
-          const label = privacyProfiles?.[value]?.label || value;
-          notify(`프라이버시 프로필이 ${label}로 설정되었습니다.`, 'info');
-        };
-      }
-
-      const privacyConfigBtn = panel.querySelector('#gmh-privacy-config');
-      if (privacyConfigBtn) {
-        privacyConfigBtn.onclick = () => configurePrivacyLists?.();
-      }
-
-      const settingsBtn = panel.querySelector('#gmh-panel-settings');
-      if (settingsBtn) {
-        settingsBtn.onclick = () => openPanelSettings?.();
-      }
-
-      if (modern) {
-        ensureAutoLoadControlsModern?.(panel);
-        mountStatusActionsModern?.(panel);
-      } else {
-        ensureAutoLoadControlsLegacy?.(panel);
-        mountStatusActionsLegacy?.(panel);
-      }
-
-      bindRangeControls(panel);
-      bindShortcuts(panel, { modern });
-      bindGuideControls?.(panel);
-
-      attachShareHandlers(panel, { modern });
-    };
-
-    return {
-      bindPanelInteractions,
-      syncPrivacyProfileSelect,
-    };
-  }
-
-  function createModernPanel({
-    documentRef = typeof document !== 'undefined' ? document : null,
-    ensureStyles,
-    version = '0.0.0-dev',
-    getActiveAdapter,
-    attachStatusElement,
-    stateView,
-    bindPanelInteractions,
-    panelId = 'genit-memory-helper-panel',
-    logger = typeof console !== 'undefined' ? console : null,
-  } = {}) {
-    const doc = documentRef;
-    if (!doc) throw new Error('createModernPanel requires documentRef');
-    if (typeof ensureStyles !== 'function') throw new Error('createModernPanel requires ensureStyles');
-    if (typeof getActiveAdapter !== 'function') throw new Error('createModernPanel requires getActiveAdapter');
-    if (!stateView || typeof stateView.bind !== 'function') {
-      throw new Error('createModernPanel requires stateView with bind');
-    }
-    if (typeof bindPanelInteractions !== 'function') {
-      throw new Error('createModernPanel requires bindPanelInteractions');
-    }
-
-    const log = logger || { warn: () => {} };
-
-    const mount = () => {
-      ensureStyles();
-      const existing = doc.querySelector(`#${panelId}`);
-      if (existing) return existing;
-
-      const panel = doc.createElement('div');
-      panel.id = panelId;
-      panel.className = 'gmh-panel';
-      panel.setAttribute('role', 'region');
-      panel.setAttribute('aria-label', 'Genit Memory Helper');
-      panel.tabIndex = -1;
-      panel.dataset.version = version;
-      panel.innerHTML = `
-      <div class="gmh-panel__header">
-        <button
-          id="gmh-panel-drag-handle"
-          class="gmh-panel__drag-handle"
-          type="button"
-          aria-label="패널 이동"
-          title="패널 끌어서 이동"
-        >
-          <span class="gmh-panel__drag-icon" aria-hidden="true">⋮⋮</span>
-        </button>
-        <div class="gmh-panel__headline">
-          <div class="gmh-panel__title">Genit Memory Helper</div>
-          <div class="gmh-panel__tag">v${version}</div>
-        </div>
-        <button id="gmh-panel-settings" class="gmh-small-btn gmh-small-btn--muted" title="설정">⚙</button>
-      </div>
-      <div class="gmh-progress">
-        <div class="gmh-progress__track">
-          <div id="gmh-progress-fill" class="gmh-progress__fill" data-indeterminate="false"></div>
-        </div>
-        <div id="gmh-progress-label" class="gmh-progress__label">대기 중</div>
-      </div>
-      <div id="gmh-status" class="gmh-status-line"></div>
-      <section class="gmh-panel__section" id="gmh-section-privacy">
-        <div class="gmh-panel__section-title">Privacy</div>
-        <div class="gmh-field-row">
-          <select id="gmh-privacy-profile" class="gmh-select">
-            <option value="safe">SAFE (권장)</option>
-            <option value="standard">STANDARD</option>
-            <option value="research">RESEARCH</option>
-          </select>
-          <button id="gmh-privacy-config" class="gmh-small-btn gmh-small-btn--accent">민감어</button>
-        </div>
-      </section>
-      <section class="gmh-panel__section" id="gmh-section-autoload">
-        <div class="gmh-panel__section-title">Auto Load</div>
-        <div id="gmh-autoload-controls"></div>
-      </section>
-      <section class="gmh-panel__section" id="gmh-section-export">
-        <div class="gmh-panel__section-title">Export</div>
-        <div class="gmh-field-row">
-          <button id="gmh-copy-recent" class="gmh-panel-btn gmh-panel-btn--neutral">최근 15메시지 복사</button>
-          <button id="gmh-copy-all" class="gmh-panel-btn gmh-panel-btn--neutral">전체 MD 복사</button>
-        </div>
-        <div class="gmh-field-row gmh-field-row--wrap">
-          <label for="gmh-range-start" class="gmh-field-label">메시지 범위</label>
-          <div class="gmh-range-controls">
-            <input
-              id="gmh-range-start"
-              class="gmh-input gmh-input--compact"
-              type="number"
-              min="1"
-              inputmode="numeric"
-              pattern="[0-9]*"
-              placeholder="시작 메시지"
-            />
-            <span class="gmh-range-sep" aria-hidden="true">~</span>
-            <input
-              id="gmh-range-end"
-              class="gmh-input gmh-input--compact"
-              type="number"
-              min="1"
-              inputmode="numeric"
-              pattern="[0-9]*"
-              placeholder="끝 메시지"
-            />
-            <div class="gmh-bookmark-controls">
-              <button id="gmh-range-mark-start" type="button" class="gmh-small-btn gmh-small-btn--muted" title="현재 메시지를 시작으로 지정">시작지정</button>
-              <button id="gmh-range-mark-end" type="button" class="gmh-small-btn gmh-small-btn--muted" title="현재 메시지를 끝으로 지정">끝지정</button>
-            </div>
-            <button id="gmh-range-clear" type="button" class="gmh-small-btn gmh-small-btn--muted">전체</button>
-          </div>
-        </div>
-        <div class="gmh-field-row gmh-field-row--wrap">
-          <label for="gmh-range-bookmark-select" class="gmh-field-label">최근 북마크</label>
-          <div class="gmh-bookmark-select">
-            <select id="gmh-range-bookmark-select" class="gmh-select gmh-select--compact">
-              <option value="">최근 클릭한 메시지가 없습니다</option>
-            </select>
-          </div>
-        </div>
-        <div id="gmh-range-summary" class="gmh-helper-text">범위 전체 내보내기</div>
-        <div class="gmh-field-row">
-          <select id="gmh-export-format" class="gmh-select">
-            <option value="structured-md" selected>Rich Markdown (.md) — 추천</option>
-            <option value="structured-json">Rich JSON (.json)</option>
-            <option value="structured-txt">Rich TXT (.txt)</option>
-            <optgroup label="Classic (경량/호환)">
-              <option value="json">Classic JSON (.json)</option>
-              <option value="md">Classic Markdown (.md)</option>
-              <option value="txt">Classic TXT (.txt)</option>
-            </optgroup>
-          </select>
-          <button id="gmh-export" class="gmh-small-btn gmh-small-btn--accent">내보내기</button>
-        </div>
-        <button id="gmh-quick-export" class="gmh-panel-btn gmh-panel-btn--accent">원클릭 내보내기</button>
-      </section>
-      <section class="gmh-panel__section" id="gmh-section-guides">
-        <div class="gmh-panel__section-title">Guides & Tools</div>
-        <div class="gmh-field-row">
-          <button id="gmh-reparse" class="gmh-small-btn gmh-small-btn--muted">재파싱</button>
-          <button id="gmh-guide" class="gmh-small-btn gmh-small-btn--muted">요약 가이드</button>
-          <button id="gmh-reguide" class="gmh-small-btn gmh-small-btn--muted">재요약 가이드</button>
-        </div>
-        <div id="gmh-status-actions"></div>
-      </section>
-      <div id="gmh-panel-resize-handle" class="gmh-panel__resize-handle" aria-hidden="true"></div>
-    `;
-
-      const adapter = getActiveAdapter();
-      const anchor = adapter?.getPanelAnchor?.(doc) || doc.body;
-      if (!anchor) {
-        log?.warn?.('[GMH] modern panel anchor missing');
-        return null;
-      }
-      anchor.appendChild(panel);
-
-      const statusEl = panel.querySelector('#gmh-status');
-      if (typeof attachStatusElement === 'function') {
-        attachStatusElement(statusEl);
-      }
-      if (statusEl) {
-        statusEl.setAttribute('role', 'status');
-        statusEl.setAttribute('aria-live', 'polite');
-      }
-
-      const progressFill = panel.querySelector('#gmh-progress-fill');
-      const progressLabel = panel.querySelector('#gmh-progress-label');
-      stateView.bind({ progressFill, progressLabel });
-
-      try {
-        bindPanelInteractions(panel, { modern: true });
-      } catch (err) {
-        log?.warn?.('[GMH] panel interactions init failed', err);
-      }
-
-      return panel;
-    };
-
-    return { mount };
-  }
-
-  function createLegacyPanel({
-    documentRef = typeof document !== 'undefined' ? document : null,
-    getActiveAdapter,
-    attachStatusElement,
-    setPanelStatus,
-    stateView,
-    bindPanelInteractions,
-    panelId = 'genit-memory-helper-panel',
-  } = {}) {
-    const doc = documentRef;
-    if (!doc) throw new Error('createLegacyPanel requires documentRef');
-    if (typeof getActiveAdapter !== 'function') {
-      throw new Error('createLegacyPanel requires getActiveAdapter');
-    }
-    if (typeof attachStatusElement !== 'function') {
-      throw new Error('createLegacyPanel requires attachStatusElement');
-    }
-    if (typeof setPanelStatus !== 'function') {
-      throw new Error('createLegacyPanel requires setPanelStatus');
-    }
-    if (!stateView || typeof stateView.bind !== 'function') {
-      throw new Error('createLegacyPanel requires stateView with bind');
-    }
-    if (typeof bindPanelInteractions !== 'function') {
-      throw new Error('createLegacyPanel requires bindPanelInteractions');
-    }
-
-    const mount = () => {
-      const existing = doc.querySelector(`#${panelId}`);
-      if (existing) return existing;
-
-      const panel = doc.createElement('div');
-      panel.id = panelId;
-      panel.style.cssText = `
-      position: fixed; right: 16px; bottom: 16px; z-index: 999999;
-      background: #0b1020; color: #fff; padding: 10px 12px; border-radius: 10px;
-      font: 12px/1.3 ui-sans-serif, system-ui; box-shadow: 0 8px 20px rgba(0,0,0,.4);
-      display: grid; gap: 8px; min-width: 260px;
-    `;
-      panel.innerHTML = `
-      <div style="font-weight:600">Genit Memory Helper</div>
-      <div style="display:flex; gap:8px; align-items:center;">
-        <select id="gmh-privacy-profile" style="flex:1; background:#111827; color:#f1f5f9; border:1px solid #1f2937; border-radius:8px; padding:8px;">
-          <option value="safe">SAFE (권장)</option>
-          <option value="standard">STANDARD</option>
-          <option value="research">RESEARCH</option>
-        </select>
-        <button id="gmh-privacy-config" style="background:#c084fc; border:0; color:#210; border-radius:8px; padding:8px; cursor:pointer;">민감어</button>
-      </div>
-      <div style="display:flex; gap:8px;">
-        <button id="gmh-copy-recent" style="flex:1; background:#22c55e; border:0; color:#051; border-radius:8px; padding:8px; cursor:pointer;">최근 15메시지 복사</button>
-        <button id="gmh-copy-all" style="flex:1; background:#60a5fa; border:0; color:#031; border-radius:8px; padding:8px; cursor:pointer;">전체 MD 복사</button>
-      </div>
-      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-        <label for="gmh-range-start" style="font-size:11px; color:#94a3b8; font-weight:600;">메시지 범위</label>
-        <div style="display:flex; gap:6px; align-items:center; flex:1;">
-          <input id="gmh-range-start" type="number" min="1" inputmode="numeric" pattern="[0-9]*" placeholder="시작 메시지" style="width:70px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;" />
-          <span style="color:#94a3b8;">~</span>
-          <input id="gmh-range-end" type="number" min="1" inputmode="numeric" pattern="[0-9]*" placeholder="끝 메시지" style="width:70px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;" />
-          <button id="gmh-range-mark-start" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;" title="현재 메시지를 시작으로 지정">시작지정</button>
-          <button id="gmh-range-mark-end" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;" title="현재 메시지를 끝으로 지정">끝지정</button>
-          <button id="gmh-range-clear" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;">전체</button>
-        </div>
-      </div>
-      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-        <label for="gmh-range-bookmark-select" style="font-size:11px; color:#94a3b8; font-weight:600;">최근 북마크</label>
-        <select id="gmh-range-bookmark-select" style="flex:1; min-width:160px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;">
-          <option value="">최근 클릭한 메시지가 없습니다</option>
-        </select>
-      </div>
-      <div id="gmh-range-summary" style="font-size:11px; color:#94a3b8;">범위 전체 내보내기</div>
-      <div style="display:flex; gap:8px; align-items:center;">
-        <select id="gmh-export-format" style="flex:1; background:#111827; color:#f1f5f9; border:1px solid #1f2937; border-radius:8px; padding:8px;">
-          <option value="structured-md" selected>Rich Markdown (.md) — 추천</option>
-          <option value="structured-json">Rich JSON (.json)</option>
-          <option value="structured-txt">Rich TXT (.txt)</option>
-          <optgroup label="Classic (경량/호환)">
-            <option value="json">Classic JSON (.json)</option>
-            <option value="md">Classic Markdown (.md)</option>
-            <option value="txt">Classic TXT (.txt)</option>
-          </optgroup>
-        </select>
-        <button id="gmh-export" style="flex:1; background:#2dd4bf; border:0; color:#052; border-radius:8px; padding:8px; cursor:pointer;">내보내기</button>
-      </div>
-      <div style="display:flex; gap:8px;">
-        <button id="gmh-quick-export" style="flex:1; background:#38bdf8; border:0; color:#031; border-radius:8px; padding:8px; cursor:pointer;">원클릭 내보내기</button>
-      </div>
-      <div style="display:flex; gap:8px;">
-        <button id="gmh-reparse" style="flex:1; background:#f59e0b; border:0; color:#210; border-radius:8px; padding:8px; cursor:pointer;">재파싱</button>
-        <button id="gmh-guide" style="flex:1; background:#a78bfa; border:0; color:#210; border-radius:8px; padding:8px; cursor:pointer;">요약 가이드</button>
-      </div>
-      <div style="display:flex; gap:8px;">
-        <button id="gmh-reguide" style="flex:1; background:#fbbf24; border:0; color:#210; border-radius:8px; padding:8px; cursor:pointer;">재요약 가이드</button>
-      </div>
-      <div id="gmh-status" style="opacity:.85"></div>
-    `;
-
-      const adapter = getActiveAdapter();
-      const anchor = adapter?.getPanelAnchor?.(doc) || doc.body;
-      if (!anchor) return null;
-      anchor.appendChild(panel);
-
-      const statusEl = panel.querySelector('#gmh-status');
-      attachStatusElement(statusEl);
-      setPanelStatus('준비 완료', 'info');
-      stateView.bind();
-      bindPanelInteractions(panel, { modern: false });
-
-      return panel;
-    };
-
-    return { mount };
-  }
-
-  const DEFAULT_PREVIEW_LIMIT = 5;
-
-  const ensureDocument = (documentRef) => {
-    if (!documentRef || typeof documentRef.createElement !== 'function') {
-      throw new Error('privacy gate requires a document reference');
-    }
-    return documentRef;
-  };
-
-  const defaultTruncate = (value, max = 220) => {
-    const text = String(value || '').trim();
-    if (text.length <= max) return text;
-    return `${text.slice(0, max - 1)}…`;
-  };
-
-  const buildTurns = ({
-    documentRef,
-    previewTurns,
-    previewLimit,
-    rangeInfo,
-    selectedIndices,
-    selectedOrdinals,
-    truncateText,
-    modern,
-  }) => {
-    const doc = ensureDocument(documentRef);
-    const list = doc.createElement('ul');
-    list.className = modern ? 'gmh-turn-list' : 'gmh-preview-turns';
-    const highlightActive = rangeInfo?.active;
-    const selectedIndexSet = new Set(selectedIndices || []);
-    const ordinalLookup = new Map();
-    (selectedIndices || []).forEach((idx, i) => {
-      const ord = selectedOrdinals?.[i] ?? null;
-      ordinalLookup.set(idx, ord);
-    });
-
-    const turns = Array.isArray(previewTurns) ? previewTurns : [];
-    turns.slice(-previewLimit).forEach((turn) => {
-      if (!turn) return;
-      const item = doc.createElement('li');
-      item.className = modern ? 'gmh-turn-list__item' : 'gmh-preview-turn';
-      item.tabIndex = 0;
-
-      const sourceIndex = typeof turn.__gmhIndex === 'number' ? turn.__gmhIndex : null;
-      if (sourceIndex !== null) item.dataset.turnIndex = String(sourceIndex);
-
-      const playerOrdinal = (() => {
-        if (typeof turn.__gmhOrdinal === 'number') return turn.__gmhOrdinal;
-        if (sourceIndex !== null && ordinalLookup.has(sourceIndex)) {
-          return ordinalLookup.get(sourceIndex);
-        }
-        return null;
-      })();
-      if (typeof playerOrdinal === 'number') {
-        item.dataset.playerTurn = String(playerOrdinal);
-      }
-
-      if (highlightActive && sourceIndex !== null && selectedIndexSet.has(sourceIndex)) {
-        item.classList.add(modern ? 'gmh-turn-list__item--selected' : 'gmh-preview-turn--selected');
-      }
-
-      const speaker = doc.createElement('div');
-      speaker.className = modern ? 'gmh-turn-list__speaker' : 'gmh-preview-turn-speaker';
-      const speakerLabel = doc.createElement('span');
-      speakerLabel.textContent = `${turn.speaker || '??'} · ${turn.role}`;
-      speaker.appendChild(speakerLabel);
-
-      if (typeof playerOrdinal === 'number' && playerOrdinal > 0) {
-        const badge = doc.createElement('span');
-        badge.className = modern ? 'gmh-turn-list__badge' : 'gmh-turn-list__badge';
-        badge.textContent = `메시지 ${playerOrdinal}`;
-        speaker.appendChild(badge);
-      }
-
-      const text = doc.createElement('div');
-      text.className = modern ? 'gmh-turn-list__text' : 'gmh-preview-turn-text';
-      const truncate = typeof truncateText === 'function' ? truncateText : defaultTruncate;
-      text.textContent = truncate(turn.text || '');
-
-      item.appendChild(speaker);
-      item.appendChild(text);
-      list.appendChild(item);
-    });
-
-    if (!list.children.length) {
-      const empty = doc.createElement(modern ? 'li' : 'div');
-      empty.className = modern
-        ? 'gmh-turn-list__item gmh-turn-list__empty'
-        : 'gmh-preview-turn';
-      const emptyText = modern ? empty : doc.createElement('div');
-      if (!modern) {
-        emptyText.className = 'gmh-preview-turn-text';
-        emptyText.textContent = '표시할 메시지가 없습니다. 상단 요약만 확인해주세요.';
-        empty.appendChild(emptyText);
-      } else {
-        empty.textContent = '표시할 메시지가 없습니다. 상단 요약만 확인해주세요.';
-      }
-      list.appendChild(empty);
-    }
-
-    return list;
-  };
-
-  const buildSummaryBox = ({
-    documentRef,
-    formatRedactionCounts,
-    privacyProfiles,
-    profile,
-    counts,
-    stats,
-    overallStats,
-    rangeInfo,
-    modern,
-  }) => {
-    const doc = ensureDocument(documentRef);
-    const summary = typeof formatRedactionCounts === 'function'
-      ? formatRedactionCounts(counts)
-      : '';
-    const profileLabel = privacyProfiles?.[profile]?.label || profile;
-    const turnsLabel = overallStats
-      ? `유저 메시지 ${stats.userMessages}/${overallStats.userMessages} · 전체 메시지 ${stats.totalMessages}/${overallStats.totalMessages}`
-      : `유저 메시지 ${stats.userMessages} · 전체 메시지 ${stats.totalMessages}`;
-
-    const container = doc.createElement('div');
-    container.className = modern ? 'gmh-privacy-summary' : 'gmh-preview-summary';
-
-    const createRow = (labelText, valueText) => {
-      const row = doc.createElement('div');
-      if (modern) {
-        row.className = 'gmh-privacy-summary__row';
-        const labelEl = doc.createElement('span');
-        labelEl.className = 'gmh-privacy-summary__label';
-        labelEl.textContent = labelText;
-        const valueEl = doc.createElement('span');
-        valueEl.textContent = valueText;
-        row.appendChild(labelEl);
-        row.appendChild(valueEl);
-      } else {
-        const strong = doc.createElement('strong');
-        strong.textContent = labelText;
-        const value = doc.createElement('span');
-        value.textContent = valueText;
-        row.appendChild(strong);
-        row.appendChild(value);
-      }
-      return row;
-    };
-
-    [
-      createRow('프로필', profileLabel),
-      createRow('메시지 수', turnsLabel),
-      createRow('레다크션', summary),
-    ].forEach((row) => container.appendChild(row));
-
-    if (rangeInfo?.total) {
-      const messageTotal = rangeInfo.messageTotal ?? rangeInfo.total;
-      const rangeText = rangeInfo.active
-        ? `메시지 ${rangeInfo.start}-${rangeInfo.end} · ${rangeInfo.count}/${messageTotal}`
-        : `메시지 ${messageTotal}개 전체`;
-      const extraParts = [];
-      if (Number.isFinite(rangeInfo.userTotal)) extraParts.push(`유저 ${rangeInfo.userTotal}개`);
-      if (Number.isFinite(rangeInfo.llmTotal)) extraParts.push(`LLM ${rangeInfo.llmTotal}개`);
-      const complement = extraParts.length ? ` · ${extraParts.join(' · ')}` : '';
-      container.appendChild(createRow('범위', rangeText + complement));
-    }
-
-    return container;
-  };
-
-  function createLegacyPrivacyGate({
-    documentRef = typeof document !== 'undefined' ? document : null,
-    formatRedactionCounts,
-    privacyProfiles,
-    ensureLegacyPreviewStyles,
-    truncateText = defaultTruncate,
-    previewLimit = DEFAULT_PREVIEW_LIMIT,
-  } = {}) {
-    const doc = ensureDocument(documentRef);
-    if (typeof ensureLegacyPreviewStyles !== 'function') {
-      throw new Error('legacy privacy gate requires ensureLegacyPreviewStyles');
-    }
-
-    const confirm = ({
-      profile,
-      counts,
-      stats,
-      overallStats = null,
-      rangeInfo = null,
-      selectedIndices = [],
-      selectedOrdinals = [],
-      previewTurns = [],
-      actionLabel = '계속',
-      heading = '공유 전 확인',
-      subheading = '외부로 공유하기 전에 민감정보가 없는지 확인하세요.',
-    } = {}) => {
-      ensureLegacyPreviewStyles();
-
-      const overlay = doc.createElement('div');
-      overlay.className = 'gmh-preview-overlay';
-      const card = doc.createElement('div');
-      card.className = 'gmh-preview-card';
-      overlay.appendChild(card);
-
-      const header = doc.createElement('div');
-      header.className = 'gmh-preview-header';
-      const headerLabel = doc.createElement('span');
-      headerLabel.textContent = heading;
-      header.appendChild(headerLabel);
-      const closeBtn = doc.createElement('button');
-      closeBtn.type = 'button';
-      closeBtn.className = 'gmh-preview-close';
-      closeBtn.setAttribute('aria-label', '닫기');
-      closeBtn.textContent = '✕';
-      header.appendChild(closeBtn);
-      card.appendChild(header);
-
-      const body = doc.createElement('div');
-      body.className = 'gmh-preview-body';
-      body.appendChild(
-        buildSummaryBox({
-          documentRef: doc,
-          formatRedactionCounts,
-          privacyProfiles,
-          profile,
-          counts,
-          stats,
-          overallStats,
-          rangeInfo,
-          modern: false,
-        }),
-      );
-
-      const previewTitle = doc.createElement('div');
-      previewTitle.style.fontWeight = '600';
-      previewTitle.style.color = '#cbd5f5';
-      previewTitle.textContent = `미리보기 (${Math.min(previewTurns.length, previewLimit)}메시지)`;
-      body.appendChild(previewTitle);
-
-      body.appendChild(
-        buildTurns({
-          documentRef: doc,
-          previewTurns,
-          previewLimit,
-          rangeInfo,
-          selectedIndices,
-          selectedOrdinals,
-          truncateText,
-          modern: false,
-        }),
-      );
-
-      const footnote = doc.createElement('div');
-      footnote.className = 'gmh-preview-footnote';
-      footnote.textContent = subheading;
-      body.appendChild(footnote);
-
-      card.appendChild(body);
-
-      const actions = doc.createElement('div');
-      actions.className = 'gmh-preview-actions';
-      const cancelBtn = doc.createElement('button');
-      cancelBtn.type = 'button';
-      cancelBtn.className = 'gmh-preview-cancel';
-      cancelBtn.textContent = '취소';
-      const confirmBtn = doc.createElement('button');
-      confirmBtn.type = 'button';
-      confirmBtn.className = 'gmh-preview-confirm';
-      confirmBtn.textContent = actionLabel;
-      actions.appendChild(cancelBtn);
-      actions.appendChild(confirmBtn);
-      card.appendChild(actions);
-
-      const bodyEl = doc.body || doc.querySelector('body');
-      if (!bodyEl) throw new Error('document body missing');
-      const prevOverflow = bodyEl.style.overflow;
-      bodyEl.style.overflow = 'hidden';
-      bodyEl.appendChild(overlay);
-
-      return new Promise((resolve) => {
-        const cleanup = (result) => {
-          bodyEl.style.overflow = prevOverflow;
-          overlay.remove();
-          doc.removeEventListener('keydown', onKey);
-          resolve(result);
-        };
-
-        const onKey = (event) => {
-          if (event.key === 'Escape') cleanup(false);
-        };
-        doc.addEventListener('keydown', onKey);
-
-        overlay.addEventListener('click', (event) => {
-          if (event.target === overlay) cleanup(false);
-        });
-        closeBtn.addEventListener('click', () => cleanup(false));
-        cancelBtn.addEventListener('click', () => cleanup(false));
-        confirmBtn.addEventListener('click', () => cleanup(true));
-      });
-    };
-
-    return { confirm };
-  }
-
-  function createModernPrivacyGate({
-    documentRef = typeof document !== 'undefined' ? document : null,
-    formatRedactionCounts,
-    privacyProfiles,
-    ensureDesignSystemStyles,
-    modal,
-    truncateText = defaultTruncate,
-    previewLimit = DEFAULT_PREVIEW_LIMIT,
-  } = {}) {
-    const doc = ensureDocument(documentRef);
-    if (typeof ensureDesignSystemStyles !== 'function') {
-      throw new Error('modern privacy gate requires ensureDesignSystemStyles');
-    }
-    if (!modal || typeof modal.open !== 'function') {
-      throw new Error('modern privacy gate requires modal.open');
-    }
-
-    const confirm = ({
-      profile,
-      counts,
-      stats,
-      overallStats = null,
-      rangeInfo = null,
-      selectedIndices = [],
-      selectedOrdinals = [],
-      previewTurns = [],
-      actionLabel = '계속',
-      heading = '공유 전 확인',
-      subheading = '외부로 공유하기 전에 민감정보가 없는지 확인하세요.',
-    } = {}) => {
-      ensureDesignSystemStyles();
-
-      const stack = doc.createElement('div');
-      stack.className = 'gmh-modal-stack';
-
-      stack.appendChild(
-        buildSummaryBox({
-          documentRef: doc,
-          formatRedactionCounts,
-          privacyProfiles,
-          profile,
-          counts,
-          stats,
-          overallStats,
-          rangeInfo,
-          modern: true,
-        }),
-      );
-
-      const previewTitle = doc.createElement('div');
-      previewTitle.className = 'gmh-section-title';
-      previewTitle.textContent = `미리보기 (${Math.min(previewTurns.length, previewLimit)}메시지)`;
-      stack.appendChild(previewTitle);
-
-      stack.appendChild(
-        buildTurns({
-          documentRef: doc,
-          previewTurns,
-          previewLimit,
-          rangeInfo,
-          selectedIndices,
-          selectedOrdinals,
-          truncateText,
-          modern: true,
-        }),
-      );
-
-      const footnote = doc.createElement('div');
-      footnote.className = 'gmh-modal-footnote';
-      footnote.textContent = subheading;
-      stack.appendChild(footnote);
-
-      return modal
-        .open({
-          title: heading,
-          description: '',
-          content: stack,
-          size: 'medium',
-          initialFocus: '[data-action="confirm"]',
-          actions: [
-            {
-              id: 'cancel',
-              label: '취소',
-              variant: 'secondary',
-              value: false,
-              attrs: { 'data-action': 'cancel' },
-            },
-            {
-              id: 'confirm',
-              label: actionLabel,
-              variant: 'primary',
-              value: true,
-              attrs: { 'data-action': 'confirm' },
-            },
-          ],
-        })
-        .then((result) => Boolean(result));
-    };
-
-    return { confirm };
-  }
-
-  const SUMMARY_GUIDE_PROMPT = `
-당신은 "장기기억 보관용 사서"입니다.
-아래 파일은 캐릭터 채팅 로그를 정형화한 것입니다.
-목표는 이 데이터를 2000자 이내로 요약하여, 캐릭터 플랫폼의 "유저노트"에 넣을 수 있는 형식으로 정리하는 것입니다.
-
-조건:
-1. 중요도 기준
-   - 플레이어와 NPC 관계 변화, 약속, 목표, 갈등, 선호/금기만 포함.
-   - 사소한 농담·잡담은 제외.
-   - 최근일수록 더 비중 있게 반영.
-
-2. 출력 구조
-   - [전체 줄거리 요약]: 주요 사건 흐름을 3~6개 항목으로.
-   - [주요 관계 변화]: NPC별 감정/태도 변화를 정리.
-   - [핵심 테마]: 반복된 규칙, 세계관 요소, 목표.
-
-3. 형식 규칙
-   - 전체 길이는 1200~1800자.
-   - 문장은 간결하게.
-   - 플레이어 이름은 "플레이어"로 통일.
-`;
-
-  const RESUMMARY_GUIDE_PROMPT = `
-아래에는 [이전 요약본]과 [새 로그 파일]이 있습니다.
-이 둘을 통합하여, 2000자 이내의 "최신 장기기억 요약본"을 만드세요.
-
-규칙:
-- 이전 요약본에서 이미 있는 사실은 유지하되, 새 로그 파일에 나온 사건/관계 변화로 업데이트.
-- 모순되면 "최근 사건"을 우선.
-- 출력 구조는 [전체 줄거리 요약] / [주요 관계 변화] / [핵심 테마].
-- 길이는 1200~1800자.
-`;
-
-  function createGuidePrompts({
-    clipboard,
-    setPanelStatus,
-    statusMessages = {},
-  } = {}) {
-    if (!clipboard || typeof clipboard.set !== 'function') {
-      throw new Error('createGuidePrompts requires clipboard helper');
-    }
-
-    const notify = (message, tone) => {
-      if (typeof setPanelStatus === 'function' && message) {
-        setPanelStatus(message, tone);
-      }
-    };
-
-    const summaryMessage = statusMessages.summaryCopied || '요약 프롬프트가 클립보드에 복사되었습니다.';
-    const resummaryMessage =
-      statusMessages.resummaryCopied || '재요약 프롬프트가 클립보드에 복사되었습니다.';
-
-    const copySummaryGuide = () => {
-      clipboard.set(SUMMARY_GUIDE_PROMPT, { type: 'text', mimetype: 'text/plain' });
-      notify(summaryMessage, 'success');
-      return SUMMARY_GUIDE_PROMPT;
-    };
-
-    const copyResummaryGuide = () => {
-      clipboard.set(RESUMMARY_GUIDE_PROMPT, { type: 'text', mimetype: 'text/plain' });
-      notify(resummaryMessage, 'success');
-      return RESUMMARY_GUIDE_PROMPT;
-    };
-
-    return {
-      copySummaryGuide,
-      copyResummaryGuide,
-      prompts: {
-        summary: SUMMARY_GUIDE_PROMPT,
-        resummary: RESUMMARY_GUIDE_PROMPT,
-      },
-    };
-  }
-
-  function createGuideControls({
-    reparse,
-    copySummaryGuide,
-    copyResummaryGuide,
-    logger = typeof console !== 'undefined' ? console : null,
-  } = {}) {
-    if (typeof copySummaryGuide !== 'function' || typeof copyResummaryGuide !== 'function') {
-      throw new Error('createGuideControls requires summary and resummary copy functions');
-    }
-
-    const bindGuideControls = (panel) => {
-      if (!panel || typeof panel.querySelector !== 'function') {
-        if (logger?.warn) {
-          logger.warn('[GMH] guide controls: panel missing querySelector');
-        }
-        return;
-      }
-
-      const reparseBtn = panel.querySelector('#gmh-reparse');
-      if (reparseBtn && typeof reparse === 'function') {
-        reparseBtn.onclick = () => reparse();
-      }
-
-      const guideBtn = panel.querySelector('#gmh-guide');
-      if (guideBtn) {
-        guideBtn.onclick = () => copySummaryGuide();
-      }
-
-      const reguideBtn = panel.querySelector('#gmh-reguide');
-      if (reguideBtn) {
-        reguideBtn.onclick = () => copyResummaryGuide();
-      }
-    };
-
-    return { bindGuideControls };
-  }
-
-  function registerGenitConfig(registerAdapterConfig) {
-    registerAdapterConfig('genit', {
-      selectors: {
-        chatContainers: [
-          '[data-chat-container]',
-          '[data-testid="chat-scroll-region"]',
-          '[data-testid="conversation-scroll"]',
-          '[data-testid="chat-container"]',
-          '[data-role="conversation"]',
-          '[data-overlayscrollbars]',
-          '.flex-1.min-h-0.overflow-y-auto',
-          'main [class*="overflow-y"]',
-        ],
-        messageRoot: [
-          '[data-message-id]',
-          '[role="listitem"][data-id]',
-          '[data-testid="message-wrapper"]',
-        ],
-        infoCode: ['code.language-INFO', 'pre code.language-INFO'],
-        playerScopes: [
-          '[data-role="user"]',
-          '[data-from-user="true"]',
-          '[data-author-role="user"]',
-          '.flex.w-full.justify-end',
-          '.flex.flex-col.items-end',
-        ],
-        playerText: [
-          '.space-y-3.mb-6 > .markdown-content:nth-of-type(1)',
-          '[data-role="user"] .markdown-content:not(.text-muted-foreground)',
-          '[data-author-role="user"] .markdown-content:not(.text-muted-foreground)',
-          '.flex.w-full.justify-end .markdown-content:not(.text-muted-foreground)',
-          '.flex.flex-col.items-end .markdown-content:not(.text-muted-foreground)',
-          '.markdown-content.text-right',
-          '.p-4.rounded-xl.bg-background p',
-          '[data-role="user"] .markdown-content.text-muted-foreground',
-          '[data-author-role="user"] .markdown-content.text-muted-foreground',
-          '.flex.w-full.justify-end .markdown-content.text-muted-foreground',
-          '.flex.flex-col.items-end .markdown-content.text-muted-foreground',
-          '.flex.justify-end .text-muted-foreground.text-sm',
-          '.flex.justify-end .text-muted-foreground',
-          '.flex.flex-col.items-end .text-muted-foreground',
-          '.p-3.rounded-lg.bg-muted\\/50 p',
-          '.flex.justify-end .p-3.rounded-lg.bg-muted\\/50 p',
-          '.flex.flex-col.items-end .p-3.rounded-lg.bg-muted\\/50 p',
-        ],
-        npcGroups: ['[data-role="assistant"]', '.flex.flex-col.w-full.group'],
-        npcName: [
-          '[data-author-name]',
-          '[data-author]',
-          '[data-username]',
-          '.text-sm.text-muted-foreground.mb-1.ml-1',
-        ],
-        npcBubble: ['.p-4.rounded-xl.bg-background', '.p-3.rounded-lg.bg-muted\\/50'],
-        narrationBlocks: [
-          '.markdown-content.text-muted-foreground > p',
-          '.text-muted-foreground.text-sm > p',
-        ],
-        panelAnchor: ['[data-testid="app-root"]', '#__next', '#root', 'main'],
-        playerNameHints: [
-          '[data-role="user"] [data-username]',
-          '[data-profile-name]',
-          '[data-user-name]',
-          '[data-testid="profile-name"]',
-          'header [data-username]',
-        ],
-        textHints: ['메시지', '채팅', '대화'],
-      },
-    });
-  }
-
-  function isPrologueBlock(element) {
-    let current = element instanceof Element ? element : null;
-    let hops = 0;
-    while (current && hops < 400) {
-      if (current.hasAttribute?.('data-gmh-player-turn')) return false;
-      if (current.previousElementSibling) {
-        current = current.previousElementSibling;
-      } else {
-        current = current.parentElement;
-      }
-      hops += 1;
-    }
-    return true;
-  }
-
-  function createAdapterAPI({ GMH, errorHandler, PLAYER_NAME_FALLBACKS, setPlayerNames, getPlayerNames }) {
-    GMH.Adapters = GMH.Adapters || {};
-    GMH.Core = GMH.Core || {};
-
-    GMH.Adapters.Registry = GMH.Adapters.Registry ?? null;
-    GMH.Adapters.register = GMH.Adapters.register ?? (() => {});
-    GMH.Adapters.getSelectors = GMH.Adapters.getSelectors ?? (() => null);
-    GMH.Adapters.getMetadata = GMH.Adapters.getMetadata ?? (() => null);
-    GMH.Adapters.list = GMH.Adapters.list ?? (() => []);
-
-    const warnDetectFailure = (err) => {
-      const level = errorHandler?.LEVELS?.WARN || 'warn';
-      errorHandler?.handle?.(err, 'adapter/detect', level);
-    };
-
-    const pickAdapter = (loc = location, doc = document) => {
-      const candidates = Array.isArray(GMH.Core.adapters) ? GMH.Core.adapters : [];
-      for (const adapter of candidates) {
-        try {
-          if (adapter?.match?.(loc, doc)) return adapter;
-        } catch (err) {
-          warnDetectFailure(err);
-        }
-      }
-      return GMH.Adapters.genit;
-    };
-
-    GMH.Core.pickAdapter = pickAdapter;
-
-    let activeAdapter = null;
-    const getActiveAdapter = () => {
-      if (!activeAdapter) {
-        activeAdapter = pickAdapter(location, document);
-      }
-      return activeAdapter;
-    };
-
-    GMH.Core.getActiveAdapter = getActiveAdapter;
-
-    const guessPlayerNamesFromDOM = () => {
-      const adapter = getActiveAdapter();
-      return adapter?.guessPlayerNames?.() || [];
-    };
-
-    const updatePlayerNames = () => {
-      const names = Array.from(
-        new Set([...PLAYER_NAME_FALLBACKS, ...guessPlayerNamesFromDOM()].filter(Boolean)),
-      );
-      setPlayerNames(names);
-      GMH.Adapters.genit?.setPlayerNameAccessor?.(() => getPlayerNames());
-    };
-
-    return {
-      pickAdapter,
-      getActiveAdapter,
-      guessPlayerNamesFromDOM,
-      updatePlayerNames,
-      resetActiveAdapter() {
-        activeAdapter = null;
-      },
-    };
-  }
-
-  /**
-   * Registers available DOM adapters and exposes helper APIs for adapter selection.
-   *
-   * @param {object} options - Injection container.
-   * @param {typeof import('../core/namespace.js').GMH} options.GMH - Global namespace handle.
-   * @param {Map} options.adapterRegistry - Registry backing store.
-   * @param {Function} options.registerAdapterConfig - Adapter registration helper.
-   * @param {Function} options.getAdapterSelectors - Accessor for adapter selectors.
-   * @param {Function} options.getAdapterMetadata - Accessor for adapter metadata.
-   * @param {Function} options.listAdapterNames - Lists registered adapter identifiers.
-   * @param {Function} options.createGenitAdapter - Factory for Genit adapter.
-   * @param {object} [options.errorHandler] - Optional error handler for logging.
-   * @param {Function} options.getPlayerNames - Retrieves configured player names.
-   * @param {Function} options.setPlayerNames - Persists player names.
-   * @param {Array<string>} options.PLAYER_NAME_FALLBACKS - Default player name list.
-   * @returns {object} Adapter utilities bound to the GMH namespace.
-   */
-  function composeAdapters({
-    GMH,
-    adapterRegistry,
-    registerAdapterConfig,
-    getAdapterSelectors,
-    getAdapterMetadata,
-    listAdapterNames,
-    createGenitAdapter,
-    errorHandler,
-    getPlayerNames,
-    setPlayerNames,
-    PLAYER_NAME_FALLBACKS,
-  }) {
-    GMH.Adapters = GMH.Adapters || {};
-    GMH.Core = GMH.Core || {};
-
-    GMH.Adapters.Registry = adapterRegistry;
-    GMH.Adapters.register = (name, config) => registerAdapterConfig(name, config);
-    GMH.Adapters.getSelectors = (name) => getAdapterSelectors(name);
-    GMH.Adapters.getMetadata = (name) => getAdapterMetadata(name);
-    GMH.Adapters.list = () => listAdapterNames();
-
-    registerGenitConfig(registerAdapterConfig);
-
-    const genitAdapter = createGenitAdapter({
-      registry: adapterRegistry,
-      getPlayerNames,
-      isPrologueBlock,
-      errorHandler,
-    });
-
-    GMH.Adapters.genit = genitAdapter;
-    GMH.Core.adapters = [genitAdapter];
-
-    const api = createAdapterAPI({
-      GMH,
-      errorHandler,
-      PLAYER_NAME_FALLBACKS,
-      setPlayerNames,
-      getPlayerNames,
-    });
-    api.updatePlayerNames();
-
-    return {
-      genitAdapter,
-      ...api,
-    };
-  }
-
-  /**
-   * Builds the privacy configuration pipeline and persistence store.
-   *
-   * @param {object} options - Dependency container.
-   * @param {Function} options.createPrivacyStore - Factory for privacy store.
-   * @param {Function} options.createPrivacyPipeline - Factory for redaction pipeline.
-   * @param {object} options.PRIVACY_PROFILES - Available privacy profile definitions.
-   * @param {string} options.DEFAULT_PRIVACY_PROFILE - Default profile key.
-   * @param {Function} options.collapseSpaces - Text normaliser.
-   * @param {Function} options.privacyRedactText - Redaction function.
-   * @param {Function} options.hasMinorSexualContext - Minor detection helper.
-   * @param {Function} options.getPlayerNames - Player name accessor.
-   * @param {object} options.ENV - Environment shims (console/storage).
-   * @param {object} options.errorHandler - Error handler instance.
-   * @returns {object} Privacy helpers bound to runtime configuration.
-   */
-  function composePrivacy({
-    createPrivacyStore,
-    createPrivacyPipeline,
-    PRIVACY_PROFILES,
-    DEFAULT_PRIVACY_PROFILE,
-    collapseSpaces,
-    privacyRedactText,
-    hasMinorSexualContext,
-    getPlayerNames,
-    ENV,
-    errorHandler,
-  }) {
-    const privacyStore = createPrivacyStore({
-      storage: ENV.localStorage,
-      errorHandler,
-      collapseSpaces,
-      defaultProfile: DEFAULT_PRIVACY_PROFILE,
-      profiles: PRIVACY_PROFILES,
-    });
-
-    const privacyConfig = privacyStore.config;
-
-    const setPrivacyProfile = (profileKey) => {
-      privacyStore.setProfile(profileKey);
-      return privacyConfig.profile;
-    };
-
-    const setCustomList = (type, items) => {
-      privacyStore.setCustomList(type, items);
-      return privacyConfig;
-    };
-
-    const boundRedactText = (text, profileKey, counts) =>
-      privacyRedactText(text, profileKey, counts, privacyConfig, PRIVACY_PROFILES);
-
-    const { applyPrivacyPipeline } = createPrivacyPipeline({
-      profiles: PRIVACY_PROFILES,
-      getConfig: () => privacyConfig,
-      redactText: boundRedactText,
-      hasMinorSexualContext,
-      getPlayerNames,
-      logger: ENV.console,
-      storage: ENV.localStorage,
-    });
-
-    return {
-      privacyStore,
-      privacyConfig,
-      setPrivacyProfile,
-      setCustomList,
-      applyPrivacyPipeline,
-      boundRedactText,
-    };
-  }
-
-  function cloneSession(session) {
-    const clonedTurns = Array.isArray(session?.turns)
-      ? session.turns.map((turn) => {
-          const clone = { ...turn };
-          if (Array.isArray(turn.__gmhEntries)) {
-            Object.defineProperty(clone, '__gmhEntries', {
-              value: turn.__gmhEntries.slice(),
-              enumerable: false,
-              writable: true,
-              configurable: true,
-            });
-          }
-          if (Array.isArray(turn.__gmhSourceBlocks)) {
-            Object.defineProperty(clone, '__gmhSourceBlocks', {
-              value: turn.__gmhSourceBlocks.slice(),
-              enumerable: false,
-              writable: true,
-              configurable: true,
-            });
-          }
-          return clone;
-        })
-      : [];
-    return {
-      meta: { ...(session?.meta || {}) },
-      turns: clonedTurns,
-      warnings: Array.isArray(session?.warnings) ? [...session.warnings] : [],
-      source: session?.source,
-    };
-  }
-
-  function collectSessionStats(session) {
-    if (!session) return { userMessages: 0, llmMessages: 0, totalMessages: 0, warnings: 0 };
-    const userMessages = session.turns?.filter((turn) => turn.channel === 'user')?.length || 0;
-    const llmMessages = session.turns?.filter((turn) => turn.channel === 'llm')?.length || 0;
-    const totalMessages = session.turns?.length || 0;
-    const warnings = session.warnings?.length || 0;
-    return { userMessages, llmMessages, totalMessages, warnings };
-  }
-
-  /**
-   * Wires the share workflow with grouped dependencies returned from index.
-   *
-   * @param {object} options - Dependency container.
-   * @param {Function} options.createShareWorkflow - Share workflow factory.
-   * @param {Function} options.captureStructuredSnapshot - Structured snapshot capture helper.
-   * @param {Function} options.normalizeTranscript - Transcript normaliser.
-   * @param {Function} options.buildSession - Session builder.
-   * @param {object} options.exportRange - Export range controller.
-   * @param {Function} options.projectStructuredMessages - Structured message projector.
-   * @param {Function} options.applyPrivacyPipeline - Privacy pipeline executor.
-   * @param {object} options.privacyConfig - Active privacy configuration reference.
-   * @param {object} options.privacyProfiles - Supported privacy profiles.
-   * @param {Function} options.formatRedactionCounts - Formatter for redaction metrics.
-   * @param {Function} options.setPanelStatus - Panel status setter.
-   * @param {Function} options.toMarkdownExport - Classic markdown exporter.
-   * @param {Function} options.toJSONExport - Classic JSON exporter.
-   * @param {Function} options.toTXTExport - Classic TXT exporter.
-   * @param {Function} options.toStructuredMarkdown - Structured markdown exporter.
-   * @param {Function} options.toStructuredJSON - Structured JSON exporter.
-   * @param {Function} options.toStructuredTXT - Structured TXT exporter.
-   * @param {Function} options.buildExportBundle - Bundle builder.
-   * @param {Function} options.buildExportManifest - Manifest builder.
-   * @param {Function} options.triggerDownload - Download helper.
-   * @param {object} options.clipboard - Clipboard helpers.
-   * @param {object} options.stateApi - State manager API.
-   * @param {object} options.stateEnum - State enum reference.
-   * @param {Function} options.confirmPrivacyGate - Privacy confirmation helper.
-   * @param {Function} options.getEntryOrigin - Entry origin accessor.
-   * @param {object} options.logger - Logger implementation.
-   * @returns {object} Share workflow API with helper statistics.
-   */
-  function composeShareWorkflow({
-    createShareWorkflow,
-    captureStructuredSnapshot,
-    normalizeTranscript,
-    buildSession,
-    exportRange,
-    projectStructuredMessages,
-    applyPrivacyPipeline,
-    privacyConfig,
-    privacyProfiles,
-    formatRedactionCounts,
-    setPanelStatus,
-    toMarkdownExport,
-    toJSONExport,
-    toTXTExport,
-    toStructuredMarkdown,
-    toStructuredJSON,
-    toStructuredTXT,
-    buildExportBundle,
-    buildExportManifest,
-    triggerDownload,
-    clipboard,
-    stateApi,
-    stateEnum,
-    confirmPrivacyGate,
-    getEntryOrigin,
-    logger,
-  }) {
-    const shareApi = createShareWorkflow({
-      captureStructuredSnapshot,
-      normalizeTranscript,
-      buildSession,
-      exportRange,
-      projectStructuredMessages,
-      cloneSession,
-      applyPrivacyPipeline,
-      privacyConfig,
-      privacyProfiles,
-      formatRedactionCounts,
-      setPanelStatus,
-      toMarkdownExport,
-      toJSONExport,
-      toTXTExport,
-      toStructuredMarkdown,
-      toStructuredJSON,
-      toStructuredTXT,
-      buildExportBundle,
-      buildExportManifest,
-      triggerDownload,
-      clipboard,
-      stateApi,
+    const modal = createModal({ documentRef, windowRef });
+    GMH.UI.Modal = modal;
+
+    const panelVisibility = createPanelVisibility({
+      panelSettings: PanelSettings,
       stateEnum,
-      confirmPrivacyGate,
-      getEntryOrigin,
-      collectSessionStats,
-      logger,
+      stateApi: stateManager,
+      modal,
+      documentRef,
+      windowRef,
+      storage: ENV.localStorage,
+      logger: ENV.console,
+    });
+
+    const statusManager = createStatusManager({ panelVisibility });
+    const { setStatus: setPanelStatus, attachStatusElement } = statusManager;
+
+    const stateView = createStateView({
+      stateApi: stateManager,
+      statusManager,
+      stateEnum,
+    });
+    GMH.UI.StateView = stateView;
+
+    const { configurePrivacyLists } = createPrivacyConfigurator({
+      privacyConfig,
+      setCustomList,
+      parseListInput,
+      setPanelStatus,
+      modal,
+      isModernUIActive,
+      documentRef,
+      windowRef,
+    });
+
+    const { openPanelSettings } = createPanelSettingsController({
+      panelSettings: PanelSettings,
+      modal,
+      setPanelStatus,
+      configurePrivacyLists,
+      documentRef,
     });
 
     return {
-      ...shareApi,
-      collectSessionStats,
+      modal,
+      panelVisibility,
+      statusManager,
+      setPanelStatus,
+      attachStatusElement,
+      stateView,
+      configurePrivacyLists,
+      openPanelSettings,
     };
+  }
+
+  /**
+   * Sets up panel mounting, boot sequencing, teardown hooks, and mutation observer.
+   *
+   * @param {object} options - Dependency container.
+   * @param {Document} options.documentRef - Document handle.
+   * @param {Window} options.windowRef - Window handle.
+   * @param {Function} options.mountPanelModern - Modern panel mount function.
+   * @param {Function} options.mountPanelLegacy - Legacy panel mount function.
+   * @param {Function} options.isModernUIActive - Getter describing whether modern UI is active.
+   * @param {object} options.Flags - Feature flags.
+   * @param {object} options.errorHandler - Error handler instance.
+   * @param {object} options.messageIndexer - Message indexer reference.
+   * @param {object} options.bookmarkListener - Bookmark listener reference.
+   */
+  function setupBootstrap({
+    documentRef,
+    windowRef,
+    mountPanelModern,
+    mountPanelLegacy,
+    isModernUIActive,
+    Flags,
+    errorHandler,
+    messageIndexer,
+    bookmarkListener,
+  }) {
+    const doc = documentRef;
+    const win = windowRef;
+    const MutationObserverCtor = win.MutationObserver || globalThis.MutationObserver;
+    const requestFrame = typeof win.requestAnimationFrame === 'function'
+      ? win.requestAnimationFrame.bind(win)
+      : (cb) => setTimeout(cb, 16);
+
+    let panelMounted = false;
+    let bootInProgress = false;
+    let observerScheduled = false;
+
+    const mountPanel = () => {
+      if (isModernUIActive()) {
+        mountPanelModern();
+      } else {
+        if (Flags.killSwitch) {
+          const level = errorHandler.LEVELS?.INFO || 'info';
+          errorHandler.handle('modern UI disabled by kill switch', 'ui/panel', level);
+        }
+        mountPanelLegacy();
+      }
+    };
+
+    const boot = () => {
+      if (panelMounted || bootInProgress) return;
+      bootInProgress = true;
+      try {
+        mountPanel();
+        messageIndexer?.start?.();
+        bookmarkListener?.start?.();
+        panelMounted = Boolean(doc.querySelector('#genit-memory-helper-panel'));
+      } catch (e) {
+        const level = errorHandler.LEVELS?.ERROR || 'error';
+        errorHandler.handle(e, 'ui/panel', level);
+      } finally {
+        bootInProgress = false;
+      }
+    };
+
+    const registerReadyHook = () => {
+      if (doc.readyState === 'complete' || doc.readyState === 'interactive') {
+        setTimeout(boot, 1200);
+      } else {
+        win.addEventListener('DOMContentLoaded', () => setTimeout(boot, 1200));
+      }
+    };
+
+    const registerTeardown = () => {
+      if (win.__GMHTeardownHook) return;
+      const teardown = () => {
+        panelMounted = false;
+        bootInProgress = false;
+        try {
+          bookmarkListener?.stop?.();
+        } catch (err) {
+          const level = errorHandler.LEVELS?.WARN || 'warn';
+          errorHandler.handle(err, 'bookmark', level);
+        }
+        try {
+          messageIndexer?.stop?.();
+        } catch (err) {
+          const level = errorHandler.LEVELS?.WARN || 'warn';
+          errorHandler.handle(err, 'adapter', level);
+        }
+      };
+      win.addEventListener('pagehide', teardown);
+      win.addEventListener('beforeunload', teardown);
+      win.__GMHTeardownHook = true;
+    };
+
+    const registerMutationObserver = () => {
+      if (!MutationObserverCtor) return;
+      const observer = new MutationObserverCtor(() => {
+        if (observerScheduled || bootInProgress) return;
+        observerScheduled = true;
+        requestFrame(() => {
+          observerScheduled = false;
+          const panelNode = doc.querySelector('#genit-memory-helper-panel');
+          if (panelNode) {
+            panelMounted = true;
+            return;
+          }
+          panelMounted = false;
+          boot();
+        });
+      });
+      observer.observe(doc.documentElement || doc.body, { subtree: true, childList: true });
+    };
+
+    registerReadyHook();
+    registerTeardown();
+    registerMutationObserver();
+
+    return { boot, mountPanel };
   }
 
   (function () {
@@ -9159,11 +9469,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     const buildExportManifest$1 = (params) =>
       buildExportManifest({ ...params, version: GMH.VERSION });
 
-    const toJSONExportLegacy = (session, normalizedRaw, options = {}) =>
-      toJSONExport(session, normalizedRaw, {
-        playerNames: getPlayerNames(),
-        ...options,
-      });
+    const toJSONExportLegacy = withPlayerNames(getPlayerNames, toJSONExport);
 
     const toStructuredMarkdownLegacy = (options = {}) =>
       toStructuredMarkdown({
@@ -9354,27 +9660,29 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       setCustomListInternal(type, items);
     };
 
-    GMH.UI.Modal = createModal({ documentRef: document, windowRef: PAGE_WINDOW });
-
-    const PanelVisibility = createPanelVisibility({
-      panelSettings: PanelSettings,
-      stateEnum: GMH_STATE,
-      stateApi: stateManager,
-      modal: GMH.UI.Modal,
+    const {
+      panelVisibility: PanelVisibility,
+      setPanelStatus,
+      attachStatusElement,
+      stateView,
+      configurePrivacyLists,
+      openPanelSettings,
+    } = composeUI({
+      GMH,
       documentRef: document,
       windowRef: PAGE_WINDOW,
-      storage: ENV.localStorage,
-      logger: ENV.console,
-    });
-
-    const statusManager = createStatusManager({ panelVisibility: PanelVisibility });
-    const { setStatus: setPanelStatus, attachStatusElement } = statusManager;
-
-    GMH.UI.StateView = createStateView({
-      stateApi: stateManager,
-      statusManager,
+      PanelSettings,
+      stateManager,
       stateEnum: GMH_STATE,
+      ENV,
+      privacyConfig: PRIVACY_CFG,
+      privacyProfiles: PRIVACY_PROFILES,
+      setCustomList,
+      parseListInput,
+      isModernUIActive: () => isModernUIActive,
     });
+
+    GMH.UI.StateView = stateView;
 
     const { describeNode, downloadDomSnapshot } = createSnapshotFeature({
       getActiveAdapter: () => getActiveAdapter(),
@@ -9383,25 +9691,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       errorHandler: GMH.Core.ErrorHandler,
       documentRef: document,
       locationRef: location,
-    });
-
-    const { configurePrivacyLists } = createPrivacyConfigurator({
-      privacyConfig: PRIVACY_CFG,
-      setCustomList,
-      parseListInput,
-      setPanelStatus,
-      modal: GMH.UI.Modal,
-      isModernUIActive: () => isModernUIActive,
-      documentRef: document,
-      windowRef: PAGE_WINDOW,
-    });
-
-    const { openPanelSettings } = createPanelSettingsController({
-      panelSettings: PanelSettings,
-      modal: GMH.UI.Modal,
-      setPanelStatus,
-      configurePrivacyLists,
-      documentRef: document,
     });
 
     const {
@@ -9600,89 +9889,17 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       stateView: GMH.UI.StateView,
       bindPanelInteractions,
     });
-    // -------------------------------
-    // 2) Writers handled via src/export modules
-    // -------------------------------
-
-
-    function mountPanel() {
-      if (isModernUIActive) {
-        mountPanelModern();
-      } else {
-        if (Flags.killSwitch) {
-          const level = errorHandler.LEVELS?.INFO || 'info';
-          errorHandler.handle('modern UI disabled by kill switch', 'ui/panel', level);
-        }
-        mountPanelLegacy();
-      }
-    }
-
-    // -------------------------------
-    // 5) Boot
-    // -------------------------------
-    let panelMounted = false;
-    let bootInProgress = false;
-
-    function boot() {
-      if (panelMounted || bootInProgress) return;
-      bootInProgress = true;
-      try {
-        mountPanel();
-        GMH.Core.MessageIndexer.start();
-        bookmarkListener.start();
-        panelMounted = Boolean(document.querySelector('#genit-memory-helper-panel'));
-      } catch (e) {
-        const level = errorHandler.LEVELS?.ERROR || 'error';
-        errorHandler.handle(e, 'ui/panel', level);
-      } finally {
-        bootInProgress = false;
-      }
-    }
-
-    if (document.readyState === 'complete' || document.readyState === 'interactive') {
-      setTimeout(boot, 1200);
-    } else {
-      window.addEventListener('DOMContentLoaded', () => setTimeout(boot, 1200));
-    }
-
-    if (!PAGE_WINDOW.__GMHTeardownHook) {
-      const teardown = () => {
-        panelMounted = false;
-        bootInProgress = false;
-        try {
-          bookmarkListener.stop();
-        } catch (err) {
-          const level = errorHandler.LEVELS?.WARN || 'warn';
-          errorHandler.handle(err, 'bookmark', level);
-        }
-        try {
-          messageIndexer.stop();
-        } catch (err) {
-          const level = errorHandler.LEVELS?.WARN || 'warn';
-          errorHandler.handle(err, 'adapter', level);
-        }
-      };
-      window.addEventListener('pagehide', teardown);
-      window.addEventListener('beforeunload', teardown);
-      PAGE_WINDOW.__GMHTeardownHook = true;
-    }
-
-    let moScheduled = false;
-    const mo = new MutationObserver(() => {
-      if (moScheduled || bootInProgress) return;
-      moScheduled = true;
-      requestAnimationFrame(() => {
-        moScheduled = false;
-        const panelNode = document.querySelector('#genit-memory-helper-panel');
-        if (panelNode) {
-          panelMounted = true;
-          return;
-        }
-        panelMounted = false;
-        boot();
-      });
+    const { mountPanel } = setupBootstrap({
+      documentRef: document,
+      windowRef: PAGE_WINDOW,
+      mountPanelModern,
+      mountPanelLegacy,
+      isModernUIActive: () => isModernUIActive,
+      Flags,
+      errorHandler,
+      messageIndexer,
+      bookmarkListener,
     });
-    mo.observe(document.documentElement, { subtree: true, childList: true });
 
     if (!PAGE_WINDOW.__GMHTest) {
       Object.defineProperty(PAGE_WINDOW, '__GMHTest', {

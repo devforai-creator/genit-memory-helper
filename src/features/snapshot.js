@@ -26,6 +26,9 @@ const createDescribeNode = (documentRef) => {
   };
 };
 
+/**
+ * Produces utilities for capturing DOM snapshots for diagnostics/export workflows.
+ */
 export function createSnapshotFeature({
   getActiveAdapter,
   triggerDownload,
@@ -76,6 +79,9 @@ export function createSnapshotFeature({
   };
 }
 
+/**
+ * Caches structured transcript snapshots, exposing helpers used by share/export flows.
+ */
 export function createStructuredSnapshotReader({
   getActiveAdapter,
   setEntryOriginProvider,

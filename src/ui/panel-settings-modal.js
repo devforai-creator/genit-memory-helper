@@ -1,5 +1,8 @@
 import { ensureDesignSystemStyles } from './styles.js';
 
+/**
+ * Provides the modal workflow for editing panel settings and privacy lists.
+ */
 export function createPanelSettingsController({
   panelSettings,
   modal,

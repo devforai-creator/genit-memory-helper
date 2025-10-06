@@ -1,5 +1,11 @@
 import { DEFAULT_PRIVACY_PROFILE, PRIVACY_PROFILES } from './constants.js';
 
+/**
+ * @typedef {import('../../types/api').PrivacyPipelineDependencies} PrivacyPipelineDependencies
+ * @typedef {import('../../types/api').PrivacyPipelineApi} PrivacyPipelineApi
+ * @typedef {import('../../types/api').PrivacyPipelineResult} PrivacyPipelineResult
+ */
+
 const cloneTurns = (turns = []) =>
   Array.isArray(turns)
     ? turns.map((turn) => {
@@ -100,6 +106,12 @@ const sanitizeStructuredSnapshot = (snapshot, profileKey, counts, redactText) =>
   };
 };
 
+/**
+ * Builds the privacy pipeline that redacts content according to active profile policies.
+ *
+ * @param {PrivacyPipelineDependencies} [options]
+ * @returns {PrivacyPipelineApi}
+ */
 export const createPrivacyPipeline = ({
   profiles = PRIVACY_PROFILES,
   getConfig,
@@ -108,16 +120,25 @@ export const createPrivacyPipeline = ({
   getPlayerNames = () => [],
   logger = null,
   storage = null,
-} = {}) => {
+} = /** @type {PrivacyPipelineDependencies} */ ({})) => {
   if (typeof redactText !== 'function') {
     throw new Error('createPrivacyPipeline: redactText function is required');
   }
 
   const getProfileKey = (profileKey) => (profiles[profileKey] ? profileKey : DEFAULT_PRIVACY_PROFILE);
 
+  /**
+   * Applies sanitization to both raw strings and structured snapshots.
+   *
+   * @param {import('../../types/api').TranscriptSession} session
+   * @param {string} rawText
+   * @param {string} profileKey
+   * @param {import('../../types/api').StructuredSnapshot | null} [structuredSnapshot]
+   * @returns {PrivacyPipelineResult}
+   */
   const applyPrivacyPipeline = (session, rawText, profileKey, structuredSnapshot = null) => {
     const activeProfile = getProfileKey(profileKey);
-    const counts = {};
+    const counts = /** @type {Record<string, number>} */ ({});
     const config = typeof getConfig === 'function' ? getConfig() : undefined;
 
     const boundRedact = (value, targetProfile, targetCounts) =>

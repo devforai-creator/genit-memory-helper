@@ -55,16 +55,11 @@ import {
 } from './utils/text.js';
 import { sleep, triggerDownload, isScrollable } from './utils/dom.js';
 import { luhnValid } from './utils/validation.js';
+import { withPlayerNames } from './utils/factories.js';
 import { ensureLegacyPreviewStyles, ensureDesignSystemStyles } from './ui/styles.js';
-import { createModal } from './ui/modal.js';
 import { createPanelSettings } from './ui/panel-settings.js';
-import { createPanelVisibility } from './ui/panel-visibility.js';
-import { createStatusManager } from './ui/status-manager.js';
-import { createStateView } from './ui/state-view.js';
 import { createSnapshotFeature, createStructuredSnapshotReader } from './features/snapshot.js';
-import { createPanelSettingsController } from './ui/panel-settings-modal.js';
 import { createAutoLoader } from './features/auto-loader.js';
-import { createPrivacyConfigurator } from './ui/privacy-config.js';
 import { createAutoLoaderControls } from './ui/auto-loader-controls.js';
 import { createRangeControls } from './ui/range-controls.js';
 import { createPanelShortcuts } from './ui/panel-shortcuts.js';
@@ -78,6 +73,8 @@ import { createGuideControls } from './ui/guide-controls.js';
 import { composeAdapters } from './composition/adapter-composition.js';
 import { composePrivacy } from './composition/privacy-composition.js';
 import { composeShareWorkflow } from './composition/share-composition.js';
+import { composeUI } from './composition/ui-composition.js';
+import { setupBootstrap } from './composition/bootstrap.js';
 import { CONFIG } from './config.js';
 
 (function () {
@@ -132,11 +129,7 @@ import { CONFIG } from './config.js';
   const buildExportManifest = (params) =>
     buildExportManifestStandalone({ ...params, version: GMH.VERSION });
 
-  const toJSONExportLegacy = (session, normalizedRaw, options = {}) =>
-    toJSONExport(session, normalizedRaw, {
-      playerNames: getPlayerNames(),
-      ...options,
-    });
+  const toJSONExportLegacy = withPlayerNames(getPlayerNames, toJSONExport);
 
   const toStructuredMarkdownLegacy = (options = {}) =>
     toStructuredMarkdown({
@@ -334,27 +327,30 @@ import { CONFIG } from './config.js';
     setCustomListInternal(type, items);
   };
 
-  GMH.UI.Modal = createModal({ documentRef: document, windowRef: PAGE_WINDOW });
-
-  const PanelVisibility = createPanelVisibility({
-    panelSettings: PanelSettings,
-    stateEnum: GMH_STATE,
-    stateApi: stateManager,
-    modal: GMH.UI.Modal,
+  const {
+    panelVisibility: PanelVisibility,
+    statusManager,
+    setPanelStatus,
+    attachStatusElement,
+    stateView,
+    configurePrivacyLists,
+    openPanelSettings,
+  } = composeUI({
+    GMH,
     documentRef: document,
     windowRef: PAGE_WINDOW,
-    storage: ENV.localStorage,
-    logger: ENV.console,
-  });
-
-  const statusManager = createStatusManager({ panelVisibility: PanelVisibility });
-  const { setStatus: setPanelStatus, attachStatusElement } = statusManager;
-
-  GMH.UI.StateView = createStateView({
-    stateApi: stateManager,
-    statusManager,
+    PanelSettings,
+    stateManager,
     stateEnum: GMH_STATE,
+    ENV,
+    privacyConfig: PRIVACY_CFG,
+    privacyProfiles: PRIVACY_PROFILES,
+    setCustomList,
+    parseListInput,
+    isModernUIActive: () => isModernUIActive,
   });
+
+  GMH.UI.StateView = stateView;
 
   const { describeNode, downloadDomSnapshot } = createSnapshotFeature({
     getActiveAdapter: () => getActiveAdapter(),
@@ -363,25 +359,6 @@ import { CONFIG } from './config.js';
     errorHandler: GMH.Core.ErrorHandler,
     documentRef: document,
     locationRef: location,
-  });
-
-  const { configurePrivacyLists } = createPrivacyConfigurator({
-    privacyConfig: PRIVACY_CFG,
-    setCustomList,
-    parseListInput,
-    setPanelStatus,
-    modal: GMH.UI.Modal,
-    isModernUIActive: () => isModernUIActive,
-    documentRef: document,
-    windowRef: PAGE_WINDOW,
-  });
-
-  const { openPanelSettings } = createPanelSettingsController({
-    panelSettings: PanelSettings,
-    modal: GMH.UI.Modal,
-    setPanelStatus,
-    configurePrivacyLists,
-    documentRef: document,
   });
 
   const {
@@ -581,89 +558,17 @@ import { CONFIG } from './config.js';
     stateView: GMH.UI.StateView,
     bindPanelInteractions,
   });
-  // -------------------------------
-  // 2) Writers handled via src/export modules
-  // -------------------------------
-
-
-  function mountPanel() {
-    if (isModernUIActive) {
-      mountPanelModern();
-    } else {
-      if (Flags.killSwitch) {
-        const level = errorHandler.LEVELS?.INFO || 'info';
-        errorHandler.handle('modern UI disabled by kill switch', 'ui/panel', level);
-      }
-      mountPanelLegacy();
-    }
-  }
-
-  // -------------------------------
-  // 5) Boot
-  // -------------------------------
-  let panelMounted = false;
-  let bootInProgress = false;
-
-  function boot() {
-    if (panelMounted || bootInProgress) return;
-    bootInProgress = true;
-    try {
-      mountPanel();
-      GMH.Core.MessageIndexer.start();
-      bookmarkListener.start();
-      panelMounted = Boolean(document.querySelector('#genit-memory-helper-panel'));
-    } catch (e) {
-      const level = errorHandler.LEVELS?.ERROR || 'error';
-      errorHandler.handle(e, 'ui/panel', level);
-    } finally {
-      bootInProgress = false;
-    }
-  }
-
-  if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    setTimeout(boot, 1200);
-  } else {
-    window.addEventListener('DOMContentLoaded', () => setTimeout(boot, 1200));
-  }
-
-  if (!PAGE_WINDOW.__GMHTeardownHook) {
-    const teardown = () => {
-      panelMounted = false;
-      bootInProgress = false;
-      try {
-        bookmarkListener.stop();
-      } catch (err) {
-        const level = errorHandler.LEVELS?.WARN || 'warn';
-        errorHandler.handle(err, 'bookmark', level);
-      }
-      try {
-        messageIndexer.stop();
-      } catch (err) {
-        const level = errorHandler.LEVELS?.WARN || 'warn';
-        errorHandler.handle(err, 'adapter', level);
-      }
-    };
-    window.addEventListener('pagehide', teardown);
-    window.addEventListener('beforeunload', teardown);
-    PAGE_WINDOW.__GMHTeardownHook = true;
-  }
-
-  let moScheduled = false;
-  const mo = new MutationObserver(() => {
-    if (moScheduled || bootInProgress) return;
-    moScheduled = true;
-    requestAnimationFrame(() => {
-      moScheduled = false;
-      const panelNode = document.querySelector('#genit-memory-helper-panel');
-      if (panelNode) {
-        panelMounted = true;
-        return;
-      }
-      panelMounted = false;
-      boot();
-    });
+  const { boot, mountPanel } = setupBootstrap({
+    documentRef: document,
+    windowRef: PAGE_WINDOW,
+    mountPanelModern,
+    mountPanelLegacy,
+    isModernUIActive: () => isModernUIActive,
+    Flags,
+    errorHandler,
+    messageIndexer,
+    bookmarkListener,
   });
-  mo.observe(document.documentElement, { subtree: true, childList: true });
 
   if (!PAGE_WINDOW.__GMHTest) {
     Object.defineProperty(PAGE_WINDOW, '__GMHTest', {

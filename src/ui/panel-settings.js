@@ -1,5 +1,8 @@
 const PANEL_SETTINGS_STORAGE_KEY = 'gmh_panel_settings_v1';
 
+/**
+ * Creates the panel settings store with persistence, change notifications, and defaults.
+ */
 export function createPanelSettings({
   clone,
   deepMerge,

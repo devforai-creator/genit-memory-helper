@@ -7,7 +7,8 @@
   "scripts": {
     "build": "node scripts/build.js",
     "sync:version": "node scripts/sync-version.js",
-    "pretest": "npm run build",
+    "typecheck": "tsc --noEmit",
+    "pretest": "npm run typecheck && npm run build",
     "test": "vitest --run tests/unit --pool=threads --maxWorkers=1 --minWorkers=1",
     "test:unit": "vitest --run",
     "test:smoke": "playwright test",

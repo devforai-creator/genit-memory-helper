@@ -1,3 +1,6 @@
+/**
+ * Creates DOM bindings for export range selectors and bookmark integration.
+ */
 export function createRangeControls({
   documentRef = typeof document !== 'undefined' ? document : null,
   windowRef = typeof window !== 'undefined' ? window : null,
