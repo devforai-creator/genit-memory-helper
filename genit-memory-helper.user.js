@@ -2707,6 +2707,12 @@ var GMHBundle = (function (exports) {
     return entries.map(([key, value]) => `${key}:${value}`).join(', ');
   };
 
+  /**
+   * @typedef {import('../../types/api').PrivacyPipelineDependencies} PrivacyPipelineDependencies
+   * @typedef {import('../../types/api').PrivacyPipelineApi} PrivacyPipelineApi
+   * @typedef {import('../../types/api').PrivacyPipelineResult} PrivacyPipelineResult
+   */
+
   const cloneTurns = (turns = []) =>
     Array.isArray(turns)
       ? turns.map((turn) => {
@@ -2809,6 +2815,9 @@ var GMHBundle = (function (exports) {
 
   /**
    * Builds the privacy pipeline that redacts content according to active profile policies.
+   *
+   * @param {PrivacyPipelineDependencies} [options]
+   * @returns {PrivacyPipelineApi}
    */
   const createPrivacyPipeline = ({
     profiles = PRIVACY_PROFILES,
@@ -2818,16 +2827,25 @@ var GMHBundle = (function (exports) {
     getPlayerNames = () => [],
     logger = null,
     storage = null,
-  } = {}) => {
+  } = /** @type {PrivacyPipelineDependencies} */ ({})) => {
     if (typeof redactText !== 'function') {
       throw new Error('createPrivacyPipeline: redactText function is required');
     }
 
     const getProfileKey = (profileKey) => (profiles[profileKey] ? profileKey : DEFAULT_PRIVACY_PROFILE);
 
+    /**
+     * Applies sanitization to both raw strings and structured snapshots.
+     *
+     * @param {import('../../types/api').TranscriptSession} session
+     * @param {string} rawText
+     * @param {string} profileKey
+     * @param {import('../../types/api').StructuredSnapshot | null} [structuredSnapshot]
+     * @returns {PrivacyPipelineResult}
+     */
     const applyPrivacyPipeline = (session, rawText, profileKey, structuredSnapshot = null) => {
       const activeProfile = getProfileKey(profileKey);
-      const counts = {};
+      const counts = /** @type {Record<string, number>} */ ({});
       const config = typeof getConfig === 'function' ? getConfig() : undefined;
 
       const boundRedact = (value, targetProfile, targetCounts) =>
@@ -4408,11 +4426,19 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     };
   }
 
+  /**
+   * @typedef {import('../../types/api').AutoLoaderOptions} AutoLoaderOptions
+   * @typedef {import('../../types/api').AutoLoaderExports} AutoLoaderExports
+   */
+
   const METER_INTERVAL_MS = CONFIG.TIMING.AUTO_LOADER.METER_INTERVAL_MS;
 
   /**
    * Creates the auto-loader controller that scrolls and indexes Genit chat messages.
    * Handles profile-specific timing, range updates, and exposes helpers for UI wiring.
+   *
+   * @param {AutoLoaderOptions} [options]
+   * @returns {AutoLoaderExports}
    */
   function createAutoLoader({
     stateApi,
@@ -4425,12 +4451,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     sleep,
     isScrollable,
     documentRef = typeof document !== 'undefined' ? document : null,
-    windowRef = typeof window !== 'undefined' ? window : null,
+    windowRef = typeof window !== 'undefined' ? /** @type {Window & typeof globalThis} */ (window) : null,
     normalizeTranscript,
     buildSession,
     readTranscriptText,
     logger = typeof console !== 'undefined' ? console : null,
-  } = {}) {
+  } = /** @type {AutoLoaderOptions} */ ({})) {
     if (!stateApi || typeof stateApi.setState !== 'function') {
       throw new Error('createAutoLoader requires stateApi with setState');
     }
@@ -5717,8 +5743,17 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   }
 
   /**
+   * @typedef {import('../../types/api').ShareWorkflowOptions} ShareWorkflowOptions
+   * @typedef {import('../../types/api').ShareWorkflowApi} ShareWorkflowApi
+   * @typedef {import('../../types/api').PreparedShareResult} PreparedShareResult
+   */
+
+  /**
    * Builds the share/export workflow orchestrator used by the panel actions.
    * Validates injected dependencies so downstream flows remain resilient.
+   *
+   * @param {ShareWorkflowOptions} options
+   * @returns {ShareWorkflowApi}
    */
   function createShareWorkflow({
     captureStructuredSnapshot,
@@ -5809,6 +5844,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       },
     );
 
+    /**
+     * Rehydrates the latest transcript snapshot and updates range counters.
+     *
+     * @returns {{ session: import('../../types/api').TranscriptSession; raw: string; snapshot: import('../../types/api').StructuredSnapshot }}
+     */
     const parseAll = () => {
       const snapshot = captureStructuredSnapshot({ force: true });
       const raw = snapshot.legacyLines.join('\n');
@@ -5830,7 +5870,13 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       return { session, raw: normalized, snapshot };
     };
 
-    const prepareShare = async ({ confirmLabel, cancelStatusMessage, blockedStatusMessage }) => {
+    /**
+     * Applies privacy and range selections before export/copy operations.
+     *
+     * @param {{ confirmLabel?: string; cancelStatusMessage?: string; blockedStatusMessage?: string }} [options]
+     * @returns {Promise<PreparedShareResult | null>}
+     */
+    const prepareShare = async ({ confirmLabel, cancelStatusMessage, blockedStatusMessage } = {}) => {
       try {
         stateApi.setState(stateEnum.REDACTING, {
           label: '민감정보 마스킹 중',
@@ -5884,7 +5930,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         };
         const rangeInfo = selection?.info || exportRange?.describe?.(privacy.sanitizedSession.turns.length);
         const structuredSelection = projectStructuredMessages(privacy.structured, rangeInfo);
-        const exportSession = cloneSession(privacy.sanitizedSession);
+        const exportSession = /** @type {import('../../types/api').TranscriptSession} */ (
+          cloneSession(privacy.sanitizedSession)
+        );
         const entryOrigin = typeof getEntryOrigin === 'function' ? getEntryOrigin() : [];
         const selectedIndices = selection.indices?.length
           ? selection.indices
@@ -5892,23 +5940,25 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
         const selectedIndexSet = new Set(selectedIndices);
 
-        exportSession.turns = selectedIndices.map((index, localIndex) => {
-          const original = privacy.sanitizedSession.turns[index] || {};
-          const clone = { ...original };
-          Object.defineProperty(clone, '__gmhIndex', {
-            value: index,
-            enumerable: false,
-          });
-          Object.defineProperty(clone, '__gmhOrdinal', {
-            value: selection.ordinals?.[localIndex] ?? null,
-            enumerable: false,
-          });
-          Object.defineProperty(clone, '__gmhSourceBlock', {
-            value: entryOrigin[index] ?? null,
-            enumerable: false,
-          });
-          return clone;
-        });
+        exportSession.turns = /** @type {import('../../types/api').TranscriptTurn[]} */ (
+          selectedIndices.map((index, localIndex) => {
+            const original = privacy.sanitizedSession.turns[index] || {};
+            const clone = { ...original };
+            Object.defineProperty(clone, '__gmhIndex', {
+              value: index,
+              enumerable: false,
+            });
+            Object.defineProperty(clone, '__gmhOrdinal', {
+              value: selection.ordinals?.[localIndex] ?? null,
+              enumerable: false,
+            });
+            Object.defineProperty(clone, '__gmhSourceBlock', {
+              value: entryOrigin[index] ?? null,
+              enumerable: false,
+            });
+            return clone;
+          })
+        );
 
         exportSession.meta = {
           ...(exportSession.meta || {}),
@@ -5929,7 +5979,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
         const stats = collectSessionStats(exportSession);
         const overallStats = collectSessionStats(privacy.sanitizedSession);
-        const previewTurns = exportSession.turns.slice(-5);
+        const previewTurns = /** @type {import('../../types/api').TranscriptTurn[]} */ (
+          exportSession.turns.slice(-5)
+        );
         stateApi.setState(stateEnum.PREVIEW, {
           label: '미리보기 준비 완료',
           message: '레다크션 결과를 검토하세요.',
@@ -5981,6 +6033,13 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       }
     };
 
+    /**
+     * Executes the export flow for the selected format.
+     *
+     * @param {PreparedShareResult | null} prepared
+     * @param {string} format
+     * @returns {Promise<boolean>}
+     */
     const performExport = async (prepared, format) => {
       if (!prepared) return false;
       try {
@@ -6099,6 +6158,12 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       }
     };
 
+    /**
+     * Copies the last 15 sanitized turns to the clipboard.
+     *
+     * @param {ShareWorkflowApi['prepareShare']} prepareShareFn
+     * @returns {Promise<void>}
+     */
     const copyRecent = async (prepareShareFn) => {
       const prepared = await prepareShareFn({
         confirmLabel: '복사 계속',
@@ -6146,6 +6211,12 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       }
     };
 
+    /**
+     * Copies the full sanitized transcript to the clipboard.
+     *
+     * @param {ShareWorkflowApi['prepareShare']} prepareShareFn
+     * @returns {Promise<void>}
+     */
     const copyAll = async (prepareShareFn) => {
       const prepared = await prepareShareFn({
         confirmLabel: '복사 계속',
@@ -6188,6 +6259,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       }
     };
 
+    /**
+     * Forces a reparse cycle to refresh sanitized stats without exporting.
+     */
     const reparse = () => {
       try {
         stateApi.setState(stateEnum.REDACTING, {
@@ -7668,11 +7742,19 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
   }
 
   /**
-   * Creates the shared modal controller used across classic/modern panels.
+   * @typedef {import('../../types/api').ModalController} ModalController
+   * @typedef {import('../../types/api').ModalOpenOptions} ModalOpenOptions
    */
-  function createModal({ documentRef = typeof document !== 'undefined' ? document : null, windowRef = typeof window !== 'undefined' ? window : null } = {}) {
+
+  /**
+   * Creates the shared modal controller used across classic/modern panels.
+   *
+   * @param {{ documentRef?: Document | null; windowRef?: (Window & typeof globalThis) | null }} [options]
+   * @returns {ModalController}
+   */
+  function createModal({ documentRef = typeof document !== 'undefined' ? document : null, windowRef = typeof window !== 'undefined' ? /** @type {Window & typeof globalThis} */ (window) : null } = {}) {
     const doc = documentRef;
-    const win = windowRef;
+    const win = /** @type {(Window & typeof globalThis) | null} */ (windowRef);
     if (!doc || !win) {
       return {
         open: async () => false,
@@ -7681,12 +7763,22 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       };
     }
 
-    const HTMLElementCtor = win.HTMLElement || (typeof HTMLElement !== 'undefined' ? HTMLElement : null);
-    const NodeCtor = win.Node || (typeof Node !== 'undefined' ? Node : null);
+    const HTMLElementCtor = /** @type {typeof HTMLElement | null} */ (
+      win.HTMLElement || (typeof HTMLElement !== 'undefined' ? HTMLElement : null)
+    );
+    const NodeCtor = /** @type {typeof Node | null} */ (
+      win.Node || (typeof Node !== 'undefined' ? Node : null)
+    );
 
     let activeModal = null;
     let modalIdCounter = 0;
 
+    /**
+     * Sanitises markup snippets before injecting them into the modal body.
+     *
+     * @param {string} markup
+     * @returns {DocumentFragment}
+     */
     const sanitizeMarkupFragment = (markup) => {
       const template = doc.createElement('template');
       template.innerHTML = String(markup ?? '');
@@ -7721,13 +7813,19 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       '[tabindex]:not([tabindex="-1"])',
     ].join(',');
 
+    /**
+     * @param {Element | null} root
+     * @returns {HTMLElement[]}
+     */
     const getFocusable = (root) => {
       if (!root) return [];
-      return Array.from(root.querySelectorAll(focusableSelector)).filter((el) => {
-        if (!(el instanceof HTMLElementCtor)) return false;
-        const style = win.getComputedStyle(el);
-        return style.visibility !== 'hidden' && style.display !== 'none';
-      });
+      return /** @type {HTMLElement[]} */ (
+        Array.from(root.querySelectorAll(focusableSelector)).filter((el) => {
+          if (!(HTMLElementCtor && el instanceof HTMLElementCtor)) return false;
+          const style = win.getComputedStyle(el);
+          return style.visibility !== 'hidden' && style.display !== 'none';
+        })
+      );
     };
 
     function buildButton(action, finalize) {
@@ -7759,7 +7857,13 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       }
     }
 
-    function open(options = {}) {
+    /**
+     * Opens a modal dialog with sanitized markup and focus trapping.
+     *
+     * @param {ModalOpenOptions} [options]
+     * @returns {Promise<unknown>}
+     */
+    function open(options = /** @type {ModalOpenOptions} */ ({})) {
       ensureDesignSystemStyles();
       closeActive(false);
 
@@ -7817,7 +7921,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         const body = doc.createElement('div');
         body.className = 'gmh-modal__body gmh-modal__body--scroll';
         if (options.bodyClass) body.classList.add(options.bodyClass);
-        if (options.content instanceof NodeCtor) {
+        if (NodeCtor && options.content instanceof NodeCtor) {
           body.appendChild(options.content);
         } else if (typeof options.content === 'string') {
           body.appendChild(sanitizeMarkupFragment(options.content));
@@ -7851,7 +7955,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         const bodyEl = doc.body;
         const prevOverflow = bodyEl.style.overflow;
         const restoreTarget =
-          doc.activeElement instanceof HTMLElementCtor ? doc.activeElement : null;
+          HTMLElementCtor && doc.activeElement instanceof HTMLElementCtor
+            ? /** @type {HTMLElement} */ (doc.activeElement)
+            : null;
         bodyEl.style.overflow = 'hidden';
         bodyEl.appendChild(overlay);
         overlay.setAttribute('role', 'presentation');
@@ -7902,8 +8008,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         doc.addEventListener('keydown', onKeydown, true);
 
         const initialSelector = options.initialFocus || '.gmh-button--primary';
-        let focusTarget = dialog.querySelector(initialSelector) ;
-        if (!(focusTarget instanceof HTMLElementCtor)) {
+        let focusTarget = /** @type {HTMLElement | null} */ (
+          dialog.querySelector(initialSelector) 
+        );
+        if (!(focusTarget && HTMLElementCtor && focusTarget instanceof HTMLElementCtor)) {
           const focusables = getFocusable(dialog);
           focusTarget = focusables[0] || closeBtn;
         }
