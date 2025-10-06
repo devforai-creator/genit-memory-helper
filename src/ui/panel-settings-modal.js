@@ -100,7 +100,7 @@ export function createPanelSettingsController({
         buildRow({
           id: 'gmh-settings-collapse-outside',
           label: '밖을 클릭하면 접기',
-          description: '패널 외부를 클릭하면 곧바로 접습니다.',
+          description: '패널 외부를 클릭하면 곧바로 접습니다. ⚠️ 모바일에서는 비활성화 권장',
           control: collapseOutsideToggle,
         }).row,
       );

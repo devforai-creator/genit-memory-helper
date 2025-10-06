@@ -1,19 +1,5 @@
 const PANEL_SETTINGS_STORAGE_KEY = 'gmh_panel_settings_v1';
 
-const isProbablyMobile = () => {
-  if (typeof navigator !== 'undefined') {
-    const ua = navigator.userAgent || navigator.vendor || navigator.platform || '';
-    if (/android|iphone|ipad|ipod/i.test(ua)) return true;
-  }
-  if (typeof window !== 'undefined') {
-    const coarse = window.matchMedia?.('(pointer:coarse)');
-    if (coarse?.matches) return true;
-    const smallViewport = window.matchMedia?.('(max-width: 768px)');
-    if (smallViewport?.matches) return true;
-  }
-  return false;
-};
-
 export function createPanelSettings({
   clone,
   deepMerge,
@@ -35,7 +21,7 @@ export function createPanelSettings({
     behavior: {
       autoHideEnabled: true,
       autoHideDelayMs: 10000,
-      collapseOnOutside: !isProbablyMobile(),
+      collapseOnOutside: false,
       collapseOnFocus: false,
       allowDrag: true,
       allowResize: true,
