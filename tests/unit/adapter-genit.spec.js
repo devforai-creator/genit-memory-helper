@@ -162,4 +162,60 @@ describe('Genit adapter narration handling', () => {
     const narrationPart = structured.parts.find((part) => part?.flavor === 'narration');
     expect(narrationPart?.lines || []).toContain('정적');
   });
+
+  it('detects player thought/action input via React props', () => {
+    const block = window.document.createElement('div');
+    block.setAttribute('data-message-id', 'player-thought-1');
+    // Simulate genit.ai structure: role="assistant" in React but player content
+    block.innerHTML = `
+      <div class="flex w-full">
+        <div class="w-full">
+          <div class="markdown-content text-muted-foreground text-sm">
+            <p>'현재 상황을 분석해보자. 나는 지금...' 나는 빠르게 상황을 파악한다.</p>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Mock React Fiber structure (genit.ai uses role="user" for player input)
+    const mockFiber = {
+      memoizedProps: {
+        message: {
+          id: 'player-thought-1',
+          role: 'user',
+          content: "'현재 상황을 분석해보자. 나는 지금...' 나는 빠르게 상황을 파악한다."
+        }
+      },
+      return: null
+    };
+
+    // Simulate React's __reactFiber property
+    Object.defineProperty(block, '__reactFiber$test', {
+      value: mockFiber,
+      enumerable: false,
+      configurable: true
+    });
+
+    const role = GMH.Adapters.genit.detectRole(block);
+    expect(role).toBe('player');
+  });
+
+  it('falls back to CSS detection when React props unavailable', () => {
+    const block = window.document.createElement('div');
+    block.setAttribute('data-message-id', 'player-normal');
+    // Standard player message with justify-end class
+    block.innerHTML = `
+      <div class="flex w-full justify-end">
+        <div class="flex flex-col items-end w-full space-y-3">
+          <div class="p-4 rounded-xl bg-background border border-border">
+            <p>일반 대사입니다.</p>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // No React Fiber props
+    const role = GMH.Adapters.genit.detectRole(block);
+    expect(role).toBe('player');
+  });
 });

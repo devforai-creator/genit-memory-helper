@@ -4,6 +4,37 @@
 
 - _No changes yet_
 
+## v1.10.0 (2025-10-07)
+
+### 버그 수정
+
+- **Player 생각/행동 입력 분류 오류 수정**: React props 기반 role 감지 추가
+  - **문제**: 유저가 생각/행동으로 입력한 메시지 21개가 `channel: "llm"`, `role: "narration"`으로 잘못 분류됨
+  - **원인**: genit.ai가 생각/행동 입력을 내부적으로 `role: "assistant"`로 저장하고 CSS 구조도 assistant처럼 렌더링 (`flex w-full`, `justify-end` 없음)
+  - **해결**: React Fiber에서 `message.role` 추출하는 `getReactMessage()` 함수 추가
+  - **영향**: 21개의 player 메시지가 올바르게 `channel: "user"`로 분류됨
+  - `src/adapters/genit.js:207-248` (getReactMessage + detectRole 수정)
+
+### 아키텍처 개선
+
+- **React Fiber 탐색 기능 추가**: genit.ai의 React 내부 상태를 안전하게 읽어 role을 판정
+  - `Object.getOwnPropertyNames()` 사용하여 non-enumerable React Fiber props 접근
+  - 최대 10단계 부모 노드 탐색으로 `message` prop 찾기
+  - CSS 폴백 유지로 React 구조 변경 시에도 동작 보장
+
+### 테스트 개선
+
+- Player 생각/행동 입력 감지 테스트 추가 (`tests/unit/adapter-genit.spec.js:166-220`)
+  - React props 모킹 테스트
+  - CSS 폴백 테스트
+- 전체 86개 테스트 통과
+
+### 문서
+
+- ROADMAP.md에 Phase 2 개선 사항 문서화
+  - 텍스트 휴리스틱 기반 백업 감지 로직 (향후 필요 시)
+  - React 구조 변경 대비 계획
+
 ## v1.9.0 (2025-10-07)
 
 ### 아키텍처 개선

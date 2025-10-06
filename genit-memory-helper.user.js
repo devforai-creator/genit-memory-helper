@@ -1539,8 +1539,55 @@ var GMHBundle = (function (exports) {
       return [];
     };
 
+    /**
+     * Extracts React message props from a DOM element via Fiber tree traversal.
+     * genit.ai stores user/assistant role in React props, which is more reliable
+     * than CSS classes for detecting player thought/action inputs.
+     * @param {Element} block - The message block element
+     * @returns {Object|null} - The message object with role/content, or null if not found
+     */
+    const getReactMessage = (block) => {
+      if (!block || typeof block !== 'object') return null;
+
+      // Try common React Fiber property patterns
+      // Use getOwnPropertyNames to catch non-enumerable properties (React Fiber is enumerable: false)
+      try {
+        const allKeys = Object.getOwnPropertyNames(block);
+        const fiberKeys = allKeys.filter(k => k.startsWith('__reactFiber'));
+        if (!fiberKeys.length) return null;
+
+        let fiber = block[fiberKeys[0]];
+        // Traverse up to 10 levels to find message props
+        for (let depth = 0; depth < 10 && fiber; depth++) {
+          const props = fiber.memoizedProps;
+          if (props && props.message && typeof props.message === 'object') {
+            return props.message;
+          }
+          fiber = fiber.return;
+        }
+      } catch (err) {
+        // Silently fail if property access throws
+      }
+      return null;
+    };
+
     const detectRole = (block) => {
       if (!block) return 'unknown';
+
+      // Phase 1: Check React props (genit.ai-specific)
+      // genit.ai stores player thought/action inputs as role="assistant" but
+      // renders them differently, so React props are more reliable than CSS
+      try {
+        const reactMessage = getReactMessage(block);
+        if (reactMessage && reactMessage.role) {
+          if (reactMessage.role === 'user') return 'player';
+          // assistant messages are handled by CSS checks below
+        }
+      } catch (err) {
+        // Silently fall back to CSS detection if React traversal fails
+      }
+
+      // Phase 2: CSS-based detection (fallback for non-React or structure changes)
       const hasPlayer = collectAll(selectors.playerScopes, block).length > 0;
       if (hasPlayer) return 'player';
       const hasNpc = collectAll(selectors.npcGroups, block).length > 0;

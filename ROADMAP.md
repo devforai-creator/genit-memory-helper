@@ -800,6 +800,53 @@ export const CONSTANTS = {
 
 ---
 
+## 🔮 Future Enhancements (향후 개선 사항)
+
+### Player Thought/Action Detection - Phase 2
+
+**현재 상태**: ✅ Phase 1 완료 (v1.10.0)
+- React props 기반 감지 구현 완료
+- genit.ai가 생각/행동 입력을 `role="user"`로 저장하는 것 확인
+- 21개의 잘못 분류된 player 메시지 수정됨
+
+**Phase 2 목표**: React 구조 변경 대비 백업 감지 로직
+**우선순위**: 🟢 LOW (React props 감지가 정상 동작하는 한 불필요)
+**예상 시간**: 3-4시간
+
+**필요한 경우**:
+- genit.ai가 React 구조를 변경했을 때
+- React Fiber 프로퍼티 명이 변경되었을 때
+- 다른 플랫폼 지원 추가 시
+
+**구현 방안**:
+```typescript
+// src/adapters/genit.js
+const detectPlayerThoughtAction = (block: Element): boolean => {
+  // 1. 텍스트 휴리스틱
+  const text = block.textContent || '';
+  const hasFirstPerson = /나는|내가|나의|나에게|나를/g.test(text);
+  const hasThoughtMarker = text.startsWith("'") || text.includes('💭');
+
+  // 2. muted 스타일 + 1인칭 조합
+  const hasMuted = block.querySelector('.text-muted-foreground') !== null;
+
+  return hasMuted && (hasFirstPerson || hasThoughtMarker);
+};
+```
+
+**테스트 계획**:
+- 생각/행동 입력 10개 샘플 수집
+- 1인칭 대명사 출현 빈도 분석
+- False positive 케이스 (NPC 1인칭 서술) 필터링
+
+**참고**:
+- 발견 일자: 2025-10-07
+- 이슈: 유저가 생각/행동으로 입력한 메시지가 `channel: "llm"`으로 분류됨
+- 원인: genit.ai가 내부적으로 `role: "assistant"`로 저장하지만, React props에는 `role: "user"` 포함
+- Phase 1 해결: `getReactMessage()` 함수로 React Fiber 탐색하여 정확한 role 추출
+
+---
+
 ## 📊 전체 요약
 
 ### 마일스톤별 성과 예측
