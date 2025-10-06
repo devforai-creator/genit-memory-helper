@@ -18,6 +18,8 @@ export function createPanelVisibility({
   const OPEN_CLASS = 'gmh-panel-open';
   const STORAGE_KEY = 'gmh_panel_collapsed';
   const MIN_GAP = 12;
+  const OUTSIDE_TOUCH_MAX_DISTANCE = 14;
+  const OUTSIDE_TOUCH_MAX_DURATION_MS = 450;
 
   const normalizeState = (value) => {
     if (!value) return null;
@@ -117,6 +119,8 @@ export function createPanelVisibility({
   let escapeKeyHandler = null;
   let panelListenersBound = false;
   let resizeScheduled = false;
+  let outsideTouchSession = null;
+  let outsidePointerTrackingBound = false;
   let currentState = stateEnum.IDLE;
   let userCollapsed = false;
   let persistedPreference = null;
@@ -339,19 +343,115 @@ export function createPanelVisibility({
     }
   };
 
+  const eventTargetsElement = (event, element) => {
+    if (!event || !element) return false;
+    if (typeof event.composedPath === 'function') {
+      const path = event.composedPath();
+      if (Array.isArray(path)) {
+        for (const node of path) {
+          if (node === element) return true;
+        }
+      }
+    }
+    const target = event.target;
+    if (target && typeof element.contains === 'function') {
+      try {
+        if (element.contains(target)) return true;
+      } catch (err) {
+        /* noop */
+      }
+    }
+    return false;
+  };
+
+  const removeOutsidePointerTracking = () => {
+    if (!outsidePointerTrackingBound) return;
+    doc.removeEventListener('pointermove', handleOutsidePointerMove);
+    doc.removeEventListener('pointerup', handleOutsidePointerUp);
+    doc.removeEventListener('pointercancel', handleOutsidePointerCancel);
+    outsidePointerTrackingBound = false;
+  };
+
+  const clearOutsideTouchSession = () => {
+    outsideTouchSession = null;
+    removeOutsidePointerTracking();
+  };
+
+  const ensureOutsidePointerTracking = () => {
+    if (outsidePointerTrackingBound) return;
+    doc.addEventListener('pointermove', handleOutsidePointerMove, { passive: true });
+    doc.addEventListener('pointerup', handleOutsidePointerUp, { passive: true });
+    doc.addEventListener('pointercancel', handleOutsidePointerCancel, { passive: true });
+    outsidePointerTrackingBound = true;
+  };
+
+  function handleOutsidePointerMove(event) {
+    if (!outsideTouchSession) return;
+    if (event.pointerId !== outsideTouchSession.pointerId) return;
+    const dx = event.clientX - outsideTouchSession.startX;
+    const dy = event.clientY - outsideTouchSession.startY;
+    if (Math.hypot(dx, dy) > OUTSIDE_TOUCH_MAX_DISTANCE) {
+      clearOutsideTouchSession();
+    }
+  }
+
+  function handleOutsidePointerUp(event) {
+    if (!outsideTouchSession) return;
+    if (event.pointerId !== outsideTouchSession.pointerId) return;
+    const pointerType = event.pointerType || outsideTouchSession.pointerType;
+    const now = typeof performance?.now === 'function' ? performance.now() : Date.now();
+    const duration = now - outsideTouchSession.startTime;
+    const dx = event.clientX - outsideTouchSession.startX;
+    const dy = event.clientY - outsideTouchSession.startY;
+    const distance = Math.hypot(dx, dy);
+    const remainedOutside =
+      !eventTargetsElement(event, panelEl) && !eventTargetsElement(event, fabEl);
+    const shouldClose =
+      remainedOutside &&
+      pointerType === outsideTouchSession.pointerType &&
+      distance <= OUTSIDE_TOUCH_MAX_DISTANCE &&
+      duration <= OUTSIDE_TOUCH_MAX_DURATION_MS;
+    clearOutsideTouchSession();
+    if (!shouldClose) return;
+    if (!isModernActive() || isCollapsed()) return;
+    if (modal?.isOpen?.()) return;
+    clearFocusMemory();
+    close('user');
+  }
+
+  function handleOutsidePointerCancel(event) {
+    if (!outsideTouchSession) return;
+    if (event.pointerId !== outsideTouchSession.pointerId) return;
+    clearOutsideTouchSession();
+  }
+
   const refreshOutsideHandler = () => {
     if (outsidePointerHandler) {
       doc.removeEventListener('pointerdown', outsidePointerHandler);
       outsidePointerHandler = null;
     }
+    clearOutsideTouchSession();
     if (!currentBehavior.collapseOnOutside) return;
     outsidePointerHandler = (event) => {
       if (!isModernActive()) return;
       if (isCollapsed()) return;
-      const target = event.target;
-      if (panelEl && panelEl.contains(target)) return;
-      if (fabEl && fabEl.contains(target)) return;
       if (modal?.isOpen?.()) return;
+      if (event.button && event.button !== 0) return;
+      if (eventTargetsElement(event, panelEl)) return;
+      if (eventTargetsElement(event, fabEl)) return;
+      const pointerType = event.pointerType || 'mouse';
+      if ((pointerType === 'touch' || pointerType === 'pen') && event.isPrimary !== false) {
+        const startTime = typeof performance?.now === 'function' ? performance.now() : Date.now();
+        outsideTouchSession = {
+          pointerId: event.pointerId,
+          pointerType,
+          startX: event.clientX,
+          startY: event.clientY,
+          startTime,
+        };
+        ensureOutsidePointerTracking();
+        return;
+      }
       clearFocusMemory();
       close('user');
     };
@@ -692,6 +792,7 @@ export function createPanelVisibility({
     fabEl && fabEl.setAttribute('aria-expanded', 'false');
     clearIdleTimer();
     clearFocusSchedules();
+    clearOutsideTouchSession();
     if (reason === 'user') {
       userCollapsed = true;
       persistCollapsed(true);
