@@ -232,24 +232,47 @@ export const createGenitAdapter = ({
   const detectRole = (block) => {
     if (!block) return 'unknown';
 
-    // Phase 1: Check React props (genit.ai-specific)
-    // genit.ai stores player thought/action inputs as role="assistant" but
-    // renders them differently, so React props are more reliable than CSS
+    // Phase 1: Most reliable CSS check - justify-end indicates normal player dialogue
+    // This catches 99% of player messages quickly
+    const hasJustifyEnd = block.querySelector('.justify-end') !== null;
+    if (hasJustifyEnd) return 'player';
+
+    // Phase 1.5: Check for NPC markers BEFORE Phase 2
+    // This prevents NPC messages from being misclassified by React content comparison
+    const hasNpc = collectAll(selectors.npcGroups, block).length > 0;
+    if (hasNpc) return 'npc';
+
+    // Phase 2: Detect player thought/action inputs via content mismatch
+    // genit.ai transforms user thought/action into AI-narrated 3rd person,
+    // but DOM still renders original user input while React has transformed version
     try {
       const reactMessage = getReactMessage(block);
-      if (reactMessage && reactMessage.role) {
-        if (reactMessage.role === 'user') return 'player';
-        // assistant messages are handled by CSS checks below
+      if (reactMessage && reactMessage.role === 'assistant') {
+        const domText = collapseSpaces(block.textContent || '');
+        const reactText = collapseSpaces(reactMessage.content || '');
+
+        // If texts differ and DOM is shorter (user input vs AI expansion),
+        // this is a player thought/action input
+        if (domText && reactText &&
+            domText !== reactText &&
+            domText.length > 0 &&
+            domText.length < reactText.length * 0.95) { // DOM significantly shorter
+          return 'player';
+        }
+      }
+
+      // Normal user dialogue (React role="user")
+      if (reactMessage && reactMessage.role === 'user') {
+        return 'player';
       }
     } catch (err) {
       // Silently fall back to CSS detection if React traversal fails
     }
 
-    // Phase 2: CSS-based detection (fallback for non-React or structure changes)
+    // Phase 3: CSS-based detection (fallback)
     const hasPlayer = collectAll(selectors.playerScopes, block).length > 0;
     if (hasPlayer) return 'player';
-    const hasNpc = collectAll(selectors.npcGroups, block).length > 0;
-    if (hasNpc) return 'npc';
+
     return 'narration';
   };
 

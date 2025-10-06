@@ -4,15 +4,43 @@
 
 - _No changes yet_
 
+## v1.10.1 (2025-10-07)
+
+### 버그 수정 (부분)
+
+- **Player 메시지 감지 개선 - NPC 오분류 방지**: NPC 체크를 React 비교 전으로 이동
+  - **문제**: v1.10.0 이후에도 일부 NPC 메시지가 player로 잘못 분류됨
+  - **원인**: Phase 2 (React 텍스트 비교)가 Phase 1.5 (NPC 체크)보다 먼저 실행
+  - **해결**: detectRole 로직 순서 재배치 (justify-end → NPC → React 비교 → CSS 폴백)
+  - **영향**: NPC 메시지 오분류 해결, 전체 86개 테스트 통과
+
+### 알려진 제한사항
+
+- **Player 메시지 감지 정확도: 73% (19/26)**
+  - genit.ai가 일부 user 메시지를 `role: "assistant"`로 저장
+  - `.justify-end` CSS 클래스 누락 케이스 존재
+  - DOM/React 텍스트가 동일한 경우 구분 불가
+  - **영향**: 7개 user 메시지가 `channel: "llm"`으로 분류됨 (ordinal 12, 20, 22, 30, 32, 40, 42)
+  - **대응**: ROADMAP.md에 상세 조사 결과 및 향후 개선 방향 문서화
+  - **사용자 영향**: 일반 export는 실용 가능, 통계 기반 기능 추가 시 주의 필요
+
+### 문서
+
+- ROADMAP.md "Player Message Detection - Known Limitations" 섹션 추가
+  - 3시간 조사 결과 및 시도한 모든 방법 기록
+  - Codex/Gemini 상담 내용 반영
+  - 향후 개선 방향: 사용자 수동 UI 추가 (우선순위 MEDIUM)
+
 ## v1.10.0 (2025-10-07)
 
-### 버그 수정
+### 버그 수정 (부분)
 
-- **Player 생각/행동 입력 분류 오류 수정**: React props 기반 role 감지 추가
-  - **문제**: 유저가 생각/행동으로 입력한 메시지 21개가 `channel: "llm"`, `role: "narration"`으로 잘못 분류됨
-  - **원인**: genit.ai가 생각/행동 입력을 내부적으로 `role: "assistant"`로 저장하고 CSS 구조도 assistant처럼 렌더링 (`flex w-full`, `justify-end` 없음)
-  - **해결**: React Fiber에서 `message.role` 추출하는 `getReactMessage()` 함수 추가
-  - **영향**: 21개의 player 메시지가 올바르게 `channel: "user"`로 분류됨
+- **Player 생각/행동 입력 분류 개선 시도**: React props 기반 role 감지 추가
+  - **문제**: 유저가 생각/행동으로 입력한 메시지가 `channel: "llm"`, `role: "narration"`으로 잘못 분류됨
+  - **원인**: genit.ai가 생각/행동 입력을 CSS 구조상 assistant처럼 렌더링 (`flex w-full`, `justify-end` 없음)
+  - **시도**: React Fiber에서 `message.role` 추출하는 `getReactMessage()` 함수 추가
+  - **결과**: 부분 해결 - 일부 user 메시지도 React에서 `role: "assistant"`로 저장되어 완전 해결 실패
+  - **후속**: v1.10.1에서 DOM/React 텍스트 비교 추가 (19/26 감지, 73% 정확도)
   - `src/adapters/genit.js:207-248` (getReactMessage + detectRole 수정)
 
 ### 아키텍처 개선

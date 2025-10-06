@@ -802,48 +802,78 @@ export const CONSTANTS = {
 
 ## 🔮 Future Enhancements (향후 개선 사항)
 
-### Player Thought/Action Detection - Phase 2
+### Player Message Detection - Known Limitations (v1.10.1)
 
-**현재 상태**: ✅ Phase 1 완료 (v1.10.0)
-- React props 기반 감지 구현 완료
-- genit.ai가 생각/행동 입력을 `role="user"`로 저장하는 것 확인
-- 21개의 잘못 분류된 player 메시지 수정됨
+**현재 상태**: ⚠️ **부분 해결** (73% 정확도)
+- v1.10.0: React props 감지 추가 → 실패 (일부 user도 `role: "assistant"`)
+- v1.10.1: DOM/React 텍스트 비교 추가 → 부분 성공 (19/26 감지)
+- **7개 누락**: genit.ai가 변환하지 않은 생각/행동 입력 + `.justify-end` 없는 일반 대화
 
-**Phase 2 목표**: React 구조 변경 대비 백업 감지 로직
-**우선순위**: 🟢 LOW (React props 감지가 정상 동작하는 한 불필요)
-**예상 시간**: 3-4시간
-
-**필요한 경우**:
-- genit.ai가 React 구조를 변경했을 때
-- React Fiber 프로퍼티 명이 변경되었을 때
-- 다른 플랫폼 지원 추가 시
-
-**구현 방안**:
-```typescript
-// src/adapters/genit.js
-const detectPlayerThoughtAction = (block: Element): boolean => {
-  // 1. 텍스트 휴리스틱
-  const text = block.textContent || '';
-  const hasFirstPerson = /나는|내가|나의|나에게|나를/g.test(text);
-  const hasThoughtMarker = text.startsWith("'") || text.includes('💭');
-
-  // 2. muted 스타일 + 1인칭 조합
-  const hasMuted = block.querySelector('.text-muted-foreground') !== null;
-
-  return hasMuted && (hasFirstPerson || hasThoughtMarker);
-};
+**문제 상황**:
+```
+전체 user 메시지: 26개
+├─ 감지 성공: 19개 (73%)
+│  ├─ .justify-end 있음: 12개 (일반 대화)
+│  └─ React 변환됨: 7개 (DOM < React, 생각/행동)
+└─ 누락: 7개 (27%)
+   ├─ ordinal 12, 20, 22, 30, 32: .justify-end 없는 일반 대화
+   └─ ordinal 40, 42: 변환 안된 생각/행동
 ```
 
-**테스트 계획**:
-- 생각/행동 입력 10개 샘플 수집
-- 1인칭 대명사 출현 빈도 분석
-- False positive 케이스 (NPC 1인칭 서술) 필터링
+**근본 원인**: genit.ai 데이터 불일치
+1. **React props**: 모두 `role: "assistant"` (user도!)
+2. **CSS 구조**: `.justify-end` 누락 케이스 존재
+3. **DOM 텍스트**: 변환 안된 경우 React와 동일
+4. **chatSession.messages**: 최근 10개만 존재 (`.sender_type` 사용 불가)
+
+**시도한 모든 방법** (2025-10-07 조사):
+| 방법 | 결과 | 이유 |
+|-----|------|------|
+| React `message.role` | ❌ 실패 | user도 `assistant`로 저장 |
+| CSS `.justify-end` | ⚠️ 부분 | 19/26만 커버 |
+| DOM vs React 텍스트 비교 | ⚠️ 부분 | 변환된 경우만 감지 |
+| `chatSession.messages.sender_type` | ❌ 불가 | 최근 10개만 존재 |
+| 짝수/홀수 ordinal 패턴 | ❌ 위험 | 시스템 메시지로 패턴 깨짐 |
+| 따옴표(`'`) 시작 패턴 | ❌ 위험 | NPC 대사도 따옴표 사용 |
+
+**Codex 권장 사항** (2025-10-07):
+> "짝수/홀수 패턴은 시스템 메시지/연속 NPC 발화로 쉽게 깨지며, 부분 로딩 시 역순 ordinal로 인해 전체 오염 위험. React props에서 추가 메타데이터를 찾거나, 스냅샷 단계 보정, 또는 사용자 수동 입력 UI 제공이 안전."
+
+**현재 선택**: ✅ **옵션 1 - 현 상태 유지 + 문서화**
+- 자동 감지: 19/26 (73%)
+- 누락 7개는 향후 기능 확장 시 문제 가능성
+- 사용자에게는 현재 큰 영향 없음
+
+**향후 개선 방향**:
+1. **우선순위 🟡 MEDIUM**: 사용자 수동 UI 추가
+   - Tampermonkey 패널에 "player로 강제 표시" 체크박스
+   - export 시 사용자 지정 반영
+   - 예상 시간: 4-6시간
+
+2. **우선순위 🟢 LOW**: 스냅샷 단계 보정
+   - `collectStructuredMessage` 이후 전체 메시지 분석
+   - 앞뒤 컨텍스트 활용한 보정
+   - 예상 시간: 6-8시간
+
+3. **비추천**: 텍스트 휴리스틱 (따옴표, 1인칭)
+   - False positive 위험 (NPC 대사)
+   - 언어 의존성
+   - 유지보수 복잡도 증가
+
+**영향 범위**:
+- ✅ 일반 export: 대부분 정상 (73% 정확도면 실용 가능)
+- ⚠️ 통계 기반 기능: user/llm 비율 오차 발생
+- ⚠️ 자동 요약 프롬프트: 일부 user 입력 누락 가능
+
+**관련 파일**:
+- `src/adapters/genit.js:232-277` - detectRole() 로직
+- `src/core/message-indexer.js:56-141` - role/channel 할당
+- `tests/unit/adapter-genit.spec.js:166-220` - 감지 테스트
 
 **참고**:
 - 발견 일자: 2025-10-07
-- 이슈: 유저가 생각/행동으로 입력한 메시지가 `channel: "llm"`으로 분류됨
-- 원인: genit.ai가 내부적으로 `role: "assistant"`로 저장하지만, React props에는 `role: "user"` 포함
-- Phase 1 해결: `getReactMessage()` 함수로 React Fiber 탐색하여 정확한 role 추출
+- 조사 시간: 약 3시간 (브라우저 콘솔 + Codex/Gemini 상담)
+- 최종 결정: 현 상태 유지, 향후 수동 UI 추가 고려
 
 ---
 

@@ -163,33 +163,32 @@ describe('Genit adapter narration handling', () => {
     expect(narrationPart?.lines || []).toContain('정적');
   });
 
-  it('detects player thought/action input via React props', () => {
+  it('detects player thought/action input via content mismatch', () => {
     const block = window.document.createElement('div');
     block.setAttribute('data-message-id', 'player-thought-1');
-    // Simulate genit.ai structure: role="assistant" in React but player content
+    // Simulate genit.ai structure: no justify-end, muted style
     block.innerHTML = `
       <div class="flex w-full">
         <div class="w-full">
           <div class="markdown-content text-muted-foreground text-sm">
-            <p>'현재 상황을 분석해보자. 나는 지금...' 나는 빠르게 상황을 파악한다.</p>
+            <p>'현재 상황을 분석해보자. 나는 지금 상대와 대치 중이다.' 빠르게 상황을 파악한다.</p>
           </div>
         </div>
       </div>
     `;
 
-    // Mock React Fiber structure (genit.ai uses role="user" for player input)
+    // Mock React Fiber: role="assistant" but content is AI-transformed (much longer)
     const mockFiber = {
       memoizedProps: {
         message: {
           id: 'player-thought-1',
-          role: 'user',
-          content: "'현재 상황을 분석해보자. 나는 지금...' 나는 빠르게 상황을 파악한다."
+          role: 'assistant', // ← genit.ai stores thought/action as assistant!
+          content: '소중한코알라5299는 상황을 냉정하게 분석했다. 그는 현재 적대적인 상대와 대치하고 있으며, 신중한 판단이 필요한 상황임을 인식했다. 주변을 재빠르게 살피며 다음 행동을 고민하는 그의 눈빛은 날카로웠다. 본능적으로 손이 무기를 향해 움직였다.'
         }
       },
       return: null
     };
 
-    // Simulate React's __reactFiber property
     Object.defineProperty(block, '__reactFiber$test', {
       value: mockFiber,
       enumerable: false,
