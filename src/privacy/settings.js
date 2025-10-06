@@ -3,6 +3,7 @@ import { STORAGE_KEYS, PRIVACY_PROFILES, DEFAULT_PRIVACY_PROFILE } from './const
 const noop = () => {};
 const MAX_CUSTOM_LIST_ITEMS = 1000;
 const MAX_CUSTOM_ITEM_LENGTH = 200;
+const DISALLOWED_PATTERN = /<|>|javascript:/i;
 
 const sanitizeList = (items = [], collapseSpaces = (value) => value) => {
   if (!Array.isArray(items)) {
@@ -34,6 +35,10 @@ const sanitizeList = (items = [], collapseSpaces = (value) => value) => {
     const trimmed = collapsedString.trim();
     if (!trimmed) {
       if (raw.trim?.()) invalidType = true;
+      continue;
+    }
+    if (DISALLOWED_PATTERN.test(trimmed)) {
+      invalidType = true;
       continue;
     }
     let entry = trimmed;

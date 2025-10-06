@@ -4,6 +4,47 @@
 
 - _No changes yet_
 
+## v1.8.0 (2025-10-07)
+
+### 버그 수정
+
+- **중복 대사 데이터 손실 수정** (#1): INFO 블록과 일반 대사를 구분하여 처리하도록 개선했습니다.
+  - **문제**: `collectStructuredMessage`에서 단일 `seen` Set이 모든 메시지 타입에 적용되어 정상적인 중복 대사가 제거됨
+  - **해결**: INFO 블록에만 전용 중복 제거 로직 적용, 일반 대사는 중복 허용
+  - **영향**: NPC 반복 대사나 플레이어 반복 선택지가 정확히 보존됨
+  - `src/adapters/genit.js:424`, `genit-memory-helper.user.js:1742`
+
+- **프라이버시 설정 XSS 차단** (#2): 커스텀 패턴 입력 검증을 강화했습니다.
+  - **문제**: 사용자 정의 프라이버시 리스트에 HTML/JS 페이로드 삽입 가능
+  - **해결**: `<`, `>`, `javascript:` 패턴을 포함한 항목 자동 제거
+  - **영향**: 악의적인 입력이 설정 저장 단계에서 차단됨
+  - `src/privacy/settings.js:4`, 테스트 추가: `tests/unit/privacy-settings.spec.js:66`
+
+- **모달 콘텐츠 안전성 검증** (#3): 기존 sanitizer의 안전성을 테스트로 확인했습니다.
+  - **문제**: 모달에 HTML 콘텐츠 삽입 시 XSS 우려
+  - **해결**: 기존 `<template>` 기반 sanitizer가 이미 안전함을 확인
+  - **영향**: `<script>`, `onerror`, `javascript:` 등 위험 요소가 모두 제거됨
+  - 테스트 추가: `tests/unit/modal.spec.js:1`
+
+- **북마크 리스너 중복 등록 방지** (#4): 페이지 전환 시 리스너 누적을 차단했습니다.
+  - **문제**: SPA 라우팅 시 `bookmarkListener.start()` 중복 호출로 클릭당 북마크가 여러 개 생성됨
+  - **해결**: `boot()` 함수 내부에서만 시작하고 `panelMounted` 가드 플래그 추가
+  - **영향**: 페이지 전환 후에도 북마크가 정상 동작
+  - `src/index.js:788`
+
+- **MutationObserver 무한 재시작 수정** (#5): DOM 변화 시 불필요한 재부팅을 제거했습니다.
+  - **문제**: SPA 내비게이션마다 MutationObserver가 `boot()` 재호출하여 성능 저하
+  - **해결**: `panelMounted`/`bootInProgress` 플래그로 중복 실행 차단
+  - **영향**: 메모리 누수 방지, 콘솔 로그 정리
+  - `src/index.js:788`
+
+### 테스트 개선
+
+- INFO 블록 중복 제거 및 일반 대사 보존 케이스 추가 (`tests/unit/adapter-genit.spec.js:83`)
+- 모달 sanitizer 안전성 검증 (script/onerror/srcdoc 제거) 추가 (`tests/unit/modal.spec.js`)
+- 프라이버시 설정 XSS 차단 회귀 테스트 추가 (`tests/unit/privacy-settings.spec.js:66`)
+- 북마크 리스너 초기화 수정 (`tests/unit/range-bookmark.spec.js:47`)
+
 ## v1.7.4 (2025-10-06)
 
 ### 모바일 UX 개선

@@ -86,4 +86,61 @@ describe('Genit adapter narration handling', () => {
     const narrationPart = structured.parts.find((part) => part?.flavor === 'narration');
     expect(narrationPart?.lines || []).toContain('NPC 대사 이후에 이어지는 묘사 문장입니다.');
   });
+
+  it('preserves duplicate dialogue lines within a single NPC block', () => {
+    const block = window.document.createElement('div');
+    block.setAttribute('data-message-id', 'npc-duplicate');
+    block.setAttribute('data-gmh-message-role', 'npc');
+    block.innerHTML = `
+      <div data-role="assistant" class="flex flex-col w-full group">
+        <div class="p-4 rounded-xl bg-background">
+          <p>같습니다</p>
+        </div>
+        <div class="p-4 rounded-xl bg-background">
+          <p>같습니다</p>
+        </div>
+      </div>
+    `;
+
+    const structured = GMH.Adapters.genit.collectStructuredMessage(block);
+    const speechParts = structured.parts.filter((part) => part?.flavor === 'speech');
+    const speechLines = speechParts.flatMap((part) => part.lines || []);
+
+    expect(speechLines.filter((line) => line === '같습니다')).toHaveLength(2);
+  });
+
+  it('deduplicates INFO lines while keeping header in legacy output', () => {
+    const block = window.document.createElement('div');
+    block.setAttribute('data-message-id', 'info-1');
+    block.setAttribute('data-gmh-message-role', 'npc');
+    block.innerHTML = `
+      <pre class="bg-card">
+        <code class="language-INFO">중요\n중요\n경고</code>
+      </pre>
+    `;
+
+    const structured = GMH.Adapters.genit.collectStructuredMessage(block);
+    const infoPart = structured.parts.find((part) => part?.type === 'info');
+
+    expect(infoPart?.lines).toEqual(['중요', '경고']);
+    expect(infoPart?.legacyLines).toEqual(['INFO', '중요', '경고']);
+  });
+
+  it('does not include INFO header in structured info lines', () => {
+    const block = window.document.createElement('div');
+    block.setAttribute('data-message-id', 'info-2');
+    block.setAttribute('data-gmh-message-role', 'npc');
+    block.innerHTML = `
+      <pre class="bg-card">
+        <code class="language-INFO">내용1\n내용2</code>
+      </pre>
+    `;
+
+    const structured = GMH.Adapters.genit.collectStructuredMessage(block);
+    const infoPart = structured.parts.find((part) => part?.type === 'info');
+
+    expect(infoPart?.lines).toEqual(['내용1', '내용2']);
+    expect(infoPart?.lines).not.toContain('INFO');
+    expect(infoPart?.legacyLines[0]).toBe('INFO');
+  });
 });

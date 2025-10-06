@@ -1742,9 +1742,22 @@ var GMHBundle = (function (exports) {
     const emitInfo = (block, pushLine, collector = null) => {
       const infoNode = firstMatch(selectors.infoCode, block);
       if (!infoNode) return;
+
+      const infoLinesOut = [];
+      const infoSeen = new Set();
+
       pushLine('INFO');
+
       const infoLines = textSegmentsFromNode(infoNode);
-      infoLines.forEach((seg) => pushLine(seg));
+      infoLines.forEach((seg) => {
+        const trimmed = (seg || '').trim();
+        if (!trimmed) return;
+        if (infoSeen.has(trimmed)) return;
+        infoSeen.add(trimmed);
+        infoLinesOut.push(trimmed);
+        pushLine(trimmed);
+      });
+
       markInfoNodeTree(infoNode);
       if (collector) {
         const infoCardWrapper =
@@ -1758,8 +1771,8 @@ var GMHBundle = (function (exports) {
           flavor: 'meta',
           role: 'system',
           speaker: 'INFO',
-          lines: infoLines.slice(),
-          legacyLines: ['INFO', ...infoLines],
+          lines: infoLinesOut,
+          legacyLines: ['INFO', ...infoLinesOut],
           legacyFormat: 'meta',
         }, { node: infoCardWrapper });
       }
@@ -2040,12 +2053,9 @@ var GMHBundle = (function (exports) {
       const playerGuess = guessPlayerNames()[0] || '플레이어';
       const collector = createStructuredCollector({ playerName: playerGuess }, { rootNode: block });
       const localLines = [];
-      const seen = new Set();
       const pushLine = (line) => {
         const trimmed = (line || '').trim();
         if (!trimmed) return;
-        if (seen.has(trimmed)) return;
-        seen.add(trimmed);
         localLines.push(trimmed);
       };
       try {
@@ -2181,6 +2191,7 @@ var GMHBundle = (function (exports) {
 
   const MAX_CUSTOM_LIST_ITEMS = 1000;
   const MAX_CUSTOM_ITEM_LENGTH = 200;
+  const DISALLOWED_PATTERN = /<|>|javascript:/i;
 
   const sanitizeList = (items = [], collapseSpaces = (value) => value) => {
     if (!Array.isArray(items)) {
@@ -2212,6 +2223,10 @@ var GMHBundle = (function (exports) {
       const trimmed = collapsedString.trim();
       if (!trimmed) {
         if (raw.trim?.()) invalidType = true;
+        continue;
+      }
+      if (DISALLOWED_PATTERN.test(trimmed)) {
+        invalidType = true;
         continue;
       }
       let entry = trimmed;
@@ -8732,7 +8747,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       console: ENV.console,
     });
 
-    bookmarkListener.start();
     GMH.Core.BookmarkListener = bookmarkListener;
 
     if (!PAGE_WINDOW.__GMHBookmarkListener) {
@@ -9229,14 +9243,22 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     // -------------------------------
     // 5) Boot
     // -------------------------------
+    let panelMounted = false;
+    let bootInProgress = false;
+
     function boot() {
+      if (panelMounted || bootInProgress) return;
+      bootInProgress = true;
       try {
         mountPanel();
         GMH.Core.MessageIndexer.start();
         bookmarkListener.start();
+        panelMounted = Boolean(document.querySelector('#genit-memory-helper-panel'));
       } catch (e) {
         const level = errorHandler.LEVELS?.ERROR || 'error';
         errorHandler.handle(e, 'ui/panel', level);
+      } finally {
+        bootInProgress = false;
       }
     }
 
@@ -9248,6 +9270,8 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
     if (!PAGE_WINDOW.__GMHTeardownHook) {
       const teardown = () => {
+        panelMounted = false;
+        bootInProgress = false;
         try {
           bookmarkListener.stop();
         } catch (err) {
@@ -9268,11 +9292,17 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
     let moScheduled = false;
     const mo = new MutationObserver(() => {
-      if (moScheduled) return;
+      if (moScheduled || bootInProgress) return;
       moScheduled = true;
       requestAnimationFrame(() => {
         moScheduled = false;
-        if (!document.querySelector('#genit-memory-helper-panel')) boot();
+        const panelNode = document.querySelector('#genit-memory-helper-panel');
+        if (panelNode) {
+          panelMounted = true;
+          return;
+        }
+        panelMounted = false;
+        boot();
       });
     });
     mo.observe(document.documentElement, { subtree: true, childList: true });

@@ -281,7 +281,6 @@ import { createGuideControls } from './ui/guide-controls.js';
     console: ENV.console,
   });
 
-  bookmarkListener.start();
   GMH.Core.BookmarkListener = bookmarkListener;
 
   if (!PAGE_WINDOW.__GMHBookmarkListener) {
@@ -785,14 +784,22 @@ function getActiveAdapter() {
   // -------------------------------
   // 5) Boot
   // -------------------------------
+  let panelMounted = false;
+  let bootInProgress = false;
+
   function boot() {
+    if (panelMounted || bootInProgress) return;
+    bootInProgress = true;
     try {
       mountPanel();
       GMH.Core.MessageIndexer.start();
       bookmarkListener.start();
+      panelMounted = Boolean(document.querySelector('#genit-memory-helper-panel'));
     } catch (e) {
       const level = errorHandler.LEVELS?.ERROR || 'error';
       errorHandler.handle(e, 'ui/panel', level);
+    } finally {
+      bootInProgress = false;
     }
   }
 
@@ -804,6 +811,8 @@ function getActiveAdapter() {
 
   if (!PAGE_WINDOW.__GMHTeardownHook) {
     const teardown = () => {
+      panelMounted = false;
+      bootInProgress = false;
       try {
         bookmarkListener.stop();
       } catch (err) {
@@ -824,11 +833,17 @@ function getActiveAdapter() {
 
   let moScheduled = false;
   const mo = new MutationObserver(() => {
-    if (moScheduled) return;
+    if (moScheduled || bootInProgress) return;
     moScheduled = true;
     requestAnimationFrame(() => {
       moScheduled = false;
-      if (!document.querySelector('#genit-memory-helper-panel')) boot();
+      const panelNode = document.querySelector('#genit-memory-helper-panel');
+      if (panelNode) {
+        panelMounted = true;
+        return;
+      }
+      panelMounted = false;
+      boot();
     });
   });
   mo.observe(document.documentElement, { subtree: true, childList: true });

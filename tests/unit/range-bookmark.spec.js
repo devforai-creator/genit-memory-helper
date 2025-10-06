@@ -44,6 +44,7 @@ describe('Range bookmark integration', () => {
 
     GMH.UI.mountPanel();
     GMH.Core.MessageIndexer.start();
+    GMH.Core.BookmarkListener.start();
     GMH.Core.MessageIndexer.refresh({ immediate: true });
 
     const chatContainer = document.querySelector(

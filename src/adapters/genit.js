@@ -423,9 +423,22 @@ export const createGenitAdapter = ({
   const emitInfo = (block, pushLine, collector = null) => {
     const infoNode = firstMatch(selectors.infoCode, block);
     if (!infoNode) return;
+
+    const infoLinesOut = [];
+    const infoSeen = new Set();
+
     pushLine('INFO');
+
     const infoLines = textSegmentsFromNode(infoNode);
-    infoLines.forEach((seg) => pushLine(seg));
+    infoLines.forEach((seg) => {
+      const trimmed = (seg || '').trim();
+      if (!trimmed) return;
+      if (infoSeen.has(trimmed)) return;
+      infoSeen.add(trimmed);
+      infoLinesOut.push(trimmed);
+      pushLine(trimmed);
+    });
+
     markInfoNodeTree(infoNode);
     if (collector) {
       const infoCardWrapper =
@@ -439,8 +452,8 @@ export const createGenitAdapter = ({
         flavor: 'meta',
         role: 'system',
         speaker: 'INFO',
-        lines: infoLines.slice(),
-        legacyLines: ['INFO', ...infoLines],
+        lines: infoLinesOut,
+        legacyLines: ['INFO', ...infoLinesOut],
         legacyFormat: 'meta',
       }, { node: infoCardWrapper });
     }
@@ -721,12 +734,9 @@ export const createGenitAdapter = ({
     const playerGuess = guessPlayerNames()[0] || '플레이어';
     const collector = createStructuredCollector({ playerName: playerGuess }, { rootNode: block });
     const localLines = [];
-    const seen = new Set();
     const pushLine = (line) => {
       const trimmed = (line || '').trim();
       if (!trimmed) return;
-      if (seen.has(trimmed)) return;
-      seen.add(trimmed);
       localLines.push(trimmed);
     };
     try {

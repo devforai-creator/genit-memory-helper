@@ -76,4 +76,19 @@ describe('createPrivacyStore', () => {
     const warnings = captured.filter((entry) => entry.context === 'privacy/save');
     expect(warnings.length).toBeGreaterThan(0);
   });
+
+  it('drops entries containing HTML or javascript patterns when loading from storage', () => {
+    const malicious = ['<script>alert(1)</script>', 'javascript:alert(1)', ' 정상'];
+    storage.setItem(STORAGE_KEYS.privacyWhitelist, JSON.stringify(malicious));
+
+    const store = createPrivacyStore({
+      storage,
+      errorHandler,
+      collapseSpaces: (value) => value,
+    });
+
+    expect(store.config.whitelist).toEqual(['정상']);
+    const warnings = captured.filter((entry) => entry.context === 'privacy/load');
+    expect(warnings.length).toBeGreaterThan(0);
+  });
 });
