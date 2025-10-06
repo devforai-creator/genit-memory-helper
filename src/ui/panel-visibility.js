@@ -18,10 +18,8 @@ export function createPanelVisibility({
   const OPEN_CLASS = 'gmh-panel-open';
   const STORAGE_KEY = 'gmh_panel_collapsed';
   const MIN_GAP = 12;
-  const INSIDE_HIT_TOLERANCE = 18;
-  const OUTSIDE_TOUCH_MAX_DISTANCE = 30;
-  const OUTSIDE_TOUCH_MAX_DURATION_MS = 900;
-  const OUTSIDE_GUARD_AFTER_TOGGLE_MS = 600;
+  const OUTSIDE_TOUCH_MAX_DISTANCE = 14;
+  const OUTSIDE_TOUCH_MAX_DURATION_MS = 450;
 
   const normalizeState = (value) => {
     if (!value) return null;
@@ -123,7 +121,6 @@ export function createPanelVisibility({
   let resizeScheduled = false;
   let outsideTouchSession = null;
   let outsidePointerTrackingBound = false;
-  let ignoreOutsideUntil = 0;
   let currentState = stateEnum.IDLE;
   let userCollapsed = false;
   let persistedPreference = null;
@@ -346,34 +343,7 @@ export function createPanelVisibility({
     }
   };
 
-  const getEventPoint = (event) => {
-    if (!event) return null;
-    if (Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
-      return { x: event.clientX, y: event.clientY };
-    }
-    const touches = event.touches || event.changedTouches;
-    if (touches && touches.length) {
-      const touch = touches[0];
-      if (Number.isFinite(touch.clientX) && Number.isFinite(touch.clientY)) {
-        return { x: touch.clientX, y: touch.clientY };
-      }
-    }
-    return null;
-  };
-
-  const pointWithinRect = (rect, point, tolerance = 0) => {
-    if (!rect || !point) return false;
-    const { x, y } = point;
-    const expand = Math.max(0, Number(tolerance) || 0);
-    return (
-      x >= rect.left - expand &&
-      x <= rect.right + expand &&
-      y >= rect.top - expand &&
-      y <= rect.bottom + expand
-    );
-  };
-
-  const eventTargetsElement = (event, element, tolerance = 0) => {
+  const eventTargetsElement = (event, element) => {
     if (!event || !element) return false;
     if (typeof event.composedPath === 'function') {
       const path = event.composedPath();
@@ -390,11 +360,6 @@ export function createPanelVisibility({
       } catch (err) {
         /* noop */
       }
-    }
-    if (typeof element.getBoundingClientRect === 'function') {
-      const rect = element.getBoundingClientRect();
-      const point = getEventPoint(event);
-      if (point && pointWithinRect(rect, point, tolerance)) return true;
     }
     return false;
   };
@@ -435,17 +400,12 @@ export function createPanelVisibility({
     if (event.pointerId !== outsideTouchSession.pointerId) return;
     const pointerType = event.pointerType || outsideTouchSession.pointerType;
     const now = typeof performance?.now === 'function' ? performance.now() : Date.now();
-    if (now <= ignoreOutsideUntil) {
-      clearOutsideTouchSession();
-      return;
-    }
     const duration = now - outsideTouchSession.startTime;
     const dx = event.clientX - outsideTouchSession.startX;
     const dy = event.clientY - outsideTouchSession.startY;
     const distance = Math.hypot(dx, dy);
     const remainedOutside =
-      !eventTargetsElement(event, panelEl, INSIDE_HIT_TOLERANCE) &&
-      !eventTargetsElement(event, fabEl, INSIDE_HIT_TOLERANCE);
+      !eventTargetsElement(event, panelEl) && !eventTargetsElement(event, fabEl);
     const shouldClose =
       remainedOutside &&
       pointerType === outsideTouchSession.pointerType &&
@@ -476,27 +436,18 @@ export function createPanelVisibility({
       if (!isModernActive()) return;
       if (isCollapsed()) return;
       if (modal?.isOpen?.()) return;
-      const now = typeof performance?.now === 'function' ? performance.now() : Date.now();
-      if (now <= ignoreOutsideUntil) return;
       if (event.button && event.button !== 0) return;
-      if (eventTargetsElement(event, panelEl, INSIDE_HIT_TOLERANCE)) return;
-      if (eventTargetsElement(event, fabEl, INSIDE_HIT_TOLERANCE)) return;
-      const pointerType = event.pointerType || (event.touches ? 'touch' : 'mouse');
-      if (pointerType === 'touch' || pointerType === 'pen') {
-        if (event.isPrimary === false) return;
-        if (typeof event.pointerId !== 'number') return;
-        const point = getEventPoint(event);
-        if (!point) return;
-        const panelRect = panelEl?.getBoundingClientRect?.();
-        const fabRect = fabEl?.getBoundingClientRect?.();
-        if (pointWithinRect(panelRect, point, INSIDE_HIT_TOLERANCE)) return;
-        if (pointWithinRect(fabRect, point, INSIDE_HIT_TOLERANCE)) return;
+      if (eventTargetsElement(event, panelEl)) return;
+      if (eventTargetsElement(event, fabEl)) return;
+      const pointerType = event.pointerType || 'mouse';
+      if ((pointerType === 'touch' || pointerType === 'pen') && event.isPrimary !== false) {
+        const startTime = typeof performance?.now === 'function' ? performance.now() : Date.now();
         outsideTouchSession = {
           pointerId: event.pointerId,
           pointerType,
-          startX: point.x,
-          startY: point.y,
-          startTime: now,
+          startX: event.clientX,
+          startY: event.clientY,
+          startTime,
         };
         ensureOutsidePointerTracking();
         return;
@@ -575,10 +526,6 @@ export function createPanelVisibility({
 
       event.preventDefault();
       fabLastToggleAt = now;
-      ignoreOutsideUntil = Math.max(
-        ignoreOutsideUntil,
-        now + OUTSIDE_GUARD_AFTER_TOGGLE_MS
-      );
       toggle();
     };
     fabEl.setAttribute('aria-expanded', isCollapsed() ? 'false' : 'true');
@@ -828,8 +775,6 @@ export function createPanelVisibility({
     userCollapsed = false;
     applyLayout();
     refreshBehavior();
-    const now = typeof performance?.now === 'function' ? performance.now() : Date.now();
-    ignoreOutsideUntil = Math.max(ignoreOutsideUntil, now + OUTSIDE_GUARD_AFTER_TOGGLE_MS / 2);
     if (focus) {
       rememberFocus();
       focusPanelElement();
