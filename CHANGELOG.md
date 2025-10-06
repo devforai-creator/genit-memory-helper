@@ -4,6 +4,44 @@
 
 - _No changes yet_
 
+## v1.10.2 (2025-10-07)
+
+### 아키텍처 개선
+
+- **Composition 모듈 완성**: UI 및 부트스트랩 로직을 별도 모듈로 분리 완료
+  - `src/composition/ui-composition.js`: 모달·패널 가시성·상태 뷰·프라이버시 설정 조립
+  - `src/composition/bootstrap.js`: boot/teardown/DOM 감시 로직
+  - `src/index.js` 765줄 수준 유지 (composition 모듈 5개로 분산)
+  - v1.9.0 Issue #6 완료
+
+- **TypeScript 전환 기반 마련**: JSDoc 타입 주석 및 타입 체크 인프라 구축
+  - `types/api.d.ts`: 공용 JSDoc 인터페이스 정의
+  - `types/globals.d.ts`: Tampermonkey GM_* API 타입 선언
+  - `tsconfig.json`: checkJs 활성화, 핵심 4개 모듈 포함 (auto-loader, share, pipeline, modal)
+  - `npm run typecheck`: pretest에 통합 (tsc --noEmit)
+  - JSDoc typedef 추가: `src/features/auto-loader.js`, `src/features/share.js`, `src/privacy/pipeline.js`, `src/ui/modal.js`, `src/core/message-indexer.js`
+  - v1.9.0 Issue #7 부분 완료 (추가 모듈 편입 예정)
+
+### 개발자 도구 개선
+
+- **고차 함수 패턴 도입**: 반복 코드 제거 및 재사용성 향상
+  - `src/utils/factories.js`: `withPlayerNames` 고차 함수 추가
+  - export 함수 wrapper 단순화
+  - v1.9.0 Issue #10 완료
+
+### 문서
+
+- **ROADMAP.md 정리**: v1.8.0 및 v1.9.0 Issue 완료 상태 표시
+  - v1.8.0 Issue #1~#5 완료 표시 (2025-10-07 릴리스)
+  - v1.9.0 Issue #6, #8, #9, #10 완료 표시
+  - v1.9.0 Issue #7 부분 완료 상태 명시
+  - 체크리스트 업데이트
+
+### 테스트
+
+- 전체 86개 테스트 통과
+- typecheck 통과 (4개 핵심 모듈)
+
 ## v1.10.1 (2025-10-07)
 
 ### 버그 수정 (부분)
