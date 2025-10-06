@@ -1,4 +1,6 @@
-const METER_INTERVAL_MS = 1500;
+import { CONFIG } from '../config.js';
+
+const METER_INTERVAL_MS = CONFIG.TIMING.AUTO_LOADER.METER_INTERVAL_MS;
 
 export function createAutoLoader({
   stateApi,
@@ -44,26 +46,7 @@ export function createAutoLoader({
   const clearIntervalFn =
     typeof win?.clearInterval === 'function' ? win.clearInterval.bind(win) : clearInterval;
 
-  const AUTO_PROFILES = {
-    default: {
-      cycleDelayMs: 700,
-      settleTimeoutMs: 2000,
-      maxStableRounds: 3,
-      guardLimit: 60,
-    },
-    stability: {
-      cycleDelayMs: 1200,
-      settleTimeoutMs: 2600,
-      maxStableRounds: 5,
-      guardLimit: 140,
-    },
-    fast: {
-      cycleDelayMs: 350,
-      settleTimeoutMs: 900,
-      maxStableRounds: 2,
-      guardLimit: 40,
-    },
-  };
+  const AUTO_PROFILES = CONFIG.TIMING.AUTO_LOADER.PROFILES;
 
   const AUTO_CFG = {
     profile: 'default',
@@ -220,12 +203,21 @@ export function createAutoLoader({
           .forEach((idx) => blockSet.add(idx));
       });
       const entryCount = blockSet.size || session.turns.length;
-      exportRange?.setTotals?.({
-        message: Math.max(previousTotals.message || 0, session.turns.length),
-        user: Math.max(previousTotals.user || 0, userMessages),
-        llm: Math.max(previousTotals.llm || 0, llmMessages),
+      const nextTotals = {
+        message: session.turns.length,
+        user: userMessages,
+        llm: llmMessages,
         entry: entryCount,
-      });
+      };
+      const totalsShrank =
+        Number.isFinite(previousTotals.message) && previousTotals.message > nextTotals.message;
+      const userShrank = Number.isFinite(previousTotals.user) && previousTotals.user > nextTotals.user;
+      const llmShrank = Number.isFinite(previousTotals.llm) && previousTotals.llm > nextTotals.llm;
+      const entryShrank = Number.isFinite(previousTotals.entry) && previousTotals.entry > nextTotals.entry;
+      if (totalsShrank || userShrank || llmShrank || entryShrank) {
+        exportRange?.clear?.();
+      }
+      exportRange?.setTotals?.(nextTotals);
       const stats = {
         session,
         userMessages,

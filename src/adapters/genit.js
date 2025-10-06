@@ -612,12 +612,11 @@ export const createGenitAdapter = ({
       if (/^INFO$/i.test(clean)) return true;
       if (knownLabels.has(clean)) return true;
       const wordCount = clean.split(/\s+/).length;
-      if (
-        wordCount === 1 &&
-        looksLikeName(clean) &&
-        !/[.!?…:,]/.test(clean)
-      )
-        return true;
+      if (wordCount === 1) {
+        if (knownLabels.has(clean)) return true;
+        if (/^[A-Za-z][A-Za-z .,'’]{0,24}$/.test(clean)) return true;
+        return false;
+      }
       return false;
     };
 

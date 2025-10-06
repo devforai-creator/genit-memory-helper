@@ -1,3 +1,5 @@
+import { requireDeps } from '../utils/validation.js';
+
 export function createShareWorkflow({
   captureStructuredSnapshot,
   normalizeTranscript,
@@ -28,34 +30,64 @@ export function createShareWorkflow({
   alert: alertFn = (msg) => globalThis.alert?.(msg),
   logger = typeof console !== 'undefined' ? console : null,
 }) {
-  if (!captureStructuredSnapshot || !normalizeTranscript || !buildSession) {
-    throw new Error('createShareWorkflow requires transcript helpers');
-  }
-  if (!exportRange) throw new Error('createShareWorkflow requires exportRange');
-  if (!applyPrivacyPipeline || !privacyConfig || !privacyProfiles) {
-    throw new Error('createShareWorkflow requires privacy dependencies');
-  }
-  if (!buildExportBundle || !buildExportManifest || !triggerDownload) {
-    throw new Error('createShareWorkflow requires export helpers');
-  }
-  if (!clipboard || typeof clipboard.set !== 'function') {
-    throw new Error('createShareWorkflow requires clipboard helper');
-  }
-  if (!stateApi || !stateEnum) {
-    throw new Error('createShareWorkflow requires state API');
-  }
-  if (!projectStructuredMessages) {
-    throw new Error('createShareWorkflow requires projectStructuredMessages');
-  }
-  if (!cloneSession) {
-    throw new Error('createShareWorkflow requires cloneSession');
-  }
-  if (!collectSessionStats) {
-    throw new Error('createShareWorkflow requires collectSessionStats');
-  }
-  if (!confirmPrivacyGate) {
-    throw new Error('createShareWorkflow requires confirmPrivacyGate');
-  }
+  requireDeps(
+    {
+      captureStructuredSnapshot,
+      normalizeTranscript,
+      buildSession,
+      exportRange,
+      projectStructuredMessages,
+      cloneSession,
+      applyPrivacyPipeline,
+      privacyConfig,
+      privacyProfiles,
+      formatRedactionCounts,
+      setPanelStatus,
+      toMarkdownExport,
+      toJSONExport,
+      toTXTExport,
+      toStructuredMarkdown,
+      toStructuredJSON,
+      toStructuredTXT,
+      buildExportBundle,
+      buildExportManifest,
+      triggerDownload,
+      clipboard,
+      stateApi,
+      stateEnum,
+      confirmPrivacyGate,
+      getEntryOrigin,
+      collectSessionStats,
+    },
+    {
+      captureStructuredSnapshot: (fn) => typeof fn === 'function',
+      normalizeTranscript: (fn) => typeof fn === 'function',
+      buildSession: (fn) => typeof fn === 'function',
+      exportRange: (value) => Boolean(value?.setTotals),
+      projectStructuredMessages: (fn) => typeof fn === 'function',
+      cloneSession: (fn) => typeof fn === 'function',
+      applyPrivacyPipeline: (fn) => typeof fn === 'function',
+      privacyConfig: (value) => Boolean(value),
+      privacyProfiles: (value) => Boolean(value),
+      formatRedactionCounts: (fn) => typeof fn === 'function',
+      setPanelStatus: (fn) => typeof fn === 'function',
+      toMarkdownExport: (fn) => typeof fn === 'function',
+      toJSONExport: (fn) => typeof fn === 'function',
+      toTXTExport: (fn) => typeof fn === 'function',
+      toStructuredMarkdown: (fn) => typeof fn === 'function',
+      toStructuredJSON: (fn) => typeof fn === 'function',
+      toStructuredTXT: (fn) => typeof fn === 'function',
+      buildExportBundle: (fn) => typeof fn === 'function',
+      buildExportManifest: (fn) => typeof fn === 'function',
+      triggerDownload: (fn) => typeof fn === 'function',
+      'clipboard.set': (fn) => typeof fn === 'function',
+      stateApi: (value) => Boolean(value?.setState),
+      stateEnum: (value) => Boolean(value),
+      confirmPrivacyGate: (fn) => typeof fn === 'function',
+      getEntryOrigin: (fn) => typeof fn === 'function',
+      collectSessionStats: (fn) => typeof fn === 'function',
+    },
+  );
 
   const parseAll = () => {
     const snapshot = captureStructuredSnapshot({ force: true });

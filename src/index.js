@@ -75,6 +75,10 @@ import { createLegacyPanel } from './ui/panel-legacy.js';
 import { createLegacyPrivacyGate, createModernPrivacyGate } from './ui/privacy-gate.js';
 import { createGuidePrompts } from './features/guides.js';
 import { createGuideControls } from './ui/guide-controls.js';
+import { composeAdapters } from './composition/adapter-composition.js';
+import { composePrivacy } from './composition/privacy-composition.js';
+import { composeShareWorkflow } from './composition/share-composition.js';
+import { CONFIG } from './config.js';
 
 (function () {
   'use strict';
@@ -94,103 +98,24 @@ import { createGuideControls } from './ui/guide-controls.js';
 
   GMH.VERSION = scriptVersion;
 
-  GMH.Adapters.Registry = adapterRegistry;
-  GMH.Adapters.register = function registerAdapter(name, config) {
-    registerAdapterConfig(name, config);
-  };
-
-  GMH.Adapters.getSelectors = function getSelectors(name) {
-    return getAdapterSelectors(name);
-  };
-
-  GMH.Adapters.getMetadata = function getMetadata(name) {
-    return getAdapterMetadata(name);
-  };
-
-  GMH.Adapters.list = function listAdapters() {
-    return listAdapterNames();
-  };
-
-  registerAdapterConfig('genit', {
-    selectors: {
-      chatContainers: [
-        '[data-chat-container]',
-        '[data-testid="chat-scroll-region"]',
-        '[data-testid="conversation-scroll"]',
-        '[data-testid="chat-container"]',
-        '[data-role="conversation"]',
-        '[data-overlayscrollbars]',
-        '.flex-1.min-h-0.overflow-y-auto',
-        'main [class*="overflow-y"]',
-      ],
-      messageRoot: [
-        '[data-message-id]',
-        '[role="listitem"][data-id]',
-        '[data-testid="message-wrapper"]',
-      ],
-      infoCode: ['code.language-INFO', 'pre code.language-INFO'],
-      playerScopes: [
-        '[data-role="user"]',
-        '[data-from-user="true"]',
-        '[data-author-role="user"]',
-        '.flex.w-full.justify-end',
-        '.flex.flex-col.items-end',
-      ],
-      playerText: [
-        '.space-y-3.mb-6 > .markdown-content:nth-of-type(1)',
-        '[data-role="user"] .markdown-content:not(.text-muted-foreground)',
-        '[data-author-role="user"] .markdown-content:not(.text-muted-foreground)',
-        '.flex.w-full.justify-end .markdown-content:not(.text-muted-foreground)',
-        '.flex.flex-col.items-end .markdown-content:not(.text-muted-foreground)',
-        '.markdown-content.text-right',
-        '.p-4.rounded-xl.bg-background p',
-        '[data-role="user"] .markdown-content.text-muted-foreground',
-        '[data-author-role="user"] .markdown-content.text-muted-foreground',
-        '.flex.w-full.justify-end .markdown-content.text-muted-foreground',
-        '.flex.flex-col.items-end .markdown-content.text-muted-foreground',
-        '.flex.justify-end .text-muted-foreground.text-sm',
-        '.flex.justify-end .text-muted-foreground',
-        '.flex.flex-col.items-end .text-muted-foreground',
-        '.p-3.rounded-lg.bg-muted\\/50 p',
-        '.flex.justify-end .p-3.rounded-lg.bg-muted\\/50 p',
-        '.flex.flex-col.items-end .p-3.rounded-lg.bg-muted\\/50 p',
-      ],
-      npcGroups: ['[data-role="assistant"]', '.flex.flex-col.w-full.group'],
-      npcName: [
-        '[data-author-name]',
-        '[data-author]',
-        '[data-username]',
-        '.text-sm.text-muted-foreground.mb-1.ml-1',
-      ],
-      npcBubble: [
-        '.p-4.rounded-xl.bg-background',
-        '.p-3.rounded-lg.bg-muted\\/50',
-      ],
-      narrationBlocks: [
-        '.markdown-content.text-muted-foreground > p',
-        '.text-muted-foreground.text-sm > p',
-      ],
-      panelAnchor: ['[data-testid="app-root"]', '#__next', '#root', 'main'],
-      playerNameHints: [
-        '[data-role="user"] [data-username]',
-        '[data-profile-name]',
-        '[data-user-name]',
-        '[data-testid="profile-name"]',
-        'header [data-username]',
-      ],
-      textHints: ['메시지', '채팅', '대화'],
-    },
-  });
-
-  const genitAdapter = createGenitAdapter({
-    registry: adapterRegistry,
+  const {
+    genitAdapter,
+    getActiveAdapter,
+    updatePlayerNames,
+  } = composeAdapters({
+    GMH,
+    adapterRegistry,
+    registerAdapterConfig,
+    getAdapterSelectors,
+    getAdapterMetadata,
+    listAdapterNames,
+    createGenitAdapter,
+    errorHandler: GMH.Core?.ErrorHandler,
     getPlayerNames,
-    isPrologueBlock,
-    errorHandler: GMH.Core.ErrorHandler,
+    setPlayerNames,
+    PLAYER_NAME_FALLBACKS,
   });
-
-  GMH.Adapters.genit = genitAdapter;
-
+  updatePlayerNames();
   const buildExportBundle = (
     session,
     normalizedRaw,
@@ -376,84 +301,38 @@ import { createGuideControls } from './ui/guide-controls.js';
   ensureDefaultUIFlag();
 
   // -------------------------------
-  // 0) Constants & utils
+  // 0) Privacy composition
   // -------------------------------
-  const privacyStore = createPrivacyStore({
-    storage: ENV.localStorage,
-    errorHandler: GMH.Core.ErrorHandler,
+  const {
+    privacyStore,
+    privacyConfig: PRIVACY_CFG,
+    setPrivacyProfile: setPrivacyProfileInternal,
+    setCustomList: setCustomListInternal,
+    applyPrivacyPipeline,
+    boundRedactText,
+  } = composePrivacy({
+    createPrivacyStore,
+    createPrivacyPipeline,
+    PRIVACY_PROFILES,
+    DEFAULT_PRIVACY_PROFILE,
     collapseSpaces,
-    defaultProfile: DEFAULT_PRIVACY_PROFILE,
-    profiles: PRIVACY_PROFILES,
+    privacyRedactText,
+    hasMinorSexualContext,
+    getPlayerNames,
+    ENV,
+    errorHandler,
   });
-
-  const PRIVACY_CFG = privacyStore.config;
 
   let syncPrivacyProfileSelect = () => {};
 
-  function setPrivacyProfile(profileKey) {
-    privacyStore.setProfile(profileKey);
+  const setPrivacyProfile = (profileKey) => {
+    setPrivacyProfileInternal(profileKey);
     syncPrivacyProfileSelect(profileKey);
-  }
+  };
 
-  function setCustomList(type, items) {
-    privacyStore.setCustomList(type, items);
-  }
-
-  const boundRedactText = (text, profileKey, counts) =>
-    privacyRedactText(text, profileKey, counts, PRIVACY_CFG, PRIVACY_PROFILES);
-
-  const { applyPrivacyPipeline } = createPrivacyPipeline({
-    profiles: PRIVACY_PROFILES,
-    getConfig: () => PRIVACY_CFG,
-    redactText: boundRedactText,
-    hasMinorSexualContext,
-    getPlayerNames,
-    logger: ENV.console,
-    storage: ENV.localStorage,
-  });
-
-  function cloneSession(session) {
-    const clonedTurns = Array.isArray(session?.turns)
-      ? session.turns.map((turn) => {
-          const clone = { ...turn };
-          if (Array.isArray(turn.__gmhEntries)) {
-            Object.defineProperty(clone, '__gmhEntries', {
-              value: turn.__gmhEntries.slice(),
-              enumerable: false,
-              writable: true,
-              configurable: true,
-            });
-          }
-          if (Array.isArray(turn.__gmhSourceBlocks)) {
-            Object.defineProperty(clone, '__gmhSourceBlocks', {
-              value: turn.__gmhSourceBlocks.slice(),
-              enumerable: false,
-              writable: true,
-              configurable: true,
-            });
-          }
-          return clone;
-        })
-      : [];
-    return {
-      meta: { ...(session?.meta || {}) },
-      turns: clonedTurns,
-      warnings: Array.isArray(session?.warnings) ? [...session.warnings] : [],
-      source: session?.source,
-    };
-  }
-
-
-  function collectSessionStats(session) {
-    if (!session) return { userMessages: 0, llmMessages: 0, totalMessages: 0, warnings: 0 };
-    const userMessages = session.turns?.filter((turn) => turn.channel === 'user')?.length || 0;
-    const llmMessages = session.turns?.filter((turn) => turn.channel === 'llm')?.length || 0;
-    const totalMessages = session.turns?.length || 0;
-    const warnings = session.warnings?.length || 0;
-    return { userMessages, llmMessages, totalMessages, warnings };
-  }
-
-  const PREVIEW_TURN_LIMIT = 5;
+  const setCustomList = (type, items) => {
+    setCustomListInternal(type, items);
+  };
 
   GMH.UI.Modal = createModal({ documentRef: document, windowRef: PAGE_WINDOW });
 
@@ -573,7 +452,7 @@ import { createGuideControls } from './ui/guide-controls.js';
     formatRedactionCounts,
     privacyProfiles: PRIVACY_PROFILES,
     ensureLegacyPreviewStyles,
-    previewLimit: PREVIEW_TURN_LIMIT,
+    previewLimit: CONFIG.LIMITS.PREVIEW_TURN_LIMIT,
   });
 
   const { confirm: confirmPrivacyGateModern } = createModernPrivacyGate({
@@ -582,7 +461,7 @@ import { createGuideControls } from './ui/guide-controls.js';
     privacyProfiles: PRIVACY_PROFILES,
     ensureDesignSystemStyles,
     modal: GMH.UI.Modal,
-    previewLimit: PREVIEW_TURN_LIMIT,
+    previewLimit: CONFIG.LIMITS.PREVIEW_TURN_LIMIT,
   });
 
   const confirmPrivacyGate = (options) =>
@@ -595,13 +474,14 @@ import { createGuideControls } from './ui/guide-controls.js';
     copyRecent: copyRecentShare,
     copyAll: copyAllShare,
     reparse: reparseShare,
-  } = createShareWorkflow({
+    collectSessionStats,
+  } = composeShareWorkflow({
+    createShareWorkflow,
     captureStructuredSnapshot,
     normalizeTranscript,
     buildSession,
     exportRange,
     projectStructuredMessages,
-    cloneSession,
     applyPrivacyPipeline,
     privacyConfig: PRIVACY_CFG,
     privacyProfiles: PRIVACY_PROFILES,
@@ -621,7 +501,7 @@ import { createGuideControls } from './ui/guide-controls.js';
     stateEnum: GMH.Core.STATE,
     confirmPrivacyGate,
     getEntryOrigin: () => getSnapshotEntryOrigin?.(),
-    collectSessionStats,
+    logger: ENV.console,
   });
 
 
@@ -701,71 +581,8 @@ import { createGuideControls } from './ui/guide-controls.js';
     stateView: GMH.UI.StateView,
     bindPanelInteractions,
   });
-  GMH.Core.adapters = [GMH.Adapters.genit];
-
-  GMH.Core.pickAdapter = function pickAdapter(loc = location, doc = document) {
-    const candidates = Array.isArray(GMH.Core.adapters) ? GMH.Core.adapters : [];
-    for (const adapter of candidates) {
-      try {
-        if (adapter?.match?.(loc, doc)) return adapter;
-      } catch (err) {
-        const level = errorHandler.LEVELS?.WARN || 'warn';
-        errorHandler.handle(err, 'adapter/detect', level);
-      }
-    }
-    return GMH.Adapters.genit;
-  };
-
-let ACTIVE_ADAPTER = null;
-
-function getActiveAdapter() {
-  if (!ACTIVE_ADAPTER) {
-    ACTIVE_ADAPTER = GMH.Core.pickAdapter(location, document);
-  }
-  return ACTIVE_ADAPTER;
-}
-
-
-
-
-
-
-  function guessPlayerNamesFromDOM() {
-    const adapter = getActiveAdapter();
-    return adapter?.guessPlayerNames?.() || [];
-  }
-
-  const updatePlayerNames = () => {
-    const names = Array.from(
-      new Set([...PLAYER_NAME_FALLBACKS, ...guessPlayerNamesFromDOM()].filter(Boolean)),
-    );
-    setPlayerNames(names);
-    GMH.Adapters.genit?.setPlayerNameAccessor?.(() => getPlayerNames());
-  };
-
-  updatePlayerNames();
-
   // -------------------------------
   // 2) Writers handled via src/export modules
-  // -------------------------------
-
-  function isPrologueBlock(element) {
-    let current = element instanceof Element ? element : null;
-    let hops = 0;
-    while (current && hops < 400) {
-      if (current.hasAttribute?.('data-gmh-player-turn')) return false;
-      if (current.previousElementSibling) {
-        current = current.previousElementSibling;
-      } else {
-        current = current.parentElement;
-      }
-      hops += 1;
-    }
-    return true;
-  }
-
-  // -------------------------------
-  // 4) UI Panel
   // -------------------------------
 
 

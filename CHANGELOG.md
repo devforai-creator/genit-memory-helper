@@ -4,6 +4,45 @@
 
 - _No changes yet_
 
+## v1.9.0 (2025-10-07)
+
+### 아키텍처 개선
+
+- **Composition 모듈 도입**: 대형 부트스트랩 블록을 전용 composition 모듈로 분리했습니다.
+  - `src/composition/adapter-composition.js`: 어댑터 레지스트리 및 플레이어 이름 관리
+  - `src/composition/privacy-composition.js`: 프라이버시 파이프라인 및 설정 초기화
+  - `src/composition/share-composition.js`: 공유 워크플로우 조합
+  - `src/index.js`가 이제 오케스트레이터 역할만 수행 (인라인 로직 최소화)
+  - `src/config.js`: 중앙 집중식 타이밍/제한 상수 (auto-loader 프로파일, preview 제한 등)
+
+### 파싱 및 Range 동작 강화
+
+- **나레이션 휴리스틱 개선**: 단어 1개 설명문을 유지하면서 명확한 라벨은 필터링
+  - 예: "정적", "당황" 같은 감정/상태 설명은 보존
+  - `src/adapters/genit.js`, `genit-memory-helper.user.js` 반영
+
+- **Auto-loader range 관리 수정**: 턴 수가 줄어들면 range를 자동으로 축소/초기화
+  - 기존: 단조 증가만 가능
+  - 개선: `exportRange.clear()` 호출하여 무효한 범위 제거
+  - `src/features/auto-loader.js`, 테스트: `tests/unit/auto-loader.spec.js`
+
+### 개발자 도구 개선
+
+- **의존성 검증 헬퍼**: `requireDeps` 유틸리티로 share 워크플로우 의존성 그룹 검증
+  - `src/features/share.js`, `src/utils/validation.js`
+  - 누락된 의존성에 대한 명확한 에러 메시지 제공
+
+- **JSDoc 추가**: composition 헬퍼에 JSDoc 주석 추가
+
+### 테스트 개선
+
+- NPC 중복 대사 회귀 테스트 추가
+- INFO 블록 처리 테스트 강화
+- 단어 1개 나레이션 보존 테스트 추가
+- 모달 sanitization 테스트
+- 프라이버시 리스트 필터링 테스트
+- Auto-loader range 축소 시나리오 테스트
+
 ## v1.8.0 (2025-10-07)
 
 ### 버그 수정

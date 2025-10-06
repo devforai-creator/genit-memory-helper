@@ -143,4 +143,23 @@ describe('Genit adapter narration handling', () => {
     expect(infoPart?.lines).not.toContain('INFO');
     expect(infoPart?.legacyLines[0]).toBe('INFO');
   });
+
+  it('retains single-word narration descriptors', () => {
+    const block = window.document.createElement('div');
+    block.setAttribute('data-message-id', 'narration-1');
+    block.setAttribute('data-gmh-message-role', 'npc');
+    block.innerHTML = `
+      <div class="markdown-content text-muted-foreground">
+        <p>정적</p>
+      </div>
+    `;
+
+    const lines = [];
+    GMH.Adapters.genit.emitTranscriptLines(block, (line) => lines.push(line));
+    expect(lines).toContain('정적');
+
+    const structured = GMH.Adapters.genit.collectStructuredMessage(block);
+    const narrationPart = structured.parts.find((part) => part?.flavor === 'narration');
+    expect(narrationPart?.lines || []).toContain('정적');
+  });
 });

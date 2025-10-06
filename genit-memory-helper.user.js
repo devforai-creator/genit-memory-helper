@@ -1333,6 +1333,29 @@ var GMHBundle = (function (exports) {
     return sum % 10 === 0;
   };
 
+  const resolvePath = (object, path) => {
+    if (!path) return object;
+    const segments = path.split('.');
+    let cursor = object;
+    for (const segment of segments) {
+      if (cursor == null) return undefined;
+      cursor = cursor[segment];
+    }
+    return cursor;
+  };
+
+  const requireDeps = (deps = {}, requirements = {}) => {
+    const entries = Object.entries(requirements);
+    entries.forEach(([path, validator]) => {
+      const check = typeof validator === 'function' ? validator : () => true;
+      const value = resolvePath(deps, path);
+      if (!check(value)) {
+        throw new Error(`[GMH] Missing or invalid dependency: ${path}`);
+      }
+    });
+    return deps;
+  };
+
   const DEFAULT_PLAYER_MARK$2 = '⟦PLAYER⟧ ';
 
   const createGenitAdapter = ({
@@ -1931,12 +1954,11 @@ var GMHBundle = (function (exports) {
         if (/^INFO$/i.test(clean)) return true;
         if (knownLabels.has(clean)) return true;
         const wordCount = clean.split(/\s+/).length;
-        if (
-          wordCount === 1 &&
-          looksLikeName(clean) &&
-          !/[.!?…:,]/.test(clean)
-        )
-          return true;
+        if (wordCount === 1) {
+          if (knownLabels.has(clean)) return true;
+          if (/^[A-Za-z][A-Za-z .,'’]{0,24}$/.test(clean)) return true;
+          return false;
+        }
         return false;
       };
 
@@ -2189,8 +2211,41 @@ var GMHBundle = (function (exports) {
 
   const DEFAULT_PRIVACY_PROFILE = 'safe';
 
-  const MAX_CUSTOM_LIST_ITEMS = 1000;
-  const MAX_CUSTOM_ITEM_LENGTH = 200;
+  const CONFIG = {
+    LIMITS: {
+      PRIVACY_LIST_MAX: 1000,
+      PRIVACY_ITEM_MAX: 200,
+      PREVIEW_TURN_LIMIT: 5,
+    },
+    TIMING: {
+      AUTO_LOADER: {
+        METER_INTERVAL_MS: 1500,
+        PROFILES: {
+          default: {
+            cycleDelayMs: 700,
+            settleTimeoutMs: 2000,
+            maxStableRounds: 3,
+            guardLimit: 60,
+          },
+          stability: {
+            cycleDelayMs: 1200,
+            settleTimeoutMs: 2600,
+            maxStableRounds: 5,
+            guardLimit: 140,
+          },
+          fast: {
+            cycleDelayMs: 350,
+            settleTimeoutMs: 900,
+            maxStableRounds: 2,
+            guardLimit: 40,
+          },
+        },
+      },
+    },
+  };
+
+  const MAX_CUSTOM_LIST_ITEMS = CONFIG.LIMITS.PRIVACY_LIST_MAX;
+  const MAX_CUSTOM_ITEM_LENGTH = CONFIG.LIMITS.PRIVACY_ITEM_MAX;
   const DISALLOWED_PATTERN = /<|>|javascript:/i;
 
   const sanitizeList = (items = [], collapseSpaces = (value) => value) => {
@@ -2589,7 +2644,7 @@ var GMHBundle = (function (exports) {
         })
       : [];
 
-  const cloneSession = (session) => {
+  const cloneSession$1 = (session) => {
     if (!session) {
       return {
         meta: {},
@@ -2688,7 +2743,7 @@ var GMHBundle = (function (exports) {
       const boundRedact = (value, targetProfile, targetCounts) =>
         redactText(value, targetProfile, targetCounts, config, profiles);
 
-      const sanitizedSession = cloneSession(session);
+      const sanitizedSession = cloneSession$1(session);
       sanitizedSession.turns = sanitizedSession.turns.map((turn) => {
         const next = { ...turn };
         next.text = boundRedact(turn.text, activeProfile, counts);
@@ -5643,7 +5698,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     };
   }
 
-  const METER_INTERVAL_MS = 1500;
+  const METER_INTERVAL_MS = CONFIG.TIMING.AUTO_LOADER.METER_INTERVAL_MS;
 
   function createAutoLoader({
     stateApi,
@@ -5689,26 +5744,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const clearIntervalFn =
       typeof win?.clearInterval === 'function' ? win.clearInterval.bind(win) : clearInterval;
 
-    const AUTO_PROFILES = {
-      default: {
-        cycleDelayMs: 700,
-        settleTimeoutMs: 2000,
-        maxStableRounds: 3,
-        guardLimit: 60,
-      },
-      stability: {
-        cycleDelayMs: 1200,
-        settleTimeoutMs: 2600,
-        maxStableRounds: 5,
-        guardLimit: 140,
-      },
-      fast: {
-        cycleDelayMs: 350,
-        settleTimeoutMs: 900,
-        maxStableRounds: 2,
-        guardLimit: 40,
-      },
-    };
+    const AUTO_PROFILES = CONFIG.TIMING.AUTO_LOADER.PROFILES;
 
     const AUTO_CFG = {
       profile: 'default',
@@ -5865,12 +5901,21 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             .forEach((idx) => blockSet.add(idx));
         });
         const entryCount = blockSet.size || session.turns.length;
-        exportRange?.setTotals?.({
-          message: Math.max(previousTotals.message || 0, session.turns.length),
-          user: Math.max(previousTotals.user || 0, userMessages),
-          llm: Math.max(previousTotals.llm || 0, llmMessages),
+        const nextTotals = {
+          message: session.turns.length,
+          user: userMessages,
+          llm: llmMessages,
           entry: entryCount,
-        });
+        };
+        const totalsShrank =
+          Number.isFinite(previousTotals.message) && previousTotals.message > nextTotals.message;
+        const userShrank = Number.isFinite(previousTotals.user) && previousTotals.user > nextTotals.user;
+        const llmShrank = Number.isFinite(previousTotals.llm) && previousTotals.llm > nextTotals.llm;
+        const entryShrank = Number.isFinite(previousTotals.entry) && previousTotals.entry > nextTotals.entry;
+        if (totalsShrank || userShrank || llmShrank || entryShrank) {
+          exportRange?.clear?.();
+        }
+        exportRange?.setTotals?.(nextTotals);
         const stats = {
           session,
           userMessages,
@@ -7098,34 +7143,64 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     alert: alertFn = (msg) => globalThis.alert?.(msg),
     logger = typeof console !== 'undefined' ? console : null,
   }) {
-    if (!captureStructuredSnapshot || !normalizeTranscript || !buildSession) {
-      throw new Error('createShareWorkflow requires transcript helpers');
-    }
-    if (!exportRange) throw new Error('createShareWorkflow requires exportRange');
-    if (!applyPrivacyPipeline || !privacyConfig || !privacyProfiles) {
-      throw new Error('createShareWorkflow requires privacy dependencies');
-    }
-    if (!buildExportBundle || !buildExportManifest || !triggerDownload) {
-      throw new Error('createShareWorkflow requires export helpers');
-    }
-    if (!clipboard || typeof clipboard.set !== 'function') {
-      throw new Error('createShareWorkflow requires clipboard helper');
-    }
-    if (!stateApi || !stateEnum) {
-      throw new Error('createShareWorkflow requires state API');
-    }
-    if (!projectStructuredMessages) {
-      throw new Error('createShareWorkflow requires projectStructuredMessages');
-    }
-    if (!cloneSession) {
-      throw new Error('createShareWorkflow requires cloneSession');
-    }
-    if (!collectSessionStats) {
-      throw new Error('createShareWorkflow requires collectSessionStats');
-    }
-    if (!confirmPrivacyGate) {
-      throw new Error('createShareWorkflow requires confirmPrivacyGate');
-    }
+    requireDeps(
+      {
+        captureStructuredSnapshot,
+        normalizeTranscript,
+        buildSession,
+        exportRange,
+        projectStructuredMessages,
+        cloneSession,
+        applyPrivacyPipeline,
+        privacyConfig,
+        privacyProfiles,
+        formatRedactionCounts,
+        setPanelStatus,
+        toMarkdownExport,
+        toJSONExport,
+        toTXTExport,
+        toStructuredMarkdown,
+        toStructuredJSON,
+        toStructuredTXT,
+        buildExportBundle,
+        buildExportManifest,
+        triggerDownload,
+        clipboard,
+        stateApi,
+        stateEnum,
+        confirmPrivacyGate,
+        getEntryOrigin,
+        collectSessionStats,
+      },
+      {
+        captureStructuredSnapshot: (fn) => typeof fn === 'function',
+        normalizeTranscript: (fn) => typeof fn === 'function',
+        buildSession: (fn) => typeof fn === 'function',
+        exportRange: (value) => Boolean(value?.setTotals),
+        projectStructuredMessages: (fn) => typeof fn === 'function',
+        cloneSession: (fn) => typeof fn === 'function',
+        applyPrivacyPipeline: (fn) => typeof fn === 'function',
+        privacyConfig: (value) => Boolean(value),
+        privacyProfiles: (value) => Boolean(value),
+        formatRedactionCounts: (fn) => typeof fn === 'function',
+        setPanelStatus: (fn) => typeof fn === 'function',
+        toMarkdownExport: (fn) => typeof fn === 'function',
+        toJSONExport: (fn) => typeof fn === 'function',
+        toTXTExport: (fn) => typeof fn === 'function',
+        toStructuredMarkdown: (fn) => typeof fn === 'function',
+        toStructuredJSON: (fn) => typeof fn === 'function',
+        toStructuredTXT: (fn) => typeof fn === 'function',
+        buildExportBundle: (fn) => typeof fn === 'function',
+        buildExportManifest: (fn) => typeof fn === 'function',
+        triggerDownload: (fn) => typeof fn === 'function',
+        'clipboard.set': (fn) => typeof fn === 'function',
+        stateApi: (value) => Boolean(value?.setState),
+        stateEnum: (value) => Boolean(value),
+        confirmPrivacyGate: (fn) => typeof fn === 'function',
+        getEntryOrigin: (fn) => typeof fn === 'function',
+        collectSessionStats: (fn) => typeof fn === 'function',
+      },
+    );
 
     const parseAll = () => {
       const snapshot = captureStructuredSnapshot({ force: true });
@@ -8543,40 +8618,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     return { bindGuideControls };
   }
 
-  (function () {
-
-    const PAGE_WINDOW =
-      ENV.window || (typeof unsafeWindow !== 'undefined' ? unsafeWindow : window);
-    const detectScriptVersion = () => {
-      const gmInfo = ENV.GM_info;
-      const version = gmInfo?.script?.version;
-      if (typeof version === 'string' && version.trim()) {
-        return version.trim();
-      }
-      return '0.0.0-dev';
-    };
-
-    const scriptVersion = detectScriptVersion();
-
-    GMH.VERSION = scriptVersion;
-
-    GMH.Adapters.Registry = adapterRegistry;
-    GMH.Adapters.register = function registerAdapter(name, config) {
-      registerAdapterConfig(name, config);
-    };
-
-    GMH.Adapters.getSelectors = function getSelectors(name) {
-      return getAdapterSelectors(name);
-    };
-
-    GMH.Adapters.getMetadata = function getMetadata(name) {
-      return getAdapterMetadata(name);
-    };
-
-    GMH.Adapters.list = function listAdapters() {
-      return listAdapterNames();
-    };
-
+  function registerGenitConfig(registerAdapterConfig) {
     registerAdapterConfig('genit', {
       selectors: {
         chatContainers: [
@@ -8628,10 +8670,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
           '[data-username]',
           '.text-sm.text-muted-foreground.mb-1.ml-1',
         ],
-        npcBubble: [
-          '.p-4.rounded-xl.bg-background',
-          '.p-3.rounded-lg.bg-muted\\/50',
-        ],
+        npcBubble: ['.p-4.rounded-xl.bg-background', '.p-3.rounded-lg.bg-muted\\/50'],
         narrationBlocks: [
           '.markdown-content.text-muted-foreground > p',
           '.text-muted-foreground.text-sm > p',
@@ -8647,16 +8686,393 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         textHints: ['메시지', '채팅', '대화'],
       },
     });
+  }
+
+  function isPrologueBlock(element) {
+    let current = element instanceof Element ? element : null;
+    let hops = 0;
+    while (current && hops < 400) {
+      if (current.hasAttribute?.('data-gmh-player-turn')) return false;
+      if (current.previousElementSibling) {
+        current = current.previousElementSibling;
+      } else {
+        current = current.parentElement;
+      }
+      hops += 1;
+    }
+    return true;
+  }
+
+  function createAdapterAPI({ GMH, errorHandler, PLAYER_NAME_FALLBACKS, setPlayerNames, getPlayerNames }) {
+    GMH.Adapters = GMH.Adapters || {};
+    GMH.Core = GMH.Core || {};
+
+    GMH.Adapters.Registry = GMH.Adapters.Registry ?? null;
+    GMH.Adapters.register = GMH.Adapters.register ?? (() => {});
+    GMH.Adapters.getSelectors = GMH.Adapters.getSelectors ?? (() => null);
+    GMH.Adapters.getMetadata = GMH.Adapters.getMetadata ?? (() => null);
+    GMH.Adapters.list = GMH.Adapters.list ?? (() => []);
+
+    const warnDetectFailure = (err) => {
+      const level = errorHandler?.LEVELS?.WARN || 'warn';
+      errorHandler?.handle?.(err, 'adapter/detect', level);
+    };
+
+    const pickAdapter = (loc = location, doc = document) => {
+      const candidates = Array.isArray(GMH.Core.adapters) ? GMH.Core.adapters : [];
+      for (const adapter of candidates) {
+        try {
+          if (adapter?.match?.(loc, doc)) return adapter;
+        } catch (err) {
+          warnDetectFailure(err);
+        }
+      }
+      return GMH.Adapters.genit;
+    };
+
+    GMH.Core.pickAdapter = pickAdapter;
+
+    let activeAdapter = null;
+    const getActiveAdapter = () => {
+      if (!activeAdapter) {
+        activeAdapter = pickAdapter(location, document);
+      }
+      return activeAdapter;
+    };
+
+    GMH.Core.getActiveAdapter = getActiveAdapter;
+
+    const guessPlayerNamesFromDOM = () => {
+      const adapter = getActiveAdapter();
+      return adapter?.guessPlayerNames?.() || [];
+    };
+
+    const updatePlayerNames = () => {
+      const names = Array.from(
+        new Set([...PLAYER_NAME_FALLBACKS, ...guessPlayerNamesFromDOM()].filter(Boolean)),
+      );
+      setPlayerNames(names);
+      GMH.Adapters.genit?.setPlayerNameAccessor?.(() => getPlayerNames());
+    };
+
+    return {
+      pickAdapter,
+      getActiveAdapter,
+      guessPlayerNamesFromDOM,
+      updatePlayerNames,
+      resetActiveAdapter() {
+        activeAdapter = null;
+      },
+    };
+  }
+
+  /**
+   * Registers available DOM adapters and exposes helper APIs for adapter selection.
+   *
+   * @param {object} options - Injection container.
+   * @param {typeof import('../core/namespace.js').GMH} options.GMH - Global namespace handle.
+   * @param {Map} options.adapterRegistry - Registry backing store.
+   * @param {Function} options.registerAdapterConfig - Adapter registration helper.
+   * @param {Function} options.getAdapterSelectors - Accessor for adapter selectors.
+   * @param {Function} options.getAdapterMetadata - Accessor for adapter metadata.
+   * @param {Function} options.listAdapterNames - Lists registered adapter identifiers.
+   * @param {Function} options.createGenitAdapter - Factory for Genit adapter.
+   * @param {object} [options.errorHandler] - Optional error handler for logging.
+   * @param {Function} options.getPlayerNames - Retrieves configured player names.
+   * @param {Function} options.setPlayerNames - Persists player names.
+   * @param {Array<string>} options.PLAYER_NAME_FALLBACKS - Default player name list.
+   * @returns {object} Adapter utilities bound to the GMH namespace.
+   */
+  function composeAdapters({
+    GMH,
+    adapterRegistry,
+    registerAdapterConfig,
+    getAdapterSelectors,
+    getAdapterMetadata,
+    listAdapterNames,
+    createGenitAdapter,
+    errorHandler,
+    getPlayerNames,
+    setPlayerNames,
+    PLAYER_NAME_FALLBACKS,
+  }) {
+    GMH.Adapters = GMH.Adapters || {};
+    GMH.Core = GMH.Core || {};
+
+    GMH.Adapters.Registry = adapterRegistry;
+    GMH.Adapters.register = (name, config) => registerAdapterConfig(name, config);
+    GMH.Adapters.getSelectors = (name) => getAdapterSelectors(name);
+    GMH.Adapters.getMetadata = (name) => getAdapterMetadata(name);
+    GMH.Adapters.list = () => listAdapterNames();
+
+    registerGenitConfig(registerAdapterConfig);
 
     const genitAdapter = createGenitAdapter({
       registry: adapterRegistry,
       getPlayerNames,
       isPrologueBlock,
-      errorHandler: GMH.Core.ErrorHandler,
+      errorHandler,
     });
 
     GMH.Adapters.genit = genitAdapter;
+    GMH.Core.adapters = [genitAdapter];
 
+    const api = createAdapterAPI({
+      GMH,
+      errorHandler,
+      PLAYER_NAME_FALLBACKS,
+      setPlayerNames,
+      getPlayerNames,
+    });
+    api.updatePlayerNames();
+
+    return {
+      genitAdapter,
+      ...api,
+    };
+  }
+
+  /**
+   * Builds the privacy configuration pipeline and persistence store.
+   *
+   * @param {object} options - Dependency container.
+   * @param {Function} options.createPrivacyStore - Factory for privacy store.
+   * @param {Function} options.createPrivacyPipeline - Factory for redaction pipeline.
+   * @param {object} options.PRIVACY_PROFILES - Available privacy profile definitions.
+   * @param {string} options.DEFAULT_PRIVACY_PROFILE - Default profile key.
+   * @param {Function} options.collapseSpaces - Text normaliser.
+   * @param {Function} options.privacyRedactText - Redaction function.
+   * @param {Function} options.hasMinorSexualContext - Minor detection helper.
+   * @param {Function} options.getPlayerNames - Player name accessor.
+   * @param {object} options.ENV - Environment shims (console/storage).
+   * @param {object} options.errorHandler - Error handler instance.
+   * @returns {object} Privacy helpers bound to runtime configuration.
+   */
+  function composePrivacy({
+    createPrivacyStore,
+    createPrivacyPipeline,
+    PRIVACY_PROFILES,
+    DEFAULT_PRIVACY_PROFILE,
+    collapseSpaces,
+    privacyRedactText,
+    hasMinorSexualContext,
+    getPlayerNames,
+    ENV,
+    errorHandler,
+  }) {
+    const privacyStore = createPrivacyStore({
+      storage: ENV.localStorage,
+      errorHandler,
+      collapseSpaces,
+      defaultProfile: DEFAULT_PRIVACY_PROFILE,
+      profiles: PRIVACY_PROFILES,
+    });
+
+    const privacyConfig = privacyStore.config;
+
+    const setPrivacyProfile = (profileKey) => {
+      privacyStore.setProfile(profileKey);
+      return privacyConfig.profile;
+    };
+
+    const setCustomList = (type, items) => {
+      privacyStore.setCustomList(type, items);
+      return privacyConfig;
+    };
+
+    const boundRedactText = (text, profileKey, counts) =>
+      privacyRedactText(text, profileKey, counts, privacyConfig, PRIVACY_PROFILES);
+
+    const { applyPrivacyPipeline } = createPrivacyPipeline({
+      profiles: PRIVACY_PROFILES,
+      getConfig: () => privacyConfig,
+      redactText: boundRedactText,
+      hasMinorSexualContext,
+      getPlayerNames,
+      logger: ENV.console,
+      storage: ENV.localStorage,
+    });
+
+    return {
+      privacyStore,
+      privacyConfig,
+      setPrivacyProfile,
+      setCustomList,
+      applyPrivacyPipeline,
+      boundRedactText,
+    };
+  }
+
+  function cloneSession(session) {
+    const clonedTurns = Array.isArray(session?.turns)
+      ? session.turns.map((turn) => {
+          const clone = { ...turn };
+          if (Array.isArray(turn.__gmhEntries)) {
+            Object.defineProperty(clone, '__gmhEntries', {
+              value: turn.__gmhEntries.slice(),
+              enumerable: false,
+              writable: true,
+              configurable: true,
+            });
+          }
+          if (Array.isArray(turn.__gmhSourceBlocks)) {
+            Object.defineProperty(clone, '__gmhSourceBlocks', {
+              value: turn.__gmhSourceBlocks.slice(),
+              enumerable: false,
+              writable: true,
+              configurable: true,
+            });
+          }
+          return clone;
+        })
+      : [];
+    return {
+      meta: { ...(session?.meta || {}) },
+      turns: clonedTurns,
+      warnings: Array.isArray(session?.warnings) ? [...session.warnings] : [],
+      source: session?.source,
+    };
+  }
+
+  function collectSessionStats(session) {
+    if (!session) return { userMessages: 0, llmMessages: 0, totalMessages: 0, warnings: 0 };
+    const userMessages = session.turns?.filter((turn) => turn.channel === 'user')?.length || 0;
+    const llmMessages = session.turns?.filter((turn) => turn.channel === 'llm')?.length || 0;
+    const totalMessages = session.turns?.length || 0;
+    const warnings = session.warnings?.length || 0;
+    return { userMessages, llmMessages, totalMessages, warnings };
+  }
+
+  /**
+   * Wires the share workflow with grouped dependencies returned from index.
+   *
+   * @param {object} options - Dependency container.
+   * @param {Function} options.createShareWorkflow - Share workflow factory.
+   * @param {Function} options.captureStructuredSnapshot - Structured snapshot capture helper.
+   * @param {Function} options.normalizeTranscript - Transcript normaliser.
+   * @param {Function} options.buildSession - Session builder.
+   * @param {object} options.exportRange - Export range controller.
+   * @param {Function} options.projectStructuredMessages - Structured message projector.
+   * @param {Function} options.applyPrivacyPipeline - Privacy pipeline executor.
+   * @param {object} options.privacyConfig - Active privacy configuration reference.
+   * @param {object} options.privacyProfiles - Supported privacy profiles.
+   * @param {Function} options.formatRedactionCounts - Formatter for redaction metrics.
+   * @param {Function} options.setPanelStatus - Panel status setter.
+   * @param {Function} options.toMarkdownExport - Classic markdown exporter.
+   * @param {Function} options.toJSONExport - Classic JSON exporter.
+   * @param {Function} options.toTXTExport - Classic TXT exporter.
+   * @param {Function} options.toStructuredMarkdown - Structured markdown exporter.
+   * @param {Function} options.toStructuredJSON - Structured JSON exporter.
+   * @param {Function} options.toStructuredTXT - Structured TXT exporter.
+   * @param {Function} options.buildExportBundle - Bundle builder.
+   * @param {Function} options.buildExportManifest - Manifest builder.
+   * @param {Function} options.triggerDownload - Download helper.
+   * @param {object} options.clipboard - Clipboard helpers.
+   * @param {object} options.stateApi - State manager API.
+   * @param {object} options.stateEnum - State enum reference.
+   * @param {Function} options.confirmPrivacyGate - Privacy confirmation helper.
+   * @param {Function} options.getEntryOrigin - Entry origin accessor.
+   * @param {object} options.logger - Logger implementation.
+   * @returns {object} Share workflow API with helper statistics.
+   */
+  function composeShareWorkflow({
+    createShareWorkflow,
+    captureStructuredSnapshot,
+    normalizeTranscript,
+    buildSession,
+    exportRange,
+    projectStructuredMessages,
+    applyPrivacyPipeline,
+    privacyConfig,
+    privacyProfiles,
+    formatRedactionCounts,
+    setPanelStatus,
+    toMarkdownExport,
+    toJSONExport,
+    toTXTExport,
+    toStructuredMarkdown,
+    toStructuredJSON,
+    toStructuredTXT,
+    buildExportBundle,
+    buildExportManifest,
+    triggerDownload,
+    clipboard,
+    stateApi,
+    stateEnum,
+    confirmPrivacyGate,
+    getEntryOrigin,
+    logger,
+  }) {
+    const shareApi = createShareWorkflow({
+      captureStructuredSnapshot,
+      normalizeTranscript,
+      buildSession,
+      exportRange,
+      projectStructuredMessages,
+      cloneSession,
+      applyPrivacyPipeline,
+      privacyConfig,
+      privacyProfiles,
+      formatRedactionCounts,
+      setPanelStatus,
+      toMarkdownExport,
+      toJSONExport,
+      toTXTExport,
+      toStructuredMarkdown,
+      toStructuredJSON,
+      toStructuredTXT,
+      buildExportBundle,
+      buildExportManifest,
+      triggerDownload,
+      clipboard,
+      stateApi,
+      stateEnum,
+      confirmPrivacyGate,
+      getEntryOrigin,
+      collectSessionStats,
+      logger,
+    });
+
+    return {
+      ...shareApi,
+      collectSessionStats,
+    };
+  }
+
+  (function () {
+
+    const PAGE_WINDOW =
+      ENV.window || (typeof unsafeWindow !== 'undefined' ? unsafeWindow : window);
+    const detectScriptVersion = () => {
+      const gmInfo = ENV.GM_info;
+      const version = gmInfo?.script?.version;
+      if (typeof version === 'string' && version.trim()) {
+        return version.trim();
+      }
+      return '0.0.0-dev';
+    };
+
+    const scriptVersion = detectScriptVersion();
+
+    GMH.VERSION = scriptVersion;
+
+    const {
+      getActiveAdapter,
+      updatePlayerNames,
+    } = composeAdapters({
+      GMH,
+      adapterRegistry,
+      registerAdapterConfig,
+      getAdapterSelectors,
+      getAdapterMetadata,
+      listAdapterNames,
+      createGenitAdapter,
+      errorHandler: GMH.Core?.ErrorHandler,
+      getPlayerNames,
+      setPlayerNames,
+      PLAYER_NAME_FALLBACKS,
+    });
+    updatePlayerNames();
     const buildExportBundle$1 = (
       session,
       normalizedRaw,
@@ -8836,84 +9252,37 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     ensureDefaultUIFlag();
 
     // -------------------------------
-    // 0) Constants & utils
+    // 0) Privacy composition
     // -------------------------------
-    const privacyStore = createPrivacyStore({
-      storage: ENV.localStorage,
-      errorHandler: GMH.Core.ErrorHandler,
+    const {
+      privacyConfig: PRIVACY_CFG,
+      setPrivacyProfile: setPrivacyProfileInternal,
+      setCustomList: setCustomListInternal,
+      applyPrivacyPipeline,
+      boundRedactText,
+    } = composePrivacy({
+      createPrivacyStore,
+      createPrivacyPipeline,
+      PRIVACY_PROFILES,
+      DEFAULT_PRIVACY_PROFILE,
       collapseSpaces,
-      defaultProfile: DEFAULT_PRIVACY_PROFILE,
-      profiles: PRIVACY_PROFILES,
+      privacyRedactText: redactText,
+      hasMinorSexualContext,
+      getPlayerNames,
+      ENV,
+      errorHandler,
     });
-
-    const PRIVACY_CFG = privacyStore.config;
 
     let syncPrivacyProfileSelect = () => {};
 
-    function setPrivacyProfile(profileKey) {
-      privacyStore.setProfile(profileKey);
+    const setPrivacyProfile = (profileKey) => {
+      setPrivacyProfileInternal(profileKey);
       syncPrivacyProfileSelect(profileKey);
-    }
+    };
 
-    function setCustomList(type, items) {
-      privacyStore.setCustomList(type, items);
-    }
-
-    const boundRedactText = (text, profileKey, counts) =>
-      redactText(text, profileKey, counts, PRIVACY_CFG, PRIVACY_PROFILES);
-
-    const { applyPrivacyPipeline } = createPrivacyPipeline({
-      profiles: PRIVACY_PROFILES,
-      getConfig: () => PRIVACY_CFG,
-      redactText: boundRedactText,
-      hasMinorSexualContext,
-      getPlayerNames,
-      logger: ENV.console,
-      storage: ENV.localStorage,
-    });
-
-    function cloneSession(session) {
-      const clonedTurns = Array.isArray(session?.turns)
-        ? session.turns.map((turn) => {
-            const clone = { ...turn };
-            if (Array.isArray(turn.__gmhEntries)) {
-              Object.defineProperty(clone, '__gmhEntries', {
-                value: turn.__gmhEntries.slice(),
-                enumerable: false,
-                writable: true,
-                configurable: true,
-              });
-            }
-            if (Array.isArray(turn.__gmhSourceBlocks)) {
-              Object.defineProperty(clone, '__gmhSourceBlocks', {
-                value: turn.__gmhSourceBlocks.slice(),
-                enumerable: false,
-                writable: true,
-                configurable: true,
-              });
-            }
-            return clone;
-          })
-        : [];
-      return {
-        meta: { ...(session?.meta || {}) },
-        turns: clonedTurns,
-        warnings: Array.isArray(session?.warnings) ? [...session.warnings] : [],
-        source: session?.source,
-      };
-    }
-
-
-    function collectSessionStats(session) {
-      if (!session) return { userMessages: 0, llmMessages: 0, totalMessages: 0, warnings: 0 };
-      const userMessages = session.turns?.filter((turn) => turn.channel === 'user')?.length || 0;
-      const llmMessages = session.turns?.filter((turn) => turn.channel === 'llm')?.length || 0;
-      const totalMessages = session.turns?.length || 0;
-      const warnings = session.warnings?.length || 0;
-      return { userMessages, llmMessages, totalMessages, warnings };
-    }
-
-    const PREVIEW_TURN_LIMIT = 5;
+    const setCustomList = (type, items) => {
+      setCustomListInternal(type, items);
+    };
 
     GMH.UI.Modal = createModal({ documentRef: document, windowRef: PAGE_WINDOW });
 
@@ -9033,7 +9402,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       formatRedactionCounts,
       privacyProfiles: PRIVACY_PROFILES,
       ensureLegacyPreviewStyles,
-      previewLimit: PREVIEW_TURN_LIMIT,
+      previewLimit: CONFIG.LIMITS.PREVIEW_TURN_LIMIT,
     });
 
     const { confirm: confirmPrivacyGateModern } = createModernPrivacyGate({
@@ -9042,7 +9411,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       privacyProfiles: PRIVACY_PROFILES,
       ensureDesignSystemStyles,
       modal: GMH.UI.Modal,
-      previewLimit: PREVIEW_TURN_LIMIT,
+      previewLimit: CONFIG.LIMITS.PREVIEW_TURN_LIMIT,
     });
 
     const confirmPrivacyGate = (options) =>
@@ -9054,13 +9423,14 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       copyRecent: copyRecentShare,
       copyAll: copyAllShare,
       reparse: reparseShare,
-    } = createShareWorkflow({
+      collectSessionStats,
+    } = composeShareWorkflow({
+      createShareWorkflow,
       captureStructuredSnapshot,
       normalizeTranscript,
       buildSession,
       exportRange,
       projectStructuredMessages,
-      cloneSession,
       applyPrivacyPipeline,
       privacyConfig: PRIVACY_CFG,
       privacyProfiles: PRIVACY_PROFILES,
@@ -9080,7 +9450,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       stateEnum: GMH.Core.STATE,
       confirmPrivacyGate,
       getEntryOrigin: () => getSnapshotEntryOrigin?.(),
-      collectSessionStats,
+      logger: ENV.console,
     });
 
 
@@ -9160,71 +9530,8 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       stateView: GMH.UI.StateView,
       bindPanelInteractions,
     });
-    GMH.Core.adapters = [GMH.Adapters.genit];
-
-    GMH.Core.pickAdapter = function pickAdapter(loc = location, doc = document) {
-      const candidates = Array.isArray(GMH.Core.adapters) ? GMH.Core.adapters : [];
-      for (const adapter of candidates) {
-        try {
-          if (adapter?.match?.(loc, doc)) return adapter;
-        } catch (err) {
-          const level = errorHandler.LEVELS?.WARN || 'warn';
-          errorHandler.handle(err, 'adapter/detect', level);
-        }
-      }
-      return GMH.Adapters.genit;
-    };
-
-  let ACTIVE_ADAPTER = null;
-
-  function getActiveAdapter() {
-    if (!ACTIVE_ADAPTER) {
-      ACTIVE_ADAPTER = GMH.Core.pickAdapter(location, document);
-    }
-    return ACTIVE_ADAPTER;
-  }
-
-
-
-
-
-
-    function guessPlayerNamesFromDOM() {
-      const adapter = getActiveAdapter();
-      return adapter?.guessPlayerNames?.() || [];
-    }
-
-    const updatePlayerNames = () => {
-      const names = Array.from(
-        new Set([...PLAYER_NAME_FALLBACKS, ...guessPlayerNamesFromDOM()].filter(Boolean)),
-      );
-      setPlayerNames(names);
-      GMH.Adapters.genit?.setPlayerNameAccessor?.(() => getPlayerNames());
-    };
-
-    updatePlayerNames();
-
     // -------------------------------
     // 2) Writers handled via src/export modules
-    // -------------------------------
-
-    function isPrologueBlock(element) {
-      let current = element instanceof Element ? element : null;
-      let hops = 0;
-      while (current && hops < 400) {
-        if (current.hasAttribute?.('data-gmh-player-turn')) return false;
-        if (current.previousElementSibling) {
-          current = current.previousElementSibling;
-        } else {
-          current = current.parentElement;
-        }
-        hops += 1;
-      }
-      return true;
-    }
-
-    // -------------------------------
-    // 4) UI Panel
     // -------------------------------
 
 

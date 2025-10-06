@@ -1,8 +1,9 @@
 import { STORAGE_KEYS, PRIVACY_PROFILES, DEFAULT_PRIVACY_PROFILE } from './constants.js';
+import { CONFIG } from '../config.js';
 
 const noop = () => {};
-const MAX_CUSTOM_LIST_ITEMS = 1000;
-const MAX_CUSTOM_ITEM_LENGTH = 200;
+const MAX_CUSTOM_LIST_ITEMS = CONFIG.LIMITS.PRIVACY_LIST_MAX;
+const MAX_CUSTOM_ITEM_LENGTH = CONFIG.LIMITS.PRIVACY_ITEM_MAX;
 const DISALLOWED_PATTERN = /<|>|javascript:/i;
 
 const sanitizeList = (items = [], collapseSpaces = (value) => value) => {

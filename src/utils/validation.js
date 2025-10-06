@@ -25,7 +25,31 @@ export const luhnValid = (value) => {
   return sum % 10 === 0;
 };
 
+const resolvePath = (object, path) => {
+  if (!path) return object;
+  const segments = path.split('.');
+  let cursor = object;
+  for (const segment of segments) {
+    if (cursor == null) return undefined;
+    cursor = cursor[segment];
+  }
+  return cursor;
+};
+
+export const requireDeps = (deps = {}, requirements = {}) => {
+  const entries = Object.entries(requirements);
+  entries.forEach(([path, validator]) => {
+    const check = typeof validator === 'function' ? validator : () => true;
+    const value = resolvePath(deps, path);
+    if (!check(value)) {
+      throw new Error(`[GMH] Missing or invalid dependency: ${path}`);
+    }
+  });
+  return deps;
+};
+
 export default {
   looksLikeName,
   luhnValid,
+  requireDeps,
 };
