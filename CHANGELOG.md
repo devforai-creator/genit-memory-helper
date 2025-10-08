@@ -4,6 +4,36 @@
 
 - _No changes yet_
 
+## v1.11.0 (2025-10-09)
+
+### 아키텍처 개선
+
+- **JSDoc 타입 커버리지 완성**: TypeScript 전환을 위한 전체 타입 주석 인프라 구축 완료
+  - `types/api.d.ts`: 확장된 인터페이스 정의 (state manager, error handler, export range, message indexer, bookmark)
+  - UI 모듈 JSDoc 추가: `src/ui/panel-interactions.js`, `src/ui/panel-visibility.js`, `src/ui/state-view.js`, `src/ui/panel-shortcuts.js`
+  - Core 모듈 JSDoc 추가: `src/core/state.js`, `src/core/error-handler.js`, `src/core/export-range.js`, `src/core/message-indexer.js`, `src/core/turn-bookmarks.js`, `src/core/bookmark-listener.js`
+  - `tsconfig.json`: checkJs 범위 확장 (기존 4개 → 14개 모듈 포함)
+  - v1.9.0 Issue #7 완료 (ROADMAP Phase 1-2)
+
+### 개발자 도구 개선
+
+- **커밋 메시지 규칙 표준화**: AI 에이전트와 인간 개발자를 위한 Conventional Commits 도입
+  - `CLAUDE.md`: AI 에이전트용 커밋 메시지 컨벤션 추가
+  - `.gitmessage`: Git 커밋 템플릿 파일 생성
+  - 타입별 커밋 가이드라인: feat, fix, docs, refactor, test, chore, perf, style
+  - AI는 필수 준수, 인간은 권장 사항으로 유연하게 운영
+
+### 테스트
+
+- 전체 86개 테스트 통과
+- `npm run typecheck` 통과 (14개 모듈)
+- 타입 안전성 강화로 런타임 에러 예방 능력 향상
+
+### 문서
+
+- CLAUDE.md에 Commit Message Convention 섹션 추가
+- AI 에이전트가 참고할 수 있는 명확한 가이드라인 제공
+
 ## v1.10.2 (2025-10-07)
 
 ### 아키텍처 개선
