@@ -1,0 +1,11 @@
+# <type>: <subject>
+#
+# type: feat, fix, docs, refactor, test, chore, perf, style
+#
+# Example:
+#   feat: add new privacy redaction profile
+#   fix: resolve bookmark state persistence bug
+#   docs: update README installation steps
+#
+# Keep subject line under 72 characters
+# Use imperative mood ("add" not "added" or "adds")

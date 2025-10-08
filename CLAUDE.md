@@ -183,6 +183,38 @@ GMH.Adapters.register('genit', {
 
 The script auto-detects genit.ai via URL matching in the userscript header (`@match https://genit.ai/*`).
 
+## Commit Message Convention
+
+**AI agents MUST follow Conventional Commits format:**
+
+```
+<type>: <short description>
+
+[optional body]
+```
+
+**Types:**
+- `feat:` - New feature or enhancement
+- `fix:` - Bug fix
+- `docs:` - Documentation changes
+- `refactor:` - Code refactoring (no functional changes)
+- `test:` - Test additions or modifications
+- `chore:` - Build process, dependencies, tooling
+- `perf:` - Performance improvements
+- `style:` - Code style/formatting (no logic changes)
+
+**Examples:**
+```
+feat: add bookmark navigation shortcuts
+fix: resolve privacy gate modal z-index conflict
+docs: update CLAUDE.md with commit conventions
+refactor: extract range controls to separate module
+test: add smoke tests for auto-loader
+chore: update rollup dependencies
+```
+
+**For human maintainers:** Follow the convention when possible, but simple messages are acceptable for quick fixes and trivial changes.
+
 ## Development Workflow
 
 1. Edit modules under `src/` (core/adapters/privacy/export/ui/features). `src/legacy.js` should only glue modules together—avoid re-introducing large inline blocks there.
