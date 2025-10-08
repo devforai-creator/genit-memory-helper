@@ -1,5 +1,19 @@
+/**
+ * @typedef {import('../../types/api').BookmarkListenerOptions} BookmarkListenerOptions
+ * @typedef {import('../../types/api').BookmarkListener} BookmarkListener
+ * @typedef {import('../../types/api').MessageIndexer} MessageIndexer
+ * @typedef {import('../../types/api').TurnBookmarks} TurnBookmarks
+ */
+
+/**
+ * @returns {void}
+ */
 const noop = () => {};
 
+/**
+ * @param {BookmarkListenerOptions} [options]
+ * @returns {BookmarkListener}
+ */
 export const createBookmarkListener = ({
   document: documentLike,
   ElementClass,
@@ -11,14 +25,21 @@ export const createBookmarkListener = ({
   if (!doc) {
     throw new Error('createBookmarkListener requires a document reference');
   }
+  /** @type {typeof Element | undefined} */
   const ElementRef = ElementClass || (typeof Element !== 'undefined' ? Element : undefined);
+  /** @type {TurnBookmarks | null | undefined} */
   const bookmarks = turnBookmarks;
+  /** @type {MessageIndexer | null | undefined} */
   const indexer = messageIndexer;
   const logger = consoleLike || (typeof console !== 'undefined' ? console : {});
   const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop;
 
   let active = false;
 
+  /**
+   * @param {MouseEvent} event
+   * @returns {void}
+   */
   const handleBookmarkCandidate = (event) => {
     const target = event.target;
     if (!ElementRef || !(target instanceof ElementRef)) return;
@@ -33,8 +54,8 @@ export const createBookmarkListener = ({
       message.getAttribute('data-gmh-message-id') || message.getAttribute('data-message-id');
     const index = Number(indexAttr);
 
-    const lookupOrdinalByIndex = indexer?.lookupOrdinalByIndex;
-    const lookupOrdinalByMessageId = indexer?.lookupOrdinalByMessageId;
+    const lookupOrdinalByIndex = indexer?.lookupOrdinalByIndex?.bind(indexer);
+    const lookupOrdinalByMessageId = indexer?.lookupOrdinalByMessageId?.bind(indexer);
 
     const resolvedOrdinal = [
       Number.isFinite(index) && typeof lookupOrdinalByIndex === 'function'
@@ -59,7 +80,7 @@ export const createBookmarkListener = ({
     );
   };
 
-  return {
+  const api = {
     start() {
       if (active) return;
       doc.addEventListener('click', handleBookmarkCandidate, true);
@@ -74,6 +95,8 @@ export const createBookmarkListener = ({
       return active;
     },
   };
+
+  return /** @type {BookmarkListener} */ (api);
 };
 
 export default createBookmarkListener;

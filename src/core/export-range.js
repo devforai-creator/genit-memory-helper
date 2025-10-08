@@ -1,7 +1,25 @@
+/**
+ * @typedef {import('../../types/api').ExportRangeOptions} ExportRangeOptions
+ * @typedef {import('../../types/api').ExportRangeController} ExportRangeController
+ * @typedef {import('../../types/api').ExportRangeSnapshot} ExportRangeSnapshot
+ * @typedef {import('../../types/api').ExportRangeApplyOptions} ExportRangeApplyOptions
+ * @typedef {import('../../types/api').ExportRangeTotals} ExportRangeTotals
+ * @typedef {import('../../types/api').ExportRangeTotalsInput} ExportRangeTotalsInput
+ * @typedef {import('../../types/api').ExportRangeInfo} ExportRangeInfo
+ * @typedef {import('../../types/api').ExportRangeSelection} ExportRangeSelection
+ * @typedef {import('../../types/api').TranscriptTurn} TranscriptTurn
+ */
+
+/**
+ * @returns {void}
+ */
 const noop = () => {};
 
 /**
  * Factory for managing export range selection and projections across transcripts.
+ *
+ * @param {ExportRangeOptions} [options]
+ * @returns {ExportRangeController}
  */
 export const createExportRange = ({
   console: consoleLike,
@@ -11,20 +29,33 @@ export const createExportRange = ({
   const logger = consoleLike || (typeof console !== 'undefined' ? console : {});
   const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop;
   const table = typeof logger.table === 'function' ? logger.table.bind(logger) : noop;
+  /** @type {(Window & typeof globalThis & { GMH_DEBUG_RANGE?: unknown }) | undefined} */
   const pageWindow = windowLike || (typeof window !== 'undefined' ? window : undefined);
   const storage = localStorage;
 
+  /** @type {{ start: number | null; end: number | null }} */
   const requested = { start: null, end: null };
+  /** @type {ExportRangeTotals} */
   let totals = { message: 0, user: 0, llm: 0, entry: 0 };
+  /** @type {Set<(snapshot: ExportRangeSnapshot) => void>} */
   const listeners = new Set();
   let lastWarnTs = 0;
 
+  /**
+   * @param {unknown} value
+   * @returns {number | null}
+   */
   const toPositiveInt = (value) => {
     const num = Number(value);
     if (!Number.isFinite(num) || num <= 0) return null;
     return Math.floor(num);
   };
 
+  /**
+   * @param {string} message
+   * @param {Record<string, unknown>} data
+   * @returns {void}
+   */
   const emitRangeWarning = (message, data) => {
     const now = Date.now();
     if (now - lastWarnTs < 500) return;
@@ -32,6 +63,9 @@ export const createExportRange = ({
     warn('[GMH] export range adjusted:', message, data);
   };
 
+  /**
+   * @returns {boolean}
+   */
   const isRangeDebugEnabled = () => {
     const flag = pageWindow?.GMH_DEBUG_RANGE;
     if (typeof flag === 'boolean') return flag;
@@ -50,6 +84,9 @@ export const createExportRange = ({
     }
   };
 
+  /**
+   * @returns {void}
+   */
   const normalizeRequestedOrder = () => {
     if (requested.start !== null && requested.end !== null && requested.start > requested.end) {
       emitRangeWarning('start > end; swapping values', {
@@ -62,6 +99,9 @@ export const createExportRange = ({
     }
   };
 
+  /**
+   * @returns {void}
+   */
   const clampRequestedToTotal = () => {
     const totalMessages = Number.isFinite(totals.message)
       ? Math.max(0, Math.floor(totals.message))
@@ -80,6 +120,10 @@ export const createExportRange = ({
     normalizeRequestedOrder();
   };
 
+  /**
+   * @param {number} [totalMessages]
+   * @returns {ExportRangeInfo}
+   */
   const resolveBounds = (totalMessages = totals.message) => {
     const total = Number.isFinite(totalMessages) ? Math.max(0, Math.floor(totalMessages)) : 0;
 
@@ -177,10 +221,25 @@ export const createExportRange = ({
     };
   };
 
+  /**
+   * @typedef {{ blockIdx: number | null; turnIndices: Set<number>; order: number; fallbackOrder: number | null; ordinal?: number }} MessageUnit
+   */
+
+  /**
+   * @param {TranscriptTurn[]} [turns]
+   * @returns {{ units: MessageUnit[]; totalMessages: number; ordinalByTurnIndex: Map<number, number>; ordinalByBlockIndex: Map<number, number> }}
+   */
   const buildMessageUnits = (turns = []) => {
+    /** @type {MessageUnit[]} */
     const units = [];
+    /** @type {Map<number, MessageUnit>} */
     const blockUnitMap = new Map();
 
+    /**
+     * @param {number | null} blockIdx
+     * @param {number | null} [fallbackOrder]
+     * @returns {MessageUnit}
+     */
     const ensureUnit = (blockIdx, fallbackOrder = null) => {
       if (blockIdx !== null && blockUnitMap.has(blockIdx)) {
         return blockUnitMap.get(blockIdx);
@@ -235,12 +294,18 @@ export const createExportRange = ({
     };
   };
 
+  /**
+   * @returns {ExportRangeSnapshot}
+   */
   const snapshot = () => ({
     range: { ...requested },
     totals: { ...totals },
     bounds: resolveBounds(),
   });
 
+  /**
+   * @returns {void}
+   */
   const notify = () => {
     const current = snapshot();
     listeners.forEach((listener) => {
@@ -252,6 +317,11 @@ export const createExportRange = ({
     });
   };
 
+  /**
+   * @param {TranscriptTurn[]} [turns]
+   * @param {ExportRangeApplyOptions} [options]
+   * @returns {ExportRangeSelection}
+   */
   const apply = (turns = [], options = {}) => {
     const list = Array.isArray(turns) ? turns : [];
     const settings = options && typeof options === 'object' ? options : {};
@@ -261,9 +331,11 @@ export const createExportRange = ({
         indices: [],
         ordinals: [],
         info: resolveBounds(0),
+        rangeDetails: null,
       };
     }
 
+    /** @type {Set<number>} */
     const includeIndices = new Set();
     if (Array.isArray(settings.includeIndices)) {
       settings.includeIndices
@@ -289,6 +361,11 @@ export const createExportRange = ({
       });
     }
 
+    /**
+     * @param {number} startPos
+     * @param {number} endPos
+     * @returns {number[]}
+     */
     const collectIndicesInWindow = (startPos, endPos) => {
       const indices = new Set();
       for (let pos = startPos; pos <= endPos; pos += 1) {
@@ -301,6 +378,11 @@ export const createExportRange = ({
         .sort((a, b) => a - b);
     };
 
+    /**
+     * @param {number} startPos
+     * @param {number} endPos
+     * @returns {{ turns: TranscriptTurn[]; indices: number[]; ordinals: (number | null)[]; rangeDetails: { startIndex: number; endIndex: number; messageStartIndex: number | null; messageEndIndex: number | null } }}
+     */
     const deriveSelection = (startPos, endPos) => {
       const clampedStart = Math.max(0, Math.min(startPos, units.length - 1));
       const clampedEnd = Math.max(clampedStart, Math.min(endPos, units.length - 1));
@@ -343,6 +425,7 @@ export const createExportRange = ({
           messageStartIndex: rangeDetails.messageStartIndex,
           messageEndIndex: rangeDetails.messageEndIndex,
         },
+        rangeDetails,
       };
     }
 
@@ -378,10 +461,11 @@ export const createExportRange = ({
         messageStartIndex: rangeDetails.messageStartIndex,
         messageEndIndex: rangeDetails.messageEndIndex,
       },
+      rangeDetails,
     };
   };
 
-  return {
+  const controller = {
     getRange() {
       return { ...requested };
     },
@@ -392,6 +476,10 @@ export const createExportRange = ({
       return resolveBounds(totalMessages);
     },
     apply,
+    /**
+     * @param {number | null | undefined} value
+     * @returns {ExportRangeSnapshot}
+     */
     setStart(value) {
       const next = toPositiveInt(value);
       if (requested.start === next) return snapshot();
@@ -400,6 +488,10 @@ export const createExportRange = ({
       notify();
       return snapshot();
     },
+    /**
+     * @param {number | null | undefined} value
+     * @returns {ExportRangeSnapshot}
+     */
     setEnd(value) {
       const next = toPositiveInt(value);
       if (requested.end === next) return snapshot();
@@ -408,6 +500,11 @@ export const createExportRange = ({
       notify();
       return snapshot();
     },
+    /**
+     * @param {number | null | undefined} startValue
+     * @param {number | null | undefined} endValue
+     * @returns {ExportRangeSnapshot}
+     */
     setRange(startValue, endValue) {
       const nextStart = toPositiveInt(startValue);
       const nextEnd = toPositiveInt(endValue);
@@ -418,6 +515,9 @@ export const createExportRange = ({
       notify();
       return snapshot();
     },
+    /**
+     * @returns {ExportRangeSnapshot}
+     */
     clear() {
       if (requested.start === null && requested.end === null) return snapshot();
       requested.start = null;
@@ -425,6 +525,10 @@ export const createExportRange = ({
       notify();
       return snapshot();
     },
+    /**
+     * @param {ExportRangeTotalsInput} [input]
+     * @returns {ExportRangeSnapshot}
+     */
     setTotals(input = {}) {
       const nextMessage = Number.isFinite(Number(input.message ?? input.entry ?? input.all))
         ? Math.max(0, Math.floor(Number(input.message ?? input.entry ?? input.all)))
@@ -457,6 +561,10 @@ export const createExportRange = ({
       notify();
       return snapshot();
     },
+    /**
+     * @param {(snapshot: ExportRangeSnapshot) => void} listener
+     * @returns {() => void}
+     */
     subscribe(listener) {
       if (typeof listener !== 'function') return noop;
       listeners.add(listener);
@@ -469,6 +577,8 @@ export const createExportRange = ({
     },
     snapshot,
   };
+
+  return /** @type {ExportRangeController} */ (controller);
 };
 
 export default createExportRange;

@@ -1,7 +1,23 @@
+/**
+ * @typedef {import('../../types/api').MessageIndexerOptions} MessageIndexerOptions
+ * @typedef {import('../../types/api').MessageIndexer} MessageIndexer
+ * @typedef {import('../../types/api').MessageIndexerSummary} MessageIndexerSummary
+ * @typedef {import('../../types/api').ExportRangeController} ExportRangeController
+ */
+
+/**
+ * @returns {void}
+ */
 const noop = () => {};
 
 /**
  * Observes Genit chat DOM, annotating blocks with GMH metadata and publishing summaries.
+ */
+/**
+ * Observes Genit chat DOM, annotating blocks with GMH metadata and publishing summaries.
+ *
+ * @param {MessageIndexerOptions} [options]
+ * @returns {MessageIndexer}
  */
 export const createMessageIndexer = ({
   console: consoleLike,
@@ -15,13 +31,18 @@ export const createMessageIndexer = ({
   const logger = consoleLike || (typeof console !== 'undefined' ? console : {});
   const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop;
   const error = typeof logger.error === 'function' ? logger.error.bind(logger) : noop;
+  /** @type {Document | undefined} */
   const documentRef = documentLike || (typeof document !== 'undefined' ? document : undefined);
-  const MutationObserverRef = MutationObserverLike || (typeof MutationObserver !== 'undefined' ? MutationObserver : undefined);
+  /** @type {typeof MutationObserver | undefined} */
+  const MutationObserverRef =
+    MutationObserverLike || (typeof MutationObserver !== 'undefined' ? MutationObserver : undefined);
+  /** @type {((callback: FrameRequestCallback) => number) | null} */
   const raf = typeof rafLike === 'function'
     ? rafLike
     : typeof requestAnimationFrame === 'function'
       ? requestAnimationFrame.bind(globalThis)
       : null;
+  /** @type {ExportRangeController | null | undefined} */
   const exportRangeRef = exportRange;
   const getAdapter = typeof getActiveAdapter === 'function' ? getActiveAdapter : () => null;
   const getOrigins = typeof getEntryOrigin === 'function' ? getEntryOrigin : () => [];
@@ -30,21 +51,34 @@ export const createMessageIndexer = ({
     throw new Error('createMessageIndexer requires a document reference');
   }
 
+  /** @type {MutationObserver | null} */
   let observer = null;
   let scheduled = false;
   let active = false;
+  /** @type {Map<number, number>} */
   const ordinalCacheByIndex = new Map();
+  /** @type {Map<string, number>} */
   const ordinalCacheById = new Map();
+  /** @type {MessageIndexerSummary} */
   let lastSummary = {
     totalMessages: 0,
     userMessages: 0,
+    llmMessages: 0,
     containerPresent: false,
     timestamp: 0,
   };
+  /** @type {Set<(summary: MessageIndexerSummary) => void>} */
   const listeners = new Set();
 
+  /**
+   * @param {MessageIndexerSummary} summary
+   * @returns {MessageIndexerSummary}
+   */
   const cloneSummary = (summary) => ({ ...summary });
 
+  /**
+   * @returns {void}
+   */
   const notify = () => {
     const snapshot = cloneSummary(lastSummary);
     listeners.forEach((listener) => {
@@ -56,6 +90,9 @@ export const createMessageIndexer = ({
     });
   };
 
+  /**
+   * @returns {MessageIndexerSummary}
+   */
   const indexMessages = () => {
     const adapter = getAdapter();
     const container = adapter?.findContainer?.(documentRef);
@@ -118,10 +155,12 @@ export const createMessageIndexer = ({
       : [];
     const uniqueEntryCount = entryOriginIndices.length ? new Set(entryOriginIndices).size : 0;
     const entryCount = blocks.length || uniqueEntryCount;
+    const llmCount = Math.max(blocks.length - userMessageCount, 0);
 
     lastSummary = {
       totalMessages: blocks.length,
       userMessages: userMessageCount,
+      llmMessages: llmCount,
       containerPresent: Boolean(container),
       timestamp: Date.now(),
     };
@@ -131,7 +170,7 @@ export const createMessageIndexer = ({
         exportRangeRef.setTotals({
           message: blocks.length,
           user: userMessageCount,
-          llm: Math.max(blocks.length - userMessageCount, 0),
+          llm: llmCount,
           entry: entryCount,
         });
       } catch (err) {
@@ -143,6 +182,9 @@ export const createMessageIndexer = ({
     return lastSummary;
   };
 
+  /**
+   * @returns {void}
+   */
   const schedule = () => {
     if (scheduled) return;
     scheduled = true;
@@ -162,6 +204,9 @@ export const createMessageIndexer = ({
     }
   };
 
+  /**
+   * @returns {void}
+   */
   const ensureObserver = () => {
     if (observer || !MutationObserverRef || !documentRef) return;
     const target = documentRef.body || documentRef.documentElement;
@@ -173,7 +218,7 @@ export const createMessageIndexer = ({
     observer.observe(target, { childList: true, subtree: true });
   };
 
-  return {
+  const api = {
     start() {
       if (active) {
         schedule();
@@ -224,6 +269,8 @@ export const createMessageIndexer = ({
       return () => listeners.delete(listener);
     },
   };
+
+  return /** @type {MessageIndexer} */ (api);
 };
 
 export default createMessageIndexer;

@@ -1,38 +1,89 @@
+/**
+ * @typedef {import('../../types/api').TurnBookmarksOptions} TurnBookmarksOptions
+ * @typedef {import('../../types/api').TurnBookmarks} TurnBookmarks
+ * @typedef {import('../../types/api').TurnBookmarkEntry} TurnBookmarkEntry
+ */
+
+/**
+ * @returns {void}
+ */
 const noop = () => {};
 
+/**
+ * @param {TurnBookmarksOptions} [options]
+ * @returns {TurnBookmarks}
+ */
 export const createTurnBookmarks = ({ console: consoleLike } = {}) => {
   const logger = consoleLike || (typeof console !== 'undefined' ? console : {});
   const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop;
 
   const HISTORY_LIMIT = 5;
+  /** @type {TurnBookmarkEntry[]} */
   const history = [];
+  /** @type {Set<(entries: TurnBookmarkEntry[]) => void>} */
   const listeners = new Set();
 
+  /**
+   * @param {unknown} entry
+   * @returns {TurnBookmarkEntry | null}
+   */
   const sanitizeEntry = (entry) => {
     if (!entry || typeof entry !== 'object') return null;
-    const { axis, ...rest } = entry;
+    const source = /** @type {Record<string, unknown>} */ (entry);
+    const { axis, ...rest } = source;
+    const entryKey = typeof rest.key === 'string' ? rest.key : null;
     if (axis && axis !== 'message') {
       warn('[GMH] entry-axis bookmark detected; forcing message ordinals', {
         axis,
-        key: entry?.key,
+        key: entryKey,
       });
     }
-    return rest;
+    const normalized = {
+      key: entryKey || `tmp:${Date.now()}`,
+      index: Number(rest.index ?? 0),
+      ordinal:
+        rest.ordinal !== null && rest.ordinal !== undefined && Number.isFinite(Number(rest.ordinal))
+          ? Number(rest.ordinal)
+          : null,
+      messageId: typeof rest.messageId === 'string' && rest.messageId ? rest.messageId : null,
+      timestamp: Number(rest.timestamp ?? Date.now()),
+    };
+    return normalized;
   };
 
+  /**
+   * @param {unknown} entry
+   * @returns {TurnBookmarkEntry | null}
+   */
   const cloneEntry = (entry) => {
     const sanitized = sanitizeEntry(entry);
     return sanitized ? { ...sanitized } : null;
   };
 
+  /**
+   * @param {number} index
+   * @param {string | null} messageId
+   * @returns {string}
+   */
   const makeKey = (index, messageId) => {
     if (typeof messageId === 'string' && messageId) return `id:${messageId}`;
     if (Number.isFinite(Number(index))) return `idx:${Number(index)}`;
     return `tmp:${Date.now()}`;
   };
 
+  /**
+   * @returns {TurnBookmarkEntry[]}
+   */
+  const snapshotHistory = () =>
+    /** @type {TurnBookmarkEntry[]} */ (
+      history.map((item) => cloneEntry(item)).filter((entry) => entry !== null)
+    );
+
+  /**
+   * @returns {void}
+   */
   const emit = () => {
-    const snapshot = history.map(cloneEntry).filter(Boolean);
+    const snapshot = snapshotHistory();
     listeners.forEach((listener) => {
       try {
         listener(snapshot);
@@ -42,7 +93,14 @@ export const createTurnBookmarks = ({ console: consoleLike } = {}) => {
     });
   };
 
-  return {
+  const api = {
+    /**
+     * @param {number} index
+     * @param {number | null | undefined} ordinal
+     * @param {string | null | undefined} messageId
+     * @param {string | null | undefined} axis
+     * @returns {TurnBookmarkEntry | null}
+     */
     record(index, ordinal, messageId, axis) {
       if (!Number.isFinite(Number(index))) return null;
       const normalizedIndex = Number(index);
@@ -77,11 +135,18 @@ export const createTurnBookmarks = ({ console: consoleLike } = {}) => {
       emit();
       return cloneEntry(entry);
     },
+    /**
+     * @returns {void}
+     */
     clear() {
       if (!history.length) return;
       history.length = 0;
       emit();
     },
+    /**
+     * @param {string} key
+     * @returns {void}
+     */
     remove(key) {
       if (!key) return;
       const next = history.findIndex((item) => item.key === key);
@@ -95,25 +160,35 @@ export const createTurnBookmarks = ({ console: consoleLike } = {}) => {
     latest() {
       return history[0] ? cloneEntry(history[0]) : null;
     },
+    /**
+     * @param {string} key
+     * @returns {TurnBookmarkEntry | null}
+     */
     pick(key) {
       if (!key) return null;
       const found = history.find((item) => item.key === key);
       return found ? cloneEntry(found) : null;
     },
     list() {
-      return history.map(cloneEntry).filter(Boolean);
+      return snapshotHistory();
     },
+    /**
+     * @param {(entries: TurnBookmarkEntry[]) => void} listener
+     * @returns {() => void}
+     */
     subscribe(listener) {
       if (typeof listener !== 'function') return noop;
       listeners.add(listener);
       try {
-        listener(history.map(cloneEntry).filter(Boolean));
+        listener(snapshotHistory());
       } catch (err) {
         warn('[GMH] bookmark subscriber failed', err);
       }
       return () => listeners.delete(listener);
     },
   };
+
+  return /** @type {TurnBookmarks} */ (api);
 };
 
 export default createTurnBookmarks;

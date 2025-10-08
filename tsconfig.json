@@ -17,6 +17,16 @@
     "src/features/share.js",
     "src/privacy/pipeline.js",
     "src/ui/modal.js",
+    "src/ui/panel-interactions.js",
+    "src/ui/panel-visibility.js",
+    "src/ui/state-view.js",
+    "src/ui/panel-shortcuts.js",
+    "src/core/state.js",
+    "src/core/error-handler.js",
+    "src/core/export-range.js",
+    "src/core/message-indexer.js",
+    "src/core/turn-bookmarks.js",
+    "src/core/bookmark-listener.js",
     "types/**/*.d.ts"
   ],
   "exclude": ["dist", "node_modules"]

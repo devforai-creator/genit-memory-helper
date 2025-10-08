@@ -1,5 +1,8 @@
 /**
  * Connects panel buttons, share workflow actions, and keyboard shortcuts.
+ *
+ * @typedef {import('../../types/api').PanelInteractionsOptions} PanelInteractionsOptions
+ * @returns {{ bindPanelInteractions: (panel: Element | null, options?: { modern?: boolean }) => void; syncPrivacyProfileSelect: (profileKey?: string | null) => void }}
  */
 export function createPanelInteractions({
   panelVisibility,
@@ -26,7 +29,7 @@ export function createPanelInteractions({
   stateEnum,
   alert: alertFn = (message) => globalThis.alert?.(message),
   logger = typeof console !== 'undefined' ? console : null,
-} = {}) {
+} = /** @type {PanelInteractionsOptions} */ ({})) {
   if (!panelVisibility) throw new Error('createPanelInteractions requires panelVisibility');
   if (!setPrivacyProfile) throw new Error('createPanelInteractions requires setPrivacyProfile');
   if (!bindRangeControls) throw new Error('createPanelInteractions requires bindRangeControls');
@@ -38,8 +41,13 @@ export function createPanelInteractions({
     throw new Error('createPanelInteractions requires state helpers');
   }
 
+  /** @type {HTMLSelectElement | null} */
   let privacySelect = null;
 
+  /**
+   * @param {string | null | undefined} [profileKey]
+   * @returns {void}
+   */
   const syncPrivacyProfileSelect = (profileKey) => {
     if (!privacySelect) return;
     const nextValue = profileKey ?? getPrivacyProfile?.();
@@ -48,16 +56,30 @@ export function createPanelInteractions({
     }
   };
 
+  /**
+   * @param {string} message
+   * @param {string} [tone]
+   */
   const notify = (message, tone) => {
     if (typeof setPanelStatus === 'function' && message) {
       setPanelStatus(message, tone);
     }
   };
 
+  /**
+   * @param {Element | null} panel
+   * @param {{ modern?: boolean }} [options]
+   */
   const attachShareHandlers = (panel, { modern = false } = {}) => {
+    /** @type {HTMLSelectElement | null} */
     const exportFormatSelect = panel.querySelector('#gmh-export-format');
+    /** @type {HTMLButtonElement | null} */
     const quickExportBtn = panel.querySelector('#gmh-quick-export');
 
+    /**
+     * @param {{ confirmLabel?: string; cancelStatusMessage?: string; blockedStatusMessage?: string }} [options]
+     * @returns {ReturnType<PanelInteractionsOptions['prepareShare']>}
+     */
     const prepareShareWithDialog = (options = {}) =>
       prepareShare({
         confirmLabel: options.confirmLabel,
@@ -65,25 +87,39 @@ export function createPanelInteractions({
         blockedStatusMessage: options.blockedStatusMessage,
       });
 
+    /**
+     * @param {string} format
+     * @param {{ confirmLabel?: string; cancelStatusMessage?: string; blockedStatusMessage?: string }} [options]
+     * @returns {Promise<void>}
+     */
     const exportWithFormat = async (format, options = {}) => {
       const prepared = await prepareShareWithDialog(options);
       if (!prepared) return;
       await performExport(prepared, format);
     };
 
+    /**
+     * @returns {ReturnType<PanelInteractionsOptions['copyRecentShare']>}
+     */
     const copyRecent = () => copyRecentShare(prepareShareWithDialog);
+    /**
+     * @returns {ReturnType<PanelInteractionsOptions['copyAllShare']>}
+     */
     const copyAll = () => copyAllShare(prepareShareWithDialog);
 
+    /** @type {HTMLButtonElement | null} */
     const copyRecentBtn = panel.querySelector('#gmh-copy-recent');
     if (copyRecentBtn) {
       copyRecentBtn.onclick = () => copyRecent();
     }
 
+    /** @type {HTMLButtonElement | null} */
     const copyAllBtn = panel.querySelector('#gmh-copy-all');
     if (copyAllBtn) {
       copyAllBtn.onclick = () => copyAll();
     }
 
+    /** @type {HTMLButtonElement | null} */
     const exportBtn = panel.querySelector('#gmh-export');
     if (exportBtn) {
       exportBtn.onclick = async () => {
@@ -135,6 +171,11 @@ export function createPanelInteractions({
     }
   };
 
+  /**
+   * @param {Element | null} panel
+   * @param {{ modern?: boolean }} [options]
+   * @returns {void}
+   */
   const bindPanelInteractions = (panel, { modern = false } = {}) => {
     if (!panel || typeof panel.querySelector !== 'function') {
       if (logger?.warn) {
@@ -145,22 +186,24 @@ export function createPanelInteractions({
 
     panelVisibility.bind(panel, { modern });
 
-    privacySelect = panel.querySelector('#gmh-privacy-profile');
+    privacySelect = /** @type {HTMLSelectElement | null} */ (panel.querySelector('#gmh-privacy-profile'));
     if (privacySelect) {
       syncPrivacyProfileSelect();
       privacySelect.onchange = (event) => {
-        const value = event.target.value;
+        const value = /** @type {HTMLSelectElement} */ (event.target).value;
         setPrivacyProfile(value);
         const label = privacyProfiles?.[value]?.label || value;
         notify(`프라이버시 프로필이 ${label}로 설정되었습니다.`, 'info');
       };
     }
 
+    /** @type {HTMLButtonElement | null} */
     const privacyConfigBtn = panel.querySelector('#gmh-privacy-config');
     if (privacyConfigBtn) {
       privacyConfigBtn.onclick = () => configurePrivacyLists?.();
     }
 
+    /** @type {HTMLButtonElement | null} */
     const settingsBtn = panel.querySelector('#gmh-panel-settings');
     if (settingsBtn) {
       settingsBtn.onclick = () => openPanelSettings?.();

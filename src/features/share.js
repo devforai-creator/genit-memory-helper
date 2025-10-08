@@ -165,7 +165,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         });
         return null;
       }
-      const requestedRange = exportRange?.getRange?.() || {};
+      const requestedRange = exportRange?.getRange?.() || { start: null, end: null };
       const sanitizedUserCount = privacy.sanitizedSession.turns.filter((turn) => turn.channel === 'user').length;
       const sanitizedLlmCount = privacy.sanitizedSession.turns.filter((turn) => turn.channel === 'llm').length;
       const sanitizedEntryCount = privacy.sanitizedSession.turns.reduce(
@@ -184,6 +184,8 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       const selection = exportRange?.apply?.(privacy.sanitizedSession.turns) || {
         indices: [],
         ordinals: [],
+        turns: [],
+        rangeDetails: null,
         info: exportRange?.describe?.(privacy.sanitizedSession.turns.length),
       };
       const rangeInfo = selection?.info || exportRange?.describe?.(privacy.sanitizedSession.turns.length);

@@ -1,5 +1,14 @@
+/**
+ * @typedef {import('../../types/api').PanelStateManager} PanelStateManager
+ * @typedef {import('../../types/api').StateManagerOptions} StateManagerOptions
+ */
+
+/**
+ * @returns {void}
+ */
 const noop = () => {};
 
+/** @type {Record<string, string>} */
 export const GMH_STATE = {
   IDLE: 'idle',
   SCANNING: 'scanning',
@@ -10,6 +19,7 @@ export const GMH_STATE = {
   ERROR: 'error',
 };
 
+/** @type {Record<string, string[]>} */
 export const STATE_TRANSITIONS = {
   idle: ['idle', 'scanning', 'redacting', 'error'],
   scanning: ['scanning', 'redacting', 'preview', 'done', 'error', 'idle'],
@@ -20,20 +30,30 @@ export const STATE_TRANSITIONS = {
   error: ['error', 'idle', 'scanning', 'redacting'],
 };
 
+/**
+ * @param {unknown} value
+ * @returns {string | null}
+ */
 const normalizeState = (value) => {
   if (!value) return null;
   const next = String(value).toLowerCase();
   return Object.values(GMH_STATE).includes(next) ? next : null;
 };
 
+/**
+ * @param {StateManagerOptions} [options]
+ * @returns {PanelStateManager}
+ */
 export const createStateManager = ({ console: consoleLike, debug } = {}) => {
   const logger = consoleLike || (typeof console !== 'undefined' ? console : { warn: noop, error: noop });
   const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop;
   const error = typeof logger.error === 'function' ? logger.error.bind(logger) : noop;
   const debugLog = typeof debug === 'function' ? debug : noop;
 
+  /** @type {Set<(state: string, meta: { previous: string | null; payload: unknown }) => void>} */
   const subscribers = new Set();
 
+  /** @type {PanelStateManager} */
   const state = {
     current: GMH_STATE.IDLE,
     previous: null,

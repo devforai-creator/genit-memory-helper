@@ -1,5 +1,8 @@
 /**
  * Registers keyboard shortcuts for panel visibility and auto-loader actions.
+ *
+ * @typedef {import('../../types/api').PanelShortcutsOptions} PanelShortcutsOptions
+ * @returns {{ bindShortcuts: (panel: Element | null, options?: { modern?: boolean }) => void }}
  */
 export function createPanelShortcuts({
   windowRef = typeof window !== 'undefined' ? window : null,
@@ -8,7 +11,7 @@ export function createPanelShortcuts({
   autoState,
   configurePrivacyLists,
   modal,
-}) {
+} = /** @type {PanelShortcutsOptions} */ ({})) {
   if (!windowRef) throw new Error('createPanelShortcuts requires window reference');
   if (!panelVisibility) throw new Error('createPanelShortcuts requires panelVisibility');
   if (!autoLoader) throw new Error('createPanelShortcuts requires autoLoader');
@@ -17,11 +20,20 @@ export function createPanelShortcuts({
 
   let shortcutsBound = false;
 
-  const bindShortcuts = (panel, { modern }) => {
+  /**
+   * @param {Element | null} panel
+   * @param {{ modern?: boolean }} [options]
+   * @returns {void}
+   */
+  const bindShortcuts = (panel, { modern } = {}) => {
     if (!modern || shortcutsBound) return;
     if (!panel) return;
 
     const win = windowRef;
+    /**
+     * @param {KeyboardEvent} event
+     * @returns {void}
+     */
     const handler = (event) => {
       if (!event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
       const key = event.key?.toLowerCase();
@@ -56,7 +68,9 @@ export function createPanelShortcuts({
           break;
         case 'e':
           event.preventDefault();
-          panel.querySelector('#gmh-export')?.click();
+          /** @type {HTMLButtonElement | null} */ (
+            panel.querySelector('#gmh-export')
+          )?.click();
           break;
         default:
           break;

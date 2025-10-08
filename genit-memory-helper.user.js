@@ -78,8 +78,17 @@ var GMHBundle = (function (exports) {
       typeof localStorage !== 'undefined' ? localStorage : undefined,
   };
 
+  /**
+   * @typedef {import('../../types/api').PanelStateManager} PanelStateManager
+   * @typedef {import('../../types/api').StateManagerOptions} StateManagerOptions
+   */
+
+  /**
+   * @returns {void}
+   */
   const noop$5 = () => {};
 
+  /** @type {Record<string, string>} */
   const GMH_STATE = {
     IDLE: 'idle',
     SCANNING: 'scanning',
@@ -90,6 +99,7 @@ var GMHBundle = (function (exports) {
     ERROR: 'error',
   };
 
+  /** @type {Record<string, string[]>} */
   const STATE_TRANSITIONS = {
     idle: ['idle', 'scanning', 'redacting', 'error'],
     scanning: ['scanning', 'redacting', 'preview', 'done', 'error', 'idle'],
@@ -100,20 +110,30 @@ var GMHBundle = (function (exports) {
     error: ['error', 'idle', 'scanning', 'redacting'],
   };
 
+  /**
+   * @param {unknown} value
+   * @returns {string | null}
+   */
   const normalizeState = (value) => {
     if (!value) return null;
     const next = String(value).toLowerCase();
     return Object.values(GMH_STATE).includes(next) ? next : null;
   };
 
+  /**
+   * @param {StateManagerOptions} [options]
+   * @returns {PanelStateManager}
+   */
   const createStateManager = ({ console: consoleLike, debug } = {}) => {
     const logger = consoleLike || (typeof console !== 'undefined' ? console : { warn: noop$5, error: noop$5 });
     const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$5;
     const error = typeof logger.error === 'function' ? logger.error.bind(logger) : noop$5;
     const debugLog = typeof debug === 'function' ? debug : noop$5;
 
+    /** @type {Set<(state: string, meta: { previous: string | null; payload: unknown }) => void>} */
     const subscribers = new Set();
 
+    /** @type {PanelStateManager} */
     const state = {
       current: GMH_STATE.IDLE,
       previous: null,
@@ -167,8 +187,19 @@ var GMHBundle = (function (exports) {
     return state;
   };
 
+  /**
+   * @typedef {import('../../types/api').ErrorHandler} ErrorHandler
+   * @typedef {import('../../types/api').ErrorHandlerOptions} ErrorHandlerOptions
+   * @typedef {import('../../types/api').ErrorLogEntry} ErrorLogEntry
+   * @typedef {import('../../types/api').PanelStateApi} PanelStateApi
+   */
+
+  /**
+   * @returns {void}
+   */
   const noop$4 = () => {};
 
+  /** @type {Record<string, string>} */
   const ERROR_LEVELS = {
     DEBUG: 'debug',
     INFO: 'info',
@@ -177,6 +208,7 @@ var GMHBundle = (function (exports) {
     FATAL: 'fatal',
   };
 
+  /** @type {Record<string, string>} */
   const ERROR_CONTEXT_LABELS = {
     'privacy/load': '프라이버시 설정 로드 실패',
     'privacy/save': '프라이버시 설정 저장 실패',
@@ -202,24 +234,42 @@ var GMHBundle = (function (exports) {
   const ERROR_LOG_KEY = 'gmh_error_log';
   const ERROR_LOG_MAX = 100;
 
+  /**
+   * @param {string} level
+   * @returns {string}
+   */
   const normalizeLevel = (level) => {
     const validLevels = Object.values(ERROR_LEVELS);
     return validLevels.includes(level) ? level : ERROR_LEVELS.ERROR;
   };
 
+  /**
+   * @param {unknown} error
+   * @returns {string}
+   */
   const extractMessage = (error) => {
     if (!error) return '알 수 없는 오류';
     if (typeof error === 'string') return error;
-    if (error.message) return error.message;
+    if (typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+      return error.message;
+    }
     return String(error);
   };
 
+  /**
+   * @param {Console | { info?: (...args: unknown[]) => void; warn?: (...args: unknown[]) => void; error?: (...args: unknown[]) => void } | null | undefined} consoleLike
+   * @returns {Console | { info?: (...args: unknown[]) => void; warn?: (...args: unknown[]) => void; error?: (...args: unknown[]) => void }}
+   */
   const ensureConsole = (consoleLike) => {
     if (consoleLike) return consoleLike;
     if (typeof console !== 'undefined') return console;
     return { info: noop$4, warn: noop$4, error: noop$4 };
   };
 
+  /**
+   * @param {ErrorHandlerOptions} [options]
+   * @returns {ErrorHandler}
+   */
   const createErrorHandler = ({
     console: consoleLike,
     alert: alertImpl,
@@ -231,8 +281,18 @@ var GMHBundle = (function (exports) {
     const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$4;
     const error = typeof logger.error === 'function' ? logger.error.bind(logger) : noop$4;
     const alertFn = typeof alertImpl === 'function' ? alertImpl : noop$4;
+    /** @type {Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null | undefined} */
     const storage = localStorage;
+    /** @type {PanelStateApi | undefined} */
+    const stateApi = state;
 
+    /**
+     * @param {string | undefined} context
+     * @param {string} message
+     * @param {unknown} original
+     * @param {string} level
+     * @returns {void}
+     */
     const logToConsole = (context, message, original, level) => {
       const prefix = `[GMH:${context}]`;
       switch (level) {
@@ -248,11 +308,17 @@ var GMHBundle = (function (exports) {
       }
     };
 
+    /**
+     * @param {string | undefined} context
+     * @param {string} message
+     * @param {string} level
+     * @returns {void}
+     */
     const updateUIState = (context, message, level) => {
-      if (!state || typeof state.setState !== 'function') return;
+      if (!stateApi || typeof stateApi.setState !== 'function') return;
       const label = ERROR_CONTEXT_LABELS[context] || '오류 발생';
       try {
-        state.setState(GMH_STATE.ERROR, {
+        stateApi.setState(GMH_STATE.ERROR, {
           label,
           message,
           tone: level === ERROR_LEVELS.FATAL ? 'error' : 'error',
@@ -263,6 +329,11 @@ var GMHBundle = (function (exports) {
       }
     };
 
+    /**
+     * @param {string | undefined} context
+     * @param {string} message
+     * @returns {void}
+     */
     const alertUser = (context, message) => {
       const label = ERROR_CONTEXT_LABELS[context] || '오류';
       try {
@@ -272,10 +343,15 @@ var GMHBundle = (function (exports) {
       }
     };
 
+    /**
+     * @param {ErrorLogEntry} data
+     * @returns {void}
+     */
     const persistError = (data) => {
       if (!storage || typeof storage.getItem !== 'function') return;
       try {
         const stored = storage.getItem(ERROR_LOG_KEY);
+        /** @type {ErrorLogEntry[]} */
         const errors = stored ? JSON.parse(stored) : [];
         errors.push(data);
         if (errors.length > ERROR_LOG_MAX) {
@@ -289,10 +365,23 @@ var GMHBundle = (function (exports) {
 
     const handler = {
       LEVELS: ERROR_LEVELS,
+      /**
+       * @param {unknown} errorInput
+       * @param {string} [context]
+       * @param {string} [level]
+       * @returns {string}
+       */
       handle(errorInput, context, level = ERROR_LEVELS.ERROR) {
         const message = extractMessage(errorInput);
         const timestamp = new Date().toISOString();
         const normalizedLevel = normalizeLevel(level);
+        let stackValue = null;
+        if (typeof errorInput === 'object' && errorInput) {
+          const stackCandidate = /** @type {{ stack?: unknown }} */ (errorInput).stack;
+          if (typeof stackCandidate === 'string') {
+            stackValue = stackCandidate;
+          }
+        }
 
         logToConsole(context, message, errorInput, normalizedLevel);
 
@@ -306,10 +395,10 @@ var GMHBundle = (function (exports) {
 
         persistError({
           timestamp,
-          context,
+          context: context || 'unknown',
           level: normalizedLevel,
           message,
-          stack: errorInput?.stack || null,
+          stack: stackValue,
         });
 
         return message;
@@ -318,7 +407,7 @@ var GMHBundle = (function (exports) {
         if (!storage || typeof storage.getItem !== 'function') return [];
         try {
           const stored = storage.getItem(ERROR_LOG_KEY);
-          return stored ? JSON.parse(stored) : [];
+          return stored ? /** @type {ErrorLogEntry[]} */ (JSON.parse(stored)) : [];
         } catch (err) {
           warn('[GMH] Failed to read error log', err);
           return [];
@@ -336,13 +425,31 @@ var GMHBundle = (function (exports) {
       },
     };
 
-    return handler;
+    return /** @type {ErrorHandler} */ (handler);
   };
 
+  /**
+   * @typedef {import('../../types/api').ExportRangeOptions} ExportRangeOptions
+   * @typedef {import('../../types/api').ExportRangeController} ExportRangeController
+   * @typedef {import('../../types/api').ExportRangeSnapshot} ExportRangeSnapshot
+   * @typedef {import('../../types/api').ExportRangeApplyOptions} ExportRangeApplyOptions
+   * @typedef {import('../../types/api').ExportRangeTotals} ExportRangeTotals
+   * @typedef {import('../../types/api').ExportRangeTotalsInput} ExportRangeTotalsInput
+   * @typedef {import('../../types/api').ExportRangeInfo} ExportRangeInfo
+   * @typedef {import('../../types/api').ExportRangeSelection} ExportRangeSelection
+   * @typedef {import('../../types/api').TranscriptTurn} TranscriptTurn
+   */
+
+  /**
+   * @returns {void}
+   */
   const noop$3 = () => {};
 
   /**
    * Factory for managing export range selection and projections across transcripts.
+   *
+   * @param {ExportRangeOptions} [options]
+   * @returns {ExportRangeController}
    */
   const createExportRange = ({
     console: consoleLike,
@@ -352,20 +459,33 @@ var GMHBundle = (function (exports) {
     const logger = consoleLike || (typeof console !== 'undefined' ? console : {});
     const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$3;
     const table = typeof logger.table === 'function' ? logger.table.bind(logger) : noop$3;
+    /** @type {(Window & typeof globalThis & { GMH_DEBUG_RANGE?: unknown }) | undefined} */
     const pageWindow = windowLike || (typeof window !== 'undefined' ? window : undefined);
     const storage = localStorage;
 
+    /** @type {{ start: number | null; end: number | null }} */
     const requested = { start: null, end: null };
+    /** @type {ExportRangeTotals} */
     let totals = { message: 0, user: 0, llm: 0, entry: 0 };
+    /** @type {Set<(snapshot: ExportRangeSnapshot) => void>} */
     const listeners = new Set();
     let lastWarnTs = 0;
 
+    /**
+     * @param {unknown} value
+     * @returns {number | null}
+     */
     const toPositiveInt = (value) => {
       const num = Number(value);
       if (!Number.isFinite(num) || num <= 0) return null;
       return Math.floor(num);
     };
 
+    /**
+     * @param {string} message
+     * @param {Record<string, unknown>} data
+     * @returns {void}
+     */
     const emitRangeWarning = (message, data) => {
       const now = Date.now();
       if (now - lastWarnTs < 500) return;
@@ -373,6 +493,9 @@ var GMHBundle = (function (exports) {
       warn('[GMH] export range adjusted:', message, data);
     };
 
+    /**
+     * @returns {boolean}
+     */
     const isRangeDebugEnabled = () => {
       const flag = pageWindow?.GMH_DEBUG_RANGE;
       if (typeof flag === 'boolean') return flag;
@@ -391,6 +514,9 @@ var GMHBundle = (function (exports) {
       }
     };
 
+    /**
+     * @returns {void}
+     */
     const normalizeRequestedOrder = () => {
       if (requested.start !== null && requested.end !== null && requested.start > requested.end) {
         emitRangeWarning('start > end; swapping values', {
@@ -403,6 +529,9 @@ var GMHBundle = (function (exports) {
       }
     };
 
+    /**
+     * @returns {void}
+     */
     const clampRequestedToTotal = () => {
       const totalMessages = Number.isFinite(totals.message)
         ? Math.max(0, Math.floor(totals.message))
@@ -421,6 +550,10 @@ var GMHBundle = (function (exports) {
       normalizeRequestedOrder();
     };
 
+    /**
+     * @param {number} [totalMessages]
+     * @returns {ExportRangeInfo}
+     */
     const resolveBounds = (totalMessages = totals.message) => {
       const total = Number.isFinite(totalMessages) ? Math.max(0, Math.floor(totalMessages)) : 0;
 
@@ -518,10 +651,25 @@ var GMHBundle = (function (exports) {
       };
     };
 
+    /**
+     * @typedef {{ blockIdx: number | null; turnIndices: Set<number>; order: number; fallbackOrder: number | null; ordinal?: number }} MessageUnit
+     */
+
+    /**
+     * @param {TranscriptTurn[]} [turns]
+     * @returns {{ units: MessageUnit[]; totalMessages: number; ordinalByTurnIndex: Map<number, number>; ordinalByBlockIndex: Map<number, number> }}
+     */
     const buildMessageUnits = (turns = []) => {
+      /** @type {MessageUnit[]} */
       const units = [];
+      /** @type {Map<number, MessageUnit>} */
       const blockUnitMap = new Map();
 
+      /**
+       * @param {number | null} blockIdx
+       * @param {number | null} [fallbackOrder]
+       * @returns {MessageUnit}
+       */
       const ensureUnit = (blockIdx, fallbackOrder = null) => {
         if (blockIdx !== null && blockUnitMap.has(blockIdx)) {
           return blockUnitMap.get(blockIdx);
@@ -576,12 +724,18 @@ var GMHBundle = (function (exports) {
       };
     };
 
+    /**
+     * @returns {ExportRangeSnapshot}
+     */
     const snapshot = () => ({
       range: { ...requested },
       totals: { ...totals },
       bounds: resolveBounds(),
     });
 
+    /**
+     * @returns {void}
+     */
     const notify = () => {
       const current = snapshot();
       listeners.forEach((listener) => {
@@ -593,6 +747,11 @@ var GMHBundle = (function (exports) {
       });
     };
 
+    /**
+     * @param {TranscriptTurn[]} [turns]
+     * @param {ExportRangeApplyOptions} [options]
+     * @returns {ExportRangeSelection}
+     */
     const apply = (turns = [], options = {}) => {
       const list = Array.isArray(turns) ? turns : [];
       const settings = options && typeof options === 'object' ? options : {};
@@ -602,9 +761,11 @@ var GMHBundle = (function (exports) {
           indices: [],
           ordinals: [],
           info: resolveBounds(0),
+          rangeDetails: null,
         };
       }
 
+      /** @type {Set<number>} */
       const includeIndices = new Set();
       if (Array.isArray(settings.includeIndices)) {
         settings.includeIndices
@@ -630,6 +791,11 @@ var GMHBundle = (function (exports) {
         });
       }
 
+      /**
+       * @param {number} startPos
+       * @param {number} endPos
+       * @returns {number[]}
+       */
       const collectIndicesInWindow = (startPos, endPos) => {
         const indices = new Set();
         for (let pos = startPos; pos <= endPos; pos += 1) {
@@ -642,6 +808,11 @@ var GMHBundle = (function (exports) {
           .sort((a, b) => a - b);
       };
 
+      /**
+       * @param {number} startPos
+       * @param {number} endPos
+       * @returns {{ turns: TranscriptTurn[]; indices: number[]; ordinals: (number | null)[]; rangeDetails: { startIndex: number; endIndex: number; messageStartIndex: number | null; messageEndIndex: number | null } }}
+       */
       const deriveSelection = (startPos, endPos) => {
         const clampedStart = Math.max(0, Math.min(startPos, units.length - 1));
         const clampedEnd = Math.max(clampedStart, Math.min(endPos, units.length - 1));
@@ -684,6 +855,7 @@ var GMHBundle = (function (exports) {
             messageStartIndex: rangeDetails.messageStartIndex,
             messageEndIndex: rangeDetails.messageEndIndex,
           },
+          rangeDetails,
         };
       }
 
@@ -719,10 +891,11 @@ var GMHBundle = (function (exports) {
           messageStartIndex: rangeDetails.messageStartIndex,
           messageEndIndex: rangeDetails.messageEndIndex,
         },
+        rangeDetails,
       };
     };
 
-    return {
+    const controller = {
       getRange() {
         return { ...requested };
       },
@@ -733,6 +906,10 @@ var GMHBundle = (function (exports) {
         return resolveBounds(totalMessages);
       },
       apply,
+      /**
+       * @param {number | null | undefined} value
+       * @returns {ExportRangeSnapshot}
+       */
       setStart(value) {
         const next = toPositiveInt(value);
         if (requested.start === next) return snapshot();
@@ -741,6 +918,10 @@ var GMHBundle = (function (exports) {
         notify();
         return snapshot();
       },
+      /**
+       * @param {number | null | undefined} value
+       * @returns {ExportRangeSnapshot}
+       */
       setEnd(value) {
         const next = toPositiveInt(value);
         if (requested.end === next) return snapshot();
@@ -749,6 +930,11 @@ var GMHBundle = (function (exports) {
         notify();
         return snapshot();
       },
+      /**
+       * @param {number | null | undefined} startValue
+       * @param {number | null | undefined} endValue
+       * @returns {ExportRangeSnapshot}
+       */
       setRange(startValue, endValue) {
         const nextStart = toPositiveInt(startValue);
         const nextEnd = toPositiveInt(endValue);
@@ -759,6 +945,9 @@ var GMHBundle = (function (exports) {
         notify();
         return snapshot();
       },
+      /**
+       * @returns {ExportRangeSnapshot}
+       */
       clear() {
         if (requested.start === null && requested.end === null) return snapshot();
         requested.start = null;
@@ -766,6 +955,10 @@ var GMHBundle = (function (exports) {
         notify();
         return snapshot();
       },
+      /**
+       * @param {ExportRangeTotalsInput} [input]
+       * @returns {ExportRangeSnapshot}
+       */
       setTotals(input = {}) {
         const nextMessage = Number.isFinite(Number(input.message ?? input.entry ?? input.all))
           ? Math.max(0, Math.floor(Number(input.message ?? input.entry ?? input.all)))
@@ -798,6 +991,10 @@ var GMHBundle = (function (exports) {
         notify();
         return snapshot();
       },
+      /**
+       * @param {(snapshot: ExportRangeSnapshot) => void} listener
+       * @returns {() => void}
+       */
       subscribe(listener) {
         if (typeof listener !== 'function') return noop$3;
         listeners.add(listener);
@@ -810,43 +1007,96 @@ var GMHBundle = (function (exports) {
       },
       snapshot,
     };
+
+    return /** @type {ExportRangeController} */ (controller);
   };
 
+  /**
+   * @typedef {import('../../types/api').TurnBookmarksOptions} TurnBookmarksOptions
+   * @typedef {import('../../types/api').TurnBookmarks} TurnBookmarks
+   * @typedef {import('../../types/api').TurnBookmarkEntry} TurnBookmarkEntry
+   */
+
+  /**
+   * @returns {void}
+   */
   const noop$2 = () => {};
 
+  /**
+   * @param {TurnBookmarksOptions} [options]
+   * @returns {TurnBookmarks}
+   */
   const createTurnBookmarks = ({ console: consoleLike } = {}) => {
     const logger = consoleLike || (typeof console !== 'undefined' ? console : {});
     const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$2;
 
     const HISTORY_LIMIT = 5;
+    /** @type {TurnBookmarkEntry[]} */
     const history = [];
+    /** @type {Set<(entries: TurnBookmarkEntry[]) => void>} */
     const listeners = new Set();
 
+    /**
+     * @param {unknown} entry
+     * @returns {TurnBookmarkEntry | null}
+     */
     const sanitizeEntry = (entry) => {
       if (!entry || typeof entry !== 'object') return null;
-      const { axis, ...rest } = entry;
+      const source = /** @type {Record<string, unknown>} */ (entry);
+      const { axis, ...rest } = source;
+      const entryKey = typeof rest.key === 'string' ? rest.key : null;
       if (axis && axis !== 'message') {
         warn('[GMH] entry-axis bookmark detected; forcing message ordinals', {
           axis,
-          key: entry?.key,
+          key: entryKey,
         });
       }
-      return rest;
+      const normalized = {
+        key: entryKey || `tmp:${Date.now()}`,
+        index: Number(rest.index ?? 0),
+        ordinal:
+          rest.ordinal !== null && rest.ordinal !== undefined && Number.isFinite(Number(rest.ordinal))
+            ? Number(rest.ordinal)
+            : null,
+        messageId: typeof rest.messageId === 'string' && rest.messageId ? rest.messageId : null,
+        timestamp: Number(rest.timestamp ?? Date.now()),
+      };
+      return normalized;
     };
 
+    /**
+     * @param {unknown} entry
+     * @returns {TurnBookmarkEntry | null}
+     */
     const cloneEntry = (entry) => {
       const sanitized = sanitizeEntry(entry);
       return sanitized ? { ...sanitized } : null;
     };
 
+    /**
+     * @param {number} index
+     * @param {string | null} messageId
+     * @returns {string}
+     */
     const makeKey = (index, messageId) => {
       if (typeof messageId === 'string' && messageId) return `id:${messageId}`;
       if (Number.isFinite(Number(index))) return `idx:${Number(index)}`;
       return `tmp:${Date.now()}`;
     };
 
+    /**
+     * @returns {TurnBookmarkEntry[]}
+     */
+    const snapshotHistory = () =>
+      /** @type {TurnBookmarkEntry[]} */ (
+        history.map((item) => cloneEntry(item)).filter((entry) => entry !== null)
+      );
+
+    /**
+     * @returns {void}
+     */
     const emit = () => {
-      const snapshot = history.map(cloneEntry).filter(Boolean);
+      const snapshot = snapshotHistory();
       listeners.forEach((listener) => {
         try {
           listener(snapshot);
@@ -856,7 +1106,14 @@ var GMHBundle = (function (exports) {
       });
     };
 
-    return {
+    const api = {
+      /**
+       * @param {number} index
+       * @param {number | null | undefined} ordinal
+       * @param {string | null | undefined} messageId
+       * @param {string | null | undefined} axis
+       * @returns {TurnBookmarkEntry | null}
+       */
       record(index, ordinal, messageId, axis) {
         if (!Number.isFinite(Number(index))) return null;
         const normalizedIndex = Number(index);
@@ -891,11 +1148,18 @@ var GMHBundle = (function (exports) {
         emit();
         return cloneEntry(entry);
       },
+      /**
+       * @returns {void}
+       */
       clear() {
         if (!history.length) return;
         history.length = 0;
         emit();
       },
+      /**
+       * @param {string} key
+       * @returns {void}
+       */
       remove(key) {
         if (!key) return;
         const next = history.findIndex((item) => item.key === key);
@@ -909,31 +1173,57 @@ var GMHBundle = (function (exports) {
       latest() {
         return history[0] ? cloneEntry(history[0]) : null;
       },
+      /**
+       * @param {string} key
+       * @returns {TurnBookmarkEntry | null}
+       */
       pick(key) {
         if (!key) return null;
         const found = history.find((item) => item.key === key);
         return found ? cloneEntry(found) : null;
       },
       list() {
-        return history.map(cloneEntry).filter(Boolean);
+        return snapshotHistory();
       },
+      /**
+       * @param {(entries: TurnBookmarkEntry[]) => void} listener
+       * @returns {() => void}
+       */
       subscribe(listener) {
         if (typeof listener !== 'function') return noop$2;
         listeners.add(listener);
         try {
-          listener(history.map(cloneEntry).filter(Boolean));
+          listener(snapshotHistory());
         } catch (err) {
           warn('[GMH] bookmark subscriber failed', err);
         }
         return () => listeners.delete(listener);
       },
     };
+
+    return /** @type {TurnBookmarks} */ (api);
   };
 
+  /**
+   * @typedef {import('../../types/api').MessageIndexerOptions} MessageIndexerOptions
+   * @typedef {import('../../types/api').MessageIndexer} MessageIndexer
+   * @typedef {import('../../types/api').MessageIndexerSummary} MessageIndexerSummary
+   * @typedef {import('../../types/api').ExportRangeController} ExportRangeController
+   */
+
+  /**
+   * @returns {void}
+   */
   const noop$1 = () => {};
 
   /**
    * Observes Genit chat DOM, annotating blocks with GMH metadata and publishing summaries.
+   */
+  /**
+   * Observes Genit chat DOM, annotating blocks with GMH metadata and publishing summaries.
+   *
+   * @param {MessageIndexerOptions} [options]
+   * @returns {MessageIndexer}
    */
   const createMessageIndexer = ({
     console: consoleLike,
@@ -947,13 +1237,18 @@ var GMHBundle = (function (exports) {
     const logger = consoleLike || (typeof console !== 'undefined' ? console : {});
     const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$1;
     typeof logger.error === 'function' ? logger.error.bind(logger) : noop$1;
+    /** @type {Document | undefined} */
     const documentRef = documentLike || (typeof document !== 'undefined' ? document : undefined);
-    const MutationObserverRef = MutationObserverLike || (typeof MutationObserver !== 'undefined' ? MutationObserver : undefined);
+    /** @type {typeof MutationObserver | undefined} */
+    const MutationObserverRef =
+      MutationObserverLike || (typeof MutationObserver !== 'undefined' ? MutationObserver : undefined);
+    /** @type {((callback: FrameRequestCallback) => number) | null} */
     const raf = typeof rafLike === 'function'
       ? rafLike
       : typeof requestAnimationFrame === 'function'
         ? requestAnimationFrame.bind(globalThis)
         : null;
+    /** @type {ExportRangeController | null | undefined} */
     const exportRangeRef = exportRange;
     const getAdapter = typeof getActiveAdapter === 'function' ? getActiveAdapter : () => null;
     const getOrigins = typeof getEntryOrigin === 'function' ? getEntryOrigin : () => [];
@@ -962,21 +1257,34 @@ var GMHBundle = (function (exports) {
       throw new Error('createMessageIndexer requires a document reference');
     }
 
+    /** @type {MutationObserver | null} */
     let observer = null;
     let scheduled = false;
     let active = false;
+    /** @type {Map<number, number>} */
     const ordinalCacheByIndex = new Map();
+    /** @type {Map<string, number>} */
     const ordinalCacheById = new Map();
+    /** @type {MessageIndexerSummary} */
     let lastSummary = {
       totalMessages: 0,
       userMessages: 0,
+      llmMessages: 0,
       containerPresent: false,
       timestamp: 0,
     };
+    /** @type {Set<(summary: MessageIndexerSummary) => void>} */
     const listeners = new Set();
 
+    /**
+     * @param {MessageIndexerSummary} summary
+     * @returns {MessageIndexerSummary}
+     */
     const cloneSummary = (summary) => ({ ...summary });
 
+    /**
+     * @returns {void}
+     */
     const notify = () => {
       const snapshot = cloneSummary(lastSummary);
       listeners.forEach((listener) => {
@@ -988,6 +1296,9 @@ var GMHBundle = (function (exports) {
       });
     };
 
+    /**
+     * @returns {MessageIndexerSummary}
+     */
     const indexMessages = () => {
       const adapter = getAdapter();
       const container = adapter?.findContainer?.(documentRef);
@@ -1050,10 +1361,12 @@ var GMHBundle = (function (exports) {
         : [];
       const uniqueEntryCount = entryOriginIndices.length ? new Set(entryOriginIndices).size : 0;
       const entryCount = blocks.length || uniqueEntryCount;
+      const llmCount = Math.max(blocks.length - userMessageCount, 0);
 
       lastSummary = {
         totalMessages: blocks.length,
         userMessages: userMessageCount,
+        llmMessages: llmCount,
         containerPresent: Boolean(container),
         timestamp: Date.now(),
       };
@@ -1063,7 +1376,7 @@ var GMHBundle = (function (exports) {
           exportRangeRef.setTotals({
             message: blocks.length,
             user: userMessageCount,
-            llm: Math.max(blocks.length - userMessageCount, 0),
+            llm: llmCount,
             entry: entryCount,
           });
         } catch (err) {
@@ -1075,6 +1388,9 @@ var GMHBundle = (function (exports) {
       return lastSummary;
     };
 
+    /**
+     * @returns {void}
+     */
     const schedule = () => {
       if (scheduled) return;
       scheduled = true;
@@ -1094,6 +1410,9 @@ var GMHBundle = (function (exports) {
       }
     };
 
+    /**
+     * @returns {void}
+     */
     const ensureObserver = () => {
       if (observer || !MutationObserverRef || !documentRef) return;
       const target = documentRef.body || documentRef.documentElement;
@@ -1105,7 +1424,7 @@ var GMHBundle = (function (exports) {
       observer.observe(target, { childList: true, subtree: true });
     };
 
-    return {
+    const api = {
       start() {
         if (active) {
           schedule();
@@ -1156,10 +1475,26 @@ var GMHBundle = (function (exports) {
         return () => listeners.delete(listener);
       },
     };
+
+    return /** @type {MessageIndexer} */ (api);
   };
 
+  /**
+   * @typedef {import('../../types/api').BookmarkListenerOptions} BookmarkListenerOptions
+   * @typedef {import('../../types/api').BookmarkListener} BookmarkListener
+   * @typedef {import('../../types/api').MessageIndexer} MessageIndexer
+   * @typedef {import('../../types/api').TurnBookmarks} TurnBookmarks
+   */
+
+  /**
+   * @returns {void}
+   */
   const noop = () => {};
 
+  /**
+   * @param {BookmarkListenerOptions} [options]
+   * @returns {BookmarkListener}
+   */
   const createBookmarkListener = ({
     document: documentLike,
     ElementClass,
@@ -1171,14 +1506,21 @@ var GMHBundle = (function (exports) {
     if (!doc) {
       throw new Error('createBookmarkListener requires a document reference');
     }
+    /** @type {typeof Element | undefined} */
     const ElementRef = ElementClass || (typeof Element !== 'undefined' ? Element : undefined);
+    /** @type {TurnBookmarks | null | undefined} */
     const bookmarks = turnBookmarks;
+    /** @type {MessageIndexer | null | undefined} */
     const indexer = messageIndexer;
     const logger = consoleLike || (typeof console !== 'undefined' ? console : {});
     const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop;
 
     let active = false;
 
+    /**
+     * @param {MouseEvent} event
+     * @returns {void}
+     */
     const handleBookmarkCandidate = (event) => {
       const target = event.target;
       if (!ElementRef || !(target instanceof ElementRef)) return;
@@ -1193,8 +1535,8 @@ var GMHBundle = (function (exports) {
         message.getAttribute('data-gmh-message-id') || message.getAttribute('data-message-id');
       const index = Number(indexAttr);
 
-      const lookupOrdinalByIndex = indexer?.lookupOrdinalByIndex;
-      const lookupOrdinalByMessageId = indexer?.lookupOrdinalByMessageId;
+      const lookupOrdinalByIndex = indexer?.lookupOrdinalByIndex?.bind(indexer);
+      const lookupOrdinalByMessageId = indexer?.lookupOrdinalByMessageId?.bind(indexer);
 
       const resolvedOrdinal = [
         Number.isFinite(index) && typeof lookupOrdinalByIndex === 'function'
@@ -1219,7 +1561,7 @@ var GMHBundle = (function (exports) {
       );
     };
 
-    return {
+    const api = {
       start() {
         if (active) return;
         doc.addEventListener('click', handleBookmarkCandidate, true);
@@ -1234,6 +1576,8 @@ var GMHBundle = (function (exports) {
         return active;
       },
     };
+
+    return /** @type {BookmarkListener} */ (api);
   };
 
   const configs = new Map();
@@ -5672,6 +6016,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
   /**
    * Registers keyboard shortcuts for panel visibility and auto-loader actions.
+   *
+   * @typedef {import('../../types/api').PanelShortcutsOptions} PanelShortcutsOptions
+   * @returns {{ bindShortcuts: (panel: Element | null, options?: { modern?: boolean }) => void }}
    */
   function createPanelShortcuts({
     windowRef = typeof window !== 'undefined' ? window : null,
@@ -5680,7 +6027,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     autoState,
     configurePrivacyLists,
     modal,
-  }) {
+  } = /** @type {PanelShortcutsOptions} */ ({})) {
     if (!windowRef) throw new Error('createPanelShortcuts requires window reference');
     if (!panelVisibility) throw new Error('createPanelShortcuts requires panelVisibility');
     if (!autoLoader) throw new Error('createPanelShortcuts requires autoLoader');
@@ -5689,11 +6036,20 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
     let shortcutsBound = false;
 
-    const bindShortcuts = (panel, { modern }) => {
+    /**
+     * @param {Element | null} panel
+     * @param {{ modern?: boolean }} [options]
+     * @returns {void}
+     */
+    const bindShortcuts = (panel, { modern } = {}) => {
       if (!modern || shortcutsBound) return;
       if (!panel) return;
 
       const win = windowRef;
+      /**
+       * @param {KeyboardEvent} event
+       * @returns {void}
+       */
       const handler = (event) => {
         if (!event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
         const key = event.key?.toLowerCase();
@@ -5728,7 +6084,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             break;
           case 'e':
             event.preventDefault();
-            panel.querySelector('#gmh-export')?.click();
+            /** @type {HTMLButtonElement | null} */ (
+              panel.querySelector('#gmh-export')
+            )?.click();
             break;
         }
       };
@@ -5907,7 +6265,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
           });
           return null;
         }
-        const requestedRange = exportRange?.getRange?.() || {};
+        const requestedRange = exportRange?.getRange?.() || { start: null, end: null };
         const sanitizedUserCount = privacy.sanitizedSession.turns.filter((turn) => turn.channel === 'user').length;
         const sanitizedLlmCount = privacy.sanitizedSession.turns.filter((turn) => turn.channel === 'llm').length;
         const sanitizedEntryCount = privacy.sanitizedSession.turns.reduce(
@@ -5926,6 +6284,8 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         const selection = exportRange?.apply?.(privacy.sanitizedSession.turns) || {
           indices: [],
           ordinals: [],
+          turns: [],
+          rangeDetails: null,
           info: exportRange?.describe?.(privacy.sanitizedSession.turns.length),
         };
         const rangeInfo = selection?.info || exportRange?.describe?.(privacy.sanitizedSession.turns.length);
@@ -6306,6 +6666,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
   /**
    * Connects panel buttons, share workflow actions, and keyboard shortcuts.
+   *
+   * @typedef {import('../../types/api').PanelInteractionsOptions} PanelInteractionsOptions
+   * @returns {{ bindPanelInteractions: (panel: Element | null, options?: { modern?: boolean }) => void; syncPrivacyProfileSelect: (profileKey?: string | null) => void }}
    */
   function createPanelInteractions({
     panelVisibility,
@@ -6332,7 +6695,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     stateEnum,
     alert: alertFn = (message) => globalThis.alert?.(message),
     logger = typeof console !== 'undefined' ? console : null,
-  } = {}) {
+  } = /** @type {PanelInteractionsOptions} */ ({})) {
     if (!panelVisibility) throw new Error('createPanelInteractions requires panelVisibility');
     if (!setPrivacyProfile) throw new Error('createPanelInteractions requires setPrivacyProfile');
     if (!bindRangeControls) throw new Error('createPanelInteractions requires bindRangeControls');
@@ -6344,8 +6707,13 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       throw new Error('createPanelInteractions requires state helpers');
     }
 
+    /** @type {HTMLSelectElement | null} */
     let privacySelect = null;
 
+    /**
+     * @param {string | null | undefined} [profileKey]
+     * @returns {void}
+     */
     const syncPrivacyProfileSelect = (profileKey) => {
       if (!privacySelect) return;
       const nextValue = profileKey ?? getPrivacyProfile?.();
@@ -6354,16 +6722,30 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       }
     };
 
+    /**
+     * @param {string} message
+     * @param {string} [tone]
+     */
     const notify = (message, tone) => {
       if (typeof setPanelStatus === 'function' && message) {
         setPanelStatus(message, tone);
       }
     };
 
+    /**
+     * @param {Element | null} panel
+     * @param {{ modern?: boolean }} [options]
+     */
     const attachShareHandlers = (panel, { modern = false } = {}) => {
+      /** @type {HTMLSelectElement | null} */
       const exportFormatSelect = panel.querySelector('#gmh-export-format');
+      /** @type {HTMLButtonElement | null} */
       const quickExportBtn = panel.querySelector('#gmh-quick-export');
 
+      /**
+       * @param {{ confirmLabel?: string; cancelStatusMessage?: string; blockedStatusMessage?: string }} [options]
+       * @returns {ReturnType<PanelInteractionsOptions['prepareShare']>}
+       */
       const prepareShareWithDialog = (options = {}) =>
         prepareShare({
           confirmLabel: options.confirmLabel,
@@ -6371,25 +6753,39 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
           blockedStatusMessage: options.blockedStatusMessage,
         });
 
+      /**
+       * @param {string} format
+       * @param {{ confirmLabel?: string; cancelStatusMessage?: string; blockedStatusMessage?: string }} [options]
+       * @returns {Promise<void>}
+       */
       const exportWithFormat = async (format, options = {}) => {
         const prepared = await prepareShareWithDialog(options);
         if (!prepared) return;
         await performExport(prepared, format);
       };
 
+      /**
+       * @returns {ReturnType<PanelInteractionsOptions['copyRecentShare']>}
+       */
       const copyRecent = () => copyRecentShare(prepareShareWithDialog);
+      /**
+       * @returns {ReturnType<PanelInteractionsOptions['copyAllShare']>}
+       */
       const copyAll = () => copyAllShare(prepareShareWithDialog);
 
+      /** @type {HTMLButtonElement | null} */
       const copyRecentBtn = panel.querySelector('#gmh-copy-recent');
       if (copyRecentBtn) {
         copyRecentBtn.onclick = () => copyRecent();
       }
 
+      /** @type {HTMLButtonElement | null} */
       const copyAllBtn = panel.querySelector('#gmh-copy-all');
       if (copyAllBtn) {
         copyAllBtn.onclick = () => copyAll();
       }
 
+      /** @type {HTMLButtonElement | null} */
       const exportBtn = panel.querySelector('#gmh-export');
       if (exportBtn) {
         exportBtn.onclick = async () => {
@@ -6441,6 +6837,11 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       }
     };
 
+    /**
+     * @param {Element | null} panel
+     * @param {{ modern?: boolean }} [options]
+     * @returns {void}
+     */
     const bindPanelInteractions = (panel, { modern = false } = {}) => {
       if (!panel || typeof panel.querySelector !== 'function') {
         if (logger?.warn) {
@@ -6451,22 +6852,24 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
       panelVisibility.bind(panel, { modern });
 
-      privacySelect = panel.querySelector('#gmh-privacy-profile');
+      privacySelect = /** @type {HTMLSelectElement | null} */ (panel.querySelector('#gmh-privacy-profile'));
       if (privacySelect) {
         syncPrivacyProfileSelect();
         privacySelect.onchange = (event) => {
-          const value = event.target.value;
+          const value = /** @type {HTMLSelectElement} */ (event.target).value;
           setPrivacyProfile(value);
           const label = privacyProfiles?.[value]?.label || value;
           notify(`프라이버시 프로필이 ${label}로 설정되었습니다.`, 'info');
         };
       }
 
+      /** @type {HTMLButtonElement | null} */
       const privacyConfigBtn = panel.querySelector('#gmh-privacy-config');
       if (privacyConfigBtn) {
         privacyConfigBtn.onclick = () => configurePrivacyLists?.();
       }
 
+      /** @type {HTMLButtonElement | null} */
       const settingsBtn = panel.querySelector('#gmh-panel-settings');
       if (settingsBtn) {
         settingsBtn.onclick = () => openPanelSettings?.();
@@ -8034,17 +8437,31 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
   /**
    * Manages panel open/collapse state, coordinating with storage and modal overlays.
+   *
+   * @typedef {import('../../types/api').PanelVisibilityOptions} PanelVisibilityOptions
+   * @typedef {import('../../types/api').PanelVisibilityController} PanelVisibilityController
+   * @typedef {import('../../types/api').PanelSettingsController} PanelSettingsController
+   * @typedef {import('../../types/api').PanelSettingsLayout} PanelSettingsLayout
+   * @typedef {import('../../types/api').PanelSettingsBehavior} PanelSettingsBehavior
+   * @typedef {import('../../types/api').PanelStateApi} PanelStateApi
+   * @typedef {import('../../types/api').ModalController} ModalController
+   * @param {PanelVisibilityOptions} [options]
+   * @returns {PanelVisibilityController}
    */
   function createPanelVisibility({
-    panelSettings,
+    panelSettings: panelSettingsRaw,
     stateEnum,
-    stateApi,
+    stateApi: stateApiRaw,
     modal,
     documentRef = typeof document !== 'undefined' ? document : null,
     windowRef = typeof window !== 'undefined' ? window : null,
     storage = typeof localStorage !== 'undefined' ? localStorage : null,
     logger = typeof console !== 'undefined' ? console : null,
-  } = {}) {
+  } = /** @type {PanelVisibilityOptions} */ ({})) {
+    /** @type {PanelSettingsController | undefined} */
+    const panelSettings = panelSettingsRaw;
+    /** @type {PanelStateApi | undefined} */
+    const stateApi = stateApiRaw;
     const doc = documentRef;
     const win = windowRef;
     if (!panelSettings || !stateEnum || !stateApi || !doc || !win) {
@@ -8056,12 +8473,17 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     const STORAGE_KEY = 'gmh_panel_collapsed';
     const MIN_GAP = 12;
 
+    /**
+     * @param {unknown} value
+     * @returns {string | null}
+     */
     const normalizeState = (value) => {
       if (!value) return null;
       const next = String(value).toLowerCase();
       return Object.values(stateEnum).includes(next) ? next : null;
     };
 
+    /** @type {PanelSettingsLayout} */
     const DEFAULT_LAYOUT = (() => {
       const layout = panelSettings.defaults?.layout || {};
       return {
@@ -8079,6 +8501,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       };
     })();
 
+    /** @type {PanelSettingsBehavior} */
     const DEFAULT_BEHAVIOR = (() => {
       const behavior = panelSettings.defaults?.behavior || {};
       return {
@@ -8096,6 +8519,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       };
     })();
 
+    /**
+     * @param {PanelSettingsLayout | null | undefined} [input]
+     * @returns {PanelSettingsLayout}
+     */
     const coerceLayout = (input = {}) => {
       const layout = { ...DEFAULT_LAYOUT, ...(input || {}) };
       return {
@@ -8115,6 +8542,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       };
     };
 
+    /**
+     * @param {PanelSettingsBehavior | null | undefined} [input]
+     * @returns {PanelSettingsBehavior}
+     */
     const coerceBehavior = (input = {}) => {
       const behavior = { ...DEFAULT_BEHAVIOR, ...(input || {}) };
       behavior.autoHideEnabled =
@@ -8141,29 +8572,45 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       return behavior;
     };
 
+    /** @type {HTMLElement | null} */
     let panelEl = null;
+    /** @type {HTMLButtonElement | null} */
     let fabEl = null;
     let fabLastToggleAt = 0;
+    /** @type {HTMLButtonElement | null} */
     let dragHandle = null;
+    /** @type {HTMLElement | null} */
     let resizeHandle = null;
     let modernMode = false;
+    /** @type {number | null} */
     let idleTimer = null;
+    /** @type {(() => void) | null} */
     let stateUnsubscribe = null;
+    /** @type {((event: PointerEvent) => void) | null} */
     let outsidePointerHandler = null;
+    /** @type {((event: FocusEvent) => void) | null} */
     let focusCollapseHandler = null;
+    /** @type {((event: KeyboardEvent) => void) | null} */
     let escapeKeyHandler = null;
     let panelListenersBound = false;
     let resizeScheduled = false;
     let currentState = stateEnum.IDLE;
     let userCollapsed = false;
+    /** @type {boolean | null} */
     let persistedPreference = null;
+    /** @type {HTMLElement | null} */
     let lastFocusTarget = null;
+    /** @type {{ pointerId?: number; startX: number; startY: number; rect: DOMRect } | null} */
     let dragSession = null;
+    /** @type {{ pointerId?: number; startX: number; startY: number; width: number; height: number; nextWidth: number; nextHeight: number } | null} */
     let resizeSession = null;
     let applyingSettings = false;
+    /** @type {number[]} */
     let focusTimeouts = [];
+    /** @type {number | null} */
     let focusAnimationFrame = null;
 
+    /** @type {import('../../types/api').PanelSettingsValue} */
     let currentSettings = panelSettings.get();
     let currentLayout = coerceLayout(currentSettings.layout);
     let currentBehavior = coerceBehavior(currentSettings.behavior);
@@ -8193,6 +8640,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     };
 
     const loadPersistedCollapsed = () => {
+      if (!storage) return null;
       try {
         const raw = storage.getItem(STORAGE_KEY);
         if (raw === '1') return true;
@@ -8204,6 +8652,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     };
 
     const persistCollapsed = (value) => {
+      if (!storage) return;
       persistedPreference = value;
       try {
         if (value === null) storage.removeItem(STORAGE_KEY);
@@ -8216,6 +8665,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     const rememberFocus = () => {
       const active = doc.activeElement;
       if (!active || active === doc.body) return;
+      if (!(active instanceof HTMLElement)) return;
       if (panelEl && panelEl.contains(active)) return;
       lastFocusTarget = active;
     };
@@ -8226,7 +8676,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         focusAnimationFrame = null;
       }
       if (focusTimeouts.length) {
-        focusTimeouts.forEach((id) => clearTimeout(id));
+        focusTimeouts.forEach((id) => win.clearTimeout(id));
         focusTimeouts = [];
       }
     };
@@ -8249,10 +8699,11 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     };
 
     const focusPanelElement = () => {
-      if (!panelEl || typeof panelEl.focus !== 'function') return;
+      const panelElement = panelEl;
+      if (!panelElement || typeof panelElement.focus !== 'function') return;
       const attempt = () => {
         try {
-          panelEl.focus({ preventScroll: true });
+          panelElement.focus({ preventScroll: true });
         } catch (err) {
           /* noop */
         }
@@ -8263,12 +8714,12 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         focusAnimationFrame = null;
         attempt();
       });
-      focusTimeouts = [setTimeout(attempt, 0), setTimeout(attempt, 50)];
+      focusTimeouts = [win.setTimeout(attempt, 0), win.setTimeout(attempt, 50)];
     };
 
     const clearIdleTimer = () => {
       if (idleTimer) {
-        clearTimeout(idleTimer);
+        win.clearTimeout(idleTimer);
         idleTimer = null;
       }
     };
@@ -8386,6 +8837,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         if (!isModernActive()) return;
         if (isCollapsed()) return;
         const target = event.target;
+        if (!(target instanceof Node)) return;
         if (panelEl && panelEl.contains(target)) return;
         if (fabEl && fabEl.contains(target)) return;
         if (modal?.isOpen?.()) return;
@@ -8404,7 +8856,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       focusCollapseHandler = (event) => {
         if (!isModernActive() || isCollapsed()) return;
         const target = event.target;
-        if (!target) return;
+        if (!(target instanceof Node)) return;
         if (panelEl && panelEl.contains(target)) return;
         if (fabEl && fabEl.contains(target)) return;
         if (modal?.isOpen?.()) return;
@@ -8446,10 +8898,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     const ensureFab = () => {
       if (!modernMode) return null;
       if (!fabEl || !fabEl.isConnected) {
-        fabEl = doc.getElementById('gmh-fab');
+        fabEl = /** @type {HTMLButtonElement | null} */ (doc.getElementById('gmh-fab'));
       }
       if (!fabEl || !fabEl.isConnected) {
-        fabEl = doc.createElement('button');
+        fabEl = /** @type {HTMLButtonElement} */ (doc.createElement('button'));
         fabEl.id = 'gmh-fab';
         fabEl.type = 'button';
         fabEl.textContent = 'GMH';
@@ -8511,13 +8963,17 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
     const bindHandles = () => {
       if (!panelEl) return;
-      const nextDragHandle = panelEl.querySelector('#gmh-panel-drag-handle');
+      const nextDragHandle = /** @type {HTMLButtonElement | null} */ (
+        panelEl.querySelector('#gmh-panel-drag-handle')
+      );
       if (dragHandle && dragHandle !== nextDragHandle)
         dragHandle.removeEventListener('pointerdown', handleDragStart);
       dragHandle = nextDragHandle;
       if (dragHandle) dragHandle.addEventListener('pointerdown', handleDragStart);
 
-      const nextResizeHandle = panelEl.querySelector('#gmh-panel-resize-handle');
+      const nextResizeHandle = /** @type {HTMLElement | null} */ (
+        panelEl.querySelector('#gmh-panel-resize-handle')
+      );
       if (resizeHandle && resizeHandle !== nextResizeHandle)
         resizeHandle.removeEventListener('pointerdown', handleResizeStart);
       resizeHandle = nextResizeHandle;
@@ -8542,6 +8998,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       dragSession = null;
     };
 
+    /**
+     * @param {PointerEvent} event
+     * @returns {void}
+     */
     const handleDragStart = (event) => {
       if (!panelEl || !modernMode) return;
       if (!currentBehavior.allowDrag) return;
@@ -8565,6 +9025,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       win.addEventListener('pointercancel', handleDragCancel);
     };
 
+    /**
+     * @param {PointerEvent} event
+     * @returns {void}
+     */
     const handleDragMove = (event) => {
       if (!dragSession || !panelEl) return;
       const dx = event.clientX - dragSession.startX;
@@ -8586,6 +9050,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       panelEl.style.bottom = 'auto';
     };
 
+    /**
+     * @returns {void}
+     */
     const finalizeDragLayout = () => {
       if (!panelEl) return;
       const rect = panelEl.getBoundingClientRect();
@@ -8600,17 +9067,26 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       panelSettings.update({ layout: { anchor, offset, bottom } });
     };
 
+    /**
+     * @returns {void}
+     */
     const handleDragEnd = () => {
       if (!dragSession) return;
       stopDragTracking();
       finalizeDragLayout();
     };
 
+    /**
+     * @returns {void}
+     */
     const handleDragCancel = () => {
       stopDragTracking();
       applyLayout();
     };
 
+    /**
+     * @returns {void}
+     */
     const stopResizeTracking = () => {
       if (!resizeSession) return;
       win.removeEventListener('pointermove', handleResizeMove);
@@ -8627,6 +9103,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       resizeSession = null;
     };
 
+    /**
+     * @param {PointerEvent} event
+     * @returns {void}
+     */
     const handleResizeStart = (event) => {
       if (!panelEl || !modernMode) return;
       if (!currentBehavior.allowResize) return;
@@ -8654,6 +9134,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       win.addEventListener('pointercancel', handleResizeCancel);
     };
 
+    /**
+     * @param {PointerEvent} event
+     * @returns {void}
+     */
     const handleResizeMove = (event) => {
       if (!resizeSession || !panelEl) return;
       const viewportWidth = win.innerWidth || doc.documentElement.clientWidth || 1280;
@@ -8679,6 +9163,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       panelEl.style.maxHeight = `${resizeSession.nextHeight}px`;
     };
 
+    /**
+     * @returns {void}
+     */
     const handleResizeEnd = () => {
       if (!resizeSession) return;
       const { nextWidth, nextHeight } = resizeSession;
@@ -8691,11 +9178,18 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       });
     };
 
+    /**
+     * @returns {void}
+     */
     const handleResizeCancel = () => {
       stopResizeTracking();
       applyLayout();
     };
 
+    /**
+     * @param {{ focus?: boolean; persist?: boolean }} [options]
+     * @returns {boolean}
+     */
     const open = ({ focus = false, persist = false } = {}) => {
       if (!panelEl) return false;
       if (!modernMode) {
@@ -8721,6 +9215,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       return wasCollapsed;
     };
 
+    /**
+     * @param {'user' | 'idle' | 'focus' | string} [reason='user']
+     * @returns {boolean}
+     */
     const close = (reason = 'user') => {
       if (!panelEl || !modernMode) return false;
       if (isCollapsed()) return false;
@@ -8739,6 +9237,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       return true;
     };
 
+    /**
+     * @returns {boolean}
+     */
     const toggle = () => {
       if (!panelEl || !modernMode) return false;
       if (isCollapsed()) {
@@ -8749,8 +9250,19 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       return false;
     };
 
+    /**
+     * @param {Element | null} panel
+     * @param {{ modern?: boolean }} [options]
+     * @returns {void}
+     */
     const bind = (panel, { modern } = {}) => {
-      panelEl = panel || null;
+      const panelElement = panel instanceof HTMLElement ? panel : null;
+      if (panel && !panelElement) {
+        if (logger?.warn) {
+          logger.warn('[GMH] panel visibility: ignored non-HTMLElement panel');
+        }
+      }
+      panelEl = panelElement;
       panelListenersBound = false;
       modernMode = !!modern && !!panelEl;
       if (!panelEl) return;
@@ -8785,6 +9297,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       if (!shouldCollapse) scheduleIdleClose();
     };
 
+    /**
+     * @param {{ tone?: string | null }} [update]
+     * @returns {void}
+     */
     const onStatusUpdate = ({ tone } = {}) => {
       if (!isModernActive()) return;
       if (tone && ['error', 'warning', 'progress'].includes(tone) && isCollapsed()) {
@@ -8858,6 +9374,12 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     };
   }
 
+  /**
+   * @typedef {import('../../types/api').StateViewOptions} StateViewOptions
+   * @typedef {import('../../types/api').StateViewBindings} StateViewBindings
+   */
+
+  /** @type {Record<string, { label: string; message: string; tone: string; progress: { value?: number; indeterminate?: boolean } }>} */
   const STATE_PRESETS = {
     idle: {
       label: '대기 중',
@@ -8905,15 +9427,25 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
   /**
    * Builds the state view binder so the panel shows current workflow progress.
+   *
+   * @param {StateViewOptions} options
+   * @returns {{ bind: (bindings?: StateViewBindings) => void }}
    */
   function createStateView({ stateApi, statusManager, stateEnum }) {
     if (!stateApi) throw new Error('createStateView requires stateApi');
     if (!statusManager) throw new Error('createStateView requires statusManager');
 
+    /** @type {HTMLElement | null} */
     let progressFillEl = null;
+    /** @type {HTMLElement | null} */
     let progressLabelEl = null;
+    /** @type {(() => void) | null} */
     let unsubscribe = null;
 
+    /**
+     * @param {number} value
+     * @returns {number}
+     */
     const clamp = (value) => {
       if (!Number.isFinite(value)) return 0;
       if (value < 0) return 0;
@@ -8923,6 +9455,11 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
     const setPanelStatus = statusManager.setStatus;
 
+    /**
+     * @param {string} stateKey
+     * @param {{ payload?: { label?: string; message?: string; tone?: string; progress?: { value?: number; indeterminate?: boolean } } }} [meta]
+     * @returns {void}
+     */
     const applyState = (stateKey, meta = {}) => {
       const payload = meta?.payload || {};
       const preset = STATE_PRESETS[stateKey] || STATE_PRESETS.idle;
@@ -8951,6 +9488,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       if (message) setPanelStatus(message, tone);
     };
 
+    /**
+     * @param {StateViewBindings} [bindings]
+     * @returns {void}
+     */
     const bind = ({ progressFill, progressLabel } = {}) => {
       progressFillEl = progressFill || null;
       progressLabelEl = progressLabel || null;
@@ -8966,9 +9507,11 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         progressLabelEl.setAttribute('aria-live', 'polite');
       }
       unsubscribe = stateApi.subscribe?.((state, meta) => {
-        applyState(state, meta);
+        const nextState = typeof state === 'string' ? state : stateEnum?.IDLE || 'idle';
+        applyState(nextState, meta);
       });
-      const current = stateApi.getState?.() || stateEnum?.IDLE || 'idle';
+      const currentRaw = stateApi.getState?.();
+      const current = typeof currentRaw === 'string' ? currentRaw : stateEnum?.IDLE || 'idle';
       applyState(current, { payload: STATE_PRESETS[current] || {} });
     };
 
