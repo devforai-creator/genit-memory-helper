@@ -52,14 +52,14 @@ v2.2.0 [Performance]      ← 2-3주 (10-15h)
 - 예: "안녕" (플레이어) → "안녕" (NPC) → 두 번째 "안녕" 스킵됨
 
 **파일**:
-- `src/adapters/genit.js:423-447` (emitInfo)
-- `src/adapters/genit.js:719-733` (collectStructuredMessage)
+- `src/adapters/genit.ts:423-447` (emitInfo)
+- `src/adapters/genit.ts:719-733` (collectStructuredMessage)
 
 **해결책**:
 
 **변경 1**: `emitInfo` - INFO 본문만 별도 배열로 관리
 ```javascript
-// src/adapters/genit.js:423-447
+// src/adapters/genit.ts:423-447
 const emitInfo = (block, pushLine, collector = null) => {
   const infoNode = firstMatch(selectors.infoCode, block);
   if (!infoNode) return;
@@ -104,7 +104,7 @@ const emitInfo = (block, pushLine, collector = null) => {
 
 **변경 2**: `collectStructuredMessage` - `seen` Set 제거
 ```javascript
-// src/adapters/genit.js:719-733
+// src/adapters/genit.ts:719-733
 const collectStructuredMessage = (block) => {
   if (!block) return null;
   const playerGuess = guessPlayerNames()[0] || '플레이어';
@@ -539,7 +539,7 @@ function boot() {
 
 ### Issue #8: 내레이션 필터 개선 ✅ **완료 (2025-10-07)**
 
-**파일**: `src/adapters/genit.js:679-699`
+**파일**: `src/adapters/genit.ts:679-699`
 
 **구현 완료**:
 ```javascript
@@ -852,7 +852,7 @@ export const CONSTANTS = {
 - ⚠️ 자동 요약 프롬프트: 일부 user 입력 누락 가능
 
 **관련 파일**:
-- `src/adapters/genit.js:232-277` - detectRole() 로직
+- `src/adapters/genit.ts:232-277` - detectRole() 로직
 - `src/core/message-indexer.js:56-141` - role/channel 할당
 - `tests/unit/adapter-genit.spec.js:166-220` - 감지 테스트
 
@@ -897,8 +897,8 @@ export const CONSTANTS = {
 git checkout -b hotfix/v1.8.0
 
 # 1. 중복 대사 수정 (1.5-2h)
-#    - src/adapters/genit.js:423 (emitInfo)
-#    - src/adapters/genit.js:724 (collectStructuredMessage)
+#    - src/adapters/genit.ts:423 (emitInfo)
+#    - src/adapters/genit.ts:724 (collectStructuredMessage)
 #    - tests/unit/adapter-genit.spec.js
 
 # 2. Modal 테스트 (1h)
