@@ -4,7 +4,7 @@ import { ENV } from './env.js';
 import { GMH_STATE, createStateManager } from './core/state.ts';
 import { createErrorHandler } from './core/error-handler.ts';
 import { createExportRange } from './core/export-range.ts';
-import { createTurnBookmarks } from './core/turn-bookmarks.js';
+import { createTurnBookmarks } from './core/turn-bookmarks.ts';
 import { createMessageIndexer } from './core/message-indexer.ts';
 import { createBookmarkListener } from './core/bookmark-listener.js';
 import {

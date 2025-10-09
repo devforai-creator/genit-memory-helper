@@ -27,7 +27,7 @@
     "src/core/error-handler.ts",
     "src/core/export-range.ts",
     "src/core/message-indexer.ts",
-    "src/core/turn-bookmarks.js",
+    "src/core/turn-bookmarks.ts",
     "src/core/bookmark-listener.js",
     "types/**/*.d.ts"
   ],
