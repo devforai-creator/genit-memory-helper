@@ -1234,8 +1234,21 @@ var GMHBundle = (function (exports) {
         return api;
     };
 
+    /**
+     * @typedef {import('../types').AdapterConfig} AdapterConfig
+     * @typedef {import('../types').AdapterSelectors} AdapterSelectors
+     * @typedef {import('../types').AdapterMetadata} AdapterMetadata
+     * @typedef {import('../types').AdapterRegistry} AdapterRegistry
+     */
+
+    /** @type {Map<string, AdapterConfig>} */
     const configs = new Map();
 
+    /**
+     * Stores adapter selectors/metadata for a named adapter.
+     * @param {string} name - Adapter identifier.
+     * @param {AdapterConfig} [config] - Selectors and metadata to persist.
+     */
     const registerAdapterConfig = (name, config = {}) => {
       if (!name) return;
       configs.set(name, {
@@ -1244,14 +1257,36 @@ var GMHBundle = (function (exports) {
       });
     };
 
+    /**
+     * Reads an adapter configuration, providing empty defaults when missing.
+     * @param {string} name - Adapter identifier.
+     * @returns {AdapterConfig}
+     */
     const getAdapterConfig = (name) => configs.get(name) || { selectors: {}, metadata: {} };
 
-    const getAdapterSelectors = (name) => clone(getAdapterConfig(name).selectors || {});
+    /**
+     * Returns a defensive copy of selector strings for the named adapter.
+     * @param {string} name - Adapter identifier.
+     * @returns {AdapterSelectors}
+     */
+    const getAdapterSelectors = (name) =>
+      /** @type {AdapterSelectors} */ (clone(getAdapterConfig(name).selectors || {}));
 
-    const getAdapterMetadata = (name) => clone(getAdapterConfig(name).metadata || {});
+    /**
+     * Returns adapter metadata as a shallow clone.
+     * @param {string} name - Adapter identifier.
+     * @returns {AdapterMetadata}
+     */
+    const getAdapterMetadata = (name) =>
+      /** @type {AdapterMetadata} */ (clone(getAdapterConfig(name).metadata || {}));
 
+    /**
+     * Lists registered adapter names in insertion order.
+     * @returns {string[]}
+     */
     const listAdapterNames = () => Array.from(configs.keys());
 
+    /** @type {AdapterRegistry} */
     const adapterRegistry = {
       register: registerAdapterConfig,
       get: getAdapterConfig,
@@ -1360,8 +1395,30 @@ var GMHBundle = (function (exports) {
         return deps;
     };
 
+    /**
+     * @typedef {import('../types').AdapterConfig} AdapterConfig
+     * @typedef {import('../types').AdapterRegistry} AdapterRegistry
+     * @typedef {import('../types').AdapterSelectors} AdapterSelectors
+     * @typedef {import('../types').GenitAdapter} GenitAdapter
+     * @typedef {import('../types').GenitAdapterOptions} GenitAdapterOptions
+     * @typedef {import('../types').StructuredSnapshotMessage} StructuredSnapshotMessage
+     * @typedef {import('../types').StructuredSnapshotMessagePart} StructuredSnapshotMessagePart
+     * @typedef {import('../types').StructuredCollector} StructuredCollector
+     * @typedef {import('../types').StructuredCollectorMeta} StructuredCollectorMeta
+     * @typedef {import('../types').ErrorHandler} ErrorHandler
+     */
+
+    /** @typedef {string[] | null | undefined} SelectorList */
+    /** @typedef {{ role?: string; content?: string }} AdapterReactMessage */
+    /** @typedef {'player' | 'npc' | 'narration' | 'unknown'} GenitRole */
+
     const DEFAULT_PLAYER_MARK$1 = '⟦PLAYER⟧ ';
 
+    /**
+     * Builds the primary adapter used to interpret genit.ai DOM transcripts.
+     * @param {GenitAdapterOptions} [options] - Optional adapter overrides.
+     * @returns {GenitAdapter}
+     */
     const createGenitAdapter = ({
       registry = adapterRegistry,
       playerMark = DEFAULT_PLAYER_MARK$1,
@@ -1369,9 +1426,17 @@ var GMHBundle = (function (exports) {
       isPrologueBlock = () => false,
       errorHandler,
     } = {}) => {
+      /** @type {WeakSet<Node>} */
       let infoNodeRegistry = new WeakSet();
+      /** @type {() => string[]} */
       let playerNameAccessor = typeof getPlayerNames === 'function' ? getPlayerNames : () => [];
 
+      /**
+       * Emits adapter warnings through the shared error handler.
+       * @param {unknown} err - Error or payload to log.
+       * @param {string} context - Context label for the error handler.
+       * @param {string} fallbackMessage - Console message when no handler exists.
+       */
       const warnWithHandler = (err, context, fallbackMessage) => {
         if (errorHandler?.handle) {
           const level = errorHandler.LEVELS?.WARN || 'warn';
@@ -1381,19 +1446,31 @@ var GMHBundle = (function (exports) {
         }
       };
 
+      /**
+       * Resolves player names from the injected accessor.
+       * @returns {string[]}
+       */
       const resolvePlayerNames = () => {
         const names = playerNameAccessor();
         return Array.isArray(names) ? names : [];
       };
 
+      /** @type {(name: string) => AdapterConfig} */
       const registryGet = registry?.get ? registry.get.bind(registry) : getAdapterConfig;
       const adapterConfig = registryGet('genit');
+      /** @type {AdapterSelectors} */
       const selectors = adapterConfig.selectors || {};
 
       const playerScopeSelector = (selectors.playerScopes || []).filter(Boolean).join(',');
       const npcScopeSelector = (selectors.npcGroups || []).filter(Boolean).join(',');
       const isPrologueBlockFn = typeof isPrologueBlock === 'function' ? isPrologueBlock : () => false;
 
+      /**
+       * Collects DOM nodes that match any selector in the provided list.
+       * @param {SelectorList} selList - Selector tokens from adapter config.
+       * @param {Document | Element} [root=document] - Search root.
+       * @returns {Element[]}
+       */
       const collectAll = (selList, root = document) => {
         const out = [];
         const seen = new Set();
@@ -1419,6 +1496,12 @@ var GMHBundle = (function (exports) {
         return out;
       };
 
+      /**
+       * Finds the first DOM node matching the provided selectors.
+       * @param {SelectorList} selList - Selector tokens.
+       * @param {Document | Element} [root=document] - Search root.
+       * @returns {Element | null}
+       */
       const firstMatch = (selList, root = document) => {
         if (!selList?.length) return null;
         for (const sel of selList) {
@@ -1433,6 +1516,12 @@ var GMHBundle = (function (exports) {
         return null;
       };
 
+      /**
+       * Checks if a node matches at least one selector.
+       * @param {Element | null} node - Target element.
+       * @param {SelectorList} selList - Selector tokens.
+       * @returns {boolean}
+       */
       const matchesSelectorList = (node, selList) => {
         if (!(node instanceof Element)) return false;
         if (!selList?.length) return false;
@@ -1446,6 +1535,12 @@ var GMHBundle = (function (exports) {
         });
       };
 
+      /**
+       * Resolves the nearest ancestor matching one of the selectors.
+       * @param {Element | null} node - Starting element.
+       * @param {SelectorList} selList - Selector tokens.
+       * @returns {Element | null}
+       */
       const closestMatchInList = (node, selList) => {
         if (!(node instanceof Element)) return null;
         if (!selList?.length) return null;
@@ -1461,6 +1556,12 @@ var GMHBundle = (function (exports) {
         return null;
       };
 
+      /**
+       * Determines whether the root contains any match for provided selectors.
+       * @param {Element | null} root - Root element.
+       * @param {SelectorList} selList - Selector tokens.
+       * @returns {boolean}
+       */
       const containsSelector = (root, selList) => {
         if (!(root instanceof Element)) return false;
         if (!selList?.length) return false;
@@ -1474,6 +1575,11 @@ var GMHBundle = (function (exports) {
         });
       };
 
+      /**
+       * Normalizes a node's textual content into trimmed segments.
+       * @param {Element | Node | null} node - DOM node to normalize.
+       * @returns {string[]}
+       */
       const textSegmentsFromNode = (node) => {
         if (!node) return [];
         const text = node.innerText ?? node.textContent ?? '';
@@ -1484,6 +1590,11 @@ var GMHBundle = (function (exports) {
           .filter(Boolean);
       };
 
+      /**
+       * Locates the first scrollable ancestor near the provided node.
+       * @param {Element | null | undefined} node - Starting element.
+       * @returns {Element | null}
+       */
       const findScrollableAncestor = (node) => {
         let current = node instanceof Element ? node : null;
         for (let depth = 0; depth < 6 && current; depth += 1) {
@@ -1493,6 +1604,11 @@ var GMHBundle = (function (exports) {
         return null;
       };
 
+      /**
+       * Attempts to locate a chat container using ARIA role attributes.
+       * @param {Document | Element} [root=document] - Search root.
+       * @returns {Element | null}
+       */
       const findByRole = (root = document) => {
         const roleNodes = collectAll(['[role]'], root);
         return roleNodes.find((node) => {
@@ -1501,6 +1617,11 @@ var GMHBundle = (function (exports) {
         });
       };
 
+      /**
+       * Finds containers whose text content hints at a chat transcript.
+       * @param {Document | Element} [root=document] - Root to search.
+       * @returns {Element | null}
+       */
       const findByTextHint = (root = document) => {
         const hints = selectors.textHints || [];
         if (!hints.length) return null;
@@ -1513,6 +1634,11 @@ var GMHBundle = (function (exports) {
         return nodes.find((node) => isScrollable(node));
       };
 
+      /**
+       * Returns the primary scrollable chat container element.
+       * @param {Document} [doc=document] - Document context.
+       * @returns {Element | null}
+       */
       const getChatContainer = (doc = document) => {
         const direct = firstMatch(selectors.chatContainers, doc);
         if (direct && isScrollable(direct)) return direct;
@@ -1532,6 +1658,11 @@ var GMHBundle = (function (exports) {
         return null;
       };
 
+      /**
+       * Collects message block elements from the specified container.
+       * @param {Document | Element | null | undefined} root - Root node to search.
+       * @returns {Element[]}
+       */
       const getMessageBlocks = (root) => {
         const targetRoot = root || document;
         const blocks = collectAll(selectors.messageRoot, targetRoot);
@@ -1544,11 +1675,9 @@ var GMHBundle = (function (exports) {
       };
 
       /**
-       * Extracts React message props from a DOM element via Fiber tree traversal.
-       * genit.ai stores user/assistant role in React props, which is more reliable
-       * than CSS classes for detecting player thought/action inputs.
-       * @param {Element} block - The message block element
-       * @returns {Object|null} - The message object with role/content, or null if not found
+       * Extracts React message props from a DOM element via Fiber traversal.
+       * @param {Element} block - The message block element.
+       * @returns {AdapterReactMessage | null} Message object with role/content metadata.
        */
       const getReactMessage = (block) => {
         if (!block || typeof block !== 'object') return null;
@@ -1575,6 +1704,11 @@ var GMHBundle = (function (exports) {
         return null;
       };
 
+      /**
+       * Determines the conversational role for the supplied block node.
+       * @param {Element | null | undefined} block - Message container under test.
+       * @returns {GenitRole}
+       */
       const detectRole = (block) => {
         if (!block) return 'unknown';
 
@@ -1622,6 +1756,11 @@ var GMHBundle = (function (exports) {
         return 'narration';
       };
 
+      /**
+       * Determines the structured snapshot part type for a DOM node.
+       * @param {Element | null} node - Node under evaluation.
+       * @returns {string}
+       */
       const resolvePartType = (node) => {
         if (!(node instanceof Element)) return 'paragraph';
         const tag = node.tagName?.toLowerCase?.() || '';
@@ -1637,6 +1776,11 @@ var GMHBundle = (function (exports) {
         return 'paragraph';
       };
 
+      /**
+       * Attempts to infer the programming language from code block metadata.
+       * @param {Element | null} node - Code element.
+       * @returns {string | null}
+       */
       const detectCodeLanguage = (node) => {
         if (!(node instanceof Element)) return null;
         const target =
@@ -1650,6 +1794,21 @@ var GMHBundle = (function (exports) {
         return null;
       };
 
+      /**
+       * Converts a DOM node into a structured snapshot message part summary.
+       * @param {Element | Node | null} node - DOM segment to normalize.
+       * @param {Record<string, unknown>} [context={}] - Rendering context.
+       * @param {{
+       *   type?: string;
+       *   flavor?: string;
+       *   role?: string;
+       *   speaker?: string;
+       *   lines?: string[];
+       *   legacyLines?: string[];
+       *   legacyFormat?: string;
+       * }} [options={}] - Overrides for the generated part.
+       * @returns {StructuredSnapshotMessagePart}
+       */
       const buildStructuredPart = (node, context = {}, options = {}) => {
         const baseLines = Array.isArray(options.lines) ? options.lines.slice() : [];
         const partType = options.type || resolvePartType(node);
@@ -1714,6 +1873,12 @@ var GMHBundle = (function (exports) {
         return part;
       };
 
+      /**
+       * Produces a positional path array for a node for ordering heuristics.
+       * @param {Node | null} node - Target node.
+       * @param {Node | null} root - Root boundary for traversal.
+       * @returns {number[] | null}
+       */
       const getOrderPath = (node, root) => {
         if (!(node instanceof Node) || !(root instanceof Node)) return null;
         const path = [];
@@ -1732,6 +1897,12 @@ var GMHBundle = (function (exports) {
         return path;
       };
 
+      /**
+       * Comparator used to keep structured parts in DOM order.
+       * @param {number[]} a
+       * @param {number[]} b
+       * @returns {number}
+       */
       const compareOrderPaths = (a, b) => {
         const len = Math.max(a.length, b.length);
         for (let i = 0; i < len; i += 1) {
@@ -1742,6 +1913,12 @@ var GMHBundle = (function (exports) {
         return 0;
       };
 
+      /**
+       * Creates a collector to manage structured message parts with ordering.
+       * @param {{ playerName?: string }} [defaults={}] - Default speaker metadata.
+       * @param {{ rootNode?: Node | null }} [context={}] - Context for ordering.
+       * @returns {StructuredCollector}
+       */
       const createStructuredCollector = (defaults = {}, context = {}) => {
         const parts = [];
         const snapshotDefaults = {
@@ -1806,6 +1983,10 @@ var GMHBundle = (function (exports) {
         };
       };
 
+      /**
+       * Memoizes info nodes to prevent duplicate narration emission.
+       * @param {Node | null | undefined} node - Entry node for the info subtree.
+       */
       const markInfoNodeTree = (node) => {
         if (!node) return;
         try {
@@ -1829,6 +2010,11 @@ var GMHBundle = (function (exports) {
         }
       };
 
+      /**
+       * Checks if a node belongs to a cached info subtree.
+       * @param {Node | null | undefined} node - Node to test.
+       * @returns {boolean}
+       */
       const isInfoRelatedNode = (node) => {
         if (!node) return false;
         if (infoNodeRegistry.has(node)) return true;
@@ -1836,6 +2022,12 @@ var GMHBundle = (function (exports) {
         return false;
       };
 
+      /**
+       * Emits special INFO lines from the current block.
+       * @param {Element} block - Message block wrapper.
+       * @param {(line: string) => void} pushLine - Accumulator for transcript text.
+       * @param {StructuredCollector | null} [collector=null] - Structured collector sink.
+       */
       const emitInfo = (block, pushLine, collector = null) => {
         const infoNode = firstMatch(selectors.infoCode, block);
         if (!infoNode) return;
@@ -1875,6 +2067,12 @@ var GMHBundle = (function (exports) {
         }
       };
 
+      /**
+       * Emits transcript and structured parts for detected player turns.
+       * @param {Element} block - Message block wrapper.
+       * @param {(line: string) => void} pushLine - Transcript accumulator callback.
+       * @param {StructuredCollector | null} [collector=null] - Structured collector sink.
+       */
       const emitPlayerLines = (block, pushLine, collector = null) => {
         const blockRole = block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
         if (blockRole !== 'player') return;
@@ -1959,6 +2157,12 @@ var GMHBundle = (function (exports) {
         return stripQuotes(collapseSpaces(name || '')).slice(0, 40);
       };
 
+      /**
+       * Emits transcript lines for NPC/dialogue bubbles.
+       * @param {Element} block - Message block wrapper.
+       * @param {(line: string) => void} pushLine - Transcript accumulator callback.
+       * @param {StructuredCollector | null} [collector=null] - Structured collector sink.
+       */
       const emitNpcLines = (block, pushLine, collector = null) => {
         const blockRole = block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
         if (blockRole !== 'npc') return;
@@ -1995,6 +2199,12 @@ var GMHBundle = (function (exports) {
         });
       };
 
+      /**
+       * Emits narration/description transcript lines from a block.
+       * @param {Element} block - Message block wrapper.
+       * @param {(line: string) => void} pushLine - Transcript accumulator callback.
+       * @param {StructuredCollector | null} [collector=null] - Structured collector sink.
+       */
       const emitNarrationLines = (block, pushLine, collector = null) => {
         const blockRole = block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
 
@@ -2145,6 +2355,12 @@ var GMHBundle = (function (exports) {
         });
       };
 
+      /**
+       * Emits all transcript flavors (info, player, npc, narration) for a block.
+       * @param {Element} block - Message block wrapper.
+       * @param {(line: string) => void} pushLine - Transcript accumulator callback.
+       * @param {StructuredCollector | null} [collector=null] - Structured collector sink.
+       */
       const emitTranscriptLines = (block, pushLine, collector = null) => {
         emitInfo(block, pushLine, collector);
         emitPlayerLines(block, pushLine, collector);
@@ -2152,11 +2368,22 @@ var GMHBundle = (function (exports) {
         emitNarrationLines(block, pushLine, collector);
       };
 
+      /**
+       * Generates a structured snapshot entry for a message block.
+       * @param {Element} block - Message block wrapper.
+       * @returns {StructuredSnapshotMessage | null}
+       */
       const collectStructuredMessage = (block) => {
         if (!block) return null;
         const playerGuess = guessPlayerNames()[0] || '플레이어';
+        /** @type {StructuredCollector} */
         const collector = createStructuredCollector({ playerName: playerGuess }, { rootNode: block });
+        /** @type {string[]} */
         const localLines = [];
+        /**
+         * Adds a normalized transcript line to the local cache.
+         * @param {string} line
+         */
         const pushLine = (line) => {
           const trimmed = (line || '').trim();
           if (!trimmed) return;
@@ -2189,6 +2416,7 @@ var GMHBundle = (function (exports) {
             : role === 'npc'
             ? 'NPC'
             : null);
+        /** @type {StructuredSnapshotMessage} */
         const message = {
           id: idAttr,
           index: Number.isFinite(indexAttr) ? indexAttr : null,
@@ -2211,6 +2439,10 @@ var GMHBundle = (function (exports) {
         return message;
       };
 
+      /**
+       * Attempts to detect player display names from DOM hints.
+       * @returns {string[]}
+       */
       const guessPlayerNames = () => {
         const results = new Set();
         collectAll(selectors.playerNameHints).forEach((node) => {
@@ -2234,14 +2466,25 @@ var GMHBundle = (function (exports) {
           .filter((name) => name && /^[\w가-힣][\w가-힣 _.-]{1,20}$/.test(name));
       };
 
+      /**
+       * Resolves the anchor element used to mount the GMH panel.
+       * @param {Document} [doc=document] - Document context.
+       * @returns {Element | null}
+       */
       const getPanelAnchor = (doc = document) => {
         const anchor = firstMatch(selectors.panelAnchor, doc);
         return anchor || doc.body;
       };
 
+      /**
+       * Tests whether the adapter applies to the provided location.
+       * @param {Location | import('../types').AdapterMatchLocation} loc - Page location metadata.
+       * @returns {boolean}
+       */
       const match = (loc) => /genit\.ai/i.test(loc.hostname);
 
-      return {
+      /** @type {GenitAdapter} */
+      const genitAdapter = {
         id: 'genit',
         label: 'Genit',
         match,
@@ -2262,6 +2505,8 @@ var GMHBundle = (function (exports) {
           }
         },
       };
+
+      return genitAdapter;
     };
 
     const STORAGE_KEYS = {

@@ -22,6 +22,25 @@ export interface GMHNamespace {
   Adapters: Record<string, unknown>;
 }
 
+export interface AdapterSelectors {
+  [key: string]: string[] | undefined;
+}
+
+export interface AdapterMetadata {
+  [key: string]: unknown;
+}
+
+export interface AdapterConfig {
+  selectors?: AdapterSelectors;
+  metadata?: AdapterMetadata;
+}
+
+export interface AdapterRegistry {
+  register(name: string, config?: AdapterConfig): void;
+  get(name: string): AdapterConfig;
+  list(): string[];
+}
+
 export interface StateManagerOptions {
   console?: Console | { warn?: (...args: unknown[]) => void; error?: (...args: unknown[]) => void } | null;
   debug?: (...args: unknown[]) => void;
@@ -383,6 +402,16 @@ export interface StructuredSnapshot {
   [key: string]: unknown;
 }
 
+export interface StructuredCollectorMeta {
+  node?: Element | null;
+}
+
+export interface StructuredCollector {
+  defaults?: { playerName?: string };
+  push(part: StructuredSnapshotMessagePart | null | undefined, meta?: StructuredCollectorMeta): void;
+  list(): StructuredSnapshotMessagePart[];
+}
+
 export interface StructuredSelectionRangeInfo {
   active: boolean;
   start: number | null;
@@ -468,9 +497,44 @@ export interface SnapshotAdapter {
   findContainer?(doc: Document): Element | null;
   listMessageBlocks?(root: Document | Element): Iterable<Element> | Element[] | NodeListOf<Element> | null;
   collectStructuredMessage?(block: Element): StructuredSnapshotMessage | null;
-  emitTranscriptLines?(block: Element, pushLine: (line: string) => void): void;
-  dumpSelectors?(): unknown;
+  emitTranscriptLines?(block: Element, pushLine: (line: string) => void, collector?: StructuredCollector | null): void;
+  dumpSelectors?(): AdapterSelectors | null | undefined;
   resetInfoRegistry?(): void;
+}
+
+export interface AdapterMatchLocation {
+  hostname?: string;
+  [key: string]: unknown;
+}
+
+export interface GenitAdapterOptions {
+  registry?: AdapterRegistry | null;
+  playerMark?: string;
+  getPlayerNames?: (() => string[] | null | undefined) | null;
+  isPrologueBlock?: (block: Element | null | undefined) => boolean;
+  errorHandler?:
+    | ErrorHandler
+    | {
+        handle?: (error: unknown, context?: string, level?: string) => string | void;
+        LEVELS?: Record<string, string>;
+      }
+    | null;
+}
+
+export interface GenitAdapter extends SnapshotAdapter {
+  id: string;
+  label: string;
+  match(loc: Location | AdapterMatchLocation, doc?: Document): boolean;
+  findContainer(doc?: Document): Element | null;
+  listMessageBlocks(root?: Document | Element): Iterable<Element> | Element[] | NodeListOf<Element> | null;
+  emitTranscriptLines(block: Element, pushLine: (line: string) => void, collector?: StructuredCollector | null): void;
+  collectStructuredMessage(block: Element): StructuredSnapshotMessage | null;
+  detectRole(block: Element | null | undefined): string;
+  guessPlayerNames(root?: Document): string[];
+  getPanelAnchor(doc?: Document): Element | null;
+  dumpSelectors(): AdapterSelectors;
+  resetInfoRegistry(): void;
+  setPlayerNameAccessor(accessor: () => string[] | null | undefined): void;
 }
 
 export interface SnapshotFeatureOptions {
