@@ -1,9 +1,9 @@
-import { toJSONExport, toTXTExport, toMarkdownExport } from './writers-classic.js';
+import { toJSONExport, toTXTExport, toMarkdownExport } from './writers-classic';
 import {
   toStructuredMarkdown,
   toStructuredJSON,
   toStructuredTXT,
-} from './writers-structured.js';
+} from './writers-structured';
 import type {
   TranscriptSession,
   ExportBundleOptions,

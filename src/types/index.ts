@@ -348,17 +348,27 @@ export interface AutoLoaderExports {
 
 export interface StructuredSnapshotMessagePart {
   speaker?: string;
+  role?: string;
+  flavor?: string;
+  type?: string;
   text?: string;
+  language?: string;
   lines?: string[];
   legacyLines?: string[];
   items?: string[];
   alt?: string;
   title?: string;
+  level?: number;
+  ordered?: boolean;
+  src?: string;
   [key: string]: unknown;
 }
 
 export interface StructuredSnapshotMessage {
   speaker?: string;
+  role?: string;
+  channel?: string;
+  ordinal?: number;
   parts?: StructuredSnapshotMessagePart[];
   legacyLines?: string[];
   [key: string]: unknown;
@@ -379,6 +389,9 @@ export interface StructuredSelectionRangeInfo {
   end: number | null;
   messageStartIndex: number | null;
   messageEndIndex: number | null;
+  count?: number;
+  total?: number;
+  messageTotal?: number;
   [key: string]: unknown;
 }
 
