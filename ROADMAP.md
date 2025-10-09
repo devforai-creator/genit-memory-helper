@@ -698,20 +698,35 @@ const toJSONExportLegacy = withPlayerNames(toJSONExport);
 
 ---
 
-### Phase 6: 나머지 파일 + strict mode (1-2주) ⏳ **예정**
+### Phase 6: 나머지 파일 + strict mode (1-2주) ✅ **완료**
 
-**남은 파일 (4개):**
-- ⏳ src/utils/factories.js → .ts
-- ⏳ src/config.js → .ts
-- ⏳ src/env.js → .ts
-- ⏳ src/index.js → .ts (마지막 - 메인 엔트리)
+**Phase 6a: 기본 모듈 (3개)** ✅ **완료**
+- ✅ src/utils/factories.ts
+- ✅ src/config.ts
+- ✅ src/env.ts
 
-**strict mode 활성화:**
-- ⏳ tsconfig.json: `"strict": true`
-- ⏳ 모든 타입 에러 수정
-- ⏳ 최종 테스트 및 검증
+**Phase 6b: 메인 엔트리** ✅ **완료**
+- ✅ src/index.ts (메인 엔트리)
+- ✅ rollup.config.js entry point 변경
+
+**Phase 6c: strict mode** ✅ **완료**
+- ✅ tsconfig.json: `"strict": true`
+- ✅ 15개 파일 타입 에러 수정
+- ✅ 최종 테스트 및 검증 (86 tests passing)
 
 **예상 시간**: 8-10시간
+
+---
+
+## ✅ v2.0.0 TypeScript Migration Complete
+
+**전체 전환 통계:**
+- 전환된 파일: 60+ 파일
+- Phase 1-6 전체 완료
+- strict mode 활성화
+- 모든 테스트 통과 (86/86)
+
+**다음 단계: v2.0.0 릴리스**
 
 ---
 
