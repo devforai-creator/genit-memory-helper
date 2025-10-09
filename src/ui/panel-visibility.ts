@@ -1,93 +1,101 @@
-/**
- * Manages panel open/collapse state, coordinating with storage and modal overlays.
- *
- * @typedef {import('../types').PanelVisibilityOptions} PanelVisibilityOptions
- * @typedef {import('../types').PanelVisibilityController} PanelVisibilityController
- * @typedef {import('../types').PanelSettingsController} PanelSettingsController
- * @typedef {import('../types').PanelSettingsLayout} PanelSettingsLayout
- * @typedef {import('../types').PanelSettingsBehavior} PanelSettingsBehavior
- * @typedef {import('../types').PanelStateApi} PanelStateApi
- * @typedef {import('../types').ModalController} ModalController
- * @param {PanelVisibilityOptions} [options]
- * @returns {PanelVisibilityController}
- */
+import type {
+  PanelSettingsBehavior,
+  PanelSettingsController,
+  PanelSettingsLayout,
+  PanelSettingsValue,
+  PanelStateApi,
+  PanelVisibilityController,
+  PanelVisibilityOptions,
+} from '../types';
+
+type LayoutInput = Partial<PanelSettingsLayout> | null | undefined;
+type BehaviorInput = Partial<PanelSettingsBehavior> | null | undefined;
+
+interface DragSession {
+  pointerId?: number;
+  startX: number;
+  startY: number;
+  rect: DOMRect;
+}
+
+interface ResizeSession {
+  pointerId?: number;
+  startX: number;
+  startY: number;
+  width: number;
+  height: number;
+  nextWidth: number;
+  nextHeight: number;
+}
+
+const COLLAPSED_CLASS = 'gmh-collapsed';
+const OPEN_CLASS = 'gmh-panel-open';
+const STORAGE_KEY = 'gmh_panel_collapsed';
+const MIN_GAP = 12;
+
+const normalizeState = (
+  value: unknown,
+  stateEnum: Record<string, string> & { IDLE?: string },
+): string | null => {
+  if (!value) return null;
+  const next = String(value).toLowerCase();
+  return Object.values(stateEnum).includes(next) ? next : null;
+};
+
 export function createPanelVisibility({
   panelSettings: panelSettingsRaw,
   stateEnum,
   stateApi: stateApiRaw,
   modal,
   documentRef = typeof document !== 'undefined' ? document : null,
-  windowRef = typeof window !== 'undefined' ? window : null,
+  windowRef = typeof window !== 'undefined' ? (window as Window & typeof globalThis) : null,
   storage = typeof localStorage !== 'undefined' ? localStorage : null,
   logger = typeof console !== 'undefined' ? console : null,
-} = /** @type {PanelVisibilityOptions} */ ({})) {
-  /** @type {PanelSettingsController | undefined} */
-  const panelSettings = panelSettingsRaw;
-  /** @type {PanelStateApi | undefined} */
-  const stateApi = stateApiRaw;
-  const doc = documentRef;
-  const win = windowRef;
+}: PanelVisibilityOptions): PanelVisibilityController {
+  const panelSettings: PanelSettingsController | undefined = panelSettingsRaw;
+  const stateApi: PanelStateApi | undefined = stateApiRaw;
+  const doc = documentRef ?? null;
+  const win = windowRef ?? null;
   if (!panelSettings || !stateEnum || !stateApi || !doc || !win) {
     throw new Error('createPanelVisibility missing required dependencies');
   }
 
-  const COLLAPSED_CLASS = 'gmh-collapsed';
-  const OPEN_CLASS = 'gmh-panel-open';
-  const STORAGE_KEY = 'gmh_panel_collapsed';
-  const MIN_GAP = 12;
-
-  /**
-   * @param {unknown} value
-   * @returns {string | null}
-   */
-  const normalizeState = (value) => {
-    if (!value) return null;
-    const next = String(value).toLowerCase();
-    return Object.values(stateEnum).includes(next) ? next : null;
-  };
-
-  /** @type {PanelSettingsLayout} */
-  const DEFAULT_LAYOUT = (() => {
-    const layout = panelSettings.defaults?.layout || {};
+  const DEFAULT_LAYOUT: PanelSettingsLayout = (() => {
+    const layout = (panelSettings.defaults?.layout ?? {}) as LayoutInput;
     return {
-      anchor: layout.anchor === 'left' ? 'left' : 'right',
+      anchor: layout?.anchor === 'left' ? 'left' : 'right',
       offset:
-        Number.isFinite(Number(layout.offset)) && Number(layout.offset) > 0
-          ? Math.max(MIN_GAP, Math.round(Number(layout.offset)))
+        Number.isFinite(Number(layout?.offset)) && Number(layout?.offset) > 0
+          ? Math.max(MIN_GAP, Math.round(Number(layout?.offset)))
           : 16,
       bottom:
-        Number.isFinite(Number(layout.bottom)) && Number(layout.bottom) > 0
-          ? Math.max(MIN_GAP, Math.round(Number(layout.bottom)))
+        Number.isFinite(Number(layout?.bottom)) && Number(layout?.bottom) > 0
+          ? Math.max(MIN_GAP, Math.round(Number(layout?.bottom)))
           : 16,
-      width: Number.isFinite(Number(layout.width)) ? Math.round(Number(layout.width)) : null,
-      height: Number.isFinite(Number(layout.height)) ? Math.round(Number(layout.height)) : null,
+      width: Number.isFinite(Number(layout?.width)) ? Math.round(Number(layout?.width)) : null,
+      height: Number.isFinite(Number(layout?.height)) ? Math.round(Number(layout?.height)) : null,
     };
   })();
 
-  /** @type {PanelSettingsBehavior} */
-  const DEFAULT_BEHAVIOR = (() => {
-    const behavior = panelSettings.defaults?.behavior || {};
+  const DEFAULT_BEHAVIOR: PanelSettingsBehavior = (() => {
+    const behavior = (panelSettings.defaults?.behavior ?? {}) as BehaviorInput;
     return {
       autoHideEnabled:
-        typeof behavior.autoHideEnabled === 'boolean' ? behavior.autoHideEnabled : true,
-      autoHideDelayMs: Number.isFinite(Number(behavior.autoHideDelayMs))
-        ? Math.max(2000, Math.round(Number(behavior.autoHideDelayMs)))
+        typeof behavior?.autoHideEnabled === 'boolean' ? behavior.autoHideEnabled : true,
+      autoHideDelayMs: Number.isFinite(Number(behavior?.autoHideDelayMs))
+        ? Math.max(2000, Math.round(Number(behavior?.autoHideDelayMs)))
         : 10000,
       collapseOnOutside:
-        typeof behavior.collapseOnOutside === 'boolean' ? behavior.collapseOnOutside : true,
+        typeof behavior?.collapseOnOutside === 'boolean' ? behavior.collapseOnOutside : true,
       collapseOnFocus:
-        typeof behavior.collapseOnFocus === 'boolean' ? behavior.collapseOnFocus : false,
-      allowDrag: typeof behavior.allowDrag === 'boolean' ? behavior.allowDrag : true,
-      allowResize: typeof behavior.allowResize === 'boolean' ? behavior.allowResize : true,
+        typeof behavior?.collapseOnFocus === 'boolean' ? behavior.collapseOnFocus : false,
+      allowDrag: typeof behavior?.allowDrag === 'boolean' ? behavior.allowDrag : true,
+      allowResize: typeof behavior?.allowResize === 'boolean' ? behavior.allowResize : true,
     };
   })();
 
-  /**
-   * @param {PanelSettingsLayout | null | undefined} [input]
-   * @returns {PanelSettingsLayout}
-   */
-  const coerceLayout = (input = {}) => {
-    const layout = { ...DEFAULT_LAYOUT, ...(input || {}) };
+  const coerceLayout = (input: LayoutInput = {}): PanelSettingsLayout => {
+    const layout = { ...DEFAULT_LAYOUT, ...(input ?? {}) } as PanelSettingsLayout;
     return {
       anchor: layout.anchor === 'left' ? 'left' : 'right',
       offset: Number.isFinite(Number(layout.offset))
@@ -105,12 +113,8 @@ export function createPanelVisibility({
     };
   };
 
-  /**
-   * @param {PanelSettingsBehavior | null | undefined} [input]
-   * @returns {PanelSettingsBehavior}
-   */
-  const coerceBehavior = (input = {}) => {
-    const behavior = { ...DEFAULT_BEHAVIOR, ...(input || {}) };
+  const coerceBehavior = (input: BehaviorInput = {}): PanelSettingsBehavior => {
+    const behavior = { ...DEFAULT_BEHAVIOR, ...(input ?? {}) } as PanelSettingsBehavior;
     behavior.autoHideEnabled =
       typeof behavior.autoHideEnabled === 'boolean'
         ? behavior.autoHideEnabled
@@ -135,53 +139,37 @@ export function createPanelVisibility({
     return behavior;
   };
 
-  /** @type {HTMLElement | null} */
-  let panelEl = null;
-  /** @type {HTMLButtonElement | null} */
-  let fabEl = null;
+  let panelEl: HTMLElement | null = null;
+  let fabEl: HTMLButtonElement | null = null;
   let fabLastToggleAt = 0;
-  /** @type {HTMLButtonElement | null} */
-  let dragHandle = null;
-  /** @type {HTMLElement | null} */
-  let resizeHandle = null;
+  let dragHandle: HTMLButtonElement | null = null;
+  let resizeHandle: HTMLElement | null = null;
   let modernMode = false;
-  /** @type {number | null} */
-  let idleTimer = null;
-  /** @type {(() => void) | null} */
-  let stateUnsubscribe = null;
-  /** @type {((event: PointerEvent) => void) | null} */
-  let outsidePointerHandler = null;
-  /** @type {((event: FocusEvent) => void) | null} */
-  let focusCollapseHandler = null;
-  /** @type {((event: KeyboardEvent) => void) | null} */
-  let escapeKeyHandler = null;
+  let idleTimer: number | null = null;
+  let stateUnsubscribe: (() => void) | null = null;
+  let outsidePointerHandler: ((event: PointerEvent) => void) | null = null;
+  let focusCollapseHandler: ((event: FocusEvent) => void) | null = null;
+  let escapeKeyHandler: ((event: KeyboardEvent) => void) | null = null;
   let panelListenersBound = false;
   let resizeScheduled = false;
-  let currentState = stateEnum.IDLE;
+  let currentState = stateEnum.IDLE || '';
   let userCollapsed = false;
-  /** @type {boolean | null} */
-  let persistedPreference = null;
-  /** @type {HTMLElement | null} */
-  let lastFocusTarget = null;
-  /** @type {{ pointerId?: number; startX: number; startY: number; rect: DOMRect } | null} */
-  let dragSession = null;
-  /** @type {{ pointerId?: number; startX: number; startY: number; width: number; height: number; nextWidth: number; nextHeight: number } | null} */
-  let resizeSession = null;
+  let persistedPreference: boolean | null = null;
+  let lastFocusTarget: HTMLElement | null = null;
+  let dragSession: DragSession | null = null;
+  let resizeSession: ResizeSession | null = null;
   let applyingSettings = false;
-  /** @type {number[]} */
-  let focusTimeouts = [];
-  /** @type {number | null} */
-  let focusAnimationFrame = null;
+  let focusTimeouts: number[] = [];
+  let focusAnimationFrame: number | null = null;
 
-  /** @type {import('../types').PanelSettingsValue} */
-  let currentSettings = panelSettings.get();
-  let currentLayout = coerceLayout(currentSettings.layout);
-  let currentBehavior = coerceBehavior(currentSettings.behavior);
+  let currentSettings: PanelSettingsValue = panelSettings.get();
+  let currentLayout = coerceLayout(currentSettings.layout as LayoutInput);
+  let currentBehavior = coerceBehavior(currentSettings.behavior as BehaviorInput);
 
-  panelSettings.onChange((next) => {
+  panelSettings.onChange((next: PanelSettingsValue) => {
     currentSettings = next;
-    currentLayout = coerceLayout(next.layout);
-    currentBehavior = coerceBehavior(next.behavior);
+    currentLayout = coerceLayout(next.layout as LayoutInput);
+    currentBehavior = coerceBehavior(next.behavior as BehaviorInput);
     if (panelEl && modernMode) {
       applyingSettings = true;
       try {
@@ -193,39 +181,38 @@ export function createPanelVisibility({
     }
   });
 
-  const getRoot = () => doc.documentElement;
+  const getRoot = (): HTMLElement => doc.documentElement;
+  const isModernActive = (): boolean => modernMode && !!panelEl;
 
-  const isModernActive = () => modernMode && !!panelEl;
-
-  const isCollapsed = () => {
+  const isCollapsed = (): boolean => {
     if (!isModernActive()) return false;
     return getRoot().classList.contains(COLLAPSED_CLASS);
   };
 
-  const loadPersistedCollapsed = () => {
+  const loadPersistedCollapsed = (): boolean | null => {
     if (!storage) return null;
     try {
       const raw = storage.getItem(STORAGE_KEY);
       if (raw === '1') return true;
       if (raw === '0') return false;
     } catch (err) {
-      logger.warn('[GMH] failed to read panel state', err);
+      logger?.warn?.('[GMH] failed to read panel state', err);
     }
     return null;
   };
 
-  const persistCollapsed = (value) => {
+  const persistCollapsed = (value: boolean | null): void => {
     if (!storage) return;
     persistedPreference = value;
     try {
       if (value === null) storage.removeItem(STORAGE_KEY);
       else storage.setItem(STORAGE_KEY, value ? '1' : '0');
     } catch (err) {
-      logger.warn('[GMH] failed to persist panel state', err);
+      logger?.warn?.('[GMH] failed to persist panel state', err);
     }
   };
 
-  const rememberFocus = () => {
+  const rememberFocus = (): void => {
     const active = doc.activeElement;
     if (!active || active === doc.body) return;
     if (!(active instanceof HTMLElement)) return;
@@ -233,7 +220,7 @@ export function createPanelVisibility({
     lastFocusTarget = active;
   };
 
-  const clearFocusSchedules = () => {
+  const clearFocusSchedules = (): void => {
     if (focusAnimationFrame) {
       cancelAnimationFrame(focusAnimationFrame);
       focusAnimationFrame = null;
@@ -244,30 +231,30 @@ export function createPanelVisibility({
     }
   };
 
-  const clearFocusMemory = () => {
+  const clearFocusMemory = (): void => {
     lastFocusTarget = null;
   };
 
-  const restoreFocus = () => {
+  const restoreFocus = (): void => {
     const target = lastFocusTarget;
     if (!target) return;
     lastFocusTarget = null;
     requestAnimationFrame(() => {
       try {
-        if (typeof target.focus === 'function') target.focus({ preventScroll: true });
+        target.focus({ preventScroll: true });
       } catch (err) {
-        logger.warn('[GMH] focus restore failed', err);
+        logger?.warn?.('[GMH] focus restore failed', err);
       }
     });
   };
 
-  const focusPanelElement = () => {
+  const focusPanelElement = (): void => {
     const panelElement = panelEl;
     if (!panelElement || typeof panelElement.focus !== 'function') return;
     const attempt = () => {
       try {
         panelElement.focus({ preventScroll: true });
-      } catch (err) {
+      } catch {
         /* noop */
       }
     };
@@ -280,19 +267,19 @@ export function createPanelVisibility({
     focusTimeouts = [win.setTimeout(attempt, 0), win.setTimeout(attempt, 50)];
   };
 
-  const clearIdleTimer = () => {
+  const clearIdleTimer = (): void => {
     if (idleTimer) {
       win.clearTimeout(idleTimer);
       idleTimer = null;
     }
   };
 
-  const getAutoHideDelay = () => {
+  const getAutoHideDelay = (): number | null => {
     if (!currentBehavior.autoHideEnabled) return null;
     return currentBehavior.autoHideDelayMs || 10000;
   };
 
-  const applyRootState = (collapsed) => {
+  const applyRootState = (collapsed: boolean): void => {
     const root = getRoot();
     if (!modernMode) {
       root.classList.remove(COLLAPSED_CLASS);
@@ -308,33 +295,33 @@ export function createPanelVisibility({
     }
   };
 
-  const syncAria = (collapsed) => {
+  const syncAria = (collapsed: boolean): void => {
     if (!panelEl) return;
     panelEl.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
     if (fabEl) fabEl.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
   };
 
-  const scheduleIdleClose = () => {
+  const scheduleIdleClose = (): void => {
     if (!isModernActive()) return;
     clearIdleTimer();
     if (isCollapsed()) return;
-    if (currentState !== stateEnum.IDLE) return;
+    if (currentState !== (stateEnum.IDLE || '')) return;
     const delay = getAutoHideDelay();
     if (!delay) return;
     idleTimer = win.setTimeout(() => {
       if (!isModernActive()) return;
-      if (currentState !== stateEnum.IDLE) return;
+      if (currentState !== (stateEnum.IDLE || '')) return;
       close('idle');
     }, delay);
   };
 
-  const resetIdleTimer = () => {
+  const resetIdleTimer = (): void => {
     if (!isModernActive()) return;
     if (isCollapsed()) return;
     scheduleIdleClose();
   };
 
-  const applyLayout = () => {
+  const applyLayout = (): void => {
     if (!panelEl) return;
     const layout = coerceLayout(currentLayout);
     const viewportWidth = win.innerWidth || doc.documentElement.clientWidth || 1280;
@@ -346,9 +333,7 @@ export function createPanelVisibility({
     const width = layout.width ? Math.min(Math.max(260, layout.width), maxWidth) : null;
     const height = layout.height ? Math.min(Math.max(240, layout.height), maxHeight) : null;
 
-    if (width) panelEl.style.width = `${width}px`;
-    else panelEl.style.width = '';
-
+    panelEl.style.width = width ? `${width}px` : '';
     if (height) {
       panelEl.style.height = `${height}px`;
       panelEl.style.maxHeight = `${height}px`;
@@ -357,15 +342,20 @@ export function createPanelVisibility({
       panelEl.style.maxHeight = '70vh';
     }
 
-    // Re-measure after size adjustments
     const rect = panelEl.getBoundingClientRect();
     const effectiveHeight = height || rect.height || 320;
 
     const bottomLimit = Math.max(MIN_GAP, viewportHeight - effectiveHeight - MIN_GAP);
-    const bottom = Math.min(Math.max(MIN_GAP, layout.bottom), bottomLimit);
+    const bottom = Math.min(
+      Math.max(MIN_GAP, layout.bottom ?? DEFAULT_LAYOUT.bottom),
+      bottomLimit,
+    );
 
     const horizontalLimit = Math.max(MIN_GAP, viewportWidth - MIN_GAP - 160);
-    const offset = Math.min(Math.max(MIN_GAP, layout.offset), horizontalLimit);
+    const offset = Math.min(
+      Math.max(MIN_GAP, layout.offset ?? DEFAULT_LAYOUT.offset),
+      horizontalLimit,
+    );
 
     if (layout.anchor === 'left') {
       panelEl.style.left = `${offset}px`;
@@ -377,7 +367,7 @@ export function createPanelVisibility({
     panelEl.style.bottom = `${bottom}px`;
     panelEl.style.top = 'auto';
 
-    const finalLayout = { ...layout, offset, bottom, width, height };
+    const finalLayout: PanelSettingsLayout = { ...layout, offset, bottom, width, height };
     const changed =
       finalLayout.anchor !== currentLayout.anchor ||
       finalLayout.offset !== currentLayout.offset ||
@@ -390,13 +380,13 @@ export function createPanelVisibility({
     }
   };
 
-  const refreshOutsideHandler = () => {
+  const refreshOutsideHandler = (): void => {
     if (outsidePointerHandler) {
       doc.removeEventListener('pointerdown', outsidePointerHandler);
       outsidePointerHandler = null;
     }
     if (!currentBehavior.collapseOnOutside) return;
-    outsidePointerHandler = (event) => {
+    outsidePointerHandler = (event: PointerEvent) => {
       if (!isModernActive()) return;
       if (isCollapsed()) return;
       const target = event.target;
@@ -410,13 +400,13 @@ export function createPanelVisibility({
     doc.addEventListener('pointerdown', outsidePointerHandler);
   };
 
-  const refreshFocusCollapseHandler = () => {
+  const refreshFocusCollapseHandler = (): void => {
     if (focusCollapseHandler) {
       doc.removeEventListener('focusin', focusCollapseHandler, true);
       focusCollapseHandler = null;
     }
     if (!currentBehavior.collapseOnFocus) return;
-    focusCollapseHandler = (event) => {
+    focusCollapseHandler = (event: FocusEvent) => {
       if (!isModernActive() || isCollapsed()) return;
       const target = event.target;
       if (!(target instanceof Node)) return;
@@ -428,7 +418,7 @@ export function createPanelVisibility({
     doc.addEventListener('focusin', focusCollapseHandler, true);
   };
 
-  const updateHandleAccessibility = () => {
+  const updateHandleAccessibility = (): void => {
     if (dragHandle) {
       dragHandle.disabled = !currentBehavior.allowDrag;
       dragHandle.setAttribute('aria-disabled', currentBehavior.allowDrag ? 'false' : 'true');
@@ -438,7 +428,7 @@ export function createPanelVisibility({
     }
   };
 
-  const refreshBehavior = () => {
+  const refreshBehavior = (): void => {
     if (!panelEl || !modernMode) return;
     refreshOutsideHandler();
     refreshFocusCollapseHandler();
@@ -446,7 +436,7 @@ export function createPanelVisibility({
     if (!isCollapsed()) scheduleIdleClose();
   };
 
-  const handleViewportResize = () => {
+  const handleViewportResize = (): void => {
     if (!panelEl || !modernMode) return;
     if (resizeScheduled) return;
     resizeScheduled = true;
@@ -458,13 +448,13 @@ export function createPanelVisibility({
 
   win.addEventListener('resize', handleViewportResize);
 
-  const ensureFab = () => {
+  const ensureFab = (): HTMLButtonElement | null => {
     if (!modernMode) return null;
     if (!fabEl || !fabEl.isConnected) {
-      fabEl = /** @type {HTMLButtonElement | null} */ (doc.getElementById('gmh-fab'));
+      fabEl = doc.getElementById('gmh-fab') as HTMLButtonElement | null;
     }
     if (!fabEl || !fabEl.isConnected) {
-      fabEl = /** @type {HTMLButtonElement} */ (doc.createElement('button'));
+      fabEl = doc.createElement('button');
       fabEl.id = 'gmh-fab';
       fabEl.type = 'button';
       fabEl.textContent = 'GMH';
@@ -472,7 +462,7 @@ export function createPanelVisibility({
       fabEl.setAttribute('aria-controls', 'genit-memory-helper-panel');
       doc.body.appendChild(fabEl);
     }
-    fabEl.onclick = (event) => {
+    fabEl.onclick = (event: MouseEvent) => {
       const now = typeof performance?.now === 'function' ? performance.now() : Date.now();
       if (now - fabLastToggleAt < 350) return;
 
@@ -484,8 +474,8 @@ export function createPanelVisibility({
     return fabEl;
   };
 
-  const attachPanelListeners = () => {
-    if (!isModernActive() || panelListenersBound) return;
+  const attachPanelListeners = (): void => {
+    if (!isModernActive() || panelListenersBound || !panelEl) return;
     const passiveReset = () => resetIdleTimer();
     panelEl.addEventListener('pointerdown', passiveReset, { passive: true });
     panelEl.addEventListener('pointermove', passiveReset, { passive: true });
@@ -496,9 +486,9 @@ export function createPanelVisibility({
     panelListenersBound = true;
   };
 
-  const ensureEscapeHandler = () => {
+  const ensureEscapeHandler = (): void => {
     if (escapeKeyHandler) return;
-    escapeKeyHandler = (event) => {
+    escapeKeyHandler = (event: KeyboardEvent) => {
       if (!isModernActive()) return;
       if (event.key !== 'Escape' || event.altKey || event.ctrlKey || event.metaKey) return;
       if (modal?.isOpen?.()) return;
@@ -509,12 +499,12 @@ export function createPanelVisibility({
     win.addEventListener('keydown', escapeKeyHandler);
   };
 
-  const ensureStateSubscription = () => {
+  const ensureStateSubscription = (): void => {
     if (stateUnsubscribe || typeof stateApi?.subscribe !== 'function') return;
     stateUnsubscribe = stateApi.subscribe((next) => {
-      currentState = normalizeState(next) || stateEnum.IDLE;
+      currentState = normalizeState(next, stateEnum) || stateEnum.IDLE || '';
       if (!modernMode) return;
-      if (currentState !== stateEnum.IDLE) {
+      if (currentState !== (stateEnum.IDLE || '')) {
         if (!userCollapsed) open({ focus: false });
         clearIdleTimer();
       } else {
@@ -524,28 +514,26 @@ export function createPanelVisibility({
     });
   };
 
-  const bindHandles = () => {
+  const bindHandles = (): void => {
     if (!panelEl) return;
-    const nextDragHandle = /** @type {HTMLButtonElement | null} */ (
-      panelEl.querySelector('#gmh-panel-drag-handle')
-    );
-    if (dragHandle && dragHandle !== nextDragHandle)
+    const nextDragHandle = panelEl.querySelector('#gmh-panel-drag-handle') as HTMLButtonElement | null;
+    if (dragHandle && dragHandle !== nextDragHandle) {
       dragHandle.removeEventListener('pointerdown', handleDragStart);
+    }
     dragHandle = nextDragHandle;
     if (dragHandle) dragHandle.addEventListener('pointerdown', handleDragStart);
 
-    const nextResizeHandle = /** @type {HTMLElement | null} */ (
-      panelEl.querySelector('#gmh-panel-resize-handle')
-    );
-    if (resizeHandle && resizeHandle !== nextResizeHandle)
+    const nextResizeHandle = panelEl.querySelector('#gmh-panel-resize-handle') as HTMLElement | null;
+    if (resizeHandle && resizeHandle !== nextResizeHandle) {
       resizeHandle.removeEventListener('pointerdown', handleResizeStart);
+    }
     resizeHandle = nextResizeHandle;
     if (resizeHandle) resizeHandle.addEventListener('pointerdown', handleResizeStart);
 
     updateHandleAccessibility();
   };
 
-  const stopDragTracking = () => {
+  const stopDragTracking = (): void => {
     if (!dragSession) return;
     win.removeEventListener('pointermove', handleDragMove);
     win.removeEventListener('pointerup', handleDragEnd);
@@ -553,7 +541,7 @@ export function createPanelVisibility({
     if (dragHandle && dragSession.pointerId !== undefined) {
       try {
         dragHandle.releasePointerCapture(dragSession.pointerId);
-      } catch (err) {
+      } catch {
         /* noop */
       }
     }
@@ -561,11 +549,7 @@ export function createPanelVisibility({
     dragSession = null;
   };
 
-  /**
-   * @param {PointerEvent} event
-   * @returns {void}
-   */
-  const handleDragStart = (event) => {
+  const handleDragStart = (event: PointerEvent): void => {
     if (!panelEl || !modernMode) return;
     if (!currentBehavior.allowDrag) return;
     if (event.button && event.button !== 0) return;
@@ -580,7 +564,7 @@ export function createPanelVisibility({
     clearIdleTimer();
     try {
       dragHandle?.setPointerCapture(event.pointerId);
-    } catch (err) {
+    } catch {
       /* noop */
     }
     win.addEventListener('pointermove', handleDragMove);
@@ -588,15 +572,11 @@ export function createPanelVisibility({
     win.addEventListener('pointercancel', handleDragCancel);
   };
 
-  /**
-   * @param {PointerEvent} event
-   * @returns {void}
-   */
-  const handleDragMove = (event) => {
+  const handleDragMove = (event: PointerEvent): void => {
     if (!dragSession || !panelEl) return;
     const dx = event.clientX - dragSession.startX;
     const dy = event.clientY - dragSession.startY;
-    const rect = dragSession.rect;
+    const { rect } = dragSession;
     const viewportWidth = win.innerWidth || doc.documentElement.clientWidth || 1280;
     const viewportHeight = win.innerHeight || doc.documentElement.clientHeight || 720;
 
@@ -613,10 +593,7 @@ export function createPanelVisibility({
     panelEl.style.bottom = 'auto';
   };
 
-  /**
-   * @returns {void}
-   */
-  const finalizeDragLayout = () => {
+  const finalizeDragLayout = (): void => {
     if (!panelEl) return;
     const rect = panelEl.getBoundingClientRect();
     const viewportWidth = win.innerWidth || doc.documentElement.clientWidth || 1280;
@@ -630,27 +607,18 @@ export function createPanelVisibility({
     panelSettings.update({ layout: { anchor, offset, bottom } });
   };
 
-  /**
-   * @returns {void}
-   */
-  const handleDragEnd = () => {
+  const handleDragEnd = (): void => {
     if (!dragSession) return;
     stopDragTracking();
     finalizeDragLayout();
   };
 
-  /**
-   * @returns {void}
-   */
-  const handleDragCancel = () => {
+  const handleDragCancel = (): void => {
     stopDragTracking();
     applyLayout();
   };
 
-  /**
-   * @returns {void}
-   */
-  const stopResizeTracking = () => {
+  const stopResizeTracking = (): void => {
     if (!resizeSession) return;
     win.removeEventListener('pointermove', handleResizeMove);
     win.removeEventListener('pointerup', handleResizeEnd);
@@ -658,7 +626,7 @@ export function createPanelVisibility({
     if (resizeHandle && resizeSession.pointerId !== undefined) {
       try {
         resizeHandle.releasePointerCapture(resizeSession.pointerId);
-      } catch (err) {
+      } catch {
         /* noop */
       }
     }
@@ -666,11 +634,7 @@ export function createPanelVisibility({
     resizeSession = null;
   };
 
-  /**
-   * @param {PointerEvent} event
-   * @returns {void}
-   */
-  const handleResizeStart = (event) => {
+  const handleResizeStart = (event: PointerEvent): void => {
     if (!panelEl || !modernMode) return;
     if (!currentBehavior.allowResize) return;
     if (event.button && event.button !== 0) return;
@@ -689,7 +653,7 @@ export function createPanelVisibility({
     clearIdleTimer();
     try {
       resizeHandle?.setPointerCapture(event.pointerId);
-    } catch (err) {
+    } catch {
       /* noop */
     }
     win.addEventListener('pointermove', handleResizeMove);
@@ -697,11 +661,7 @@ export function createPanelVisibility({
     win.addEventListener('pointercancel', handleResizeCancel);
   };
 
-  /**
-   * @param {PointerEvent} event
-   * @returns {void}
-   */
-  const handleResizeMove = (event) => {
+  const handleResizeMove = (event: PointerEvent): void => {
     if (!resizeSession || !panelEl) return;
     const viewportWidth = win.innerWidth || doc.documentElement.clientWidth || 1280;
     const viewportHeight = win.innerHeight || doc.documentElement.clientHeight || 720;
@@ -709,8 +669,14 @@ export function createPanelVisibility({
     const dx = event.clientX - resizeSession.startX;
     const dy = event.clientY - resizeSession.startY;
 
-    const horizontalRoom = Math.max(MIN_GAP, viewportWidth - currentLayout.offset - MIN_GAP);
-    const verticalRoom = Math.max(MIN_GAP, viewportHeight - currentLayout.bottom - MIN_GAP);
+    const horizontalRoom = Math.max(
+      MIN_GAP,
+      viewportWidth - (currentLayout.offset ?? DEFAULT_LAYOUT.offset) - MIN_GAP,
+    );
+    const verticalRoom = Math.max(
+      MIN_GAP,
+      viewportHeight - (currentLayout.bottom ?? DEFAULT_LAYOUT.bottom) - MIN_GAP,
+    );
 
     let nextWidth = resizeSession.width + dx;
     let nextHeight = resizeSession.height + dy;
@@ -726,10 +692,7 @@ export function createPanelVisibility({
     panelEl.style.maxHeight = `${resizeSession.nextHeight}px`;
   };
 
-  /**
-   * @returns {void}
-   */
-  const handleResizeEnd = () => {
+  const handleResizeEnd = (): void => {
     if (!resizeSession) return;
     const { nextWidth, nextHeight } = resizeSession;
     stopResizeTracking();
@@ -741,19 +704,12 @@ export function createPanelVisibility({
     });
   };
 
-  /**
-   * @returns {void}
-   */
-  const handleResizeCancel = () => {
+  const handleResizeCancel = (): void => {
     stopResizeTracking();
     applyLayout();
   };
 
-  /**
-   * @param {{ focus?: boolean; persist?: boolean }} [options]
-   * @returns {boolean}
-   */
-  const open = ({ focus = false, persist = false } = {}) => {
+  const open = ({ focus = false, persist = false } = {}): boolean => {
     if (!panelEl) return false;
     if (!modernMode) {
       if (focus && typeof panelEl.focus === 'function') {
@@ -764,7 +720,7 @@ export function createPanelVisibility({
     const wasCollapsed = isCollapsed();
     applyRootState(false);
     syncAria(false);
-    fabEl && fabEl.setAttribute('aria-expanded', 'true');
+    if (fabEl) fabEl.setAttribute('aria-expanded', 'true');
     if (persist) persistCollapsed(false);
     userCollapsed = false;
     applyLayout();
@@ -773,21 +729,17 @@ export function createPanelVisibility({
       rememberFocus();
       focusPanelElement();
     }
-    if (currentState === stateEnum.IDLE) scheduleIdleClose();
+    if (currentState === (stateEnum.IDLE || '')) scheduleIdleClose();
     else clearIdleTimer();
     return wasCollapsed;
   };
 
-  /**
-   * @param {'user' | 'idle' | 'focus' | string} [reason='user']
-   * @returns {boolean}
-   */
-  const close = (reason = 'user') => {
+  const close = (reason: string = 'user'): boolean => {
     if (!panelEl || !modernMode) return false;
     if (isCollapsed()) return false;
     applyRootState(true);
     syncAria(true);
-    fabEl && fabEl.setAttribute('aria-expanded', 'false');
+    if (fabEl) fabEl.setAttribute('aria-expanded', 'false');
     clearIdleTimer();
     clearFocusSchedules();
     if (reason === 'user') {
@@ -800,10 +752,7 @@ export function createPanelVisibility({
     return true;
   };
 
-  /**
-   * @returns {boolean}
-   */
-  const toggle = () => {
+  const toggle = (): boolean => {
     if (!panelEl || !modernMode) return false;
     if (isCollapsed()) {
       open({ focus: true, persist: true });
@@ -813,12 +762,7 @@ export function createPanelVisibility({
     return false;
   };
 
-  /**
-   * @param {Element | null} panel
-   * @param {{ modern?: boolean }} [options]
-   * @returns {void}
-   */
-  const bind = (panel, { modern } = {}) => {
+  const bind = (panel: Element | null, { modern }: { modern?: boolean } = {}): void => {
     const panelElement = panel instanceof HTMLElement ? panel : null;
     if (panel && !panelElement) {
       if (logger?.warn) {
@@ -839,7 +783,7 @@ export function createPanelVisibility({
       return;
     }
     ensureStateSubscription();
-    currentState = normalizeState(stateApi?.getState?.()) || stateEnum.IDLE;
+    currentState = normalizeState(stateApi?.getState?.(), stateEnum) || stateEnum.IDLE || '';
     ensureFab();
     attachPanelListeners();
     ensureEscapeHandler();
@@ -860,11 +804,7 @@ export function createPanelVisibility({
     if (!shouldCollapse) scheduleIdleClose();
   };
 
-  /**
-   * @param {{ tone?: string | null }} [update]
-   * @returns {void}
-   */
-  const onStatusUpdate = ({ tone } = {}) => {
+  const onStatusUpdate = ({ tone }: { tone?: string | null } = {}): void => {
     if (!isModernActive()) return;
     if (tone && ['error', 'warning', 'progress'].includes(tone) && isCollapsed()) {
       open({ focus: false });

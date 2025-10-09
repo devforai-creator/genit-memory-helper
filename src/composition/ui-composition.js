@@ -1,5 +1,5 @@
-import { createModal } from '../ui/modal.js';
-import { createPanelVisibility } from '../ui/panel-visibility.js';
+import { createModal } from '../ui/modal.ts';
+import { createPanelVisibility } from '../ui/panel-visibility.ts';
 import { createStatusManager } from '../ui/status-manager.js';
 import { createStateView } from '../ui/state-view.js';
 import { createPrivacyConfigurator } from '../ui/privacy-config.js';

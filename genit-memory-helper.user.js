@@ -103,7 +103,7 @@ var GMHBundle = (function (exports) {
         done: ['done', 'idle', 'scanning', 'redacting'],
         error: ['error', 'idle', 'scanning', 'redacting'],
     };
-    const normalizeState = (value) => {
+    const normalizeState$1 = (value) => {
         if (!value)
             return null;
         const next = String(value).toLowerCase();
@@ -132,7 +132,7 @@ var GMHBundle = (function (exports) {
                 };
             },
             setState(nextState, payload) {
-                const next = normalizeState(nextState);
+                const next = normalizeState$1(nextState);
                 if (!next) {
                     warn('[GMH] unknown state requested', nextState);
                     return false;
@@ -3700,7 +3700,6 @@ var GMHBundle = (function (exports) {
 
     /**
      * CSS used for the legacy preview privacy overlay.
-     * @type {string}
      */
     const LEGACY_PREVIEW_CSS = `
 .gmh-preview-overlay{position:fixed;inset:0;background:rgba(15,23,42,0.72);z-index:9999999;display:flex;align-items:center;justify-content:center;padding:24px;}
@@ -3727,10 +3726,8 @@ var GMHBundle = (function (exports) {
 .gmh-preview-close:hover{color:#f8fafc;}
 @media (max-width:480px){.gmh-preview-card{width:100%;border-radius:12px;}}
 `;
-
     /**
      * CSS bundle for the modern design-system panel.
-     * @type {string}
      */
     const DESIGN_SYSTEM_CSS = `
 :root{--gmh-bg:#0b1020;--gmh-surface:#0f172a;--gmh-surface-alt:rgba(30,41,59,0.65);--gmh-fg:#e2e8f0;--gmh-muted:#94a3b8;--gmh-accent:#38bdf8;--gmh-accent-soft:#c4b5fd;--gmh-success:#34d399;--gmh-warning:#fbbf24;--gmh-danger:#f87171;--gmh-border:rgba(148,163,184,0.25);--gmh-radius:14px;--gmh-radius-sm:10px;--gmh-panel-shadow:0 18px 48px rgba(8,15,30,0.55);--gmh-font:13px/1.5 'Inter',system-ui,-apple-system,BlinkMacSystemFont,sans-serif;}
@@ -3839,35 +3836,31 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 @media (max-width:480px){.gmh-modal{width:100%;border-radius:12px;}.gmh-modal__actions{flex-direction:column;}.gmh-panel{right:12px;left:12px;bottom:12px;width:auto;max-height:76vh;}.gmh-panel::-webkit-scrollbar{width:6px;}.gmh-panel::-webkit-scrollbar-thumb{background:rgba(148,163,184,0.35);border-radius:999px;}#gmh-fab{width:48px;height:48px;right:12px;bottom:12px;font-size:12px;}}
 @media (prefers-reduced-motion:reduce){.gmh-panel,.gmh-modal,.gmh-progress__fill,#gmh-fab{transition:none !important;animation-duration:0.001s !important;}}
 `;
-
     /**
      * Injects the legacy preview stylesheet into the provided document once.
-     *
-     * @param {Document | null} [doc]
-     * @returns {void}
      */
     function ensureLegacyPreviewStyles(doc = typeof document !== 'undefined' ? document : null) {
-      if (!doc) return;
-      if (doc.getElementById('gmh-preview-style')) return;
-      const style = doc.createElement('style');
-      style.id = 'gmh-preview-style';
-      style.textContent = LEGACY_PREVIEW_CSS;
-      doc.head.appendChild(style);
+        if (!doc)
+            return;
+        if (doc.getElementById('gmh-preview-style'))
+            return;
+        const style = doc.createElement('style');
+        style.id = 'gmh-preview-style';
+        style.textContent = LEGACY_PREVIEW_CSS;
+        doc.head.appendChild(style);
     }
-
     /**
      * Injects the design-system stylesheet into the provided document once.
-     *
-     * @param {Document | null} [doc]
-     * @returns {void}
      */
     function ensureDesignSystemStyles(doc = typeof document !== 'undefined' ? document : null) {
-      if (!doc) return;
-      if (doc.getElementById('gmh-design-system-style')) return;
-      const style = doc.createElement('style');
-      style.id = 'gmh-design-system-style';
-      style.textContent = DESIGN_SYSTEM_CSS;
-      doc.head.appendChild(style);
+        if (!doc)
+            return;
+        if (doc.getElementById('gmh-design-system-style'))
+            return;
+        const style = doc.createElement('style');
+        style.id = 'gmh-design-system-style';
+        style.textContent = DESIGN_SYSTEM_CSS;
+        doc.head.appendChild(style);
     }
 
     const PANEL_SETTINGS_STORAGE_KEY = 'gmh_panel_settings_v1';
@@ -7984,1178 +7977,1055 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     }
 
     /**
-     * @typedef {import('../types').ModalController} ModalController
-     * @typedef {import('../types').ModalOpenOptions} ModalOpenOptions
-     */
-
-    /**
      * Creates the shared modal controller used across classic/modern panels.
-     *
-     * @param {{ documentRef?: Document | null; windowRef?: (Window & typeof globalThis) | null }} [options]
-     * @returns {ModalController}
      */
-    function createModal({ documentRef = typeof document !== 'undefined' ? document : null, windowRef = typeof window !== 'undefined' ? /** @type {Window & typeof globalThis} */ (window) : null } = {}) {
-      const doc = documentRef;
-      const win = /** @type {(Window & typeof globalThis) | null} */ (windowRef);
-      if (!doc || !win) {
-        return {
-          open: async () => false,
-          close: () => {},
-          isOpen: () => false,
-        };
-      }
-
-      const HTMLElementCtor = /** @type {typeof HTMLElement | null} */ (
-        win.HTMLElement || (typeof HTMLElement !== 'undefined' ? HTMLElement : null)
-      );
-      const NodeCtor = /** @type {typeof Node | null} */ (
-        win.Node || (typeof Node !== 'undefined' ? Node : null)
-      );
-
-      let activeModal = null;
-      let modalIdCounter = 0;
-
-      /**
-       * Sanitises markup snippets before injecting them into the modal body.
-       *
-       * @param {string} markup
-       * @returns {DocumentFragment}
-       */
-      const sanitizeMarkupFragment = (markup) => {
-        const template = doc.createElement('template');
-        template.innerHTML = String(markup ?? '');
-        template.content
-          .querySelectorAll('script, style, iframe, object, embed, link, meta')
-          .forEach((node) => node.remove());
-        template.content.querySelectorAll('*').forEach((element) => {
-          Array.from(element.attributes).forEach((attr) => {
-            const name = attr.name.toLowerCase();
-            const value = String(attr.value || '');
-            if (name.startsWith('on')) {
-              element.removeAttribute(attr.name);
-              return;
-            }
-            if (/(javascript:|data:text\/html)/i.test(value)) {
-              element.removeAttribute(attr.name);
-              return;
-            }
-            if (name === 'srcdoc') element.removeAttribute(attr.name);
-          });
-        });
-        return template.content;
-      };
-
-      const focusableSelector = [
-        'a[href]',
-        'area[href]',
-        'input:not([disabled])',
-        'select:not([disabled])',
-        'textarea:not([disabled])',
-        'button:not([disabled])',
-        '[tabindex]:not([tabindex="-1"])',
-      ].join(',');
-
-      /**
-       * @param {Element | null} root
-       * @returns {HTMLElement[]}
-       */
-      const getFocusable = (root) => {
-        if (!root) return [];
-        return /** @type {HTMLElement[]} */ (
-          Array.from(root.querySelectorAll(focusableSelector)).filter((el) => {
-            if (!(HTMLElementCtor && el instanceof HTMLElementCtor)) return false;
-            const style = win.getComputedStyle(el);
-            return style.visibility !== 'hidden' && style.display !== 'none';
-          })
-        );
-      };
-
-      function buildButton(action, finalize) {
-        const button = doc.createElement('button');
-        button.type = action.type || 'button';
-        button.className = 'gmh-button';
-        if (action.variant) button.classList.add(`gmh-button--${action.variant}`);
-        if (action.attrs && typeof action.attrs === 'object') {
-          Object.entries(action.attrs).forEach(([key, value]) => {
-            button.setAttribute(key, value);
-          });
+    function createModal({ documentRef = typeof document !== 'undefined' ? document : null, windowRef = typeof window !== 'undefined' ? window : null, } = {}) {
+        const doc = documentRef;
+        const win = windowRef;
+        if (!doc || !win) {
+            return {
+                open: async () => false,
+                close: () => { },
+                isOpen: () => false,
+            };
         }
-        if (action.disabled) button.disabled = true;
-        button.textContent = action.label || '확인';
-        button.addEventListener('click', (event) => {
-          if (button.disabled) return;
-          if (typeof action.onSelect === 'function') {
-            const shouldClose = action.onSelect(event);
-            if (shouldClose === false) return;
-          }
-          finalize(action.value);
-        });
-        return button;
-      }
-
-      function closeActive(result) {
-        if (activeModal && typeof activeModal.close === 'function') {
-          activeModal.close(result, true);
-        }
-      }
-
-      /**
-       * Opens a modal dialog with sanitized markup and focus trapping.
-       *
-       * @param {ModalOpenOptions} [options]
-       * @returns {Promise<unknown>}
-       */
-      function open(options = /** @type {ModalOpenOptions} */ ({})) {
-        ensureDesignSystemStyles();
-        closeActive(false);
-
-        return new Promise((resolve) => {
-          const overlay = doc.createElement('div');
-          overlay.className = 'gmh-modal-overlay';
-          const dialog = doc.createElement('div');
-          dialog.className = 'gmh-modal';
-          if (options.size === 'small') dialog.classList.add('gmh-modal--sm');
-          if (options.size === 'large') dialog.classList.add('gmh-modal--lg');
-          dialog.setAttribute('role', 'dialog');
-          dialog.setAttribute('aria-modal', 'true');
-          dialog.setAttribute('tabindex', '-1');
-          modalIdCounter += 1;
-          const modalId = `gmh-modal-${modalIdCounter}`;
-          const titleId = `${modalId}-title`;
-          const descId = options.description ? `${modalId}-desc` : '';
-          dialog.id = modalId;
-
-          const header = doc.createElement('div');
-          header.className = 'gmh-modal__header';
-          const headerRow = doc.createElement('div');
-          headerRow.className = 'gmh-modal__header-row';
-
-          const title = doc.createElement('h2');
-          title.className = 'gmh-modal__title';
-          title.textContent = options.title || '';
-          title.id = titleId;
-          headerRow.appendChild(title);
-
-          let closeBtn = null;
-          if (options.dismissible !== false) {
-            closeBtn = doc.createElement('button');
-            closeBtn.type = 'button';
-            closeBtn.className = 'gmh-modal__close';
-            closeBtn.setAttribute('aria-label', '닫기');
-            closeBtn.textContent = '×';
-            headerRow.appendChild(closeBtn);
-          }
-
-          header.appendChild(headerRow);
-
-          if (options.description) {
-            const desc = doc.createElement('p');
-            desc.className = 'gmh-modal__description';
-            desc.textContent = options.description;
-            desc.id = descId;
-            header.appendChild(desc);
-          }
-
-          dialog.setAttribute('aria-labelledby', titleId);
-          if (options.description) dialog.setAttribute('aria-describedby', descId);
-          else dialog.removeAttribute('aria-describedby');
-
-          const body = doc.createElement('div');
-          body.className = 'gmh-modal__body gmh-modal__body--scroll';
-          if (options.bodyClass) body.classList.add(options.bodyClass);
-          if (NodeCtor && options.content instanceof NodeCtor) {
-            body.appendChild(options.content);
-          } else if (typeof options.content === 'string') {
-            body.appendChild(sanitizeMarkupFragment(options.content));
-          }
-
-          const footer = doc.createElement('div');
-          footer.className = 'gmh-modal__footer';
-          const actionsWrap = doc.createElement('div');
-          actionsWrap.className = 'gmh-modal__actions';
-          const actions =
-            Array.isArray(options.actions) && options.actions.length ? options.actions : [];
-
-          const finalize = (result) => {
-            cleanup(result);
-          };
-
-          actions.forEach((action) => {
-            const button = buildButton(action, finalize);
-            actionsWrap.appendChild(button);
-          });
-
-          if (actionsWrap.childElementCount) {
-            footer.appendChild(actionsWrap);
-          }
-
-          dialog.appendChild(header);
-          dialog.appendChild(body);
-          if (actionsWrap.childElementCount) dialog.appendChild(footer);
-          overlay.appendChild(dialog);
-
-          const bodyEl = doc.body;
-          const prevOverflow = bodyEl.style.overflow;
-          const restoreTarget =
-            HTMLElementCtor && doc.activeElement instanceof HTMLElementCtor
-              ? /** @type {HTMLElement} */ (doc.activeElement)
-              : null;
-          bodyEl.style.overflow = 'hidden';
-          bodyEl.appendChild(overlay);
-          overlay.setAttribute('role', 'presentation');
-
-          const onKeydown = (event) => {
-            if (event.key === 'Escape' && options.dismissible !== false) {
-              event.preventDefault();
-              cleanup(false);
-              return;
-            }
-            if (event.key === 'Tab') {
-              const focusables = getFocusable(dialog);
-              if (!focusables.length) {
-                event.preventDefault();
-                return;
-              }
-              const first = focusables[0];
-              const last = focusables[focusables.length - 1];
-              if (event.shiftKey && doc.activeElement === first) {
-                event.preventDefault();
-                last.focus();
-              } else if (!event.shiftKey && doc.activeElement === last) {
-                event.preventDefault();
-                first.focus();
-              }
-            }
-          };
-
-          const cleanup = (result) => {
-            if (!overlay.isConnected) return;
-            doc.removeEventListener('keydown', onKeydown, true);
-            overlay.remove();
-            bodyEl.style.overflow = prevOverflow;
-            if (restoreTarget && typeof restoreTarget.focus === 'function') {
-              restoreTarget.focus();
-            }
-            activeModal = null;
-            resolve(result);
-          };
-
-          if (options.dismissible !== false) {
-            overlay.addEventListener('click', (event) => {
-              if (event.target === overlay) cleanup(false);
+        const HTMLElementCtor = win.HTMLElement || (typeof HTMLElement !== 'undefined' ? HTMLElement : null);
+        const NodeCtor = win.Node || (typeof Node !== 'undefined' ? Node : null);
+        let activeModal = null;
+        let modalIdCounter = 0;
+        /**
+         * Sanitises markup snippets before injecting them into the modal body.
+         */
+        const sanitizeMarkupFragment = (markup) => {
+            const template = doc.createElement('template');
+            template.innerHTML = String(markup ?? '');
+            template.content
+                .querySelectorAll('script, style, iframe, object, embed, link, meta')
+                .forEach((node) => node.remove());
+            template.content.querySelectorAll('*').forEach((element) => {
+                Array.from(element.attributes).forEach((attr) => {
+                    const name = attr.name.toLowerCase();
+                    const value = String(attr.value || '');
+                    if (name.startsWith('on')) {
+                        element.removeAttribute(attr.name);
+                        return;
+                    }
+                    if (/(javascript:|data:text\/html)/i.test(value)) {
+                        element.removeAttribute(attr.name);
+                        return;
+                    }
+                    if (name === 'srcdoc')
+                        element.removeAttribute(attr.name);
+                });
             });
-            if (closeBtn) closeBtn.addEventListener('click', () => cleanup(false));
-          }
-
-          doc.addEventListener('keydown', onKeydown, true);
-
-          const initialSelector = options.initialFocus || '.gmh-button--primary';
-          let focusTarget = /** @type {HTMLElement | null} */ (
-            dialog.querySelector(initialSelector) 
-          );
-          if (!(focusTarget && HTMLElementCtor && focusTarget instanceof HTMLElementCtor)) {
-            const focusables = getFocusable(dialog);
-            focusTarget = focusables[0] || closeBtn;
-          }
-          win.setTimeout(() => {
-            if (focusTarget && typeof focusTarget.focus === 'function') focusTarget.focus();
-          }, 20);
-
-          activeModal = {
-            close: cleanup,
-          };
-        });
-      }
-
-      return {
-        open,
-        close: closeActive,
-        isOpen: () => Boolean(activeModal),
-      };
+            return template.content;
+        };
+        const focusableSelector = [
+            'a[href]',
+            'area[href]',
+            'input:not([disabled])',
+            'select:not([disabled])',
+            'textarea:not([disabled])',
+            'button:not([disabled])',
+            '[tabindex]:not([tabindex="-1"])',
+        ].join(',');
+        const getFocusable = (root) => {
+            if (!root)
+                return [];
+            const candidates = Array.from(root.querySelectorAll(focusableSelector));
+            return candidates.filter((el) => {
+                if (!(HTMLElementCtor && el instanceof HTMLElementCtor))
+                    return false;
+                const style = win.getComputedStyle(el);
+                return style.visibility !== 'hidden' && style.display !== 'none';
+            });
+        };
+        const buildButton = (action, finalize) => {
+            const button = doc.createElement('button');
+            button.type = 'button';
+            if (typeof action.type === 'string') {
+                button.setAttribute('type', action.type);
+            }
+            button.className = 'gmh-button';
+            if (action.variant)
+                button.classList.add(`gmh-button--${action.variant}`);
+            if (action.attrs && typeof action.attrs === 'object') {
+                Object.entries(action.attrs).forEach(([key, value]) => {
+                    button.setAttribute(key, value);
+                });
+            }
+            if (action.disabled)
+                button.disabled = true;
+            button.textContent = action.label || '확인';
+            button.addEventListener('click', (event) => {
+                if (button.disabled)
+                    return;
+                if (typeof action.onSelect === 'function') {
+                    const shouldClose = action.onSelect(event);
+                    if (shouldClose === false)
+                        return;
+                }
+                finalize(action.value);
+            });
+            return button;
+        };
+        const closeActive = (result) => {
+            if (activeModal && typeof activeModal.close === 'function') {
+                activeModal.close(result, true);
+            }
+        };
+        /**
+         * Opens a modal dialog with sanitized markup and focus trapping.
+         */
+        const open = (options = {}) => {
+            ensureDesignSystemStyles();
+            closeActive(false);
+            return new Promise((resolve) => {
+                const overlay = doc.createElement('div');
+                overlay.className = 'gmh-modal-overlay';
+                const dialog = doc.createElement('div');
+                dialog.className = 'gmh-modal';
+                if (options.size === 'small')
+                    dialog.classList.add('gmh-modal--sm');
+                if (options.size === 'large')
+                    dialog.classList.add('gmh-modal--lg');
+                dialog.setAttribute('role', 'dialog');
+                dialog.setAttribute('aria-modal', 'true');
+                dialog.setAttribute('tabindex', '-1');
+                modalIdCounter += 1;
+                const modalId = `gmh-modal-${modalIdCounter}`;
+                const titleId = `${modalId}-title`;
+                const descId = options.description ? `${modalId}-desc` : '';
+                dialog.id = modalId;
+                const header = doc.createElement('div');
+                header.className = 'gmh-modal__header';
+                const headerRow = doc.createElement('div');
+                headerRow.className = 'gmh-modal__header-row';
+                const title = doc.createElement('h2');
+                title.className = 'gmh-modal__title';
+                title.textContent = options.title || '';
+                title.id = titleId;
+                headerRow.appendChild(title);
+                let closeBtn = null;
+                if (options.dismissible !== false) {
+                    closeBtn = doc.createElement('button');
+                    closeBtn.type = 'button';
+                    closeBtn.className = 'gmh-modal__close';
+                    closeBtn.setAttribute('aria-label', '닫기');
+                    closeBtn.textContent = '×';
+                    headerRow.appendChild(closeBtn);
+                }
+                header.appendChild(headerRow);
+                if (options.description) {
+                    const desc = doc.createElement('p');
+                    desc.className = 'gmh-modal__description';
+                    desc.textContent = options.description;
+                    desc.id = descId;
+                    header.appendChild(desc);
+                }
+                dialog.setAttribute('aria-labelledby', titleId);
+                if (options.description)
+                    dialog.setAttribute('aria-describedby', descId);
+                else
+                    dialog.removeAttribute('aria-describedby');
+                const body = doc.createElement('div');
+                body.className = 'gmh-modal__body gmh-modal__body--scroll';
+                if (options.bodyClass)
+                    body.classList.add(options.bodyClass);
+                const { content } = options;
+                if (NodeCtor && content instanceof NodeCtor) {
+                    body.appendChild(content);
+                }
+                else if (typeof content === 'string') {
+                    body.appendChild(sanitizeMarkupFragment(content));
+                }
+                const footer = doc.createElement('div');
+                footer.className = 'gmh-modal__footer';
+                const actionsWrap = doc.createElement('div');
+                actionsWrap.className = 'gmh-modal__actions';
+                const actions = Array.isArray(options.actions) ? options.actions : [];
+                const finalize = (result) => {
+                    cleanup(result);
+                };
+                actions.forEach((action) => {
+                    const button = buildButton(action, finalize);
+                    actionsWrap.appendChild(button);
+                });
+                if (actionsWrap.childElementCount) {
+                    footer.appendChild(actionsWrap);
+                }
+                dialog.appendChild(header);
+                dialog.appendChild(body);
+                if (actionsWrap.childElementCount)
+                    dialog.appendChild(footer);
+                overlay.appendChild(dialog);
+                const bodyEl = doc.body;
+                const prevOverflow = bodyEl.style.overflow;
+                const restoreTarget = HTMLElementCtor && doc.activeElement instanceof HTMLElementCtor
+                    ? doc.activeElement
+                    : null;
+                bodyEl.style.overflow = 'hidden';
+                bodyEl.appendChild(overlay);
+                overlay.setAttribute('role', 'presentation');
+                const onKeydown = (event) => {
+                    if (event.key === 'Escape' && options.dismissible !== false) {
+                        event.preventDefault();
+                        cleanup(false);
+                        return;
+                    }
+                    if (event.key === 'Tab') {
+                        const focusables = getFocusable(dialog);
+                        if (!focusables.length) {
+                            event.preventDefault();
+                            return;
+                        }
+                        const first = focusables[0];
+                        const last = focusables[focusables.length - 1];
+                        if (event.shiftKey && doc.activeElement === first) {
+                            event.preventDefault();
+                            last.focus();
+                        }
+                        else if (!event.shiftKey && doc.activeElement === last) {
+                            event.preventDefault();
+                            first.focus();
+                        }
+                    }
+                };
+                const cleanup = (result) => {
+                    if (!overlay.isConnected)
+                        return;
+                    doc.removeEventListener('keydown', onKeydown, true);
+                    overlay.remove();
+                    bodyEl.style.overflow = prevOverflow;
+                    if (restoreTarget && typeof restoreTarget.focus === 'function') {
+                        restoreTarget.focus();
+                    }
+                    activeModal = null;
+                    resolve(result);
+                };
+                if (options.dismissible !== false) {
+                    overlay.addEventListener('click', (event) => {
+                        if (event.target === overlay)
+                            cleanup(false);
+                    });
+                    if (closeBtn)
+                        closeBtn.addEventListener('click', () => cleanup(false));
+                }
+                doc.addEventListener('keydown', onKeydown, true);
+                const initialSelector = options.initialFocus || '.gmh-button--primary';
+                let focusTarget = (dialog.querySelector(initialSelector) ) ??
+                    null;
+                if (!(focusTarget && HTMLElementCtor && focusTarget instanceof HTMLElementCtor)) {
+                    const focusables = getFocusable(dialog);
+                    focusTarget = focusables[0] ?? closeBtn ?? null;
+                }
+                win.setTimeout(() => {
+                    if (focusTarget && typeof focusTarget.focus === 'function')
+                        focusTarget.focus();
+                }, 20);
+                activeModal = {
+                    close: cleanup,
+                };
+            });
+        };
+        return {
+            open,
+            close: closeActive,
+            isOpen: () => Boolean(activeModal),
+        };
     }
 
-    /**
-     * Manages panel open/collapse state, coordinating with storage and modal overlays.
-     *
-     * @typedef {import('../types').PanelVisibilityOptions} PanelVisibilityOptions
-     * @typedef {import('../types').PanelVisibilityController} PanelVisibilityController
-     * @typedef {import('../types').PanelSettingsController} PanelSettingsController
-     * @typedef {import('../types').PanelSettingsLayout} PanelSettingsLayout
-     * @typedef {import('../types').PanelSettingsBehavior} PanelSettingsBehavior
-     * @typedef {import('../types').PanelStateApi} PanelStateApi
-     * @typedef {import('../types').ModalController} ModalController
-     * @param {PanelVisibilityOptions} [options]
-     * @returns {PanelVisibilityController}
-     */
-    function createPanelVisibility({
-      panelSettings: panelSettingsRaw,
-      stateEnum,
-      stateApi: stateApiRaw,
-      modal,
-      documentRef = typeof document !== 'undefined' ? document : null,
-      windowRef = typeof window !== 'undefined' ? window : null,
-      storage = typeof localStorage !== 'undefined' ? localStorage : null,
-      logger = typeof console !== 'undefined' ? console : null,
-    } = /** @type {PanelVisibilityOptions} */ ({})) {
-      /** @type {PanelSettingsController | undefined} */
-      const panelSettings = panelSettingsRaw;
-      /** @type {PanelStateApi | undefined} */
-      const stateApi = stateApiRaw;
-      const doc = documentRef;
-      const win = windowRef;
-      if (!panelSettings || !stateEnum || !stateApi || !doc || !win) {
-        throw new Error('createPanelVisibility missing required dependencies');
-      }
-
-      const COLLAPSED_CLASS = 'gmh-collapsed';
-      const OPEN_CLASS = 'gmh-panel-open';
-      const STORAGE_KEY = 'gmh_panel_collapsed';
-      const MIN_GAP = 12;
-
-      /**
-       * @param {unknown} value
-       * @returns {string | null}
-       */
-      const normalizeState = (value) => {
-        if (!value) return null;
+    const COLLAPSED_CLASS = 'gmh-collapsed';
+    const OPEN_CLASS = 'gmh-panel-open';
+    const STORAGE_KEY = 'gmh_panel_collapsed';
+    const MIN_GAP = 12;
+    const normalizeState = (value, stateEnum) => {
+        if (!value)
+            return null;
         const next = String(value).toLowerCase();
         return Object.values(stateEnum).includes(next) ? next : null;
-      };
-
-      /** @type {PanelSettingsLayout} */
-      const DEFAULT_LAYOUT = (() => {
-        const layout = panelSettings.defaults?.layout || {};
-        return {
-          anchor: layout.anchor === 'left' ? 'left' : 'right',
-          offset:
-            Number.isFinite(Number(layout.offset)) && Number(layout.offset) > 0
-              ? Math.max(MIN_GAP, Math.round(Number(layout.offset)))
-              : 16,
-          bottom:
-            Number.isFinite(Number(layout.bottom)) && Number(layout.bottom) > 0
-              ? Math.max(MIN_GAP, Math.round(Number(layout.bottom)))
-              : 16,
-          width: Number.isFinite(Number(layout.width)) ? Math.round(Number(layout.width)) : null,
-          height: Number.isFinite(Number(layout.height)) ? Math.round(Number(layout.height)) : null,
+    };
+    function createPanelVisibility({ panelSettings: panelSettingsRaw, stateEnum, stateApi: stateApiRaw, modal, documentRef = typeof document !== 'undefined' ? document : null, windowRef = typeof window !== 'undefined' ? window : null, storage = typeof localStorage !== 'undefined' ? localStorage : null, logger = typeof console !== 'undefined' ? console : null, }) {
+        const panelSettings = panelSettingsRaw;
+        const stateApi = stateApiRaw;
+        const doc = documentRef ?? null;
+        const win = windowRef ?? null;
+        if (!panelSettings || !stateEnum || !stateApi || !doc || !win) {
+            throw new Error('createPanelVisibility missing required dependencies');
+        }
+        const DEFAULT_LAYOUT = (() => {
+            const layout = (panelSettings.defaults?.layout ?? {});
+            return {
+                anchor: layout?.anchor === 'left' ? 'left' : 'right',
+                offset: Number.isFinite(Number(layout?.offset)) && Number(layout?.offset) > 0
+                    ? Math.max(MIN_GAP, Math.round(Number(layout?.offset)))
+                    : 16,
+                bottom: Number.isFinite(Number(layout?.bottom)) && Number(layout?.bottom) > 0
+                    ? Math.max(MIN_GAP, Math.round(Number(layout?.bottom)))
+                    : 16,
+                width: Number.isFinite(Number(layout?.width)) ? Math.round(Number(layout?.width)) : null,
+                height: Number.isFinite(Number(layout?.height)) ? Math.round(Number(layout?.height)) : null,
+            };
+        })();
+        const DEFAULT_BEHAVIOR = (() => {
+            const behavior = (panelSettings.defaults?.behavior ?? {});
+            return {
+                autoHideEnabled: typeof behavior?.autoHideEnabled === 'boolean' ? behavior.autoHideEnabled : true,
+                autoHideDelayMs: Number.isFinite(Number(behavior?.autoHideDelayMs))
+                    ? Math.max(2000, Math.round(Number(behavior?.autoHideDelayMs)))
+                    : 10000,
+                collapseOnOutside: typeof behavior?.collapseOnOutside === 'boolean' ? behavior.collapseOnOutside : true,
+                collapseOnFocus: typeof behavior?.collapseOnFocus === 'boolean' ? behavior.collapseOnFocus : false,
+                allowDrag: typeof behavior?.allowDrag === 'boolean' ? behavior.allowDrag : true,
+                allowResize: typeof behavior?.allowResize === 'boolean' ? behavior.allowResize : true,
+            };
+        })();
+        const coerceLayout = (input = {}) => {
+            const layout = { ...DEFAULT_LAYOUT, ...(input ?? {}) };
+            return {
+                anchor: layout.anchor === 'left' ? 'left' : 'right',
+                offset: Number.isFinite(Number(layout.offset))
+                    ? Math.max(MIN_GAP, Math.round(Number(layout.offset)))
+                    : DEFAULT_LAYOUT.offset,
+                bottom: Number.isFinite(Number(layout.bottom))
+                    ? Math.max(MIN_GAP, Math.round(Number(layout.bottom)))
+                    : DEFAULT_LAYOUT.bottom,
+                width: Number.isFinite(Number(layout.width))
+                    ? Math.max(240, Math.round(Number(layout.width)))
+                    : null,
+                height: Number.isFinite(Number(layout.height))
+                    ? Math.max(220, Math.round(Number(layout.height)))
+                    : null,
+            };
         };
-      })();
-
-      /** @type {PanelSettingsBehavior} */
-      const DEFAULT_BEHAVIOR = (() => {
-        const behavior = panelSettings.defaults?.behavior || {};
-        return {
-          autoHideEnabled:
-            typeof behavior.autoHideEnabled === 'boolean' ? behavior.autoHideEnabled : true,
-          autoHideDelayMs: Number.isFinite(Number(behavior.autoHideDelayMs))
-            ? Math.max(2000, Math.round(Number(behavior.autoHideDelayMs)))
-            : 10000,
-          collapseOnOutside:
-            typeof behavior.collapseOnOutside === 'boolean' ? behavior.collapseOnOutside : true,
-          collapseOnFocus:
-            typeof behavior.collapseOnFocus === 'boolean' ? behavior.collapseOnFocus : false,
-          allowDrag: typeof behavior.allowDrag === 'boolean' ? behavior.allowDrag : true,
-          allowResize: typeof behavior.allowResize === 'boolean' ? behavior.allowResize : true,
+        const coerceBehavior = (input = {}) => {
+            const behavior = { ...DEFAULT_BEHAVIOR, ...(input ?? {}) };
+            behavior.autoHideEnabled =
+                typeof behavior.autoHideEnabled === 'boolean'
+                    ? behavior.autoHideEnabled
+                    : DEFAULT_BEHAVIOR.autoHideEnabled;
+            behavior.autoHideDelayMs = Number.isFinite(Number(behavior.autoHideDelayMs))
+                ? Math.max(2000, Math.round(Number(behavior.autoHideDelayMs)))
+                : DEFAULT_BEHAVIOR.autoHideDelayMs;
+            behavior.collapseOnOutside =
+                typeof behavior.collapseOnOutside === 'boolean'
+                    ? behavior.collapseOnOutside
+                    : DEFAULT_BEHAVIOR.collapseOnOutside;
+            behavior.collapseOnFocus =
+                typeof behavior.collapseOnFocus === 'boolean'
+                    ? behavior.collapseOnFocus
+                    : DEFAULT_BEHAVIOR.collapseOnFocus;
+            behavior.allowDrag =
+                typeof behavior.allowDrag === 'boolean' ? behavior.allowDrag : DEFAULT_BEHAVIOR.allowDrag;
+            behavior.allowResize =
+                typeof behavior.allowResize === 'boolean'
+                    ? behavior.allowResize
+                    : DEFAULT_BEHAVIOR.allowResize;
+            return behavior;
         };
-      })();
-
-      /**
-       * @param {PanelSettingsLayout | null | undefined} [input]
-       * @returns {PanelSettingsLayout}
-       */
-      const coerceLayout = (input = {}) => {
-        const layout = { ...DEFAULT_LAYOUT, ...(input || {}) };
-        return {
-          anchor: layout.anchor === 'left' ? 'left' : 'right',
-          offset: Number.isFinite(Number(layout.offset))
-            ? Math.max(MIN_GAP, Math.round(Number(layout.offset)))
-            : DEFAULT_LAYOUT.offset,
-          bottom: Number.isFinite(Number(layout.bottom))
-            ? Math.max(MIN_GAP, Math.round(Number(layout.bottom)))
-            : DEFAULT_LAYOUT.bottom,
-          width: Number.isFinite(Number(layout.width))
-            ? Math.max(240, Math.round(Number(layout.width)))
-            : null,
-          height: Number.isFinite(Number(layout.height))
-            ? Math.max(220, Math.round(Number(layout.height)))
-            : null,
+        let panelEl = null;
+        let fabEl = null;
+        let fabLastToggleAt = 0;
+        let dragHandle = null;
+        let resizeHandle = null;
+        let modernMode = false;
+        let idleTimer = null;
+        let stateUnsubscribe = null;
+        let outsidePointerHandler = null;
+        let focusCollapseHandler = null;
+        let escapeKeyHandler = null;
+        let panelListenersBound = false;
+        let resizeScheduled = false;
+        let currentState = stateEnum.IDLE || '';
+        let userCollapsed = false;
+        let persistedPreference = null;
+        let lastFocusTarget = null;
+        let dragSession = null;
+        let resizeSession = null;
+        let applyingSettings = false;
+        let focusTimeouts = [];
+        let focusAnimationFrame = null;
+        let currentSettings = panelSettings.get();
+        let currentLayout = coerceLayout(currentSettings.layout);
+        let currentBehavior = coerceBehavior(currentSettings.behavior);
+        panelSettings.onChange((next) => {
+            currentSettings = next;
+            currentLayout = coerceLayout(next.layout);
+            currentBehavior = coerceBehavior(next.behavior);
+            if (panelEl && modernMode) {
+                applyingSettings = true;
+                try {
+                    applyLayout();
+                    refreshBehavior();
+                }
+                finally {
+                    applyingSettings = false;
+                }
+            }
+        });
+        const getRoot = () => doc.documentElement;
+        const isModernActive = () => modernMode && !!panelEl;
+        const isCollapsed = () => {
+            if (!isModernActive())
+                return false;
+            return getRoot().classList.contains(COLLAPSED_CLASS);
         };
-      };
-
-      /**
-       * @param {PanelSettingsBehavior | null | undefined} [input]
-       * @returns {PanelSettingsBehavior}
-       */
-      const coerceBehavior = (input = {}) => {
-        const behavior = { ...DEFAULT_BEHAVIOR, ...(input || {}) };
-        behavior.autoHideEnabled =
-          typeof behavior.autoHideEnabled === 'boolean'
-            ? behavior.autoHideEnabled
-            : DEFAULT_BEHAVIOR.autoHideEnabled;
-        behavior.autoHideDelayMs = Number.isFinite(Number(behavior.autoHideDelayMs))
-          ? Math.max(2000, Math.round(Number(behavior.autoHideDelayMs)))
-          : DEFAULT_BEHAVIOR.autoHideDelayMs;
-        behavior.collapseOnOutside =
-          typeof behavior.collapseOnOutside === 'boolean'
-            ? behavior.collapseOnOutside
-            : DEFAULT_BEHAVIOR.collapseOnOutside;
-        behavior.collapseOnFocus =
-          typeof behavior.collapseOnFocus === 'boolean'
-            ? behavior.collapseOnFocus
-            : DEFAULT_BEHAVIOR.collapseOnFocus;
-        behavior.allowDrag =
-          typeof behavior.allowDrag === 'boolean' ? behavior.allowDrag : DEFAULT_BEHAVIOR.allowDrag;
-        behavior.allowResize =
-          typeof behavior.allowResize === 'boolean'
-            ? behavior.allowResize
-            : DEFAULT_BEHAVIOR.allowResize;
-        return behavior;
-      };
-
-      /** @type {HTMLElement | null} */
-      let panelEl = null;
-      /** @type {HTMLButtonElement | null} */
-      let fabEl = null;
-      let fabLastToggleAt = 0;
-      /** @type {HTMLButtonElement | null} */
-      let dragHandle = null;
-      /** @type {HTMLElement | null} */
-      let resizeHandle = null;
-      let modernMode = false;
-      /** @type {number | null} */
-      let idleTimer = null;
-      /** @type {(() => void) | null} */
-      let stateUnsubscribe = null;
-      /** @type {((event: PointerEvent) => void) | null} */
-      let outsidePointerHandler = null;
-      /** @type {((event: FocusEvent) => void) | null} */
-      let focusCollapseHandler = null;
-      /** @type {((event: KeyboardEvent) => void) | null} */
-      let escapeKeyHandler = null;
-      let panelListenersBound = false;
-      let resizeScheduled = false;
-      let currentState = stateEnum.IDLE;
-      let userCollapsed = false;
-      /** @type {boolean | null} */
-      let persistedPreference = null;
-      /** @type {HTMLElement | null} */
-      let lastFocusTarget = null;
-      /** @type {{ pointerId?: number; startX: number; startY: number; rect: DOMRect } | null} */
-      let dragSession = null;
-      /** @type {{ pointerId?: number; startX: number; startY: number; width: number; height: number; nextWidth: number; nextHeight: number } | null} */
-      let resizeSession = null;
-      let applyingSettings = false;
-      /** @type {number[]} */
-      let focusTimeouts = [];
-      /** @type {number | null} */
-      let focusAnimationFrame = null;
-
-      /** @type {import('../types').PanelSettingsValue} */
-      let currentSettings = panelSettings.get();
-      let currentLayout = coerceLayout(currentSettings.layout);
-      let currentBehavior = coerceBehavior(currentSettings.behavior);
-
-      panelSettings.onChange((next) => {
-        currentSettings = next;
-        currentLayout = coerceLayout(next.layout);
-        currentBehavior = coerceBehavior(next.behavior);
-        if (panelEl && modernMode) {
-          applyingSettings = true;
-          try {
+        const loadPersistedCollapsed = () => {
+            if (!storage)
+                return null;
+            try {
+                const raw = storage.getItem(STORAGE_KEY);
+                if (raw === '1')
+                    return true;
+                if (raw === '0')
+                    return false;
+            }
+            catch (err) {
+                logger?.warn?.('[GMH] failed to read panel state', err);
+            }
+            return null;
+        };
+        const persistCollapsed = (value) => {
+            if (!storage)
+                return;
+            persistedPreference = value;
+            try {
+                if (value === null)
+                    storage.removeItem(STORAGE_KEY);
+                else
+                    storage.setItem(STORAGE_KEY, value ? '1' : '0');
+            }
+            catch (err) {
+                logger?.warn?.('[GMH] failed to persist panel state', err);
+            }
+        };
+        const rememberFocus = () => {
+            const active = doc.activeElement;
+            if (!active || active === doc.body)
+                return;
+            if (!(active instanceof HTMLElement))
+                return;
+            if (panelEl && panelEl.contains(active))
+                return;
+            lastFocusTarget = active;
+        };
+        const clearFocusSchedules = () => {
+            if (focusAnimationFrame) {
+                cancelAnimationFrame(focusAnimationFrame);
+                focusAnimationFrame = null;
+            }
+            if (focusTimeouts.length) {
+                focusTimeouts.forEach((id) => win.clearTimeout(id));
+                focusTimeouts = [];
+            }
+        };
+        const clearFocusMemory = () => {
+            lastFocusTarget = null;
+        };
+        const restoreFocus = () => {
+            const target = lastFocusTarget;
+            if (!target)
+                return;
+            lastFocusTarget = null;
+            requestAnimationFrame(() => {
+                try {
+                    target.focus({ preventScroll: true });
+                }
+                catch (err) {
+                    logger?.warn?.('[GMH] focus restore failed', err);
+                }
+            });
+        };
+        const focusPanelElement = () => {
+            const panelElement = panelEl;
+            if (!panelElement || typeof panelElement.focus !== 'function')
+                return;
+            const attempt = () => {
+                try {
+                    panelElement.focus({ preventScroll: true });
+                }
+                catch {
+                    /* noop */
+                }
+            };
+            clearFocusSchedules();
+            attempt();
+            focusAnimationFrame = requestAnimationFrame(() => {
+                focusAnimationFrame = null;
+                attempt();
+            });
+            focusTimeouts = [win.setTimeout(attempt, 0), win.setTimeout(attempt, 50)];
+        };
+        const clearIdleTimer = () => {
+            if (idleTimer) {
+                win.clearTimeout(idleTimer);
+                idleTimer = null;
+            }
+        };
+        const getAutoHideDelay = () => {
+            if (!currentBehavior.autoHideEnabled)
+                return null;
+            return currentBehavior.autoHideDelayMs || 10000;
+        };
+        const applyRootState = (collapsed) => {
+            const root = getRoot();
+            if (!modernMode) {
+                root.classList.remove(COLLAPSED_CLASS);
+                root.classList.remove(OPEN_CLASS);
+                return;
+            }
+            if (collapsed) {
+                root.classList.add(COLLAPSED_CLASS);
+                root.classList.remove(OPEN_CLASS);
+            }
+            else {
+                root.classList.add(OPEN_CLASS);
+                root.classList.remove(COLLAPSED_CLASS);
+            }
+        };
+        const syncAria = (collapsed) => {
+            if (!panelEl)
+                return;
+            panelEl.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
+            if (fabEl)
+                fabEl.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        };
+        const scheduleIdleClose = () => {
+            if (!isModernActive())
+                return;
+            clearIdleTimer();
+            if (isCollapsed())
+                return;
+            if (currentState !== (stateEnum.IDLE || ''))
+                return;
+            const delay = getAutoHideDelay();
+            if (!delay)
+                return;
+            idleTimer = win.setTimeout(() => {
+                if (!isModernActive())
+                    return;
+                if (currentState !== (stateEnum.IDLE || ''))
+                    return;
+                close('idle');
+            }, delay);
+        };
+        const resetIdleTimer = () => {
+            if (!isModernActive())
+                return;
+            if (isCollapsed())
+                return;
+            scheduleIdleClose();
+        };
+        const applyLayout = () => {
+            if (!panelEl)
+                return;
+            const layout = coerceLayout(currentLayout);
+            const viewportWidth = win.innerWidth || doc.documentElement.clientWidth || 1280;
+            const viewportHeight = win.innerHeight || doc.documentElement.clientHeight || 720;
+            const maxWidth = Math.max(MIN_GAP, viewportWidth - MIN_GAP * 2);
+            const maxHeight = Math.max(MIN_GAP, viewportHeight - MIN_GAP * 2);
+            const width = layout.width ? Math.min(Math.max(260, layout.width), maxWidth) : null;
+            const height = layout.height ? Math.min(Math.max(240, layout.height), maxHeight) : null;
+            panelEl.style.width = width ? `${width}px` : '';
+            if (height) {
+                panelEl.style.height = `${height}px`;
+                panelEl.style.maxHeight = `${height}px`;
+            }
+            else {
+                panelEl.style.height = '';
+                panelEl.style.maxHeight = '70vh';
+            }
+            const rect = panelEl.getBoundingClientRect();
+            const effectiveHeight = height || rect.height || 320;
+            const bottomLimit = Math.max(MIN_GAP, viewportHeight - effectiveHeight - MIN_GAP);
+            const bottom = Math.min(Math.max(MIN_GAP, layout.bottom ?? DEFAULT_LAYOUT.bottom), bottomLimit);
+            const horizontalLimit = Math.max(MIN_GAP, viewportWidth - MIN_GAP - 160);
+            const offset = Math.min(Math.max(MIN_GAP, layout.offset ?? DEFAULT_LAYOUT.offset), horizontalLimit);
+            if (layout.anchor === 'left') {
+                panelEl.style.left = `${offset}px`;
+                panelEl.style.right = 'auto';
+            }
+            else {
+                panelEl.style.left = 'auto';
+                panelEl.style.right = `${offset}px`;
+            }
+            panelEl.style.bottom = `${bottom}px`;
+            panelEl.style.top = 'auto';
+            const finalLayout = { ...layout, offset, bottom, width, height };
+            const changed = finalLayout.anchor !== currentLayout.anchor ||
+                finalLayout.offset !== currentLayout.offset ||
+                finalLayout.bottom !== currentLayout.bottom ||
+                finalLayout.width !== currentLayout.width ||
+                finalLayout.height !== currentLayout.height;
+            currentLayout = finalLayout;
+            if (changed && !applyingSettings) {
+                panelSettings.update({ layout: finalLayout });
+            }
+        };
+        const refreshOutsideHandler = () => {
+            if (outsidePointerHandler) {
+                doc.removeEventListener('pointerdown', outsidePointerHandler);
+                outsidePointerHandler = null;
+            }
+            if (!currentBehavior.collapseOnOutside)
+                return;
+            outsidePointerHandler = (event) => {
+                if (!isModernActive())
+                    return;
+                if (isCollapsed())
+                    return;
+                const target = event.target;
+                if (!(target instanceof Node))
+                    return;
+                if (panelEl && panelEl.contains(target))
+                    return;
+                if (fabEl && fabEl.contains(target))
+                    return;
+                if (modal?.isOpen?.())
+                    return;
+                clearFocusMemory();
+                close('user');
+            };
+            doc.addEventListener('pointerdown', outsidePointerHandler);
+        };
+        const refreshFocusCollapseHandler = () => {
+            if (focusCollapseHandler) {
+                doc.removeEventListener('focusin', focusCollapseHandler, true);
+                focusCollapseHandler = null;
+            }
+            if (!currentBehavior.collapseOnFocus)
+                return;
+            focusCollapseHandler = (event) => {
+                if (!isModernActive() || isCollapsed())
+                    return;
+                const target = event.target;
+                if (!(target instanceof Node))
+                    return;
+                if (panelEl && panelEl.contains(target))
+                    return;
+                if (fabEl && fabEl.contains(target))
+                    return;
+                if (modal?.isOpen?.())
+                    return;
+                close('focus');
+            };
+            doc.addEventListener('focusin', focusCollapseHandler, true);
+        };
+        const updateHandleAccessibility = () => {
+            if (dragHandle) {
+                dragHandle.disabled = !currentBehavior.allowDrag;
+                dragHandle.setAttribute('aria-disabled', currentBehavior.allowDrag ? 'false' : 'true');
+            }
+            if (resizeHandle) {
+                resizeHandle.style.display = currentBehavior.allowResize ? '' : 'none';
+            }
+        };
+        const refreshBehavior = () => {
+            if (!panelEl || !modernMode)
+                return;
+            refreshOutsideHandler();
+            refreshFocusCollapseHandler();
+            updateHandleAccessibility();
+            if (!isCollapsed())
+                scheduleIdleClose();
+        };
+        const handleViewportResize = () => {
+            if (!panelEl || !modernMode)
+                return;
+            if (resizeScheduled)
+                return;
+            resizeScheduled = true;
+            requestAnimationFrame(() => {
+                resizeScheduled = false;
+                applyLayout();
+            });
+        };
+        win.addEventListener('resize', handleViewportResize);
+        const ensureFab = () => {
+            if (!modernMode)
+                return null;
+            if (!fabEl || !fabEl.isConnected) {
+                fabEl = doc.getElementById('gmh-fab');
+            }
+            if (!fabEl || !fabEl.isConnected) {
+                fabEl = doc.createElement('button');
+                fabEl.id = 'gmh-fab';
+                fabEl.type = 'button';
+                fabEl.textContent = 'GMH';
+                fabEl.setAttribute('aria-label', 'Genit Memory Helper 토글');
+                fabEl.setAttribute('aria-controls', 'genit-memory-helper-panel');
+                doc.body.appendChild(fabEl);
+            }
+            fabEl.onclick = (event) => {
+                const now = typeof performance?.now === 'function' ? performance.now() : Date.now();
+                if (now - fabLastToggleAt < 350)
+                    return;
+                event.preventDefault();
+                fabLastToggleAt = now;
+                toggle();
+            };
+            fabEl.setAttribute('aria-expanded', isCollapsed() ? 'false' : 'true');
+            return fabEl;
+        };
+        const attachPanelListeners = () => {
+            if (!isModernActive() || panelListenersBound || !panelEl)
+                return;
+            const passiveReset = () => resetIdleTimer();
+            panelEl.addEventListener('pointerdown', passiveReset, { passive: true });
+            panelEl.addEventListener('pointermove', passiveReset, { passive: true });
+            panelEl.addEventListener('wheel', passiveReset, { passive: true });
+            panelEl.addEventListener('touchstart', passiveReset, { passive: true });
+            panelEl.addEventListener('keydown', resetIdleTimer);
+            panelEl.addEventListener('focusin', resetIdleTimer);
+            panelListenersBound = true;
+        };
+        const ensureEscapeHandler = () => {
+            if (escapeKeyHandler)
+                return;
+            escapeKeyHandler = (event) => {
+                if (!isModernActive())
+                    return;
+                if (event.key !== 'Escape' || event.altKey || event.ctrlKey || event.metaKey)
+                    return;
+                if (modal?.isOpen?.())
+                    return;
+                if (isCollapsed())
+                    return;
+                close('user');
+                event.preventDefault();
+            };
+            win.addEventListener('keydown', escapeKeyHandler);
+        };
+        const ensureStateSubscription = () => {
+            if (stateUnsubscribe || typeof stateApi?.subscribe !== 'function')
+                return;
+            stateUnsubscribe = stateApi.subscribe((next) => {
+                currentState = normalizeState(next, stateEnum) || stateEnum.IDLE || '';
+                if (!modernMode)
+                    return;
+                if (currentState !== (stateEnum.IDLE || '')) {
+                    if (!userCollapsed)
+                        open({ focus: false });
+                    clearIdleTimer();
+                }
+                else {
+                    userCollapsed = false;
+                    scheduleIdleClose();
+                }
+            });
+        };
+        const bindHandles = () => {
+            if (!panelEl)
+                return;
+            const nextDragHandle = panelEl.querySelector('#gmh-panel-drag-handle');
+            if (dragHandle && dragHandle !== nextDragHandle) {
+                dragHandle.removeEventListener('pointerdown', handleDragStart);
+            }
+            dragHandle = nextDragHandle;
+            if (dragHandle)
+                dragHandle.addEventListener('pointerdown', handleDragStart);
+            const nextResizeHandle = panelEl.querySelector('#gmh-panel-resize-handle');
+            if (resizeHandle && resizeHandle !== nextResizeHandle) {
+                resizeHandle.removeEventListener('pointerdown', handleResizeStart);
+            }
+            resizeHandle = nextResizeHandle;
+            if (resizeHandle)
+                resizeHandle.addEventListener('pointerdown', handleResizeStart);
+            updateHandleAccessibility();
+        };
+        const stopDragTracking = () => {
+            if (!dragSession)
+                return;
+            win.removeEventListener('pointermove', handleDragMove);
+            win.removeEventListener('pointerup', handleDragEnd);
+            win.removeEventListener('pointercancel', handleDragCancel);
+            if (dragHandle && dragSession.pointerId !== undefined) {
+                try {
+                    dragHandle.releasePointerCapture(dragSession.pointerId);
+                }
+                catch {
+                    /* noop */
+                }
+            }
+            panelEl?.classList.remove('gmh-panel--dragging');
+            dragSession = null;
+        };
+        const handleDragStart = (event) => {
+            if (!panelEl || !modernMode)
+                return;
+            if (!currentBehavior.allowDrag)
+                return;
+            if (event.button && event.button !== 0)
+                return;
+            event.preventDefault();
+            dragSession = {
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startY: event.clientY,
+                rect: panelEl.getBoundingClientRect(),
+            };
+            panelEl.classList.add('gmh-panel--dragging');
+            clearIdleTimer();
+            try {
+                dragHandle?.setPointerCapture(event.pointerId);
+            }
+            catch {
+                /* noop */
+            }
+            win.addEventListener('pointermove', handleDragMove);
+            win.addEventListener('pointerup', handleDragEnd);
+            win.addEventListener('pointercancel', handleDragCancel);
+        };
+        const handleDragMove = (event) => {
+            if (!dragSession || !panelEl)
+                return;
+            const dx = event.clientX - dragSession.startX;
+            const dy = event.clientY - dragSession.startY;
+            const { rect } = dragSession;
+            const viewportWidth = win.innerWidth || doc.documentElement.clientWidth || 1280;
+            const viewportHeight = win.innerHeight || doc.documentElement.clientHeight || 720;
+            let nextLeft = rect.left + dx;
+            let nextTop = rect.top + dy;
+            const maxLeft = viewportWidth - rect.width - MIN_GAP;
+            const maxTop = viewportHeight - rect.height - MIN_GAP;
+            nextLeft = Math.min(Math.max(MIN_GAP, nextLeft), Math.max(MIN_GAP, maxLeft));
+            nextTop = Math.min(Math.max(MIN_GAP, nextTop), Math.max(MIN_GAP, maxTop));
+            panelEl.style.left = `${Math.round(nextLeft)}px`;
+            panelEl.style.top = `${Math.round(nextTop)}px`;
+            panelEl.style.right = 'auto';
+            panelEl.style.bottom = 'auto';
+        };
+        const finalizeDragLayout = () => {
+            if (!panelEl)
+                return;
+            const rect = panelEl.getBoundingClientRect();
+            const viewportWidth = win.innerWidth || doc.documentElement.clientWidth || 1280;
+            const viewportHeight = win.innerHeight || doc.documentElement.clientHeight || 720;
+            const anchor = rect.left + rect.width / 2 <= viewportWidth / 2 ? 'left' : 'right';
+            const offset = anchor === 'left'
+                ? Math.round(Math.max(MIN_GAP, rect.left))
+                : Math.round(Math.max(MIN_GAP, viewportWidth - rect.right));
+            const bottom = Math.round(Math.max(MIN_GAP, viewportHeight - rect.bottom));
+            panelSettings.update({ layout: { anchor, offset, bottom } });
+        };
+        const handleDragEnd = () => {
+            if (!dragSession)
+                return;
+            stopDragTracking();
+            finalizeDragLayout();
+        };
+        const handleDragCancel = () => {
+            stopDragTracking();
+            applyLayout();
+        };
+        const stopResizeTracking = () => {
+            if (!resizeSession)
+                return;
+            win.removeEventListener('pointermove', handleResizeMove);
+            win.removeEventListener('pointerup', handleResizeEnd);
+            win.removeEventListener('pointercancel', handleResizeCancel);
+            if (resizeHandle && resizeSession.pointerId !== undefined) {
+                try {
+                    resizeHandle.releasePointerCapture(resizeSession.pointerId);
+                }
+                catch {
+                    /* noop */
+                }
+            }
+            panelEl?.classList.remove('gmh-panel--resizing');
+            resizeSession = null;
+        };
+        const handleResizeStart = (event) => {
+            if (!panelEl || !modernMode)
+                return;
+            if (!currentBehavior.allowResize)
+                return;
+            if (event.button && event.button !== 0)
+                return;
+            event.preventDefault();
+            const rect = panelEl.getBoundingClientRect();
+            resizeSession = {
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startY: event.clientY,
+                width: rect.width,
+                height: rect.height,
+                nextWidth: rect.width,
+                nextHeight: rect.height,
+            };
+            panelEl.classList.add('gmh-panel--resizing');
+            clearIdleTimer();
+            try {
+                resizeHandle?.setPointerCapture(event.pointerId);
+            }
+            catch {
+                /* noop */
+            }
+            win.addEventListener('pointermove', handleResizeMove);
+            win.addEventListener('pointerup', handleResizeEnd);
+            win.addEventListener('pointercancel', handleResizeCancel);
+        };
+        const handleResizeMove = (event) => {
+            if (!resizeSession || !panelEl)
+                return;
+            const viewportWidth = win.innerWidth || doc.documentElement.clientWidth || 1280;
+            const viewportHeight = win.innerHeight || doc.documentElement.clientHeight || 720;
+            const dx = event.clientX - resizeSession.startX;
+            const dy = event.clientY - resizeSession.startY;
+            const horizontalRoom = Math.max(MIN_GAP, viewportWidth - (currentLayout.offset ?? DEFAULT_LAYOUT.offset) - MIN_GAP);
+            const verticalRoom = Math.max(MIN_GAP, viewportHeight - (currentLayout.bottom ?? DEFAULT_LAYOUT.bottom) - MIN_GAP);
+            let nextWidth = resizeSession.width + dx;
+            let nextHeight = resizeSession.height + dy;
+            nextWidth = Math.min(Math.max(260, nextWidth), horizontalRoom);
+            nextHeight = Math.min(Math.max(240, nextHeight), verticalRoom);
+            resizeSession.nextWidth = Math.round(nextWidth);
+            resizeSession.nextHeight = Math.round(nextHeight);
+            panelEl.style.width = `${resizeSession.nextWidth}px`;
+            panelEl.style.height = `${resizeSession.nextHeight}px`;
+            panelEl.style.maxHeight = `${resizeSession.nextHeight}px`;
+        };
+        const handleResizeEnd = () => {
+            if (!resizeSession)
+                return;
+            const { nextWidth, nextHeight } = resizeSession;
+            stopResizeTracking();
+            panelSettings.update({
+                layout: {
+                    width: nextWidth,
+                    height: nextHeight,
+                },
+            });
+        };
+        const handleResizeCancel = () => {
+            stopResizeTracking();
+            applyLayout();
+        };
+        const open = ({ focus = false, persist = false } = {}) => {
+            if (!panelEl)
+                return false;
+            if (!modernMode) {
+                if (focus && typeof panelEl.focus === 'function') {
+                    requestAnimationFrame(() => panelEl.focus({ preventScroll: true }));
+                }
+                return true;
+            }
+            const wasCollapsed = isCollapsed();
+            applyRootState(false);
+            syncAria(false);
+            if (fabEl)
+                fabEl.setAttribute('aria-expanded', 'true');
+            if (persist)
+                persistCollapsed(false);
+            userCollapsed = false;
             applyLayout();
             refreshBehavior();
-          } finally {
-            applyingSettings = false;
-          }
-        }
-      });
-
-      const getRoot = () => doc.documentElement;
-
-      const isModernActive = () => modernMode && !!panelEl;
-
-      const isCollapsed = () => {
-        if (!isModernActive()) return false;
-        return getRoot().classList.contains(COLLAPSED_CLASS);
-      };
-
-      const loadPersistedCollapsed = () => {
-        if (!storage) return null;
-        try {
-          const raw = storage.getItem(STORAGE_KEY);
-          if (raw === '1') return true;
-          if (raw === '0') return false;
-        } catch (err) {
-          logger.warn('[GMH] failed to read panel state', err);
-        }
-        return null;
-      };
-
-      const persistCollapsed = (value) => {
-        if (!storage) return;
-        persistedPreference = value;
-        try {
-          if (value === null) storage.removeItem(STORAGE_KEY);
-          else storage.setItem(STORAGE_KEY, value ? '1' : '0');
-        } catch (err) {
-          logger.warn('[GMH] failed to persist panel state', err);
-        }
-      };
-
-      const rememberFocus = () => {
-        const active = doc.activeElement;
-        if (!active || active === doc.body) return;
-        if (!(active instanceof HTMLElement)) return;
-        if (panelEl && panelEl.contains(active)) return;
-        lastFocusTarget = active;
-      };
-
-      const clearFocusSchedules = () => {
-        if (focusAnimationFrame) {
-          cancelAnimationFrame(focusAnimationFrame);
-          focusAnimationFrame = null;
-        }
-        if (focusTimeouts.length) {
-          focusTimeouts.forEach((id) => win.clearTimeout(id));
-          focusTimeouts = [];
-        }
-      };
-
-      const clearFocusMemory = () => {
-        lastFocusTarget = null;
-      };
-
-      const restoreFocus = () => {
-        const target = lastFocusTarget;
-        if (!target) return;
-        lastFocusTarget = null;
-        requestAnimationFrame(() => {
-          try {
-            if (typeof target.focus === 'function') target.focus({ preventScroll: true });
-          } catch (err) {
-            logger.warn('[GMH] focus restore failed', err);
-          }
-        });
-      };
-
-      const focusPanelElement = () => {
-        const panelElement = panelEl;
-        if (!panelElement || typeof panelElement.focus !== 'function') return;
-        const attempt = () => {
-          try {
-            panelElement.focus({ preventScroll: true });
-          } catch (err) {
-            /* noop */
-          }
+            if (focus) {
+                rememberFocus();
+                focusPanelElement();
+            }
+            if (currentState === (stateEnum.IDLE || ''))
+                scheduleIdleClose();
+            else
+                clearIdleTimer();
+            return wasCollapsed;
         };
-        clearFocusSchedules();
-        attempt();
-        focusAnimationFrame = requestAnimationFrame(() => {
-          focusAnimationFrame = null;
-          attempt();
-        });
-        focusTimeouts = [win.setTimeout(attempt, 0), win.setTimeout(attempt, 50)];
-      };
-
-      const clearIdleTimer = () => {
-        if (idleTimer) {
-          win.clearTimeout(idleTimer);
-          idleTimer = null;
-        }
-      };
-
-      const getAutoHideDelay = () => {
-        if (!currentBehavior.autoHideEnabled) return null;
-        return currentBehavior.autoHideDelayMs || 10000;
-      };
-
-      const applyRootState = (collapsed) => {
-        const root = getRoot();
-        if (!modernMode) {
-          root.classList.remove(COLLAPSED_CLASS);
-          root.classList.remove(OPEN_CLASS);
-          return;
-        }
-        if (collapsed) {
-          root.classList.add(COLLAPSED_CLASS);
-          root.classList.remove(OPEN_CLASS);
-        } else {
-          root.classList.add(OPEN_CLASS);
-          root.classList.remove(COLLAPSED_CLASS);
-        }
-      };
-
-      const syncAria = (collapsed) => {
-        if (!panelEl) return;
-        panelEl.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
-        if (fabEl) fabEl.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-      };
-
-      const scheduleIdleClose = () => {
-        if (!isModernActive()) return;
-        clearIdleTimer();
-        if (isCollapsed()) return;
-        if (currentState !== stateEnum.IDLE) return;
-        const delay = getAutoHideDelay();
-        if (!delay) return;
-        idleTimer = win.setTimeout(() => {
-          if (!isModernActive()) return;
-          if (currentState !== stateEnum.IDLE) return;
-          close('idle');
-        }, delay);
-      };
-
-      const resetIdleTimer = () => {
-        if (!isModernActive()) return;
-        if (isCollapsed()) return;
-        scheduleIdleClose();
-      };
-
-      const applyLayout = () => {
-        if (!panelEl) return;
-        const layout = coerceLayout(currentLayout);
-        const viewportWidth = win.innerWidth || doc.documentElement.clientWidth || 1280;
-        const viewportHeight = win.innerHeight || doc.documentElement.clientHeight || 720;
-
-        const maxWidth = Math.max(MIN_GAP, viewportWidth - MIN_GAP * 2);
-        const maxHeight = Math.max(MIN_GAP, viewportHeight - MIN_GAP * 2);
-
-        const width = layout.width ? Math.min(Math.max(260, layout.width), maxWidth) : null;
-        const height = layout.height ? Math.min(Math.max(240, layout.height), maxHeight) : null;
-
-        if (width) panelEl.style.width = `${width}px`;
-        else panelEl.style.width = '';
-
-        if (height) {
-          panelEl.style.height = `${height}px`;
-          panelEl.style.maxHeight = `${height}px`;
-        } else {
-          panelEl.style.height = '';
-          panelEl.style.maxHeight = '70vh';
-        }
-
-        // Re-measure after size adjustments
-        const rect = panelEl.getBoundingClientRect();
-        const effectiveHeight = height || rect.height || 320;
-
-        const bottomLimit = Math.max(MIN_GAP, viewportHeight - effectiveHeight - MIN_GAP);
-        const bottom = Math.min(Math.max(MIN_GAP, layout.bottom), bottomLimit);
-
-        const horizontalLimit = Math.max(MIN_GAP, viewportWidth - MIN_GAP - 160);
-        const offset = Math.min(Math.max(MIN_GAP, layout.offset), horizontalLimit);
-
-        if (layout.anchor === 'left') {
-          panelEl.style.left = `${offset}px`;
-          panelEl.style.right = 'auto';
-        } else {
-          panelEl.style.left = 'auto';
-          panelEl.style.right = `${offset}px`;
-        }
-        panelEl.style.bottom = `${bottom}px`;
-        panelEl.style.top = 'auto';
-
-        const finalLayout = { ...layout, offset, bottom, width, height };
-        const changed =
-          finalLayout.anchor !== currentLayout.anchor ||
-          finalLayout.offset !== currentLayout.offset ||
-          finalLayout.bottom !== currentLayout.bottom ||
-          finalLayout.width !== currentLayout.width ||
-          finalLayout.height !== currentLayout.height;
-        currentLayout = finalLayout;
-        if (changed && !applyingSettings) {
-          panelSettings.update({ layout: finalLayout });
-        }
-      };
-
-      const refreshOutsideHandler = () => {
-        if (outsidePointerHandler) {
-          doc.removeEventListener('pointerdown', outsidePointerHandler);
-          outsidePointerHandler = null;
-        }
-        if (!currentBehavior.collapseOnOutside) return;
-        outsidePointerHandler = (event) => {
-          if (!isModernActive()) return;
-          if (isCollapsed()) return;
-          const target = event.target;
-          if (!(target instanceof Node)) return;
-          if (panelEl && panelEl.contains(target)) return;
-          if (fabEl && fabEl.contains(target)) return;
-          if (modal?.isOpen?.()) return;
-          clearFocusMemory();
-          close('user');
-        };
-        doc.addEventListener('pointerdown', outsidePointerHandler);
-      };
-
-      const refreshFocusCollapseHandler = () => {
-        if (focusCollapseHandler) {
-          doc.removeEventListener('focusin', focusCollapseHandler, true);
-          focusCollapseHandler = null;
-        }
-        if (!currentBehavior.collapseOnFocus) return;
-        focusCollapseHandler = (event) => {
-          if (!isModernActive() || isCollapsed()) return;
-          const target = event.target;
-          if (!(target instanceof Node)) return;
-          if (panelEl && panelEl.contains(target)) return;
-          if (fabEl && fabEl.contains(target)) return;
-          if (modal?.isOpen?.()) return;
-          close('focus');
-        };
-        doc.addEventListener('focusin', focusCollapseHandler, true);
-      };
-
-      const updateHandleAccessibility = () => {
-        if (dragHandle) {
-          dragHandle.disabled = !currentBehavior.allowDrag;
-          dragHandle.setAttribute('aria-disabled', currentBehavior.allowDrag ? 'false' : 'true');
-        }
-        if (resizeHandle) {
-          resizeHandle.style.display = currentBehavior.allowResize ? '' : 'none';
-        }
-      };
-
-      const refreshBehavior = () => {
-        if (!panelEl || !modernMode) return;
-        refreshOutsideHandler();
-        refreshFocusCollapseHandler();
-        updateHandleAccessibility();
-        if (!isCollapsed()) scheduleIdleClose();
-      };
-
-      const handleViewportResize = () => {
-        if (!panelEl || !modernMode) return;
-        if (resizeScheduled) return;
-        resizeScheduled = true;
-        requestAnimationFrame(() => {
-          resizeScheduled = false;
-          applyLayout();
-        });
-      };
-
-      win.addEventListener('resize', handleViewportResize);
-
-      const ensureFab = () => {
-        if (!modernMode) return null;
-        if (!fabEl || !fabEl.isConnected) {
-          fabEl = /** @type {HTMLButtonElement | null} */ (doc.getElementById('gmh-fab'));
-        }
-        if (!fabEl || !fabEl.isConnected) {
-          fabEl = /** @type {HTMLButtonElement} */ (doc.createElement('button'));
-          fabEl.id = 'gmh-fab';
-          fabEl.type = 'button';
-          fabEl.textContent = 'GMH';
-          fabEl.setAttribute('aria-label', 'Genit Memory Helper 토글');
-          fabEl.setAttribute('aria-controls', 'genit-memory-helper-panel');
-          doc.body.appendChild(fabEl);
-        }
-        fabEl.onclick = (event) => {
-          const now = typeof performance?.now === 'function' ? performance.now() : Date.now();
-          if (now - fabLastToggleAt < 350) return;
-
-          event.preventDefault();
-          fabLastToggleAt = now;
-          toggle();
-        };
-        fabEl.setAttribute('aria-expanded', isCollapsed() ? 'false' : 'true');
-        return fabEl;
-      };
-
-      const attachPanelListeners = () => {
-        if (!isModernActive() || panelListenersBound) return;
-        const passiveReset = () => resetIdleTimer();
-        panelEl.addEventListener('pointerdown', passiveReset, { passive: true });
-        panelEl.addEventListener('pointermove', passiveReset, { passive: true });
-        panelEl.addEventListener('wheel', passiveReset, { passive: true });
-        panelEl.addEventListener('touchstart', passiveReset, { passive: true });
-        panelEl.addEventListener('keydown', resetIdleTimer);
-        panelEl.addEventListener('focusin', resetIdleTimer);
-        panelListenersBound = true;
-      };
-
-      const ensureEscapeHandler = () => {
-        if (escapeKeyHandler) return;
-        escapeKeyHandler = (event) => {
-          if (!isModernActive()) return;
-          if (event.key !== 'Escape' || event.altKey || event.ctrlKey || event.metaKey) return;
-          if (modal?.isOpen?.()) return;
-          if (isCollapsed()) return;
-          close('user');
-          event.preventDefault();
-        };
-        win.addEventListener('keydown', escapeKeyHandler);
-      };
-
-      const ensureStateSubscription = () => {
-        if (stateUnsubscribe || typeof stateApi?.subscribe !== 'function') return;
-        stateUnsubscribe = stateApi.subscribe((next) => {
-          currentState = normalizeState(next) || stateEnum.IDLE;
-          if (!modernMode) return;
-          if (currentState !== stateEnum.IDLE) {
-            if (!userCollapsed) open({ focus: false });
+        const close = (reason = 'user') => {
+            if (!panelEl || !modernMode)
+                return false;
+            if (isCollapsed())
+                return false;
+            applyRootState(true);
+            syncAria(true);
+            if (fabEl)
+                fabEl.setAttribute('aria-expanded', 'false');
             clearIdleTimer();
-          } else {
-            userCollapsed = false;
-            scheduleIdleClose();
-          }
-        });
-      };
-
-      const bindHandles = () => {
-        if (!panelEl) return;
-        const nextDragHandle = /** @type {HTMLButtonElement | null} */ (
-          panelEl.querySelector('#gmh-panel-drag-handle')
-        );
-        if (dragHandle && dragHandle !== nextDragHandle)
-          dragHandle.removeEventListener('pointerdown', handleDragStart);
-        dragHandle = nextDragHandle;
-        if (dragHandle) dragHandle.addEventListener('pointerdown', handleDragStart);
-
-        const nextResizeHandle = /** @type {HTMLElement | null} */ (
-          panelEl.querySelector('#gmh-panel-resize-handle')
-        );
-        if (resizeHandle && resizeHandle !== nextResizeHandle)
-          resizeHandle.removeEventListener('pointerdown', handleResizeStart);
-        resizeHandle = nextResizeHandle;
-        if (resizeHandle) resizeHandle.addEventListener('pointerdown', handleResizeStart);
-
-        updateHandleAccessibility();
-      };
-
-      const stopDragTracking = () => {
-        if (!dragSession) return;
-        win.removeEventListener('pointermove', handleDragMove);
-        win.removeEventListener('pointerup', handleDragEnd);
-        win.removeEventListener('pointercancel', handleDragCancel);
-        if (dragHandle && dragSession.pointerId !== undefined) {
-          try {
-            dragHandle.releasePointerCapture(dragSession.pointerId);
-          } catch (err) {
-            /* noop */
-          }
-        }
-        panelEl?.classList.remove('gmh-panel--dragging');
-        dragSession = null;
-      };
-
-      /**
-       * @param {PointerEvent} event
-       * @returns {void}
-       */
-      const handleDragStart = (event) => {
-        if (!panelEl || !modernMode) return;
-        if (!currentBehavior.allowDrag) return;
-        if (event.button && event.button !== 0) return;
-        event.preventDefault();
-        dragSession = {
-          pointerId: event.pointerId,
-          startX: event.clientX,
-          startY: event.clientY,
-          rect: panelEl.getBoundingClientRect(),
+            clearFocusSchedules();
+            if (reason === 'user') {
+                userCollapsed = true;
+                persistCollapsed(true);
+                if (lastFocusTarget)
+                    restoreFocus();
+            }
+            if (reason === 'idle')
+                userCollapsed = false;
+            if (reason !== 'user')
+                clearFocusMemory();
+            return true;
         };
-        panelEl.classList.add('gmh-panel--dragging');
-        clearIdleTimer();
-        try {
-          dragHandle?.setPointerCapture(event.pointerId);
-        } catch (err) {
-          /* noop */
-        }
-        win.addEventListener('pointermove', handleDragMove);
-        win.addEventListener('pointerup', handleDragEnd);
-        win.addEventListener('pointercancel', handleDragCancel);
-      };
-
-      /**
-       * @param {PointerEvent} event
-       * @returns {void}
-       */
-      const handleDragMove = (event) => {
-        if (!dragSession || !panelEl) return;
-        const dx = event.clientX - dragSession.startX;
-        const dy = event.clientY - dragSession.startY;
-        const rect = dragSession.rect;
-        const viewportWidth = win.innerWidth || doc.documentElement.clientWidth || 1280;
-        const viewportHeight = win.innerHeight || doc.documentElement.clientHeight || 720;
-
-        let nextLeft = rect.left + dx;
-        let nextTop = rect.top + dy;
-        const maxLeft = viewportWidth - rect.width - MIN_GAP;
-        const maxTop = viewportHeight - rect.height - MIN_GAP;
-        nextLeft = Math.min(Math.max(MIN_GAP, nextLeft), Math.max(MIN_GAP, maxLeft));
-        nextTop = Math.min(Math.max(MIN_GAP, nextTop), Math.max(MIN_GAP, maxTop));
-
-        panelEl.style.left = `${Math.round(nextLeft)}px`;
-        panelEl.style.top = `${Math.round(nextTop)}px`;
-        panelEl.style.right = 'auto';
-        panelEl.style.bottom = 'auto';
-      };
-
-      /**
-       * @returns {void}
-       */
-      const finalizeDragLayout = () => {
-        if (!panelEl) return;
-        const rect = panelEl.getBoundingClientRect();
-        const viewportWidth = win.innerWidth || doc.documentElement.clientWidth || 1280;
-        const viewportHeight = win.innerHeight || doc.documentElement.clientHeight || 720;
-        const anchor = rect.left + rect.width / 2 <= viewportWidth / 2 ? 'left' : 'right';
-        const offset =
-          anchor === 'left'
-            ? Math.round(Math.max(MIN_GAP, rect.left))
-            : Math.round(Math.max(MIN_GAP, viewportWidth - rect.right));
-        const bottom = Math.round(Math.max(MIN_GAP, viewportHeight - rect.bottom));
-        panelSettings.update({ layout: { anchor, offset, bottom } });
-      };
-
-      /**
-       * @returns {void}
-       */
-      const handleDragEnd = () => {
-        if (!dragSession) return;
-        stopDragTracking();
-        finalizeDragLayout();
-      };
-
-      /**
-       * @returns {void}
-       */
-      const handleDragCancel = () => {
-        stopDragTracking();
-        applyLayout();
-      };
-
-      /**
-       * @returns {void}
-       */
-      const stopResizeTracking = () => {
-        if (!resizeSession) return;
-        win.removeEventListener('pointermove', handleResizeMove);
-        win.removeEventListener('pointerup', handleResizeEnd);
-        win.removeEventListener('pointercancel', handleResizeCancel);
-        if (resizeHandle && resizeSession.pointerId !== undefined) {
-          try {
-            resizeHandle.releasePointerCapture(resizeSession.pointerId);
-          } catch (err) {
-            /* noop */
-          }
-        }
-        panelEl?.classList.remove('gmh-panel--resizing');
-        resizeSession = null;
-      };
-
-      /**
-       * @param {PointerEvent} event
-       * @returns {void}
-       */
-      const handleResizeStart = (event) => {
-        if (!panelEl || !modernMode) return;
-        if (!currentBehavior.allowResize) return;
-        if (event.button && event.button !== 0) return;
-        event.preventDefault();
-        const rect = panelEl.getBoundingClientRect();
-        resizeSession = {
-          pointerId: event.pointerId,
-          startX: event.clientX,
-          startY: event.clientY,
-          width: rect.width,
-          height: rect.height,
-          nextWidth: rect.width,
-          nextHeight: rect.height,
+        const toggle = () => {
+            if (!panelEl || !modernMode)
+                return false;
+            if (isCollapsed()) {
+                open({ focus: true, persist: true });
+                return true;
+            }
+            close('user');
+            return false;
         };
-        panelEl.classList.add('gmh-panel--resizing');
-        clearIdleTimer();
-        try {
-          resizeHandle?.setPointerCapture(event.pointerId);
-        } catch (err) {
-          /* noop */
-        }
-        win.addEventListener('pointermove', handleResizeMove);
-        win.addEventListener('pointerup', handleResizeEnd);
-        win.addEventListener('pointercancel', handleResizeCancel);
-      };
-
-      /**
-       * @param {PointerEvent} event
-       * @returns {void}
-       */
-      const handleResizeMove = (event) => {
-        if (!resizeSession || !panelEl) return;
-        const viewportWidth = win.innerWidth || doc.documentElement.clientWidth || 1280;
-        const viewportHeight = win.innerHeight || doc.documentElement.clientHeight || 720;
-
-        const dx = event.clientX - resizeSession.startX;
-        const dy = event.clientY - resizeSession.startY;
-
-        const horizontalRoom = Math.max(MIN_GAP, viewportWidth - currentLayout.offset - MIN_GAP);
-        const verticalRoom = Math.max(MIN_GAP, viewportHeight - currentLayout.bottom - MIN_GAP);
-
-        let nextWidth = resizeSession.width + dx;
-        let nextHeight = resizeSession.height + dy;
-
-        nextWidth = Math.min(Math.max(260, nextWidth), horizontalRoom);
-        nextHeight = Math.min(Math.max(240, nextHeight), verticalRoom);
-
-        resizeSession.nextWidth = Math.round(nextWidth);
-        resizeSession.nextHeight = Math.round(nextHeight);
-
-        panelEl.style.width = `${resizeSession.nextWidth}px`;
-        panelEl.style.height = `${resizeSession.nextHeight}px`;
-        panelEl.style.maxHeight = `${resizeSession.nextHeight}px`;
-      };
-
-      /**
-       * @returns {void}
-       */
-      const handleResizeEnd = () => {
-        if (!resizeSession) return;
-        const { nextWidth, nextHeight } = resizeSession;
-        stopResizeTracking();
-        panelSettings.update({
-          layout: {
-            width: nextWidth,
-            height: nextHeight,
-          },
-        });
-      };
-
-      /**
-       * @returns {void}
-       */
-      const handleResizeCancel = () => {
-        stopResizeTracking();
-        applyLayout();
-      };
-
-      /**
-       * @param {{ focus?: boolean; persist?: boolean }} [options]
-       * @returns {boolean}
-       */
-      const open = ({ focus = false, persist = false } = {}) => {
-        if (!panelEl) return false;
-        if (!modernMode) {
-          if (focus && typeof panelEl.focus === 'function') {
-            requestAnimationFrame(() => panelEl.focus({ preventScroll: true }));
-          }
-          return true;
-        }
-        const wasCollapsed = isCollapsed();
-        applyRootState(false);
-        syncAria(false);
-        fabEl && fabEl.setAttribute('aria-expanded', 'true');
-        if (persist) persistCollapsed(false);
-        userCollapsed = false;
-        applyLayout();
-        refreshBehavior();
-        if (focus) {
-          rememberFocus();
-          focusPanelElement();
-        }
-        if (currentState === stateEnum.IDLE) scheduleIdleClose();
-        else clearIdleTimer();
-        return wasCollapsed;
-      };
-
-      /**
-       * @param {'user' | 'idle' | 'focus' | string} [reason='user']
-       * @returns {boolean}
-       */
-      const close = (reason = 'user') => {
-        if (!panelEl || !modernMode) return false;
-        if (isCollapsed()) return false;
-        applyRootState(true);
-        syncAria(true);
-        fabEl && fabEl.setAttribute('aria-expanded', 'false');
-        clearIdleTimer();
-        clearFocusSchedules();
-        if (reason === 'user') {
-          userCollapsed = true;
-          persistCollapsed(true);
-          if (lastFocusTarget) restoreFocus();
-        }
-        if (reason === 'idle') userCollapsed = false;
-        if (reason !== 'user') clearFocusMemory();
-        return true;
-      };
-
-      /**
-       * @returns {boolean}
-       */
-      const toggle = () => {
-        if (!panelEl || !modernMode) return false;
-        if (isCollapsed()) {
-          open({ focus: true, persist: true });
-          return true;
-        }
-        close('user');
-        return false;
-      };
-
-      /**
-       * @param {Element | null} panel
-       * @param {{ modern?: boolean }} [options]
-       * @returns {void}
-       */
-      const bind = (panel, { modern } = {}) => {
-        const panelElement = panel instanceof HTMLElement ? panel : null;
-        if (panel && !panelElement) {
-          if (logger?.warn) {
-            logger.warn('[GMH] panel visibility: ignored non-HTMLElement panel');
-          }
-        }
-        panelEl = panelElement;
-        panelListenersBound = false;
-        modernMode = !!modern && !!panelEl;
-        if (!panelEl) return;
-        if (!modernMode) {
-          if (fabEl && fabEl.isConnected) {
-            fabEl.remove();
-            fabEl = null;
-          }
-          applyRootState(false);
-          syncAria(false);
-          return;
-        }
-        ensureStateSubscription();
-        currentState = normalizeState(stateApi?.getState?.()) || stateEnum.IDLE;
-        ensureFab();
-        attachPanelListeners();
-        ensureEscapeHandler();
-        bindHandles();
-        persistedPreference = loadPersistedCollapsed();
-        const shouldCollapse = (() => {
-          if (typeof persistedPreference === 'boolean') return persistedPreference;
-          const mq = win.matchMedia?.('(max-width: 768px)');
-          if (mq?.matches) return true;
-          if (typeof win.innerWidth === 'number') return win.innerWidth <= 768;
-          return false;
-        })();
-        if (!shouldCollapse) applyLayout();
-        applyRootState(shouldCollapse);
-        syncAria(shouldCollapse);
-        userCollapsed = shouldCollapse;
-        refreshBehavior();
-        if (!shouldCollapse) scheduleIdleClose();
-      };
-
-      /**
-       * @param {{ tone?: string | null }} [update]
-       * @returns {void}
-       */
-      const onStatusUpdate = ({ tone } = {}) => {
-        if (!isModernActive()) return;
-        if (tone && ['error', 'warning', 'progress'].includes(tone) && isCollapsed()) {
-          open({ focus: false });
-        }
-        if (!isCollapsed()) scheduleIdleClose();
-      };
-
-      return {
-        bind,
-        open,
-        close,
-        toggle,
-        isCollapsed,
-        onStatusUpdate,
-      };
+        const bind = (panel, { modern } = {}) => {
+            const panelElement = panel instanceof HTMLElement ? panel : null;
+            if (panel && !panelElement) {
+                if (logger?.warn) {
+                    logger.warn('[GMH] panel visibility: ignored non-HTMLElement panel');
+                }
+            }
+            panelEl = panelElement;
+            panelListenersBound = false;
+            modernMode = !!modern && !!panelEl;
+            if (!panelEl)
+                return;
+            if (!modernMode) {
+                if (fabEl && fabEl.isConnected) {
+                    fabEl.remove();
+                    fabEl = null;
+                }
+                applyRootState(false);
+                syncAria(false);
+                return;
+            }
+            ensureStateSubscription();
+            currentState = normalizeState(stateApi?.getState?.(), stateEnum) || stateEnum.IDLE || '';
+            ensureFab();
+            attachPanelListeners();
+            ensureEscapeHandler();
+            bindHandles();
+            persistedPreference = loadPersistedCollapsed();
+            const shouldCollapse = (() => {
+                if (typeof persistedPreference === 'boolean')
+                    return persistedPreference;
+                const mq = win.matchMedia?.('(max-width: 768px)');
+                if (mq?.matches)
+                    return true;
+                if (typeof win.innerWidth === 'number')
+                    return win.innerWidth <= 768;
+                return false;
+            })();
+            if (!shouldCollapse)
+                applyLayout();
+            applyRootState(shouldCollapse);
+            syncAria(shouldCollapse);
+            userCollapsed = shouldCollapse;
+            refreshBehavior();
+            if (!shouldCollapse)
+                scheduleIdleClose();
+        };
+        const onStatusUpdate = ({ tone } = {}) => {
+            if (!isModernActive())
+                return;
+            if (tone && ['error', 'warning', 'progress'].includes(tone) && isCollapsed()) {
+                open({ focus: false });
+            }
+            if (!isCollapsed())
+                scheduleIdleClose();
+        };
+        return {
+            bind,
+            open,
+            close,
+            toggle,
+            isCollapsed,
+            onStatusUpdate,
+        };
     }
 
     /**

@@ -1,19 +1,24 @@
-import { ensureDesignSystemStyles } from './styles.js';
+import { ensureDesignSystemStyles } from './styles';
+import type { ModalAction, ModalController, ModalOpenOptions } from '../types';
 
-/**
- * @typedef {import('../types').ModalController} ModalController
- * @typedef {import('../types').ModalOpenOptions} ModalOpenOptions
- */
+interface CreateModalOptions {
+  documentRef?: Document | null;
+  windowRef?: (Window & typeof globalThis) | null;
+}
+
+type ActiveModal = {
+  close: (result?: unknown, skipResolve?: boolean) => void;
+} | null;
 
 /**
  * Creates the shared modal controller used across classic/modern panels.
- *
- * @param {{ documentRef?: Document | null; windowRef?: (Window & typeof globalThis) | null }} [options]
- * @returns {ModalController}
  */
-export function createModal({ documentRef = typeof document !== 'undefined' ? document : null, windowRef = typeof window !== 'undefined' ? /** @type {Window & typeof globalThis} */ (window) : null } = {}) {
+export function createModal({
+  documentRef = typeof document !== 'undefined' ? document : null,
+  windowRef = typeof window !== 'undefined' ? (window as Window & typeof globalThis) : null,
+}: CreateModalOptions = {}): ModalController {
   const doc = documentRef;
-  const win = /** @type {(Window & typeof globalThis) | null} */ (windowRef);
+  const win = windowRef;
   if (!doc || !win) {
     return {
       open: async () => false,
@@ -22,23 +27,18 @@ export function createModal({ documentRef = typeof document !== 'undefined' ? do
     };
   }
 
-  const HTMLElementCtor = /** @type {typeof HTMLElement | null} */ (
-    win.HTMLElement || (typeof HTMLElement !== 'undefined' ? HTMLElement : null)
-  );
-  const NodeCtor = /** @type {typeof Node | null} */ (
-    win.Node || (typeof Node !== 'undefined' ? Node : null)
-  );
+  const HTMLElementCtor: typeof HTMLElement | null =
+    win.HTMLElement || (typeof HTMLElement !== 'undefined' ? HTMLElement : null);
+  const NodeCtor: typeof Node | null =
+    win.Node || (typeof Node !== 'undefined' ? Node : null);
 
-  let activeModal = null;
+  let activeModal: ActiveModal = null;
   let modalIdCounter = 0;
 
   /**
    * Sanitises markup snippets before injecting them into the modal body.
-   *
-   * @param {string} markup
-   * @returns {DocumentFragment}
    */
-  const sanitizeMarkupFragment = (markup) => {
+  const sanitizeMarkupFragment = (markup: string): DocumentFragment => {
     const template = doc.createElement('template');
     template.innerHTML = String(markup ?? '');
     template.content
@@ -72,24 +72,25 @@ export function createModal({ documentRef = typeof document !== 'undefined' ? do
     '[tabindex]:not([tabindex="-1"])',
   ].join(',');
 
-  /**
-   * @param {Element | null} root
-   * @returns {HTMLElement[]}
-   */
-  const getFocusable = (root) => {
+  const getFocusable = (root: Element | null): HTMLElement[] => {
     if (!root) return [];
-    return /** @type {HTMLElement[]} */ (
-      Array.from(root.querySelectorAll(focusableSelector)).filter((el) => {
-        if (!(HTMLElementCtor && el instanceof HTMLElementCtor)) return false;
-        const style = win.getComputedStyle(el);
-        return style.visibility !== 'hidden' && style.display !== 'none';
-      })
-    );
+    const candidates = Array.from(root.querySelectorAll(focusableSelector)) as HTMLElement[];
+    return candidates.filter((el) => {
+      if (!(HTMLElementCtor && el instanceof HTMLElementCtor)) return false;
+      const style = win.getComputedStyle(el);
+      return style.visibility !== 'hidden' && style.display !== 'none';
+    });
   };
 
-  function buildButton(action, finalize) {
+  const buildButton = (
+    action: ModalAction,
+    finalize: (result: unknown) => void,
+  ): HTMLButtonElement => {
     const button = doc.createElement('button');
-    button.type = action.type || 'button';
+    button.type = 'button';
+    if (typeof action.type === 'string') {
+      button.setAttribute('type', action.type);
+    }
     button.className = 'gmh-button';
     if (action.variant) button.classList.add(`gmh-button--${action.variant}`);
     if (action.attrs && typeof action.attrs === 'object') {
@@ -99,7 +100,7 @@ export function createModal({ documentRef = typeof document !== 'undefined' ? do
     }
     if (action.disabled) button.disabled = true;
     button.textContent = action.label || '확인';
-    button.addEventListener('click', (event) => {
+    button.addEventListener('click', (event: MouseEvent) => {
       if (button.disabled) return;
       if (typeof action.onSelect === 'function') {
         const shouldClose = action.onSelect(event);
@@ -108,21 +109,18 @@ export function createModal({ documentRef = typeof document !== 'undefined' ? do
       finalize(action.value);
     });
     return button;
-  }
+  };
 
-  function closeActive(result) {
+  const closeActive = (result?: unknown): void => {
     if (activeModal && typeof activeModal.close === 'function') {
       activeModal.close(result, true);
     }
-  }
+  };
 
   /**
    * Opens a modal dialog with sanitized markup and focus trapping.
-   *
-   * @param {ModalOpenOptions} [options]
-   * @returns {Promise<unknown>}
    */
-  function open(options = /** @type {ModalOpenOptions} */ ({})) {
+  const open = (options: ModalOpenOptions = {}): Promise<unknown> => {
     ensureDesignSystemStyles();
     closeActive(false);
 
@@ -153,7 +151,7 @@ export function createModal({ documentRef = typeof document !== 'undefined' ? do
       title.id = titleId;
       headerRow.appendChild(title);
 
-      let closeBtn = null;
+      let closeBtn: HTMLButtonElement | null = null;
       if (options.dismissible !== false) {
         closeBtn = doc.createElement('button');
         closeBtn.type = 'button';
@@ -180,20 +178,20 @@ export function createModal({ documentRef = typeof document !== 'undefined' ? do
       const body = doc.createElement('div');
       body.className = 'gmh-modal__body gmh-modal__body--scroll';
       if (options.bodyClass) body.classList.add(options.bodyClass);
-      if (NodeCtor && options.content instanceof NodeCtor) {
-        body.appendChild(options.content);
-      } else if (typeof options.content === 'string') {
-        body.appendChild(sanitizeMarkupFragment(options.content));
+      const { content } = options;
+      if (NodeCtor && content instanceof NodeCtor) {
+        body.appendChild(content);
+      } else if (typeof content === 'string') {
+        body.appendChild(sanitizeMarkupFragment(content));
       }
 
       const footer = doc.createElement('div');
       footer.className = 'gmh-modal__footer';
       const actionsWrap = doc.createElement('div');
       actionsWrap.className = 'gmh-modal__actions';
-      const actions =
-        Array.isArray(options.actions) && options.actions.length ? options.actions : [];
+      const actions: ModalAction[] = Array.isArray(options.actions) ? options.actions : [];
 
-      const finalize = (result) => {
+      const finalize = (result: unknown) => {
         cleanup(result);
       };
 
@@ -215,13 +213,13 @@ export function createModal({ documentRef = typeof document !== 'undefined' ? do
       const prevOverflow = bodyEl.style.overflow;
       const restoreTarget =
         HTMLElementCtor && doc.activeElement instanceof HTMLElementCtor
-          ? /** @type {HTMLElement} */ (doc.activeElement)
+          ? (doc.activeElement as HTMLElement)
           : null;
       bodyEl.style.overflow = 'hidden';
       bodyEl.appendChild(overlay);
       overlay.setAttribute('role', 'presentation');
 
-      const onKeydown = (event) => {
+      const onKeydown = (event: KeyboardEvent) => {
         if (event.key === 'Escape' && options.dismissible !== false) {
           event.preventDefault();
           cleanup(false);
@@ -245,7 +243,7 @@ export function createModal({ documentRef = typeof document !== 'undefined' ? do
         }
       };
 
-      const cleanup = (result) => {
+      const cleanup = (result: unknown) => {
         if (!overlay.isConnected) return;
         doc.removeEventListener('keydown', onKeydown, true);
         overlay.remove();
@@ -258,7 +256,7 @@ export function createModal({ documentRef = typeof document !== 'undefined' ? do
       };
 
       if (options.dismissible !== false) {
-        overlay.addEventListener('click', (event) => {
+        overlay.addEventListener('click', (event: MouseEvent) => {
           if (event.target === overlay) cleanup(false);
         });
         if (closeBtn) closeBtn.addEventListener('click', () => cleanup(false));
@@ -267,12 +265,12 @@ export function createModal({ documentRef = typeof document !== 'undefined' ? do
       doc.addEventListener('keydown', onKeydown, true);
 
       const initialSelector = options.initialFocus || '.gmh-button--primary';
-      let focusTarget = /** @type {HTMLElement | null} */ (
-        initialSelector ? dialog.querySelector(initialSelector) : null
-      );
+      let focusTarget: HTMLElement | null =
+        (initialSelector ? (dialog.querySelector(initialSelector) as HTMLElement | null) : null) ??
+        null;
       if (!(focusTarget && HTMLElementCtor && focusTarget instanceof HTMLElementCtor)) {
         const focusables = getFocusable(dialog);
-        focusTarget = focusables[0] || closeBtn;
+        focusTarget = focusables[0] ?? closeBtn ?? null;
       }
       win.setTimeout(() => {
         if (focusTarget && typeof focusTarget.focus === 'function') focusTarget.focus();
@@ -282,7 +280,7 @@ export function createModal({ documentRef = typeof document !== 'undefined' ? do
         close: cleanup,
       };
     });
-  }
+  };
 
   return {
     open,

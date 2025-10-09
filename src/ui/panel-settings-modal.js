@@ -1,4 +1,4 @@
-import { ensureDesignSystemStyles } from './styles.js';
+import { ensureDesignSystemStyles } from './styles.ts';
 
 /**
  * @typedef {import('../types').PanelSettingsController} PanelSettingsController

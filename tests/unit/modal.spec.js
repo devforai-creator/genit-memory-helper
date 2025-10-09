@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { JSDOM } from 'jsdom';
 
-import { createModal } from '../../src/ui/modal.js';
+import { createModal } from '../../src/ui/modal.ts';
 
 describe('UI modal sanitization', () => {
   let modal;

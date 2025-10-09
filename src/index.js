@@ -56,7 +56,7 @@ import {
 import { sleep, triggerDownload, isScrollable } from './utils/dom.ts';
 import { luhnValid } from './utils/validation.ts';
 import { withPlayerNames } from './utils/factories.js';
-import { ensureLegacyPreviewStyles, ensureDesignSystemStyles } from './ui/styles.js';
+import { ensureLegacyPreviewStyles, ensureDesignSystemStyles } from './ui/styles.ts';
 import { createPanelSettings } from './ui/panel-settings.js';
 import { createSnapshotFeature, createStructuredSnapshotReader } from './features/snapshot.ts';
 import { createAutoLoader } from './features/auto-loader.ts';
