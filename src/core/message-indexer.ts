@@ -1,24 +1,40 @@
-/**
- * @typedef {import('../types').MessageIndexerOptions} MessageIndexerOptions
- * @typedef {import('../types').MessageIndexer} MessageIndexer
- * @typedef {import('../types').MessageIndexerSummary} MessageIndexerSummary
- * @typedef {import('../types').ExportRangeController} ExportRangeController
- */
+import type {
+  ExportRangeController,
+  MessageIndexer,
+  MessageIndexerOptions,
+  MessageIndexerSummary,
+} from '../types';
 
-/**
- * @returns {void}
- */
-const noop = () => {};
+type ConsoleWithWarnError =
+  | Console
+  | {
+      warn?: (...args: unknown[]) => void;
+      error?: (...args: unknown[]) => void;
+    };
 
-/**
- * Observes Genit chat DOM, annotating blocks with GMH metadata and publishing summaries.
- */
-/**
- * Observes Genit chat DOM, annotating blocks with GMH metadata and publishing summaries.
- *
- * @param {MessageIndexerOptions} [options]
- * @returns {MessageIndexer}
- */
+type AdapterRef =
+  | {
+      findContainer?(doc: Document): Element | null;
+      listMessageBlocks?(
+        doc: Document | Element,
+      ): Iterable<Element> | Element[] | NodeListOf<Element> | null;
+      detectRole?(block: Element): string;
+    }
+  | null
+  | undefined;
+
+type RangeTotalsSetter = Pick<ExportRangeController, 'setTotals'>;
+
+type SummaryListener = (summary: MessageIndexerSummary) => void;
+
+const noop = (): void => {};
+
+const cloneSummary = (summary: MessageIndexerSummary): MessageIndexerSummary => ({ ...summary });
+
+const toIterableElements = (
+  nodes: Iterable<Element> | Element[] | NodeListOf<Element>,
+): Element[] => Array.from(nodes).filter((node): node is Element => node instanceof Element);
+
 export const createMessageIndexer = ({
   console: consoleLike,
   document: documentLike,
@@ -27,59 +43,53 @@ export const createMessageIndexer = ({
   exportRange,
   getActiveAdapter,
   getEntryOrigin,
-} = {}) => {
-  const logger = consoleLike || (typeof console !== 'undefined' ? console : {});
-  const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop;
-  const error = typeof logger.error === 'function' ? logger.error.bind(logger) : noop;
-  /** @type {Document | undefined} */
-  const documentRef = documentLike || (typeof document !== 'undefined' ? document : undefined);
-  /** @type {typeof MutationObserver | undefined} */
-  const MutationObserverRef =
-    MutationObserverLike || (typeof MutationObserver !== 'undefined' ? MutationObserver : undefined);
-  /** @type {((callback: FrameRequestCallback) => number) | null} */
-  const raf = typeof rafLike === 'function'
-    ? rafLike
-    : typeof requestAnimationFrame === 'function'
-      ? requestAnimationFrame.bind(globalThis)
-      : null;
-  /** @type {ExportRangeController | null | undefined} */
-  const exportRangeRef = exportRange;
-  const getAdapter = typeof getActiveAdapter === 'function' ? getActiveAdapter : () => null;
-  const getOrigins = typeof getEntryOrigin === 'function' ? getEntryOrigin : () => [];
+}: MessageIndexerOptions = {}): MessageIndexer => {
+  const logger: ConsoleWithWarnError =
+    (consoleLike as ConsoleWithWarnError | null | undefined) ??
+    (typeof console !== 'undefined' ? console : {});
+  const warn =
+    typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop;
+  const error =
+    typeof logger.error === 'function' ? logger.error.bind(logger) : noop;
+
+  const documentRef: Document | undefined =
+    documentLike ?? (typeof document !== 'undefined' ? document : undefined);
+
+  const MutationObserverRef: typeof MutationObserver | undefined =
+    MutationObserverLike ?? (typeof MutationObserver !== 'undefined' ? MutationObserver : undefined);
+
+  const raf: ((callback: FrameRequestCallback) => number) | null =
+    typeof rafLike === 'function'
+      ? rafLike
+      : typeof requestAnimationFrame === 'function'
+        ? requestAnimationFrame.bind(globalThis)
+        : null;
+
+  const exportRangeRef: ExportRangeController | null | undefined = exportRange;
+  const getAdapter: () => AdapterRef =
+    typeof getActiveAdapter === 'function' ? getActiveAdapter : () => null;
+  const getOrigins: () => number[] =
+    typeof getEntryOrigin === 'function' ? getEntryOrigin : () => [];
 
   if (!documentRef) {
     throw new Error('createMessageIndexer requires a document reference');
   }
 
-  /** @type {MutationObserver | null} */
-  let observer = null;
+  let observer: MutationObserver | null = null;
   let scheduled = false;
   let active = false;
-  /** @type {Map<number, number>} */
-  const ordinalCacheByIndex = new Map();
-  /** @type {Map<string, number>} */
-  const ordinalCacheById = new Map();
-  /** @type {MessageIndexerSummary} */
-  let lastSummary = {
+  const ordinalCacheByIndex = new Map<number, number>();
+  const ordinalCacheById = new Map<string, number>();
+  let lastSummary: MessageIndexerSummary = {
     totalMessages: 0,
     userMessages: 0,
     llmMessages: 0,
     containerPresent: false,
     timestamp: 0,
   };
-  /** @type {Set<(summary: MessageIndexerSummary) => void>} */
-  const listeners = new Set();
+  const listeners = new Set<SummaryListener>();
 
-  /**
-   * @param {MessageIndexerSummary} summary
-   * @returns {MessageIndexerSummary}
-   */
-  const cloneSummary = (summary) => ({ ...summary });
-
-  /**
-   * @returns {void}
-   */
-  const notify = () => {
+  const notify = (): void => {
     const snapshot = cloneSummary(lastSummary);
     listeners.forEach((listener) => {
       try {
@@ -90,14 +100,17 @@ export const createMessageIndexer = ({
     });
   };
 
-  /**
-   * @returns {MessageIndexerSummary}
-   */
-  const indexMessages = () => {
+  const indexMessages = (): MessageIndexerSummary => {
     const adapter = getAdapter();
-    const container = adapter?.findContainer?.(documentRef);
-    const blockNodes = adapter?.listMessageBlocks?.(container || documentRef) || [];
-    const blocks = Array.from(blockNodes).filter((node) => node instanceof Element);
+    const container = adapter?.findContainer?.(documentRef) ?? null;
+    const blockNodes =
+      adapter?.listMessageBlocks?.(container ?? documentRef) ?? [];
+
+    const blocks = Array.isArray(blockNodes)
+      ? toIterableElements(blockNodes)
+      : blockNodes
+        ? toIterableElements(blockNodes as Iterable<Element>)
+        : [];
 
     let userMessageCount = 0;
     ordinalCacheByIndex.clear();
@@ -112,8 +125,11 @@ export const createMessageIndexer = ({
           block.getAttribute('data-message-id') ||
           block.getAttribute('data-id') ||
           null;
-        if (messageId) block.setAttribute('data-gmh-message-id', messageId);
-        else block.removeAttribute('data-gmh-message-id');
+        if (messageId) {
+          block.setAttribute('data-gmh-message-id', messageId);
+        } else {
+          block.removeAttribute('data-gmh-message-id');
+        }
         const role = adapter?.detectRole?.(block) || 'unknown';
         block.setAttribute('data-gmh-message-role', role);
         const channel = role === 'player' ? 'user' : 'llm';
@@ -122,8 +138,8 @@ export const createMessageIndexer = ({
         block.removeAttribute('data-gmh-player-turn');
         block.removeAttribute('data-gmh-user-ordinal');
         block.removeAttribute('data-gmh-message-ordinal');
-      } catch (err) {
-        /* ignore per-node errors */
+      } catch {
+        // ignore per-node errors
       }
     });
 
@@ -143,10 +159,14 @@ export const createMessageIndexer = ({
       const blockIdxAttr = block.getAttribute('data-gmh-message-index');
       if (blockIdxAttr !== null) {
         const numericIdx = Number(blockIdxAttr);
-        if (Number.isFinite(numericIdx)) ordinalCacheByIndex.set(numericIdx, messageOrdinal);
+        if (Number.isFinite(numericIdx)) {
+          ordinalCacheByIndex.set(numericIdx, messageOrdinal);
+        }
       }
       const blockMessageId = block.getAttribute('data-gmh-message-id');
-      if (blockMessageId) ordinalCacheById.set(blockMessageId, messageOrdinal);
+      if (blockMessageId) {
+        ordinalCacheById.set(blockMessageId, messageOrdinal);
+      }
     }
 
     const entryOrigin = getOrigins() || [];
@@ -165,9 +185,10 @@ export const createMessageIndexer = ({
       timestamp: Date.now(),
     };
 
-    if (exportRangeRef && typeof exportRangeRef.setTotals === 'function') {
+    const range = exportRangeRef as RangeTotalsSetter | null | undefined;
+    if (range && typeof range.setTotals === 'function') {
       try {
-        exportRangeRef.setTotals({
+        range.setTotals({
           message: blocks.length,
           user: userMessageCount,
           llm: llmCount,
@@ -182,13 +203,10 @@ export const createMessageIndexer = ({
     return lastSummary;
   };
 
-  /**
-   * @returns {void}
-   */
-  const schedule = () => {
+  const schedule = (): void => {
     if (scheduled) return;
     scheduled = true;
-    const runner = () => {
+    const runIndexing = (): void => {
       try {
         indexMessages();
       } catch (err) {
@@ -197,17 +215,15 @@ export const createMessageIndexer = ({
         scheduled = false;
       }
     };
+
     if (raf) {
-      raf(runner);
+      raf(() => runIndexing());
     } else {
-      setTimeout(runner, 16);
+      setTimeout(runIndexing, 16);
     }
   };
 
-  /**
-   * @returns {void}
-   */
-  const ensureObserver = () => {
+  const ensureObserver = (): void => {
     if (observer || !MutationObserverRef || !documentRef) return;
     const target = documentRef.body || documentRef.documentElement;
     if (!target) return;
@@ -218,7 +234,7 @@ export const createMessageIndexer = ({
     observer.observe(target, { childList: true, subtree: true });
   };
 
-  const api = {
+  const api: MessageIndexer = {
     start() {
       if (active) {
         schedule();
@@ -240,7 +256,7 @@ export const createMessageIndexer = ({
       }
       scheduled = false;
     },
-    refresh(options = {}) {
+    refresh(options?: { immediate?: boolean }) {
       const immediate = Boolean(options?.immediate);
       if (immediate) return indexMessages();
       schedule();
@@ -249,16 +265,20 @@ export const createMessageIndexer = ({
     getSummary() {
       return cloneSummary(lastSummary);
     },
-    lookupOrdinalByIndex(index) {
+    lookupOrdinalByIndex(index: number) {
       const numericIndex = Number(index);
       if (!Number.isFinite(numericIndex)) return null;
-      return ordinalCacheByIndex.has(numericIndex) ? ordinalCacheByIndex.get(numericIndex) : null;
+      return ordinalCacheByIndex.has(numericIndex)
+        ? (ordinalCacheByIndex.get(numericIndex) as number)
+        : null;
     },
-    lookupOrdinalByMessageId(messageId) {
+    lookupOrdinalByMessageId(messageId: string) {
       if (typeof messageId !== 'string' || !messageId) return null;
-      return ordinalCacheById.has(messageId) ? ordinalCacheById.get(messageId) : null;
+      return ordinalCacheById.has(messageId)
+        ? (ordinalCacheById.get(messageId) as number)
+        : null;
     },
-    subscribe(listener) {
+    subscribe(listener: SummaryListener) {
       if (typeof listener !== 'function') return noop;
       listeners.add(listener);
       try {
@@ -270,7 +290,7 @@ export const createMessageIndexer = ({
     },
   };
 
-  return /** @type {MessageIndexer} */ (api);
+  return api;
 };
 
 export default createMessageIndexer;
