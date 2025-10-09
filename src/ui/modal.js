@@ -1,8 +1,8 @@
 import { ensureDesignSystemStyles } from './styles.js';
 
 /**
- * @typedef {import('../../types/api').ModalController} ModalController
- * @typedef {import('../../types/api').ModalOpenOptions} ModalOpenOptions
+ * @typedef {import('../types').ModalController} ModalController
+ * @typedef {import('../types').ModalOpenOptions} ModalOpenOptions
  */
 
 /**

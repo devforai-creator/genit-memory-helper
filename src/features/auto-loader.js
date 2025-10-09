@@ -1,8 +1,8 @@
 import { CONFIG } from '../config.js';
 
 /**
- * @typedef {import('../../types/api').AutoLoaderOptions} AutoLoaderOptions
- * @typedef {import('../../types/api').AutoLoaderExports} AutoLoaderExports
+ * @typedef {import('../types').AutoLoaderOptions} AutoLoaderOptions
+ * @typedef {import('../types').AutoLoaderExports} AutoLoaderExports
  */
 
 const METER_INTERVAL_MS = CONFIG.TIMING.AUTO_LOADER.METER_INTERVAL_MS;

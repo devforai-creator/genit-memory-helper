@@ -1,7 +1,7 @@
 /**
  * Registers keyboard shortcuts for panel visibility and auto-loader actions.
  *
- * @typedef {import('../../types/api').PanelShortcutsOptions} PanelShortcutsOptions
+ * @typedef {import('../types').PanelShortcutsOptions} PanelShortcutsOptions
  * @returns {{ bindShortcuts: (panel: Element | null, options?: { modern?: boolean }) => void }}
  */
 export function createPanelShortcuts({

@@ -1,7 +1,7 @@
 /**
  * Connects panel buttons, share workflow actions, and keyboard shortcuts.
  *
- * @typedef {import('../../types/api').PanelInteractionsOptions} PanelInteractionsOptions
+ * @typedef {import('../types').PanelInteractionsOptions} PanelInteractionsOptions
  * @returns {{ bindPanelInteractions: (panel: Element | null, options?: { modern?: boolean }) => void; syncPrivacyProfileSelect: (profileKey?: string | null) => void }}
  */
 export function createPanelInteractions({

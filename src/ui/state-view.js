@@ -1,6 +1,6 @@
 /**
- * @typedef {import('../../types/api').StateViewOptions} StateViewOptions
- * @typedef {import('../../types/api').StateViewBindings} StateViewBindings
+ * @typedef {import('../types').StateViewOptions} StateViewOptions
+ * @typedef {import('../types').StateViewBindings} StateViewBindings
  */
 
 /** @type {Record<string, { label: string; message: string; tone: string; progress: { value?: number; indeterminate?: boolean } }>} */

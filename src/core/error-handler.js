@@ -1,10 +1,10 @@
 import { GMH_STATE } from './state.js';
 
 /**
- * @typedef {import('../../types/api').ErrorHandler} ErrorHandler
- * @typedef {import('../../types/api').ErrorHandlerOptions} ErrorHandlerOptions
- * @typedef {import('../../types/api').ErrorLogEntry} ErrorLogEntry
- * @typedef {import('../../types/api').PanelStateApi} PanelStateApi
+ * @typedef {import('../types').ErrorHandler} ErrorHandler
+ * @typedef {import('../types').ErrorHandlerOptions} ErrorHandlerOptions
+ * @typedef {import('../types').ErrorLogEntry} ErrorLogEntry
+ * @typedef {import('../types').PanelStateApi} PanelStateApi
  */
 
 /**

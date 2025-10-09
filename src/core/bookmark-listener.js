@@ -1,8 +1,8 @@
 /**
- * @typedef {import('../../types/api').BookmarkListenerOptions} BookmarkListenerOptions
- * @typedef {import('../../types/api').BookmarkListener} BookmarkListener
- * @typedef {import('../../types/api').MessageIndexer} MessageIndexer
- * @typedef {import('../../types/api').TurnBookmarks} TurnBookmarks
+ * @typedef {import('../types').BookmarkListenerOptions} BookmarkListenerOptions
+ * @typedef {import('../types').BookmarkListener} BookmarkListener
+ * @typedef {import('../types').MessageIndexer} MessageIndexer
+ * @typedef {import('../types').TurnBookmarks} TurnBookmarks
  */
 
 /**

@@ -79,8 +79,8 @@ var GMHBundle = (function (exports) {
   };
 
   /**
-   * @typedef {import('../../types/api').PanelStateManager} PanelStateManager
-   * @typedef {import('../../types/api').StateManagerOptions} StateManagerOptions
+   * @typedef {import('../types').PanelStateManager} PanelStateManager
+   * @typedef {import('../types').StateManagerOptions} StateManagerOptions
    */
 
   /**
@@ -188,10 +188,10 @@ var GMHBundle = (function (exports) {
   };
 
   /**
-   * @typedef {import('../../types/api').ErrorHandler} ErrorHandler
-   * @typedef {import('../../types/api').ErrorHandlerOptions} ErrorHandlerOptions
-   * @typedef {import('../../types/api').ErrorLogEntry} ErrorLogEntry
-   * @typedef {import('../../types/api').PanelStateApi} PanelStateApi
+   * @typedef {import('../types').ErrorHandler} ErrorHandler
+   * @typedef {import('../types').ErrorHandlerOptions} ErrorHandlerOptions
+   * @typedef {import('../types').ErrorLogEntry} ErrorLogEntry
+   * @typedef {import('../types').PanelStateApi} PanelStateApi
    */
 
   /**
@@ -429,15 +429,15 @@ var GMHBundle = (function (exports) {
   };
 
   /**
-   * @typedef {import('../../types/api').ExportRangeOptions} ExportRangeOptions
-   * @typedef {import('../../types/api').ExportRangeController} ExportRangeController
-   * @typedef {import('../../types/api').ExportRangeSnapshot} ExportRangeSnapshot
-   * @typedef {import('../../types/api').ExportRangeApplyOptions} ExportRangeApplyOptions
-   * @typedef {import('../../types/api').ExportRangeTotals} ExportRangeTotals
-   * @typedef {import('../../types/api').ExportRangeTotalsInput} ExportRangeTotalsInput
-   * @typedef {import('../../types/api').ExportRangeInfo} ExportRangeInfo
-   * @typedef {import('../../types/api').ExportRangeSelection} ExportRangeSelection
-   * @typedef {import('../../types/api').TranscriptTurn} TranscriptTurn
+   * @typedef {import('../types').ExportRangeOptions} ExportRangeOptions
+   * @typedef {import('../types').ExportRangeController} ExportRangeController
+   * @typedef {import('../types').ExportRangeSnapshot} ExportRangeSnapshot
+   * @typedef {import('../types').ExportRangeApplyOptions} ExportRangeApplyOptions
+   * @typedef {import('../types').ExportRangeTotals} ExportRangeTotals
+   * @typedef {import('../types').ExportRangeTotalsInput} ExportRangeTotalsInput
+   * @typedef {import('../types').ExportRangeInfo} ExportRangeInfo
+   * @typedef {import('../types').ExportRangeSelection} ExportRangeSelection
+   * @typedef {import('../types').TranscriptTurn} TranscriptTurn
    */
 
   /**
@@ -1012,9 +1012,9 @@ var GMHBundle = (function (exports) {
   };
 
   /**
-   * @typedef {import('../../types/api').TurnBookmarksOptions} TurnBookmarksOptions
-   * @typedef {import('../../types/api').TurnBookmarks} TurnBookmarks
-   * @typedef {import('../../types/api').TurnBookmarkEntry} TurnBookmarkEntry
+   * @typedef {import('../types').TurnBookmarksOptions} TurnBookmarksOptions
+   * @typedef {import('../types').TurnBookmarks} TurnBookmarks
+   * @typedef {import('../types').TurnBookmarkEntry} TurnBookmarkEntry
    */
 
   /**
@@ -1205,10 +1205,10 @@ var GMHBundle = (function (exports) {
   };
 
   /**
-   * @typedef {import('../../types/api').MessageIndexerOptions} MessageIndexerOptions
-   * @typedef {import('../../types/api').MessageIndexer} MessageIndexer
-   * @typedef {import('../../types/api').MessageIndexerSummary} MessageIndexerSummary
-   * @typedef {import('../../types/api').ExportRangeController} ExportRangeController
+   * @typedef {import('../types').MessageIndexerOptions} MessageIndexerOptions
+   * @typedef {import('../types').MessageIndexer} MessageIndexer
+   * @typedef {import('../types').MessageIndexerSummary} MessageIndexerSummary
+   * @typedef {import('../types').ExportRangeController} ExportRangeController
    */
 
   /**
@@ -1480,10 +1480,10 @@ var GMHBundle = (function (exports) {
   };
 
   /**
-   * @typedef {import('../../types/api').BookmarkListenerOptions} BookmarkListenerOptions
-   * @typedef {import('../../types/api').BookmarkListener} BookmarkListener
-   * @typedef {import('../../types/api').MessageIndexer} MessageIndexer
-   * @typedef {import('../../types/api').TurnBookmarks} TurnBookmarks
+   * @typedef {import('../types').BookmarkListenerOptions} BookmarkListenerOptions
+   * @typedef {import('../types').BookmarkListener} BookmarkListener
+   * @typedef {import('../types').MessageIndexer} MessageIndexer
+   * @typedef {import('../types').TurnBookmarks} TurnBookmarks
    */
 
   /**
@@ -3052,9 +3052,9 @@ var GMHBundle = (function (exports) {
   };
 
   /**
-   * @typedef {import('../../types/api').PrivacyPipelineDependencies} PrivacyPipelineDependencies
-   * @typedef {import('../../types/api').PrivacyPipelineApi} PrivacyPipelineApi
-   * @typedef {import('../../types/api').PrivacyPipelineResult} PrivacyPipelineResult
+   * @typedef {import('../types').PrivacyPipelineDependencies} PrivacyPipelineDependencies
+   * @typedef {import('../types').PrivacyPipelineApi} PrivacyPipelineApi
+   * @typedef {import('../types').PrivacyPipelineResult} PrivacyPipelineResult
    */
 
   const cloneTurns = (turns = []) =>
@@ -3181,10 +3181,10 @@ var GMHBundle = (function (exports) {
     /**
      * Applies sanitization to both raw strings and structured snapshots.
      *
-     * @param {import('../../types/api').TranscriptSession} session
+     * @param {import('../types').TranscriptSession} session
      * @param {string} rawText
      * @param {string} profileKey
-     * @param {import('../../types/api').StructuredSnapshot | null} [structuredSnapshot]
+     * @param {import('../types').StructuredSnapshot | null} [structuredSnapshot]
      * @returns {PrivacyPipelineResult}
      */
     const applyPrivacyPipeline = (session, rawText, profileKey, structuredSnapshot = null) => {
@@ -4771,8 +4771,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   }
 
   /**
-   * @typedef {import('../../types/api').AutoLoaderOptions} AutoLoaderOptions
-   * @typedef {import('../../types/api').AutoLoaderExports} AutoLoaderExports
+   * @typedef {import('../types').AutoLoaderOptions} AutoLoaderOptions
+   * @typedef {import('../types').AutoLoaderExports} AutoLoaderExports
    */
 
   const METER_INTERVAL_MS = CONFIG.TIMING.AUTO_LOADER.METER_INTERVAL_MS;
@@ -6017,7 +6017,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   /**
    * Registers keyboard shortcuts for panel visibility and auto-loader actions.
    *
-   * @typedef {import('../../types/api').PanelShortcutsOptions} PanelShortcutsOptions
+   * @typedef {import('../types').PanelShortcutsOptions} PanelShortcutsOptions
    * @returns {{ bindShortcuts: (panel: Element | null, options?: { modern?: boolean }) => void }}
    */
   function createPanelShortcuts({
@@ -6101,9 +6101,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
   }
 
   /**
-   * @typedef {import('../../types/api').ShareWorkflowOptions} ShareWorkflowOptions
-   * @typedef {import('../../types/api').ShareWorkflowApi} ShareWorkflowApi
-   * @typedef {import('../../types/api').PreparedShareResult} PreparedShareResult
+   * @typedef {import('../types').ShareWorkflowOptions} ShareWorkflowOptions
+   * @typedef {import('../types').ShareWorkflowApi} ShareWorkflowApi
+   * @typedef {import('../types').PreparedShareResult} PreparedShareResult
    */
 
   /**
@@ -6205,7 +6205,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     /**
      * Rehydrates the latest transcript snapshot and updates range counters.
      *
-     * @returns {{ session: import('../../types/api').TranscriptSession; raw: string; snapshot: import('../../types/api').StructuredSnapshot }}
+     * @returns {{ session: import('../types').TranscriptSession; raw: string; snapshot: import('../types').StructuredSnapshot }}
      */
     const parseAll = () => {
       const snapshot = captureStructuredSnapshot({ force: true });
@@ -6290,7 +6290,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         };
         const rangeInfo = selection?.info || exportRange?.describe?.(privacy.sanitizedSession.turns.length);
         const structuredSelection = projectStructuredMessages(privacy.structured, rangeInfo);
-        const exportSession = /** @type {import('../../types/api').TranscriptSession} */ (
+        const exportSession = /** @type {import('../types').TranscriptSession} */ (
           cloneSession(privacy.sanitizedSession)
         );
         const entryOrigin = typeof getEntryOrigin === 'function' ? getEntryOrigin() : [];
@@ -6300,7 +6300,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
         const selectedIndexSet = new Set(selectedIndices);
 
-        exportSession.turns = /** @type {import('../../types/api').TranscriptTurn[]} */ (
+        exportSession.turns = /** @type {import('../types').TranscriptTurn[]} */ (
           selectedIndices.map((index, localIndex) => {
             const original = privacy.sanitizedSession.turns[index] || {};
             const clone = { ...original };
@@ -6339,7 +6339,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
         const stats = collectSessionStats(exportSession);
         const overallStats = collectSessionStats(privacy.sanitizedSession);
-        const previewTurns = /** @type {import('../../types/api').TranscriptTurn[]} */ (
+        const previewTurns = /** @type {import('../types').TranscriptTurn[]} */ (
           exportSession.turns.slice(-5)
         );
         stateApi.setState(stateEnum.PREVIEW, {
@@ -6667,7 +6667,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
   /**
    * Connects panel buttons, share workflow actions, and keyboard shortcuts.
    *
-   * @typedef {import('../../types/api').PanelInteractionsOptions} PanelInteractionsOptions
+   * @typedef {import('../types').PanelInteractionsOptions} PanelInteractionsOptions
    * @returns {{ bindPanelInteractions: (panel: Element | null, options?: { modern?: boolean }) => void; syncPrivacyProfileSelect: (profileKey?: string | null) => void }}
    */
   function createPanelInteractions({
@@ -8145,8 +8145,8 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
   }
 
   /**
-   * @typedef {import('../../types/api').ModalController} ModalController
-   * @typedef {import('../../types/api').ModalOpenOptions} ModalOpenOptions
+   * @typedef {import('../types').ModalController} ModalController
+   * @typedef {import('../types').ModalOpenOptions} ModalOpenOptions
    */
 
   /**
@@ -8438,13 +8438,13 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
   /**
    * Manages panel open/collapse state, coordinating with storage and modal overlays.
    *
-   * @typedef {import('../../types/api').PanelVisibilityOptions} PanelVisibilityOptions
-   * @typedef {import('../../types/api').PanelVisibilityController} PanelVisibilityController
-   * @typedef {import('../../types/api').PanelSettingsController} PanelSettingsController
-   * @typedef {import('../../types/api').PanelSettingsLayout} PanelSettingsLayout
-   * @typedef {import('../../types/api').PanelSettingsBehavior} PanelSettingsBehavior
-   * @typedef {import('../../types/api').PanelStateApi} PanelStateApi
-   * @typedef {import('../../types/api').ModalController} ModalController
+   * @typedef {import('../types').PanelVisibilityOptions} PanelVisibilityOptions
+   * @typedef {import('../types').PanelVisibilityController} PanelVisibilityController
+   * @typedef {import('../types').PanelSettingsController} PanelSettingsController
+   * @typedef {import('../types').PanelSettingsLayout} PanelSettingsLayout
+   * @typedef {import('../types').PanelSettingsBehavior} PanelSettingsBehavior
+   * @typedef {import('../types').PanelStateApi} PanelStateApi
+   * @typedef {import('../types').ModalController} ModalController
    * @param {PanelVisibilityOptions} [options]
    * @returns {PanelVisibilityController}
    */
@@ -8610,7 +8610,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     /** @type {number | null} */
     let focusAnimationFrame = null;
 
-    /** @type {import('../../types/api').PanelSettingsValue} */
+    /** @type {import('../types').PanelSettingsValue} */
     let currentSettings = panelSettings.get();
     let currentLayout = coerceLayout(currentSettings.layout);
     let currentBehavior = coerceBehavior(currentSettings.behavior);
@@ -9375,8 +9375,8 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
   }
 
   /**
-   * @typedef {import('../../types/api').StateViewOptions} StateViewOptions
-   * @typedef {import('../../types/api').StateViewBindings} StateViewBindings
+   * @typedef {import('../types').StateViewOptions} StateViewOptions
+   * @typedef {import('../types').StateViewBindings} StateViewBindings
    */
 
   /** @type {Record<string, { label: string; message: string; tone: string; progress: { value?: number; indeterminate?: boolean } }>} */

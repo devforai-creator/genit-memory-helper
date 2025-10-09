@@ -1,13 +1,13 @@
 /**
  * Manages panel open/collapse state, coordinating with storage and modal overlays.
  *
- * @typedef {import('../../types/api').PanelVisibilityOptions} PanelVisibilityOptions
- * @typedef {import('../../types/api').PanelVisibilityController} PanelVisibilityController
- * @typedef {import('../../types/api').PanelSettingsController} PanelSettingsController
- * @typedef {import('../../types/api').PanelSettingsLayout} PanelSettingsLayout
- * @typedef {import('../../types/api').PanelSettingsBehavior} PanelSettingsBehavior
- * @typedef {import('../../types/api').PanelStateApi} PanelStateApi
- * @typedef {import('../../types/api').ModalController} ModalController
+ * @typedef {import('../types').PanelVisibilityOptions} PanelVisibilityOptions
+ * @typedef {import('../types').PanelVisibilityController} PanelVisibilityController
+ * @typedef {import('../types').PanelSettingsController} PanelSettingsController
+ * @typedef {import('../types').PanelSettingsLayout} PanelSettingsLayout
+ * @typedef {import('../types').PanelSettingsBehavior} PanelSettingsBehavior
+ * @typedef {import('../types').PanelStateApi} PanelStateApi
+ * @typedef {import('../types').ModalController} ModalController
  * @param {PanelVisibilityOptions} [options]
  * @returns {PanelVisibilityController}
  */
@@ -173,7 +173,7 @@ export function createPanelVisibility({
   /** @type {number | null} */
   let focusAnimationFrame = null;
 
-  /** @type {import('../../types/api').PanelSettingsValue} */
+  /** @type {import('../types').PanelSettingsValue} */
   let currentSettings = panelSettings.get();
   let currentLayout = coerceLayout(currentSettings.layout);
   let currentBehavior = coerceBehavior(currentSettings.behavior);

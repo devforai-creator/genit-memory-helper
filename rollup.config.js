@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import resolve from '@rollup/plugin-node-resolve';
+import typescript from '@rollup/plugin-typescript';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,7 +32,13 @@ export default {
     name: 'GMHBundle',
     banner: metaBanner,
   },
-  plugins: [resolve()],
+  plugins: [
+    resolve(),
+    typescript({
+      tsconfig: './tsconfig.json',
+      include: ['src/**/*.ts'],
+    }),
+  ],
   treeshake: {
     moduleSideEffects: false,
     propertyReadSideEffects: false,

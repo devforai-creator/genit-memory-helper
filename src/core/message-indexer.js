@@ -1,8 +1,8 @@
 /**
- * @typedef {import('../../types/api').MessageIndexerOptions} MessageIndexerOptions
- * @typedef {import('../../types/api').MessageIndexer} MessageIndexer
- * @typedef {import('../../types/api').MessageIndexerSummary} MessageIndexerSummary
- * @typedef {import('../../types/api').ExportRangeController} ExportRangeController
+ * @typedef {import('../types').MessageIndexerOptions} MessageIndexerOptions
+ * @typedef {import('../types').MessageIndexer} MessageIndexer
+ * @typedef {import('../types').MessageIndexerSummary} MessageIndexerSummary
+ * @typedef {import('../types').ExportRangeController} ExportRangeController
  */
 
 /**

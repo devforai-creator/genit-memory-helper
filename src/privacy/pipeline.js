@@ -1,9 +1,9 @@
 import { DEFAULT_PRIVACY_PROFILE, PRIVACY_PROFILES } from './constants.js';
 
 /**
- * @typedef {import('../../types/api').PrivacyPipelineDependencies} PrivacyPipelineDependencies
- * @typedef {import('../../types/api').PrivacyPipelineApi} PrivacyPipelineApi
- * @typedef {import('../../types/api').PrivacyPipelineResult} PrivacyPipelineResult
+ * @typedef {import('../types').PrivacyPipelineDependencies} PrivacyPipelineDependencies
+ * @typedef {import('../types').PrivacyPipelineApi} PrivacyPipelineApi
+ * @typedef {import('../types').PrivacyPipelineResult} PrivacyPipelineResult
  */
 
 const cloneTurns = (turns = []) =>
@@ -130,10 +130,10 @@ export const createPrivacyPipeline = ({
   /**
    * Applies sanitization to both raw strings and structured snapshots.
    *
-   * @param {import('../../types/api').TranscriptSession} session
+   * @param {import('../types').TranscriptSession} session
    * @param {string} rawText
    * @param {string} profileKey
-   * @param {import('../../types/api').StructuredSnapshot | null} [structuredSnapshot]
+   * @param {import('../types').StructuredSnapshot | null} [structuredSnapshot]
    * @returns {PrivacyPipelineResult}
    */
   const applyPrivacyPipeline = (session, rawText, profileKey, structuredSnapshot = null) => {

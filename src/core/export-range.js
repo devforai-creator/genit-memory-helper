@@ -1,13 +1,13 @@
 /**
- * @typedef {import('../../types/api').ExportRangeOptions} ExportRangeOptions
- * @typedef {import('../../types/api').ExportRangeController} ExportRangeController
- * @typedef {import('../../types/api').ExportRangeSnapshot} ExportRangeSnapshot
- * @typedef {import('../../types/api').ExportRangeApplyOptions} ExportRangeApplyOptions
- * @typedef {import('../../types/api').ExportRangeTotals} ExportRangeTotals
- * @typedef {import('../../types/api').ExportRangeTotalsInput} ExportRangeTotalsInput
- * @typedef {import('../../types/api').ExportRangeInfo} ExportRangeInfo
- * @typedef {import('../../types/api').ExportRangeSelection} ExportRangeSelection
- * @typedef {import('../../types/api').TranscriptTurn} TranscriptTurn
+ * @typedef {import('../types').ExportRangeOptions} ExportRangeOptions
+ * @typedef {import('../types').ExportRangeController} ExportRangeController
+ * @typedef {import('../types').ExportRangeSnapshot} ExportRangeSnapshot
+ * @typedef {import('../types').ExportRangeApplyOptions} ExportRangeApplyOptions
+ * @typedef {import('../types').ExportRangeTotals} ExportRangeTotals
+ * @typedef {import('../types').ExportRangeTotalsInput} ExportRangeTotalsInput
+ * @typedef {import('../types').ExportRangeInfo} ExportRangeInfo
+ * @typedef {import('../types').ExportRangeSelection} ExportRangeSelection
+ * @typedef {import('../types').TranscriptTurn} TranscriptTurn
  */
 
 /**

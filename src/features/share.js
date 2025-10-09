@@ -1,9 +1,9 @@
 import { requireDeps } from '../utils/validation.js';
 
 /**
- * @typedef {import('../../types/api').ShareWorkflowOptions} ShareWorkflowOptions
- * @typedef {import('../../types/api').ShareWorkflowApi} ShareWorkflowApi
- * @typedef {import('../../types/api').PreparedShareResult} PreparedShareResult
+ * @typedef {import('../types').ShareWorkflowOptions} ShareWorkflowOptions
+ * @typedef {import('../types').ShareWorkflowApi} ShareWorkflowApi
+ * @typedef {import('../types').PreparedShareResult} PreparedShareResult
  */
 
 /**
@@ -105,7 +105,7 @@ export function createShareWorkflow({
   /**
    * Rehydrates the latest transcript snapshot and updates range counters.
    *
-   * @returns {{ session: import('../../types/api').TranscriptSession; raw: string; snapshot: import('../../types/api').StructuredSnapshot }}
+   * @returns {{ session: import('../types').TranscriptSession; raw: string; snapshot: import('../types').StructuredSnapshot }}
    */
   const parseAll = () => {
     const snapshot = captureStructuredSnapshot({ force: true });
@@ -190,7 +190,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       };
       const rangeInfo = selection?.info || exportRange?.describe?.(privacy.sanitizedSession.turns.length);
       const structuredSelection = projectStructuredMessages(privacy.structured, rangeInfo);
-      const exportSession = /** @type {import('../../types/api').TranscriptSession} */ (
+      const exportSession = /** @type {import('../types').TranscriptSession} */ (
         cloneSession(privacy.sanitizedSession)
       );
       const entryOrigin = typeof getEntryOrigin === 'function' ? getEntryOrigin() : [];
@@ -200,7 +200,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
       const selectedIndexSet = new Set(selectedIndices);
 
-      exportSession.turns = /** @type {import('../../types/api').TranscriptTurn[]} */ (
+      exportSession.turns = /** @type {import('../types').TranscriptTurn[]} */ (
         selectedIndices.map((index, localIndex) => {
           const original = privacy.sanitizedSession.turns[index] || {};
           const clone = { ...original };
@@ -239,7 +239,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
       const stats = collectSessionStats(exportSession);
       const overallStats = collectSessionStats(privacy.sanitizedSession);
-      const previewTurns = /** @type {import('../../types/api').TranscriptTurn[]} */ (
+      const previewTurns = /** @type {import('../types').TranscriptTurn[]} */ (
         exportSession.turns.slice(-5)
       );
       stateApi.setState(stateEnum.PREVIEW, {

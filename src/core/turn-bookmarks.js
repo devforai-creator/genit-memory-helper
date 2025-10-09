@@ -1,7 +1,7 @@
 /**
- * @typedef {import('../../types/api').TurnBookmarksOptions} TurnBookmarksOptions
- * @typedef {import('../../types/api').TurnBookmarks} TurnBookmarks
- * @typedef {import('../../types/api').TurnBookmarkEntry} TurnBookmarkEntry
+ * @typedef {import('../types').TurnBookmarksOptions} TurnBookmarksOptions
+ * @typedef {import('../types').TurnBookmarks} TurnBookmarks
+ * @typedef {import('../types').TurnBookmarkEntry} TurnBookmarkEntry
  */
 
 /**

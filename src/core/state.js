@@ -1,6 +1,6 @@
 /**
- * @typedef {import('../../types/api').PanelStateManager} PanelStateManager
- * @typedef {import('../../types/api').StateManagerOptions} StateManagerOptions
+ * @typedef {import('../types').PanelStateManager} PanelStateManager
+ * @typedef {import('../types').StateManagerOptions} StateManagerOptions
  */
 
 /**
