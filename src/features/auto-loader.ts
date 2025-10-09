@@ -1,19 +1,33 @@
 import { CONFIG } from '../config.js';
-
-/**
- * @typedef {import('../types').AutoLoaderOptions} AutoLoaderOptions
- * @typedef {import('../types').AutoLoaderExports} AutoLoaderExports
- */
+import type {
+  AutoLoaderExports,
+  AutoLoaderOptions,
+  AutoLoaderStats,
+  AutoLoaderStartOptions,
+  AutoLoaderController,
+  ExportRangeController,
+  MessageIndexer,
+  StructuredSnapshot,
+  TranscriptSession,
+  TranscriptTurn,
+} from '../types';
 
 const METER_INTERVAL_MS = CONFIG.TIMING.AUTO_LOADER.METER_INTERVAL_MS;
 
-/**
- * Creates the auto-loader controller that scrolls and indexes Genit chat messages.
- * Handles profile-specific timing, range updates, and exposes helpers for UI wiring.
- *
- * @param {AutoLoaderOptions} [options]
- * @returns {AutoLoaderExports}
- */
+const toElementArray = (collection: Iterable<Element> | Element[] | NodeListOf<Element> | null | undefined): Element[] => {
+  if (!collection) return [];
+  if (Array.isArray(collection)) return collection;
+  return Array.from(collection);
+};
+
+type ScrollElement = Element & { scrollTop: number; scrollHeight: number };
+type StatsCache = {
+  summaryKey: string | null;
+  rawKey: string | null;
+  data: AutoLoaderStats | null;
+};
+type CollectStatsOptions = { force?: boolean };
+
 export function createAutoLoader({
   stateApi,
   stateEnum,
@@ -25,12 +39,12 @@ export function createAutoLoader({
   sleep,
   isScrollable,
   documentRef = typeof document !== 'undefined' ? document : null,
-  windowRef = typeof window !== 'undefined' ? /** @type {Window & typeof globalThis} */ (window) : null,
+  windowRef = typeof window !== 'undefined' ? (window as Window & typeof globalThis) : null,
   normalizeTranscript,
   buildSession,
   readTranscriptText,
   logger = typeof console !== 'undefined' ? console : null,
-} = /** @type {AutoLoaderOptions} */ ({})) {
+}: AutoLoaderOptions = {} as AutoLoaderOptions): AutoLoaderExports {
   if (!stateApi || typeof stateApi.setState !== 'function') {
     throw new Error('createAutoLoader requires stateApi with setState');
   }
@@ -60,18 +74,22 @@ export function createAutoLoader({
 
   const AUTO_PROFILES = CONFIG.TIMING.AUTO_LOADER.PROFILES;
 
-  const AUTO_CFG = {
+  const AUTO_CFG: { profile: string } = {
     profile: 'default',
   };
 
-  const AUTO_STATE = {
+  const AUTO_STATE: {
+    running: boolean;
+    container: Element | null;
+    meterTimer: ReturnType<typeof setInterval> | null;
+  } = {
     running: false,
     container: null,
     meterTimer: null,
   };
 
-  const profileListeners = new Set();
-  const warnWithHandler = (err, context, fallbackMessage) => {
+  const profileListeners = new Set<(profile: string) => void>();
+  const warnWithHandler = (err: unknown, context: string, fallbackMessage: string) => {
     if (errorHandler?.handle) {
       const level = errorHandler.LEVELS?.WARN || 'warn';
       errorHandler.handle(err, context, level);
@@ -92,7 +110,7 @@ export function createAutoLoader({
 
   const getProfile = () => AUTO_CFG.profile;
 
-  function ensureScrollContainer() {
+  function ensureScrollContainer(): Element | null {
     const adapter = typeof getActiveAdapter === 'function' ? getActiveAdapter() : null;
     const adapterContainer = adapter?.findContainer?.(doc);
     if (adapterContainer) {
@@ -106,7 +124,7 @@ export function createAutoLoader({
       }
       return adapterContainer;
     }
-    const messageBlocks = adapter?.listMessageBlocks?.(doc) || [];
+    const messageBlocks = toElementArray(adapter?.listMessageBlocks?.(doc));
     if (messageBlocks.length) {
       let ancestor = messageBlocks[0]?.parentElement || null;
       for (let depth = 0; depth < 6 && ancestor; depth += 1) {
@@ -114,10 +132,10 @@ export function createAutoLoader({
         ancestor = ancestor.parentElement;
       }
     }
-    return doc.scrollingElement || doc.documentElement || doc.body;
+    return (doc.scrollingElement || doc.documentElement || doc.body) as Element | null;
   }
 
-  function waitForGrowth(el, startHeight, timeout) {
+  function waitForGrowth(el: ScrollElement, startHeight: number, timeout: number): Promise<boolean> {
     if (!MutationObserverCtor) {
       return new Promise((resolve) => {
         setTimeoutFn(() => resolve(false), timeout);
@@ -142,15 +160,16 @@ export function createAutoLoader({
     });
   }
 
-  async function scrollUpCycle(container, profile) {
+  async function scrollUpCycle(container: Element | null, profile: any) {
     if (!container) return { grew: false, before: 0, after: 0 };
-    const before = container.scrollHeight;
-    container.scrollTop = 0;
-    const grew = await waitForGrowth(container, before, profile.settleTimeoutMs);
-    return { grew, before, after: container.scrollHeight };
+    const target = container as ScrollElement;
+    const before = target.scrollHeight;
+    target.scrollTop = 0;
+    const grew = await waitForGrowth(target, before, profile.settleTimeoutMs);
+    return { grew, before, after: target.scrollHeight };
   }
 
-  const statsCache = {
+  const statsCache: StatsCache = {
     summaryKey: null,
     rawKey: null,
     data: null,
@@ -172,9 +191,9 @@ export function createAutoLoader({
     return `${total}:${user}:${stamp}`;
   };
 
-  function collectTurnStats(options = {}) {
-    const force = Boolean(options?.force);
-    let summary = null;
+  function collectTurnStats(options: CollectStatsOptions = {}): AutoLoaderStats {
+    const force = Boolean(options.force);
+    let summary: any = null;
     try {
       const currentSignature = windowRef?.location?.href || (typeof location !== 'undefined' ? location.href : null);
       if (currentSignature && currentSignature !== lastSessionSignature) {
@@ -193,8 +212,8 @@ export function createAutoLoader({
         return statsCache.data;
       }
 
-      let rawText = null;
-      let rawKey = null;
+      let rawText: string | null = null;
+      let rawKey: string | null = null;
       const transcriptOptions = force ? { force: true } : {};
       if (!summaryKey) {
         rawText = readTranscriptText(transcriptOptions);
@@ -239,7 +258,7 @@ export function createAutoLoader({
         exportRange?.clear?.();
       }
       exportRange?.setTotals?.(nextTotals);
-      const stats = {
+      const stats: AutoLoaderStats = {
         session,
         userMessages,
         llmMessages,
@@ -262,7 +281,7 @@ export function createAutoLoader({
         llmMessages: 0,
         totalMessages: 0,
         error,
-      };
+      } as AutoLoaderStats;
     }
   }
 
@@ -282,7 +301,7 @@ export function createAutoLoader({
     stateApi.setState(stateEnum.IDLE, payload);
   };
 
-  async function autoLoadAll() {
+  async function autoLoadAll(): Promise<AutoLoaderStats> {
     const profile = AUTO_PROFILES[getProfile()] || AUTO_PROFILES.default;
     const container = ensureScrollContainer();
     if (!container) {
@@ -292,7 +311,13 @@ export function createAutoLoader({
         tone: 'error',
         progress: { value: 1 },
       });
-      return { error: new Error('container missing') };
+      return {
+        session: null,
+        userMessages: 0,
+        llmMessages: 0,
+        totalMessages: 0,
+        error: new Error('container missing'),
+      };
     }
     AUTO_STATE.running = true;
     AUTO_STATE.container = container;
@@ -335,7 +360,7 @@ export function createAutoLoader({
     return stats;
   }
 
-  async function autoLoadUntilPlayerTurns(target) {
+  async function autoLoadUntilPlayerTurns(target: number): Promise<AutoLoaderStats> {
     const profile = AUTO_PROFILES[getProfile()] || AUTO_PROFILES.default;
     const container = ensureScrollContainer();
     if (!container) {
@@ -345,7 +370,13 @@ export function createAutoLoader({
         tone: 'error',
         progress: { value: 1 },
       });
-      return { error: new Error('container missing') };
+      return {
+        session: null,
+        userMessages: 0,
+        llmMessages: 0,
+        totalMessages: 0,
+        error: new Error('container missing'),
+      };
     }
     AUTO_STATE.running = true;
     AUTO_STATE.container = container;
@@ -460,11 +491,11 @@ export function createAutoLoader({
     }, METER_INTERVAL_MS);
   }
 
-  const autoLoader = {
+  const autoLoader: AutoLoaderExports['autoLoader'] = {
     lastMode: null,
     lastTarget: null,
     lastProfile: AUTO_CFG.profile,
-    async start(mode, target, opts = {}) {
+    async start(mode: 'all' | 'turns', target?: number | null, opts: AutoLoaderStartOptions = {}) {
       if (AUTO_STATE.running) {
         setPanelStatus?.('이미 자동 로딩이 진행 중입니다.', 'muted');
         return null;

@@ -1,40 +1,49 @@
-/**
- * @typedef {import('../types').SnapshotFeatureOptions} SnapshotFeatureOptions
- * @typedef {import('../types').SnapshotCaptureOptions} SnapshotCaptureOptions
- * @typedef {import('../types').SnapshotAdapter} SnapshotAdapter
- * @typedef {import('../types').StructuredSnapshotReaderOptions} StructuredSnapshotReaderOptions
- * @typedef {import('../types').StructuredSnapshot} StructuredSnapshot
- * @typedef {import('../types').StructuredSnapshotMessage} StructuredSnapshotMessage
- * @typedef {import('../types').StructuredSnapshotMessagePart} StructuredSnapshotMessagePart
- * @typedef {import('../types').StructuredSelectionResult} StructuredSelectionResult
- */
+import type {
+  SnapshotFeatureOptions,
+  SnapshotCaptureOptions,
+  SnapshotAdapter,
+  StructuredSnapshotReaderOptions,
+  StructuredSnapshot,
+  StructuredSnapshotMessage,
+  StructuredSnapshotMessagePart,
+  StructuredSelectionResult,
+  StructuredSelectionRangeInfo,
+  ExportRangeInfo,
+} from '../types';
 
-/**
- * Ensures a usable Document reference is provided for DOM operations.
- *
- * @param {Document | null | undefined} documentRef
- * @returns {Document}
- */
-const ensureDocument = (documentRef) => {
+type CacheEntry = {
+  structured: StructuredSnapshotMessage | null;
+  lines: string[];
+  errors: string[];
+  signature: string;
+};
+
+const normalizeBlocks = (
+  collection: Iterable<Element> | Element[] | NodeListOf<Element> | null | undefined,
+): Element[] => {
+  if (!collection) return [];
+  if (Array.isArray(collection)) return collection;
+  return Array.from(collection);
+};
+
+const normalizeNumeric = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? value : null;
+
+const ensureDocument = (documentRef: Document | null | undefined): Document => {
   if (!documentRef || typeof documentRef.createElement !== 'function') {
     throw new Error('snapshot feature requires a document reference');
   }
   return documentRef;
 };
 
-/**
- * Creates a helper that describes DOM nodes using a short CSS-like path.
- *
- * @param {Document | null | undefined} documentRef
- * @returns {(node: Element | null | undefined) => string | null}
- */
-const createDescribeNode = (documentRef) => {
-  const doc = ensureDocument(documentRef);
-  const ElementCtor = doc?.defaultView?.Element || (typeof Element !== 'undefined' ? Element : null);
-  return (node) => {
+const createDescribeNode =
+  (documentRef: Document | null | undefined) =>
+  (node: Element | null | undefined): string | null => {
+    const doc = ensureDocument(documentRef);
+    const ElementCtor = doc?.defaultView?.Element || (typeof Element !== 'undefined' ? Element : null);
     if (!ElementCtor || !node || !(node instanceof ElementCtor)) return null;
-    const parts = [];
-    let current = node;
+    const parts: string[] = [];
+    let current: Element | null = node;
     let depth = 0;
     while (current && depth < 5) {
       let part = current.tagName.toLowerCase();
@@ -47,14 +56,7 @@ const createDescribeNode = (documentRef) => {
     }
     return parts.join(' > ');
   };
-};
 
-/**
- * Produces utilities for capturing DOM snapshots for diagnostics/export workflows.
- *
- * @param {SnapshotFeatureOptions} options
- * @returns {{ describeNode: ReturnType<typeof createDescribeNode>; downloadDomSnapshot: () => void }}
- */
 export function createSnapshotFeature({
   getActiveAdapter,
   triggerDownload,
@@ -62,26 +64,21 @@ export function createSnapshotFeature({
   errorHandler,
   documentRef = typeof document !== 'undefined' ? document : null,
   locationRef = typeof location !== 'undefined' ? location : null,
-}) {
+}: SnapshotFeatureOptions) {
   if (!getActiveAdapter || !triggerDownload || !setPanelStatus || !errorHandler) {
     throw new Error('createSnapshotFeature missing required dependencies');
   }
 
   const describeNode = createDescribeNode(documentRef);
 
-  /**
-   * Captures adapter state and DOM metadata into a JSON snapshot.
-   *
-   * @returns {void}
-   */
-  const downloadDomSnapshot = () => {
+  const downloadDomSnapshot = (): void => {
     const doc = documentRef;
     const loc = locationRef;
     if (!doc || !loc) return;
     try {
       const adapter = getActiveAdapter();
       const container = adapter?.findContainer?.(doc);
-      const blocks = adapter?.listMessageBlocks?.(container || doc) || [];
+      const blocks = normalizeBlocks(adapter?.listMessageBlocks?.(container || doc));
       const snapshot = {
         url: loc.href,
         captured_at: new Date().toISOString(),
@@ -110,34 +107,25 @@ export function createSnapshotFeature({
   };
 }
 
-/**
- * Caches structured transcript snapshots, exposing helpers used by share/export flows.
- */
 export function createStructuredSnapshotReader({
   getActiveAdapter,
   setEntryOriginProvider,
   documentRef = typeof document !== 'undefined' ? document : null,
-} = /** @type {StructuredSnapshotReaderOptions} */ ({})) {
+}: StructuredSnapshotReaderOptions) {
   if (!getActiveAdapter) throw new Error('createStructuredSnapshotReader requires getActiveAdapter');
   const doc = ensureDocument(documentRef);
 
-  let entryOrigin = [];
-  let latestStructuredSnapshot = null;
-  let blockCache = new WeakMap();
-  let blockIdRegistry = new WeakMap();
+  let entryOrigin: number[] = [];
+  let latestStructuredSnapshot: StructuredSnapshot | null = null;
+  let blockCache: WeakMap<Element, CacheEntry> = new WeakMap();
+  let blockIdRegistry: WeakMap<Element, number> = new WeakMap();
   let blockIdCounter = 0;
 
   if (typeof setEntryOriginProvider === 'function') {
     setEntryOriginProvider(() => entryOrigin);
   }
 
-  /**
-   * Resolves a stable numeric identifier for a DOM block element.
-   *
-   * @param {Element | null | undefined} block
-   * @returns {number | null}
-   */
-  const getBlockId = (block) => {
+  const getBlockId = (block: Element | null | undefined): number | null => {
     if (!block) return null;
     if (!blockIdRegistry.has(block)) {
       blockIdCounter += 1;
@@ -146,13 +134,7 @@ export function createStructuredSnapshotReader({
     return blockIdRegistry.get(block);
   };
 
-  /**
-   * Produces a stable fingerprint for a block's textual content.
-   *
-   * @param {string | null | undefined} value
-   * @returns {string}
-   */
-  const fingerprintText = (value) => {
+  const fingerprintText = (value: string | null | undefined): string => {
     if (!value) return '0:0';
     let hash = 0;
     for (let i = 0; i < value.length; i += 1) {
@@ -161,13 +143,7 @@ export function createStructuredSnapshotReader({
     return `${value.length}:${hash.toString(16)}`;
   };
 
-  /**
-   * Builds a signature string representing a structured block.
-   *
-   * @param {Element | null | undefined} block
-   * @returns {string}
-   */
-  const getBlockSignature = (block) => {
+  const getBlockSignature = (block: Element | null | undefined): string => {
     if (!block || typeof block.getAttribute !== 'function') return 'none';
     const idAttr =
       block.getAttribute('data-gmh-message-id') ||
@@ -184,11 +160,15 @@ export function createStructuredSnapshotReader({
    * @param {StructuredSnapshotMessage | null | undefined} message
    * @returns {StructuredSnapshotMessage | null}
    */
-  const cloneStructuredMessage = (message) => {
+  const cloneStructuredMessage = (
+    message: StructuredSnapshotMessage | null | undefined,
+  ): StructuredSnapshotMessage | null => {
     if (!message || typeof message !== 'object') return null;
-    const cloned = { ...message };
+    const cloned: StructuredSnapshotMessage = { ...message };
     if (Array.isArray(message.parts)) {
-      cloned.parts = message.parts.map((part) => (part && typeof part === 'object' ? { ...part } : part));
+      cloned.parts = message.parts.map((part) =>
+        part && typeof part === 'object' ? { ...part } : part,
+      ) as StructuredSnapshotMessagePart[];
     }
     if (Array.isArray(message.legacyLines)) cloned.legacyLines = message.legacyLines.slice();
     if (Array.isArray(message.__gmhEntries)) cloned.__gmhEntries = message.__gmhEntries.slice();
@@ -196,16 +176,12 @@ export function createStructuredSnapshotReader({
     return cloned;
   };
 
-  /**
-   * Retrieves or regenerates a cache entry for a DOM block.
-   *
-   * @param {SnapshotAdapter | null | undefined} adapter
-   * @param {Element | null | undefined} block
-   * @param {boolean} forceReparse
-   * @returns {{ structured: StructuredSnapshotMessage | null; lines: string[]; errors: string[]; signature: string }}
-   */
-  const ensureCacheEntry = (adapter, block, forceReparse) => {
-    if (!block) return { structured: null, lines: [], errors: [] };
+  const ensureCacheEntry = (
+    adapter: SnapshotAdapter | null | undefined,
+    block: Element | null | undefined,
+    forceReparse: boolean,
+  ): CacheEntry => {
+    if (!block) return { structured: null, lines: [], errors: [], signature: 'none' };
     const signature = getBlockSignature(block);
     if (!forceReparse && blockCache.has(block)) {
       const cached = blockCache.get(block);
@@ -214,17 +190,17 @@ export function createStructuredSnapshotReader({
       }
     }
 
-    const localSeen = new Set();
-    const errors = [];
-    let structured = null;
-    let lines = [];
+    const localSeen = new Set<string>();
+    const errors: string[] = [];
+    let structured: StructuredSnapshotMessage | null = null;
+    let lines: string[] = [];
 
     try {
       const collected = adapter?.collectStructuredMessage?.(block);
       if (collected && typeof collected === 'object') {
         structured = cloneStructuredMessage(collected);
         const legacy = Array.isArray(collected.legacyLines) ? collected.legacyLines : [];
-        lines = legacy.reduce((acc, line) => {
+        lines = legacy.reduce<string[]>((acc, line) => {
           const trimmed = (line || '').trim();
           if (!trimmed || localSeen.has(trimmed)) return acc;
           localSeen.add(trimmed);
@@ -237,8 +213,8 @@ export function createStructuredSnapshotReader({
     }
 
     if (!structured) {
-      const fallbackLines = [];
-      const pushLine = (line) => {
+      const fallbackLines: string[] = [];
+      const pushLine = (line: string) => {
         const trimmed = (line || '').trim();
         if (!trimmed || localSeen.has(trimmed)) return;
         localSeen.add(trimmed);
@@ -252,7 +228,7 @@ export function createStructuredSnapshotReader({
       lines = fallbackLines;
     }
 
-    const entry = {
+    const entry: CacheEntry = {
       structured,
       lines,
       errors,
@@ -262,13 +238,7 @@ export function createStructuredSnapshotReader({
     return entry;
   };
 
-  /**
-   * Creates a structured snapshot of chat messages and raw legacy lines.
-   *
-   * @param {SnapshotCaptureOptions} [options]
-   * @returns {StructuredSnapshot}
-   */
-  const captureStructuredSnapshot = (options = {}) => {
+  const captureStructuredSnapshot = (options: SnapshotCaptureOptions = {}): StructuredSnapshot => {
     const { force } = options || {};
     if (force) {
       blockCache = new WeakMap();
@@ -277,7 +247,7 @@ export function createStructuredSnapshotReader({
     }
     const adapter = getActiveAdapter();
     const container = adapter?.findContainer?.(doc);
-    const blocks = adapter?.listMessageBlocks?.(container || doc) || [];
+    const blocks = normalizeBlocks(adapter?.listMessageBlocks?.(container || doc));
     if (!container && !blocks.length) throw new Error('채팅 컨테이너를 찾을 수 없습니다.');
     if (!blocks.length) {
       entryOrigin = [];
@@ -291,11 +261,11 @@ export function createStructuredSnapshotReader({
       return latestStructuredSnapshot;
     }
 
-    const seenLine = new Set();
-    const legacyLines = [];
-    const origins = [];
-    const messages = [];
-    const errors = [];
+    const seenLine = new Set<string>();
+    const legacyLines: string[] = [];
+    const origins: Array<number | null> = [];
+    const messages: StructuredSnapshotMessage[] = [];
+    const errors: Array<{ index: number; error: string }> = [];
     const totalBlocks = blocks.length;
 
     adapter?.resetInfoRegistry?.();
@@ -329,7 +299,7 @@ export function createStructuredSnapshotReader({
         messages.push(structured);
       }
 
-      cacheLines.forEach((line) => {
+      cacheLines.forEach((line: string) => {
         const trimmed = (line || '').trim();
         if (!trimmed) return;
         const lineKey = `${blockId ?? originIndex}::${trimmed}`;
@@ -363,23 +333,13 @@ export function createStructuredSnapshotReader({
     return latestStructuredSnapshot;
   };
 
-  /**
-   * Reads normalized transcript text from the cached snapshot.
-   *
-   * @param {SnapshotCaptureOptions} [options]
-   * @returns {string}
-   */
-  const readTranscriptText = (options = {}) =>
+  const readTranscriptText = (options: SnapshotCaptureOptions = {}): string =>
     captureStructuredSnapshot(options).legacyLines.join('\n');
 
-  /**
-   * Projects structured messages into a filtered range selection.
-   *
-   * @param {StructuredSnapshot | null | undefined} structuredSnapshot
-   * @param {import('../types').ExportRangeInfo | null | undefined} rangeInfo
-   * @returns {StructuredSelectionResult}
-   */
-  const projectStructuredMessages = (structuredSnapshot, rangeInfo) => {
+  const projectStructuredMessages = (
+    structuredSnapshot: StructuredSnapshot | null | undefined,
+    rangeInfo: ExportRangeInfo | StructuredSelectionRangeInfo | null | undefined,
+  ): StructuredSelectionResult => {
     if (!structuredSnapshot) {
       return {
         messages: [],
@@ -397,16 +357,15 @@ export function createStructuredSnapshotReader({
       ? structuredSnapshot.messages.slice()
       : [];
     const total = messages.length;
-    const baseRange = {
+    const baseRange: StructuredSelectionRangeInfo = {
       active: Boolean(rangeInfo?.active),
-      start: Number.isFinite(rangeInfo?.start) ? rangeInfo.start : null,
-      end: Number.isFinite(rangeInfo?.end) ? rangeInfo.end : null,
-      messageStartIndex: Number.isFinite(rangeInfo?.messageStartIndex)
-        ? rangeInfo.messageStartIndex
-        : null,
-      messageEndIndex: Number.isFinite(rangeInfo?.messageEndIndex)
-        ? rangeInfo.messageEndIndex
-        : null,
+      start: normalizeNumeric(rangeInfo?.start),
+      end: normalizeNumeric(rangeInfo?.end),
+      messageStartIndex: normalizeNumeric(rangeInfo?.messageStartIndex),
+      messageEndIndex: normalizeNumeric(rangeInfo?.messageEndIndex),
+      count: normalizeNumeric(rangeInfo?.count) ?? undefined,
+      total: normalizeNumeric(rangeInfo?.total) ?? undefined,
+      messageTotal: normalizeNumeric(rangeInfo?.messageTotal) ?? undefined,
     };
     if (!messages.length || !baseRange.active) {
       return { messages, sourceTotal: total, range: { ...baseRange, active: false } };
@@ -443,13 +402,7 @@ export function createStructuredSnapshotReader({
     };
   };
 
-  /**
-   * Retrieves structured messages, optionally forcing a fresh capture.
-   *
-   * @param {SnapshotCaptureOptions} [options]
-   * @returns {StructuredSnapshotMessage[]}
-   */
-  const readStructuredMessages = (options = {}) => {
+  const readStructuredMessages = (options: SnapshotCaptureOptions = {}): StructuredSnapshotMessage[] => {
     const { force } = options || {};
     if (!force && latestStructuredSnapshot) {
       return Array.isArray(latestStructuredSnapshot.messages)
@@ -460,12 +413,7 @@ export function createStructuredSnapshotReader({
     return Array.isArray(snapshot.messages) ? snapshot.messages.slice() : [];
   };
 
-  /**
-   * Returns the captured origin map for legacy transcript lines.
-   *
-   * @returns {number[]}
-   */
-  const getEntryOrigin = () => entryOrigin.slice();
+  const getEntryOrigin = (): number[] => entryOrigin.slice();
 
   return {
     captureStructuredSnapshot,

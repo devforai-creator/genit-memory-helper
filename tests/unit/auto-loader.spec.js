@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createAutoLoader } from '../../src/features/auto-loader.js';
+import { createAutoLoader } from '../../src/features/auto-loader.ts';
 
 const MutationObserverStub = class {
   constructor(callback) {

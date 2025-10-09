@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 
-import { createStructuredSnapshotReader } from '../../src/features/snapshot.js';
+import { createStructuredSnapshotReader } from '../../src/features/snapshot.ts';
 
 describe('structured snapshot reader (incremental)', () => {
   let dom;

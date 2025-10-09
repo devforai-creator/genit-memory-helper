@@ -3894,1024 +3894,892 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       };
     }
 
-    /**
-     * @typedef {import('../types').SnapshotFeatureOptions} SnapshotFeatureOptions
-     * @typedef {import('../types').SnapshotCaptureOptions} SnapshotCaptureOptions
-     * @typedef {import('../types').SnapshotAdapter} SnapshotAdapter
-     * @typedef {import('../types').StructuredSnapshotReaderOptions} StructuredSnapshotReaderOptions
-     * @typedef {import('../types').StructuredSnapshot} StructuredSnapshot
-     * @typedef {import('../types').StructuredSnapshotMessage} StructuredSnapshotMessage
-     * @typedef {import('../types').StructuredSnapshotMessagePart} StructuredSnapshotMessagePart
-     * @typedef {import('../types').StructuredSelectionResult} StructuredSelectionResult
-     */
-
-    /**
-     * Ensures a usable Document reference is provided for DOM operations.
-     *
-     * @param {Document | null | undefined} documentRef
-     * @returns {Document}
-     */
-    const ensureDocument$1 = (documentRef) => {
-      if (!documentRef || typeof documentRef.createElement !== 'function') {
-        throw new Error('snapshot feature requires a document reference');
-      }
-      return documentRef;
+    const normalizeBlocks = (collection) => {
+        if (!collection)
+            return [];
+        if (Array.isArray(collection))
+            return collection;
+        return Array.from(collection);
     };
-
-    /**
-     * Creates a helper that describes DOM nodes using a short CSS-like path.
-     *
-     * @param {Document | null | undefined} documentRef
-     * @returns {(node: Element | null | undefined) => string | null}
-     */
-    const createDescribeNode = (documentRef) => {
-      const doc = ensureDocument$1(documentRef);
-      const ElementCtor = doc?.defaultView?.Element || (typeof Element !== 'undefined' ? Element : null);
-      return (node) => {
-        if (!ElementCtor || !node || !(node instanceof ElementCtor)) return null;
+    const normalizeNumeric = (value) => typeof value === 'number' && Number.isFinite(value) ? value : null;
+    const ensureDocument$1 = (documentRef) => {
+        if (!documentRef || typeof documentRef.createElement !== 'function') {
+            throw new Error('snapshot feature requires a document reference');
+        }
+        return documentRef;
+    };
+    const createDescribeNode = (documentRef) => (node) => {
+        const doc = ensureDocument$1(documentRef);
+        const ElementCtor = doc?.defaultView?.Element || (typeof Element !== 'undefined' ? Element : null);
+        if (!ElementCtor || !node || !(node instanceof ElementCtor))
+            return null;
         const parts = [];
         let current = node;
         let depth = 0;
         while (current && depth < 5) {
-          let part = current.tagName.toLowerCase();
-          if (current.id) part += `#${current.id}`;
-          if (current.classList?.length)
-            part += `.${Array.from(current.classList).slice(0, 3).join('.')}`;
-          parts.unshift(part);
-          current = current.parentElement;
-          depth += 1;
+            let part = current.tagName.toLowerCase();
+            if (current.id)
+                part += `#${current.id}`;
+            if (current.classList?.length)
+                part += `.${Array.from(current.classList).slice(0, 3).join('.')}`;
+            parts.unshift(part);
+            current = current.parentElement;
+            depth += 1;
         }
         return parts.join(' > ');
-      };
     };
-
-    /**
-     * Produces utilities for capturing DOM snapshots for diagnostics/export workflows.
-     *
-     * @param {SnapshotFeatureOptions} options
-     * @returns {{ describeNode: ReturnType<typeof createDescribeNode>; downloadDomSnapshot: () => void }}
-     */
-    function createSnapshotFeature({
-      getActiveAdapter,
-      triggerDownload,
-      setPanelStatus,
-      errorHandler,
-      documentRef = typeof document !== 'undefined' ? document : null,
-      locationRef = typeof location !== 'undefined' ? location : null,
-    }) {
-      if (!getActiveAdapter || !triggerDownload || !setPanelStatus || !errorHandler) {
-        throw new Error('createSnapshotFeature missing required dependencies');
-      }
-
-      const describeNode = createDescribeNode(documentRef);
-
-      /**
-       * Captures adapter state and DOM metadata into a JSON snapshot.
-       *
-       * @returns {void}
-       */
-      const downloadDomSnapshot = () => {
-        const doc = documentRef;
-        const loc = locationRef;
-        if (!doc || !loc) return;
-        try {
-          const adapter = getActiveAdapter();
-          const container = adapter?.findContainer?.(doc);
-          const blocks = adapter?.listMessageBlocks?.(container || doc) || [];
-          const snapshot = {
-            url: loc.href,
-            captured_at: new Date().toISOString(),
-            container_path: describeNode(container),
-            block_count: blocks.length,
-            selector_strategies: adapter?.dumpSelectors?.(),
-            container_html_sample: container ? (container.innerHTML || '').slice(0, 40000) : null,
-          };
-          const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
-            type: 'application/json',
-          });
-          triggerDownload(blob, `genit-snapshot-${Date.now()}.json`);
-          setPanelStatus('DOM 스냅샷이 저장되었습니다.', 'success');
-        } catch (error) {
-          const handler = errorHandler?.handle ? errorHandler : null;
-          const message = handler?.handle
-            ? handler.handle(error, 'snapshot', handler.LEVELS?.ERROR)
-            : error?.message || String(error);
-          setPanelStatus(`스냅샷 실패: ${message}`, 'error');
+    function createSnapshotFeature({ getActiveAdapter, triggerDownload, setPanelStatus, errorHandler, documentRef = typeof document !== 'undefined' ? document : null, locationRef = typeof location !== 'undefined' ? location : null, }) {
+        if (!getActiveAdapter || !triggerDownload || !setPanelStatus || !errorHandler) {
+            throw new Error('createSnapshotFeature missing required dependencies');
         }
-      };
-
-      return {
-        describeNode,
-        downloadDomSnapshot,
-      };
-    }
-
-    /**
-     * Caches structured transcript snapshots, exposing helpers used by share/export flows.
-     */
-    function createStructuredSnapshotReader({
-      getActiveAdapter,
-      setEntryOriginProvider,
-      documentRef = typeof document !== 'undefined' ? document : null,
-    } = /** @type {StructuredSnapshotReaderOptions} */ ({})) {
-      if (!getActiveAdapter) throw new Error('createStructuredSnapshotReader requires getActiveAdapter');
-      const doc = ensureDocument$1(documentRef);
-
-      let entryOrigin = [];
-      let latestStructuredSnapshot = null;
-      let blockCache = new WeakMap();
-      let blockIdRegistry = new WeakMap();
-      let blockIdCounter = 0;
-
-      if (typeof setEntryOriginProvider === 'function') {
-        setEntryOriginProvider(() => entryOrigin);
-      }
-
-      /**
-       * Resolves a stable numeric identifier for a DOM block element.
-       *
-       * @param {Element | null | undefined} block
-       * @returns {number | null}
-       */
-      const getBlockId = (block) => {
-        if (!block) return null;
-        if (!blockIdRegistry.has(block)) {
-          blockIdCounter += 1;
-          blockIdRegistry.set(block, blockIdCounter);
-        }
-        return blockIdRegistry.get(block);
-      };
-
-      /**
-       * Produces a stable fingerprint for a block's textual content.
-       *
-       * @param {string | null | undefined} value
-       * @returns {string}
-       */
-      const fingerprintText = (value) => {
-        if (!value) return '0:0';
-        let hash = 0;
-        for (let i = 0; i < value.length; i += 1) {
-          hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
-        }
-        return `${value.length}:${hash.toString(16)}`;
-      };
-
-      /**
-       * Builds a signature string representing a structured block.
-       *
-       * @param {Element | null | undefined} block
-       * @returns {string}
-       */
-      const getBlockSignature = (block) => {
-        if (!block || typeof block.getAttribute !== 'function') return 'none';
-        const idAttr =
-          block.getAttribute('data-gmh-message-id') ||
-          block.getAttribute('data-message-id') ||
-          block.getAttribute('data-id');
-        if (idAttr) return `id:${idAttr}`;
-        const text = block.textContent || '';
-        return `text:${fingerprintText(text)}`;
-      };
-
-      /**
-       * Deep clones structured message payloads to avoid adapter mutation.
-       *
-       * @param {StructuredSnapshotMessage | null | undefined} message
-       * @returns {StructuredSnapshotMessage | null}
-       */
-      const cloneStructuredMessage = (message) => {
-        if (!message || typeof message !== 'object') return null;
-        const cloned = { ...message };
-        if (Array.isArray(message.parts)) {
-          cloned.parts = message.parts.map((part) => (part && typeof part === 'object' ? { ...part } : part));
-        }
-        if (Array.isArray(message.legacyLines)) cloned.legacyLines = message.legacyLines.slice();
-        if (Array.isArray(message.__gmhEntries)) cloned.__gmhEntries = message.__gmhEntries.slice();
-        if (Array.isArray(message.__gmhSourceBlocks)) cloned.__gmhSourceBlocks = message.__gmhSourceBlocks.slice();
-        return cloned;
-      };
-
-      /**
-       * Retrieves or regenerates a cache entry for a DOM block.
-       *
-       * @param {SnapshotAdapter | null | undefined} adapter
-       * @param {Element | null | undefined} block
-       * @param {boolean} forceReparse
-       * @returns {{ structured: StructuredSnapshotMessage | null; lines: string[]; errors: string[]; signature: string }}
-       */
-      const ensureCacheEntry = (adapter, block, forceReparse) => {
-        if (!block) return { structured: null, lines: [], errors: [] };
-        const signature = getBlockSignature(block);
-        if (!forceReparse && blockCache.has(block)) {
-          const cached = blockCache.get(block);
-          if (cached && cached.signature === signature) {
-            return cached;
-          }
-        }
-
-        const localSeen = new Set();
-        const errors = [];
-        let structured = null;
-        let lines = [];
-
-        try {
-          const collected = adapter?.collectStructuredMessage?.(block);
-          if (collected && typeof collected === 'object') {
-            structured = cloneStructuredMessage(collected);
-            const legacy = Array.isArray(collected.legacyLines) ? collected.legacyLines : [];
-            lines = legacy.reduce((acc, line) => {
-              const trimmed = (line || '').trim();
-              if (!trimmed || localSeen.has(trimmed)) return acc;
-              localSeen.add(trimmed);
-              acc.push(trimmed);
-              return acc;
-            }, []);
-          }
-        } catch (error) {
-          errors.push(error?.message || String(error));
-        }
-
-        if (!structured) {
-          const fallbackLines = [];
-          const pushLine = (line) => {
-            const trimmed = (line || '').trim();
-            if (!trimmed || localSeen.has(trimmed)) return;
-            localSeen.add(trimmed);
-            fallbackLines.push(trimmed);
-          };
-          try {
-            adapter?.emitTranscriptLines?.(block, pushLine);
-          } catch (error) {
-            errors.push(error?.message || String(error));
-          }
-          lines = fallbackLines;
-        }
-
-        const entry = {
-          structured,
-          lines,
-          errors,
-          signature,
-        };
-        blockCache.set(block, entry);
-        return entry;
-      };
-
-      /**
-       * Creates a structured snapshot of chat messages and raw legacy lines.
-       *
-       * @param {SnapshotCaptureOptions} [options]
-       * @returns {StructuredSnapshot}
-       */
-      const captureStructuredSnapshot = (options = {}) => {
-        const { force } = options || {};
-        if (force) {
-          blockCache = new WeakMap();
-          blockIdRegistry = new WeakMap();
-          blockIdCounter = 0;
-        }
-        const adapter = getActiveAdapter();
-        const container = adapter?.findContainer?.(doc);
-        const blocks = adapter?.listMessageBlocks?.(container || doc) || [];
-        if (!container && !blocks.length) throw new Error('채팅 컨테이너를 찾을 수 없습니다.');
-        if (!blocks.length) {
-          entryOrigin = [];
-          latestStructuredSnapshot = {
-            messages: [],
-            legacyLines: [],
-            entryOrigin: [],
-            errors: [],
-            generatedAt: Date.now(),
-          };
-          return latestStructuredSnapshot;
-        }
-
-        const seenLine = new Set();
-        const legacyLines = [];
-        const origins = [];
-        const messages = [];
-        const errors = [];
-        const totalBlocks = blocks.length;
-
-        adapter?.resetInfoRegistry?.();
-
-        blocks.forEach((block, idx) => {
-          const fallbackIndex = Number(block?.getAttribute?.('data-gmh-message-index'));
-          const originIndex = Number.isFinite(fallbackIndex) ? fallbackIndex : idx;
-          const blockId = getBlockId(block);
-          const cacheEntry = ensureCacheEntry(adapter, block, Boolean(force));
-          const cacheLines = Array.isArray(cacheEntry.lines) ? cacheEntry.lines : [];
-
-          const structured = cacheEntry.structured ? cloneStructuredMessage(cacheEntry.structured) : null;
-          if (structured) {
-            const ordinalAttr = Number(block?.getAttribute?.('data-gmh-message-ordinal'));
-            const indexAttr = Number(block?.getAttribute?.('data-gmh-message-index'));
-            const userOrdinalAttr = Number(block?.getAttribute?.('data-gmh-user-ordinal'));
-            const channelAttr = block?.getAttribute?.('data-gmh-channel');
-            structured.ordinal = Number.isFinite(ordinalAttr) ? ordinalAttr : totalBlocks - idx;
-            structured.index = Number.isFinite(indexAttr) ? indexAttr : originIndex;
-            if (Number.isFinite(userOrdinalAttr)) structured.userOrdinal = userOrdinalAttr;
-            else if (structured.userOrdinal) delete structured.userOrdinal;
-            if (channelAttr) structured.channel = channelAttr;
-            else if (!structured.channel) {
-              structured.channel =
-                structured.role === 'player'
-                  ? 'user'
-                  : structured.role === 'npc'
-                  ? 'llm'
-                  : 'system';
+        const describeNode = createDescribeNode(documentRef);
+        const downloadDomSnapshot = () => {
+            const doc = documentRef;
+            const loc = locationRef;
+            if (!doc || !loc)
+                return;
+            try {
+                const adapter = getActiveAdapter();
+                const container = adapter?.findContainer?.(doc);
+                const blocks = normalizeBlocks(adapter?.listMessageBlocks?.(container || doc));
+                const snapshot = {
+                    url: loc.href,
+                    captured_at: new Date().toISOString(),
+                    container_path: describeNode(container),
+                    block_count: blocks.length,
+                    selector_strategies: adapter?.dumpSelectors?.(),
+                    container_html_sample: container ? (container.innerHTML || '').slice(0, 40000) : null,
+                };
+                const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
+                    type: 'application/json',
+                });
+                triggerDownload(blob, `genit-snapshot-${Date.now()}.json`);
+                setPanelStatus('DOM 스냅샷이 저장되었습니다.', 'success');
             }
-            messages.push(structured);
-          }
-
-          cacheLines.forEach((line) => {
-            const trimmed = (line || '').trim();
-            if (!trimmed) return;
-            const lineKey = `${blockId ?? originIndex}::${trimmed}`;
-            if (seenLine.has(lineKey)) return;
-            seenLine.add(lineKey);
-            legacyLines.push(trimmed);
-            origins.push(originIndex);
-          });
-
-          if (Array.isArray(cacheEntry.errors)) {
-            cacheEntry.errors.forEach((message) => {
-              errors.push({ index: originIndex, error: message });
-            });
-          }
-        });
-
-        if (origins.length < legacyLines.length) {
-          while (origins.length < legacyLines.length) origins.push(null);
-        } else if (origins.length > legacyLines.length) {
-          origins.length = legacyLines.length;
-        }
-
-        entryOrigin = origins.slice();
-        latestStructuredSnapshot = {
-          messages,
-          legacyLines,
-          entryOrigin: origins,
-          errors,
-          generatedAt: Date.now(),
+            catch (error) {
+                const handler = errorHandler?.handle ? errorHandler : null;
+                const message = handler?.handle
+                    ? handler.handle(error, 'snapshot', handler.LEVELS?.ERROR)
+                    : error?.message || String(error);
+                setPanelStatus(`스냅샷 실패: ${message}`, 'error');
+            }
         };
-        return latestStructuredSnapshot;
-      };
-
-      /**
-       * Reads normalized transcript text from the cached snapshot.
-       *
-       * @param {SnapshotCaptureOptions} [options]
-       * @returns {string}
-       */
-      const readTranscriptText = (options = {}) =>
-        captureStructuredSnapshot(options).legacyLines.join('\n');
-
-      /**
-       * Projects structured messages into a filtered range selection.
-       *
-       * @param {StructuredSnapshot | null | undefined} structuredSnapshot
-       * @param {import('../types').ExportRangeInfo | null | undefined} rangeInfo
-       * @returns {StructuredSelectionResult}
-       */
-      const projectStructuredMessages = (structuredSnapshot, rangeInfo) => {
-        if (!structuredSnapshot) {
-          return {
-            messages: [],
-            sourceTotal: 0,
-            range: {
-              active: false,
-              start: null,
-              end: null,
-              messageStartIndex: null,
-              messageEndIndex: null,
-            },
-          };
-        }
-        const messages = Array.isArray(structuredSnapshot.messages)
-          ? structuredSnapshot.messages.slice()
-          : [];
-        const total = messages.length;
-        const baseRange = {
-          active: Boolean(rangeInfo?.active),
-          start: Number.isFinite(rangeInfo?.start) ? rangeInfo.start : null,
-          end: Number.isFinite(rangeInfo?.end) ? rangeInfo.end : null,
-          messageStartIndex: Number.isFinite(rangeInfo?.messageStartIndex)
-            ? rangeInfo.messageStartIndex
-            : null,
-          messageEndIndex: Number.isFinite(rangeInfo?.messageEndIndex)
-            ? rangeInfo.messageEndIndex
-            : null,
-        };
-        if (!messages.length || !baseRange.active) {
-          return { messages, sourceTotal: total, range: { ...baseRange, active: false } };
-        }
-
-        let filtered = messages;
-        if (Number.isFinite(baseRange.messageStartIndex) && Number.isFinite(baseRange.messageEndIndex)) {
-          const lower = Math.min(baseRange.messageStartIndex, baseRange.messageEndIndex);
-          const upper = Math.max(baseRange.messageStartIndex, baseRange.messageEndIndex);
-          filtered = messages.filter((message) => {
-            const idx = Number(message?.index);
-            return Number.isFinite(idx) ? idx >= lower && idx <= upper : false;
-          });
-        } else if (Number.isFinite(baseRange.start) && Number.isFinite(baseRange.end)) {
-          const lowerOrdinal = Math.min(baseRange.start, baseRange.end);
-          const upperOrdinal = Math.max(baseRange.start, baseRange.end);
-          filtered = messages.filter((message) => {
-            const ord = Number(message?.ordinal);
-            return Number.isFinite(ord) ? ord >= lowerOrdinal && ord <= upperOrdinal : false;
-          });
-        }
-
-        if (!filtered.length) {
-          filtered = messages.slice();
-        }
-
         return {
-          messages: filtered,
-          sourceTotal: total,
-          range: {
-            ...baseRange,
-            active: Boolean(baseRange.active && filtered.length && filtered.length <= total),
-          },
+            describeNode,
+            downloadDomSnapshot,
         };
-      };
-
-      /**
-       * Retrieves structured messages, optionally forcing a fresh capture.
-       *
-       * @param {SnapshotCaptureOptions} [options]
-       * @returns {StructuredSnapshotMessage[]}
-       */
-      const readStructuredMessages = (options = {}) => {
-        const { force } = options || {};
-        if (!force && latestStructuredSnapshot) {
-          return Array.isArray(latestStructuredSnapshot.messages)
-            ? latestStructuredSnapshot.messages.slice()
-            : [];
-        }
-        const snapshot = captureStructuredSnapshot(options);
-        return Array.isArray(snapshot.messages) ? snapshot.messages.slice() : [];
-      };
-
-      /**
-       * Returns the captured origin map for legacy transcript lines.
-       *
-       * @returns {number[]}
-       */
-      const getEntryOrigin = () => entryOrigin.slice();
-
-      return {
-        captureStructuredSnapshot,
-        readTranscriptText,
-        projectStructuredMessages,
-        readStructuredMessages,
-        getEntryOrigin,
-      };
     }
-
-    /**
-     * @typedef {import('../types').AutoLoaderOptions} AutoLoaderOptions
-     * @typedef {import('../types').AutoLoaderExports} AutoLoaderExports
-     */
+    function createStructuredSnapshotReader({ getActiveAdapter, setEntryOriginProvider, documentRef = typeof document !== 'undefined' ? document : null, }) {
+        if (!getActiveAdapter)
+            throw new Error('createStructuredSnapshotReader requires getActiveAdapter');
+        const doc = ensureDocument$1(documentRef);
+        let entryOrigin = [];
+        let latestStructuredSnapshot = null;
+        let blockCache = new WeakMap();
+        let blockIdRegistry = new WeakMap();
+        let blockIdCounter = 0;
+        if (typeof setEntryOriginProvider === 'function') {
+            setEntryOriginProvider(() => entryOrigin);
+        }
+        const getBlockId = (block) => {
+            if (!block)
+                return null;
+            if (!blockIdRegistry.has(block)) {
+                blockIdCounter += 1;
+                blockIdRegistry.set(block, blockIdCounter);
+            }
+            return blockIdRegistry.get(block);
+        };
+        const fingerprintText = (value) => {
+            if (!value)
+                return '0:0';
+            let hash = 0;
+            for (let i = 0; i < value.length; i += 1) {
+                hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
+            }
+            return `${value.length}:${hash.toString(16)}`;
+        };
+        const getBlockSignature = (block) => {
+            if (!block || typeof block.getAttribute !== 'function')
+                return 'none';
+            const idAttr = block.getAttribute('data-gmh-message-id') ||
+                block.getAttribute('data-message-id') ||
+                block.getAttribute('data-id');
+            if (idAttr)
+                return `id:${idAttr}`;
+            const text = block.textContent || '';
+            return `text:${fingerprintText(text)}`;
+        };
+        /**
+         * Deep clones structured message payloads to avoid adapter mutation.
+         *
+         * @param {StructuredSnapshotMessage | null | undefined} message
+         * @returns {StructuredSnapshotMessage | null}
+         */
+        const cloneStructuredMessage = (message) => {
+            if (!message || typeof message !== 'object')
+                return null;
+            const cloned = { ...message };
+            if (Array.isArray(message.parts)) {
+                cloned.parts = message.parts.map((part) => part && typeof part === 'object' ? { ...part } : part);
+            }
+            if (Array.isArray(message.legacyLines))
+                cloned.legacyLines = message.legacyLines.slice();
+            if (Array.isArray(message.__gmhEntries))
+                cloned.__gmhEntries = message.__gmhEntries.slice();
+            if (Array.isArray(message.__gmhSourceBlocks))
+                cloned.__gmhSourceBlocks = message.__gmhSourceBlocks.slice();
+            return cloned;
+        };
+        const ensureCacheEntry = (adapter, block, forceReparse) => {
+            if (!block)
+                return { structured: null, lines: [], errors: [], signature: 'none' };
+            const signature = getBlockSignature(block);
+            if (!forceReparse && blockCache.has(block)) {
+                const cached = blockCache.get(block);
+                if (cached && cached.signature === signature) {
+                    return cached;
+                }
+            }
+            const localSeen = new Set();
+            const errors = [];
+            let structured = null;
+            let lines = [];
+            try {
+                const collected = adapter?.collectStructuredMessage?.(block);
+                if (collected && typeof collected === 'object') {
+                    structured = cloneStructuredMessage(collected);
+                    const legacy = Array.isArray(collected.legacyLines) ? collected.legacyLines : [];
+                    lines = legacy.reduce((acc, line) => {
+                        const trimmed = (line || '').trim();
+                        if (!trimmed || localSeen.has(trimmed))
+                            return acc;
+                        localSeen.add(trimmed);
+                        acc.push(trimmed);
+                        return acc;
+                    }, []);
+                }
+            }
+            catch (error) {
+                errors.push(error?.message || String(error));
+            }
+            if (!structured) {
+                const fallbackLines = [];
+                const pushLine = (line) => {
+                    const trimmed = (line || '').trim();
+                    if (!trimmed || localSeen.has(trimmed))
+                        return;
+                    localSeen.add(trimmed);
+                    fallbackLines.push(trimmed);
+                };
+                try {
+                    adapter?.emitTranscriptLines?.(block, pushLine);
+                }
+                catch (error) {
+                    errors.push(error?.message || String(error));
+                }
+                lines = fallbackLines;
+            }
+            const entry = {
+                structured,
+                lines,
+                errors,
+                signature,
+            };
+            blockCache.set(block, entry);
+            return entry;
+        };
+        const captureStructuredSnapshot = (options = {}) => {
+            const { force } = options || {};
+            if (force) {
+                blockCache = new WeakMap();
+                blockIdRegistry = new WeakMap();
+                blockIdCounter = 0;
+            }
+            const adapter = getActiveAdapter();
+            const container = adapter?.findContainer?.(doc);
+            const blocks = normalizeBlocks(adapter?.listMessageBlocks?.(container || doc));
+            if (!container && !blocks.length)
+                throw new Error('채팅 컨테이너를 찾을 수 없습니다.');
+            if (!blocks.length) {
+                entryOrigin = [];
+                latestStructuredSnapshot = {
+                    messages: [],
+                    legacyLines: [],
+                    entryOrigin: [],
+                    errors: [],
+                    generatedAt: Date.now(),
+                };
+                return latestStructuredSnapshot;
+            }
+            const seenLine = new Set();
+            const legacyLines = [];
+            const origins = [];
+            const messages = [];
+            const errors = [];
+            const totalBlocks = blocks.length;
+            adapter?.resetInfoRegistry?.();
+            blocks.forEach((block, idx) => {
+                const fallbackIndex = Number(block?.getAttribute?.('data-gmh-message-index'));
+                const originIndex = Number.isFinite(fallbackIndex) ? fallbackIndex : idx;
+                const blockId = getBlockId(block);
+                const cacheEntry = ensureCacheEntry(adapter, block, Boolean(force));
+                const cacheLines = Array.isArray(cacheEntry.lines) ? cacheEntry.lines : [];
+                const structured = cacheEntry.structured ? cloneStructuredMessage(cacheEntry.structured) : null;
+                if (structured) {
+                    const ordinalAttr = Number(block?.getAttribute?.('data-gmh-message-ordinal'));
+                    const indexAttr = Number(block?.getAttribute?.('data-gmh-message-index'));
+                    const userOrdinalAttr = Number(block?.getAttribute?.('data-gmh-user-ordinal'));
+                    const channelAttr = block?.getAttribute?.('data-gmh-channel');
+                    structured.ordinal = Number.isFinite(ordinalAttr) ? ordinalAttr : totalBlocks - idx;
+                    structured.index = Number.isFinite(indexAttr) ? indexAttr : originIndex;
+                    if (Number.isFinite(userOrdinalAttr))
+                        structured.userOrdinal = userOrdinalAttr;
+                    else if (structured.userOrdinal)
+                        delete structured.userOrdinal;
+                    if (channelAttr)
+                        structured.channel = channelAttr;
+                    else if (!structured.channel) {
+                        structured.channel =
+                            structured.role === 'player'
+                                ? 'user'
+                                : structured.role === 'npc'
+                                    ? 'llm'
+                                    : 'system';
+                    }
+                    messages.push(structured);
+                }
+                cacheLines.forEach((line) => {
+                    const trimmed = (line || '').trim();
+                    if (!trimmed)
+                        return;
+                    const lineKey = `${blockId ?? originIndex}::${trimmed}`;
+                    if (seenLine.has(lineKey))
+                        return;
+                    seenLine.add(lineKey);
+                    legacyLines.push(trimmed);
+                    origins.push(originIndex);
+                });
+                if (Array.isArray(cacheEntry.errors)) {
+                    cacheEntry.errors.forEach((message) => {
+                        errors.push({ index: originIndex, error: message });
+                    });
+                }
+            });
+            if (origins.length < legacyLines.length) {
+                while (origins.length < legacyLines.length)
+                    origins.push(null);
+            }
+            else if (origins.length > legacyLines.length) {
+                origins.length = legacyLines.length;
+            }
+            entryOrigin = origins.slice();
+            latestStructuredSnapshot = {
+                messages,
+                legacyLines,
+                entryOrigin: origins,
+                errors,
+                generatedAt: Date.now(),
+            };
+            return latestStructuredSnapshot;
+        };
+        const readTranscriptText = (options = {}) => captureStructuredSnapshot(options).legacyLines.join('\n');
+        const projectStructuredMessages = (structuredSnapshot, rangeInfo) => {
+            if (!structuredSnapshot) {
+                return {
+                    messages: [],
+                    sourceTotal: 0,
+                    range: {
+                        active: false,
+                        start: null,
+                        end: null,
+                        messageStartIndex: null,
+                        messageEndIndex: null,
+                    },
+                };
+            }
+            const messages = Array.isArray(structuredSnapshot.messages)
+                ? structuredSnapshot.messages.slice()
+                : [];
+            const total = messages.length;
+            const baseRange = {
+                active: Boolean(rangeInfo?.active),
+                start: normalizeNumeric(rangeInfo?.start),
+                end: normalizeNumeric(rangeInfo?.end),
+                messageStartIndex: normalizeNumeric(rangeInfo?.messageStartIndex),
+                messageEndIndex: normalizeNumeric(rangeInfo?.messageEndIndex),
+                count: normalizeNumeric(rangeInfo?.count) ?? undefined,
+                total: normalizeNumeric(rangeInfo?.total) ?? undefined,
+                messageTotal: normalizeNumeric(rangeInfo?.messageTotal) ?? undefined,
+            };
+            if (!messages.length || !baseRange.active) {
+                return { messages, sourceTotal: total, range: { ...baseRange, active: false } };
+            }
+            let filtered = messages;
+            if (Number.isFinite(baseRange.messageStartIndex) && Number.isFinite(baseRange.messageEndIndex)) {
+                const lower = Math.min(baseRange.messageStartIndex, baseRange.messageEndIndex);
+                const upper = Math.max(baseRange.messageStartIndex, baseRange.messageEndIndex);
+                filtered = messages.filter((message) => {
+                    const idx = Number(message?.index);
+                    return Number.isFinite(idx) ? idx >= lower && idx <= upper : false;
+                });
+            }
+            else if (Number.isFinite(baseRange.start) && Number.isFinite(baseRange.end)) {
+                const lowerOrdinal = Math.min(baseRange.start, baseRange.end);
+                const upperOrdinal = Math.max(baseRange.start, baseRange.end);
+                filtered = messages.filter((message) => {
+                    const ord = Number(message?.ordinal);
+                    return Number.isFinite(ord) ? ord >= lowerOrdinal && ord <= upperOrdinal : false;
+                });
+            }
+            if (!filtered.length) {
+                filtered = messages.slice();
+            }
+            return {
+                messages: filtered,
+                sourceTotal: total,
+                range: {
+                    ...baseRange,
+                    active: Boolean(baseRange.active && filtered.length && filtered.length <= total),
+                },
+            };
+        };
+        const readStructuredMessages = (options = {}) => {
+            const { force } = options || {};
+            if (!force && latestStructuredSnapshot) {
+                return Array.isArray(latestStructuredSnapshot.messages)
+                    ? latestStructuredSnapshot.messages.slice()
+                    : [];
+            }
+            const snapshot = captureStructuredSnapshot(options);
+            return Array.isArray(snapshot.messages) ? snapshot.messages.slice() : [];
+        };
+        const getEntryOrigin = () => entryOrigin.slice();
+        return {
+            captureStructuredSnapshot,
+            readTranscriptText,
+            projectStructuredMessages,
+            readStructuredMessages,
+            getEntryOrigin,
+        };
+    }
 
     const METER_INTERVAL_MS = CONFIG.TIMING.AUTO_LOADER.METER_INTERVAL_MS;
-
-    /**
-     * Creates the auto-loader controller that scrolls and indexes Genit chat messages.
-     * Handles profile-specific timing, range updates, and exposes helpers for UI wiring.
-     *
-     * @param {AutoLoaderOptions} [options]
-     * @returns {AutoLoaderExports}
-     */
-    function createAutoLoader({
-      stateApi,
-      stateEnum,
-      errorHandler,
-      messageIndexer,
-      exportRange,
-      setPanelStatus,
-      getActiveAdapter,
-      sleep,
-      isScrollable,
-      documentRef = typeof document !== 'undefined' ? document : null,
-      windowRef = typeof window !== 'undefined' ? /** @type {Window & typeof globalThis} */ (window) : null,
-      normalizeTranscript,
-      buildSession,
-      readTranscriptText,
-      logger = typeof console !== 'undefined' ? console : null,
-    } = /** @type {AutoLoaderOptions} */ ({})) {
-      if (!stateApi || typeof stateApi.setState !== 'function') {
-        throw new Error('createAutoLoader requires stateApi with setState');
-      }
-      if (!stateEnum) throw new Error('createAutoLoader requires stateEnum');
-      if (!errorHandler || typeof errorHandler.handle !== 'function') {
-        throw new Error('createAutoLoader requires errorHandler');
-      }
-      if (!getActiveAdapter) throw new Error('createAutoLoader requires getActiveAdapter');
-      if (!sleep) throw new Error('createAutoLoader requires sleep helper');
-      if (!isScrollable) throw new Error('createAutoLoader requires isScrollable helper');
-      if (!normalizeTranscript || !buildSession || !readTranscriptText) {
-        throw new Error('createAutoLoader requires transcript helpers');
-      }
-      if (!documentRef) throw new Error('createAutoLoader requires document reference');
-      if (!windowRef) throw new Error('createAutoLoader requires window reference');
-
-      const doc = documentRef;
-      const win = windowRef;
-      const ElementCtor = doc?.defaultView?.Element || (typeof Element !== 'undefined' ? Element : null);
-      const MutationObserverCtor =
-        win?.MutationObserver || (typeof MutationObserver !== 'undefined' ? MutationObserver : null);
-      const setTimeoutFn = typeof win?.setTimeout === 'function' ? win.setTimeout.bind(win) : setTimeout;
-      const setIntervalFn =
-        typeof win?.setInterval === 'function' ? win.setInterval.bind(win) : setInterval;
-      const clearIntervalFn =
-        typeof win?.clearInterval === 'function' ? win.clearInterval.bind(win) : clearInterval;
-
-      const AUTO_PROFILES = CONFIG.TIMING.AUTO_LOADER.PROFILES;
-
-      const AUTO_CFG = {
-        profile: 'default',
-      };
-
-      const AUTO_STATE = {
-        running: false,
-        container: null,
-        meterTimer: null,
-      };
-
-      const profileListeners = new Set();
-      const warnWithHandler = (err, context, fallbackMessage) => {
-        if (errorHandler?.handle) {
-          const level = errorHandler.LEVELS?.WARN || 'warn';
-          errorHandler.handle(err, context, level);
-        } else if (logger?.warn) {
-          logger.warn(fallbackMessage, err);
+    const toElementArray = (collection) => {
+        if (!collection)
+            return [];
+        if (Array.isArray(collection))
+            return collection;
+        return Array.from(collection);
+    };
+    function createAutoLoader({ stateApi, stateEnum, errorHandler, messageIndexer, exportRange, setPanelStatus, getActiveAdapter, sleep, isScrollable, documentRef = typeof document !== 'undefined' ? document : null, windowRef = typeof window !== 'undefined' ? window : null, normalizeTranscript, buildSession, readTranscriptText, logger = typeof console !== 'undefined' ? console : null, } = {}) {
+        if (!stateApi || typeof stateApi.setState !== 'function') {
+            throw new Error('createAutoLoader requires stateApi with setState');
         }
-      };
-
-      const notifyProfileChange = () => {
-        profileListeners.forEach((listener) => {
-          try {
-            listener(AUTO_CFG.profile);
-          } catch (err) {
-            warnWithHandler(err, 'autoload', '[GMH] auto profile listener failed');
-          }
-        });
-      };
-
-      const getProfile = () => AUTO_CFG.profile;
-
-      function ensureScrollContainer() {
-        const adapter = typeof getActiveAdapter === 'function' ? getActiveAdapter() : null;
-        const adapterContainer = adapter?.findContainer?.(doc);
-        if (adapterContainer) {
-          if (isScrollable(adapterContainer)) return adapterContainer;
-          if (ElementCtor && adapterContainer instanceof ElementCtor) {
-            let ancestor = adapterContainer.parentElement;
-            for (let depth = 0; depth < 6 && ancestor; depth += 1) {
-              if (isScrollable(ancestor)) return ancestor;
-              ancestor = ancestor.parentElement;
-            }
-          }
-          return adapterContainer;
+        if (!stateEnum)
+            throw new Error('createAutoLoader requires stateEnum');
+        if (!errorHandler || typeof errorHandler.handle !== 'function') {
+            throw new Error('createAutoLoader requires errorHandler');
         }
-        const messageBlocks = adapter?.listMessageBlocks?.(doc) || [];
-        if (messageBlocks.length) {
-          let ancestor = messageBlocks[0]?.parentElement || null;
-          for (let depth = 0; depth < 6 && ancestor; depth += 1) {
-            if (isScrollable(ancestor)) return ancestor;
-            ancestor = ancestor.parentElement;
-          }
+        if (!getActiveAdapter)
+            throw new Error('createAutoLoader requires getActiveAdapter');
+        if (!sleep)
+            throw new Error('createAutoLoader requires sleep helper');
+        if (!isScrollable)
+            throw new Error('createAutoLoader requires isScrollable helper');
+        if (!normalizeTranscript || !buildSession || !readTranscriptText) {
+            throw new Error('createAutoLoader requires transcript helpers');
         }
-        return doc.scrollingElement || doc.documentElement || doc.body;
-      }
-
-      function waitForGrowth(el, startHeight, timeout) {
-        if (!MutationObserverCtor) {
-          return new Promise((resolve) => {
-            setTimeoutFn(() => resolve(false), timeout);
-          });
-        }
-        return new Promise((resolve) => {
-          let finished = false;
-          const obs = new MutationObserverCtor(() => {
-            if (el.scrollHeight > startHeight + 4) {
-              finished = true;
-              obs.disconnect();
-              resolve(true);
-            }
-          });
-          obs.observe(el, { childList: true, subtree: true });
-          setTimeoutFn(() => {
-            if (!finished) {
-              obs.disconnect();
-              resolve(false);
-            }
-          }, timeout);
-        });
-      }
-
-      async function scrollUpCycle(container, profile) {
-        if (!container) return { grew: false, before: 0, after: 0 };
-        const before = container.scrollHeight;
-        container.scrollTop = 0;
-        const grew = await waitForGrowth(container, before, profile.settleTimeoutMs);
-        return { grew, before, after: container.scrollHeight };
-      }
-
-      const statsCache = {
-        summaryKey: null,
-        rawKey: null,
-        data: null,
-      };
-
-      const clearStatsCache = () => {
-        statsCache.summaryKey = null;
-        statsCache.rawKey = null;
-        statsCache.data = null;
-      };
-
-      let lastSessionSignature = windowRef?.location?.href || (typeof location !== 'undefined' ? location.href : null);
-
-      const makeSummaryKey = (summary) => {
-        if (!summary) return null;
-        const total = Number.isFinite(summary.totalMessages) ? summary.totalMessages : 'na';
-        const user = Number.isFinite(summary.userMessages) ? summary.userMessages : 'na';
-        const stamp = summary.timestamp || 'na';
-        return `${total}:${user}:${stamp}`;
-      };
-
-      function collectTurnStats(options = {}) {
-        const force = Boolean(options?.force);
-        let summary = null;
-        try {
-          const currentSignature = windowRef?.location?.href || (typeof location !== 'undefined' ? location.href : null);
-          if (currentSignature && currentSignature !== lastSessionSignature) {
-            lastSessionSignature = currentSignature;
-            clearStatsCache();
-            exportRange?.clear?.();
-            exportRange?.setTotals?.({ message: 0, user: 0, llm: 0, entry: 0 });
-          }
-          try {
-            summary = messageIndexer?.refresh?.({ immediate: true }) || null;
-          } catch (err) {
-            warnWithHandler(err, 'autoload', '[GMH] message indexing before stats failed');
-          }
-          const summaryKey = makeSummaryKey(summary);
-          if (!force && summaryKey && statsCache.data && statsCache.summaryKey === summaryKey) {
-            return statsCache.data;
-          }
-
-          let rawText = null;
-          let rawKey = null;
-          const transcriptOptions = force ? { force: true } : {};
-          if (!summaryKey) {
-            rawText = readTranscriptText(transcriptOptions);
-            rawKey = typeof rawText === 'string' ? rawText : String(rawText ?? '');
-            if (!force && statsCache.data && statsCache.rawKey === rawKey) {
-              return statsCache.data;
-            }
-          } else {
-            rawText = readTranscriptText(transcriptOptions);
-          }
-
-          const normalized = normalizeTranscript(rawText);
-          const session = buildSession(normalized);
-          const userMessages = session.turns.filter((t) => t.channel === 'user').length;
-          const llmMessages = session.turns.filter((t) => t.channel === 'llm').length;
-          const previousTotals = exportRange?.getTotals?.() || {
-            message: 0,
-            user: 0,
-            llm: 0,
-            entry: 0,
-          };
-          const blockSet = new Set();
-          session.turns.forEach((turn) => {
-            const blocks = Array.isArray(turn?.__gmhSourceBlocks) ? turn.__gmhSourceBlocks : [];
-            blocks
-              .filter((idx) => Number.isInteger(idx) && idx >= 0)
-              .forEach((idx) => blockSet.add(idx));
-          });
-          const entryCount = blockSet.size || session.turns.length;
-          const nextTotals = {
-            message: session.turns.length,
-            user: userMessages,
-            llm: llmMessages,
-            entry: entryCount,
-          };
-          const totalsShrank =
-            Number.isFinite(previousTotals.message) && previousTotals.message > nextTotals.message;
-          const userShrank = Number.isFinite(previousTotals.user) && previousTotals.user > nextTotals.user;
-          const llmShrank = Number.isFinite(previousTotals.llm) && previousTotals.llm > nextTotals.llm;
-          const entryShrank = Number.isFinite(previousTotals.entry) && previousTotals.entry > nextTotals.entry;
-          if (totalsShrank || userShrank || llmShrank || entryShrank) {
-            exportRange?.clear?.();
-          }
-          exportRange?.setTotals?.(nextTotals);
-          const stats = {
-            session,
-            userMessages,
-            llmMessages,
-            totalMessages: session.turns.length,
-          };
-          statsCache.summaryKey = summaryKey;
-          statsCache.rawKey = summaryKey ? null : rawKey;
-          statsCache.data = stats;
-          lastSessionSignature = currentSignature || lastSessionSignature;
-          return stats;
-        } catch (error) {
-          clearStatsCache();
-          if (errorHandler?.handle) {
-            const level = errorHandler.LEVELS?.ERROR || 'error';
-            errorHandler.handle(error, 'autoload', level);
-          }
-          return {
-            session: null,
-            userMessages: 0,
-            llmMessages: 0,
-            totalMessages: 0,
-            error,
-          };
-        }
-      }
-
-      const notifyScan = (payload) => {
-        stateApi.setState(stateEnum.SCANNING, payload);
-      };
-
-      const notifyDone = (payload) => {
-        stateApi.setState(stateEnum.DONE, payload);
-      };
-
-      const notifyError = (payload) => {
-        stateApi.setState(stateEnum.ERROR, payload);
-      };
-
-      const notifyIdle = (payload) => {
-        stateApi.setState(stateEnum.IDLE, payload);
-      };
-
-      async function autoLoadAll() {
-        const profile = AUTO_PROFILES[getProfile()] || AUTO_PROFILES.default;
-        const container = ensureScrollContainer();
-        if (!container) {
-          notifyError({
-            label: '자동 로딩 실패',
-            message: '채팅 컨테이너를 찾을 수 없습니다.',
-            tone: 'error',
-            progress: { value: 1 },
-          });
-          return { error: new Error('container missing') };
-        }
-        AUTO_STATE.running = true;
-        AUTO_STATE.container = container;
-        let stableRounds = 0;
-        let guard = 0;
-
-        while (AUTO_STATE.running && guard < profile.guardLimit) {
-          guard += 1;
-          notifyScan({
-            label: '위로 끝까지 로딩',
-            message: `추가 수집 중 (${guard}/${profile.guardLimit})`,
-            tone: 'progress',
-            progress: { indeterminate: true },
-          });
-          const { grew, before, after } = await scrollUpCycle(container, profile);
-          if (!AUTO_STATE.running) break;
-          const delta = after - before;
-          stableRounds = !grew || delta < 6 ? stableRounds + 1 : 0;
-          if (stableRounds >= profile.maxStableRounds) break;
-          await sleep(profile.cycleDelayMs);
-        }
-
-        AUTO_STATE.running = false;
-        const stats = collectTurnStats();
-        if (stats.error) {
-          notifyError({
-            label: '자동 로딩 실패',
-            message: '스크롤 후 파싱 실패',
-            tone: 'error',
-            progress: { value: 1 },
-          });
-        } else {
-          notifyDone({
-            label: '자동 로딩 완료',
-            message: `유저 메시지 ${stats.userMessages}개 확보`,
-            tone: 'success',
-            progress: { value: 1 },
-          });
-        }
-        return stats;
-      }
-
-      async function autoLoadUntilPlayerTurns(target) {
-        const profile = AUTO_PROFILES[getProfile()] || AUTO_PROFILES.default;
-        const container = ensureScrollContainer();
-        if (!container) {
-          notifyError({
-            label: '자동 로딩 실패',
-            message: '채팅 컨테이너를 찾을 수 없습니다.',
-            tone: 'error',
-            progress: { value: 1 },
-          });
-          return { error: new Error('container missing') };
-        }
-        AUTO_STATE.running = true;
-        AUTO_STATE.container = container;
-        let stableRounds = 0;
-        let stagnantRounds = 0;
-        let loopCount = 0;
-        let prevUserMessages = -1;
-
-        while (AUTO_STATE.running && loopCount < profile.guardLimit) {
-          loopCount += 1;
-          const stats = collectTurnStats();
-          if (stats.error) {
-            notifyError({
-              label: '자동 로딩 실패',
-              message: '파싱 실패 - DOM 변화를 감지하지 못했습니다.',
-              tone: 'error',
-              progress: { value: 1 },
-            });
-            break;
-          }
-          if (stats.userMessages >= target) {
-            notifyDone({
-              label: '자동 로딩 완료',
-              message: `목표 달성 · 유저 메시지 ${stats.userMessages}개 확보`,
-              tone: 'success',
-              progress: { value: 1 },
-            });
-            break;
-          }
-
-          const ratio = target > 0 ? Math.min(1, stats.userMessages / target) : 0;
-          notifyScan({
-            label: '메시지 확보 중',
-            message: `유저 메시지 ${stats.userMessages}/${target}`,
-            tone: 'progress',
-            progress: { value: ratio },
-          });
-
-          const { grew, before, after } = await scrollUpCycle(container, profile);
-          if (!AUTO_STATE.running) break;
-          const delta = after - before;
-          stableRounds = !grew || delta < 6 ? stableRounds + 1 : 0;
-
-          stagnantRounds = stats.userMessages === prevUserMessages ? stagnantRounds + 1 : 0;
-          prevUserMessages = stats.userMessages;
-
-          if (stableRounds >= profile.maxStableRounds || stagnantRounds >= profile.guardLimit) {
-            notifyDone({
-              label: '자동 로딩 종료',
-              message: '추가 데이터를 불러오지 못했습니다. 더 이상 기록이 없거나 막혀있습니다.',
-              tone: 'warning',
-              progress: { value: ratio },
-            });
-            break;
-          }
-          await sleep(profile.cycleDelayMs);
-        }
-
-        AUTO_STATE.running = false;
-        const finalStats = collectTurnStats();
-        if (finalStats?.error) {
-          notifyError({
-            label: '자동 로딩 실패',
-            message: '메시지 정보를 수집하지 못했습니다.',
-            tone: 'error',
-            progress: { value: 1 },
-          });
-          return finalStats;
-        }
-        if (stateApi.getState?.() === stateEnum.SCANNING) {
-          const ratio = target > 0 ? Math.min(1, finalStats.userMessages / target) : 0;
-          notifyDone({
-            label: '자동 로딩 종료',
-            message: `유저 메시지 ${finalStats.userMessages}/${target}`,
-            tone: 'warning',
-            progress: { value: ratio },
-          });
-        }
-        return finalStats;
-      }
-
-      function stopAutoLoad() {
-        if (!AUTO_STATE.running) return;
-        AUTO_STATE.running = false;
-        notifyIdle({
-          label: '대기 중',
-          message: '자동 로딩을 중지했습니다.',
-          tone: 'info',
-          progress: { value: 0 },
-        });
-      }
-
-      function startTurnMeter(meter) {
-        if (!meter) return;
-        const render = () => {
-          const stats = collectTurnStats();
-          if (stats.error) {
-            meter.textContent = '메시지 측정 실패: DOM을 읽을 수 없습니다.';
-            return;
-          }
-          meter.textContent = `메시지 현황 · 유저 ${stats.userMessages} · LLM ${stats.llmMessages}`;
+        if (!documentRef)
+            throw new Error('createAutoLoader requires document reference');
+        if (!windowRef)
+            throw new Error('createAutoLoader requires window reference');
+        const doc = documentRef;
+        const win = windowRef;
+        const ElementCtor = doc?.defaultView?.Element || (typeof Element !== 'undefined' ? Element : null);
+        const MutationObserverCtor = win?.MutationObserver || (typeof MutationObserver !== 'undefined' ? MutationObserver : null);
+        const setTimeoutFn = typeof win?.setTimeout === 'function' ? win.setTimeout.bind(win) : setTimeout;
+        const setIntervalFn = typeof win?.setInterval === 'function' ? win.setInterval.bind(win) : setInterval;
+        const clearIntervalFn = typeof win?.clearInterval === 'function' ? win.clearInterval.bind(win) : clearInterval;
+        const AUTO_PROFILES = CONFIG.TIMING.AUTO_LOADER.PROFILES;
+        const AUTO_CFG = {
+            profile: 'default',
         };
-        render();
-        if (AUTO_STATE.meterTimer) return;
-        AUTO_STATE.meterTimer = setIntervalFn(() => {
-          if (!meter.isConnected) {
-            clearIntervalFn(AUTO_STATE.meterTimer);
-            AUTO_STATE.meterTimer = null;
-            return;
-          }
-          render();
-        }, METER_INTERVAL_MS);
-      }
-
-      const autoLoader = {
-        lastMode: null,
-        lastTarget: null,
-        lastProfile: AUTO_CFG.profile,
-        async start(mode, target, opts = {}) {
-          if (AUTO_STATE.running) {
-            setPanelStatus?.('이미 자동 로딩이 진행 중입니다.', 'muted');
-            return null;
-          }
-          if (opts.profile) {
-            AUTO_CFG.profile = AUTO_PROFILES[opts.profile] ? opts.profile : 'default';
-            this.lastProfile = AUTO_CFG.profile;
-            notifyProfileChange();
-          }
-          this.lastMode = mode;
-          this.lastProfile = AUTO_CFG.profile;
-          try {
-            if (mode === 'all') {
-              this.lastTarget = null;
-              return await autoLoadAll();
+        const AUTO_STATE = {
+            running: false,
+            container: null,
+            meterTimer: null,
+        };
+        const profileListeners = new Set();
+        const warnWithHandler = (err, context, fallbackMessage) => {
+            if (errorHandler?.handle) {
+                const level = errorHandler.LEVELS?.WARN || 'warn';
+                errorHandler.handle(err, context, level);
             }
-            if (mode === 'turns') {
-              const numericTarget = Number(target);
-              const goal = Number.isFinite(numericTarget) ? numericTarget : Number(target) || 0;
-              if (!goal || goal <= 0) {
-                setPanelStatus?.('유저 메시지 목표가 올바르지 않습니다.', 'error');
+            else if (logger?.warn) {
+                logger.warn(fallbackMessage, err);
+            }
+        };
+        const notifyProfileChange = () => {
+            profileListeners.forEach((listener) => {
+                try {
+                    listener(AUTO_CFG.profile);
+                }
+                catch (err) {
+                    warnWithHandler(err, 'autoload', '[GMH] auto profile listener failed');
+                }
+            });
+        };
+        const getProfile = () => AUTO_CFG.profile;
+        function ensureScrollContainer() {
+            const adapter = typeof getActiveAdapter === 'function' ? getActiveAdapter() : null;
+            const adapterContainer = adapter?.findContainer?.(doc);
+            if (adapterContainer) {
+                if (isScrollable(adapterContainer))
+                    return adapterContainer;
+                if (ElementCtor && adapterContainer instanceof ElementCtor) {
+                    let ancestor = adapterContainer.parentElement;
+                    for (let depth = 0; depth < 6 && ancestor; depth += 1) {
+                        if (isScrollable(ancestor))
+                            return ancestor;
+                        ancestor = ancestor.parentElement;
+                    }
+                }
+                return adapterContainer;
+            }
+            const messageBlocks = toElementArray(adapter?.listMessageBlocks?.(doc));
+            if (messageBlocks.length) {
+                let ancestor = messageBlocks[0]?.parentElement || null;
+                for (let depth = 0; depth < 6 && ancestor; depth += 1) {
+                    if (isScrollable(ancestor))
+                        return ancestor;
+                    ancestor = ancestor.parentElement;
+                }
+            }
+            return (doc.scrollingElement || doc.documentElement || doc.body);
+        }
+        function waitForGrowth(el, startHeight, timeout) {
+            if (!MutationObserverCtor) {
+                return new Promise((resolve) => {
+                    setTimeoutFn(() => resolve(false), timeout);
+                });
+            }
+            return new Promise((resolve) => {
+                let finished = false;
+                const obs = new MutationObserverCtor(() => {
+                    if (el.scrollHeight > startHeight + 4) {
+                        finished = true;
+                        obs.disconnect();
+                        resolve(true);
+                    }
+                });
+                obs.observe(el, { childList: true, subtree: true });
+                setTimeoutFn(() => {
+                    if (!finished) {
+                        obs.disconnect();
+                        resolve(false);
+                    }
+                }, timeout);
+            });
+        }
+        async function scrollUpCycle(container, profile) {
+            if (!container)
+                return { grew: false, before: 0, after: 0 };
+            const target = container;
+            const before = target.scrollHeight;
+            target.scrollTop = 0;
+            const grew = await waitForGrowth(target, before, profile.settleTimeoutMs);
+            return { grew, before, after: target.scrollHeight };
+        }
+        const statsCache = {
+            summaryKey: null,
+            rawKey: null,
+            data: null,
+        };
+        const clearStatsCache = () => {
+            statsCache.summaryKey = null;
+            statsCache.rawKey = null;
+            statsCache.data = null;
+        };
+        let lastSessionSignature = windowRef?.location?.href || (typeof location !== 'undefined' ? location.href : null);
+        const makeSummaryKey = (summary) => {
+            if (!summary)
                 return null;
-              }
-              this.lastTarget = goal;
-              return await autoLoadUntilPlayerTurns(goal);
+            const total = Number.isFinite(summary.totalMessages) ? summary.totalMessages : 'na';
+            const user = Number.isFinite(summary.userMessages) ? summary.userMessages : 'na';
+            const stamp = summary.timestamp || 'na';
+            return `${total}:${user}:${stamp}`;
+        };
+        function collectTurnStats(options = {}) {
+            const force = Boolean(options.force);
+            let summary = null;
+            try {
+                const currentSignature = windowRef?.location?.href || (typeof location !== 'undefined' ? location.href : null);
+                if (currentSignature && currentSignature !== lastSessionSignature) {
+                    lastSessionSignature = currentSignature;
+                    clearStatsCache();
+                    exportRange?.clear?.();
+                    exportRange?.setTotals?.({ message: 0, user: 0, llm: 0, entry: 0 });
+                }
+                try {
+                    summary = messageIndexer?.refresh?.({ immediate: true }) || null;
+                }
+                catch (err) {
+                    warnWithHandler(err, 'autoload', '[GMH] message indexing before stats failed');
+                }
+                const summaryKey = makeSummaryKey(summary);
+                if (!force && summaryKey && statsCache.data && statsCache.summaryKey === summaryKey) {
+                    return statsCache.data;
+                }
+                let rawText = null;
+                let rawKey = null;
+                const transcriptOptions = force ? { force: true } : {};
+                if (!summaryKey) {
+                    rawText = readTranscriptText(transcriptOptions);
+                    rawKey = typeof rawText === 'string' ? rawText : String(rawText ?? '');
+                    if (!force && statsCache.data && statsCache.rawKey === rawKey) {
+                        return statsCache.data;
+                    }
+                }
+                else {
+                    rawText = readTranscriptText(transcriptOptions);
+                }
+                const normalized = normalizeTranscript(rawText);
+                const session = buildSession(normalized);
+                const userMessages = session.turns.filter((t) => t.channel === 'user').length;
+                const llmMessages = session.turns.filter((t) => t.channel === 'llm').length;
+                const previousTotals = exportRange?.getTotals?.() || {
+                    message: 0,
+                    user: 0,
+                    llm: 0,
+                    entry: 0,
+                };
+                const blockSet = new Set();
+                session.turns.forEach((turn) => {
+                    const blocks = Array.isArray(turn?.__gmhSourceBlocks) ? turn.__gmhSourceBlocks : [];
+                    blocks
+                        .filter((idx) => Number.isInteger(idx) && idx >= 0)
+                        .forEach((idx) => blockSet.add(idx));
+                });
+                const entryCount = blockSet.size || session.turns.length;
+                const nextTotals = {
+                    message: session.turns.length,
+                    user: userMessages,
+                    llm: llmMessages,
+                    entry: entryCount,
+                };
+                const totalsShrank = Number.isFinite(previousTotals.message) && previousTotals.message > nextTotals.message;
+                const userShrank = Number.isFinite(previousTotals.user) && previousTotals.user > nextTotals.user;
+                const llmShrank = Number.isFinite(previousTotals.llm) && previousTotals.llm > nextTotals.llm;
+                const entryShrank = Number.isFinite(previousTotals.entry) && previousTotals.entry > nextTotals.entry;
+                if (totalsShrank || userShrank || llmShrank || entryShrank) {
+                    exportRange?.clear?.();
+                }
+                exportRange?.setTotals?.(nextTotals);
+                const stats = {
+                    session,
+                    userMessages,
+                    llmMessages,
+                    totalMessages: session.turns.length,
+                };
+                statsCache.summaryKey = summaryKey;
+                statsCache.rawKey = summaryKey ? null : rawKey;
+                statsCache.data = stats;
+                lastSessionSignature = currentSignature || lastSessionSignature;
+                return stats;
             }
-          } catch (error) {
-            errorHandler.handle(error, 'autoload', errorHandler.LEVELS?.ERROR);
-            throw error;
-          }
-          return null;
-        },
-        async startCurrent(profileName) {
-          if (!this.lastMode) {
-            setPanelStatus?.('재시도할 이전 작업이 없습니다.', 'muted');
-            return null;
-          }
-          if (profileName) {
-            AUTO_CFG.profile = AUTO_PROFILES[profileName] ? profileName : 'default';
-          } else {
-            AUTO_CFG.profile = this.lastProfile || 'default';
-          }
-          this.lastProfile = AUTO_CFG.profile;
-          notifyProfileChange();
-          return this.start(this.lastMode, this.lastTarget);
-        },
-        setProfile(profileName) {
-          const next = AUTO_PROFILES[profileName] ? profileName : 'default';
-          AUTO_CFG.profile = next;
-          this.lastProfile = next;
-          setPanelStatus?.(`프로파일이 '${next}'로 설정되었습니다.`, 'info');
-          notifyProfileChange();
-        },
-        stop() {
-          stopAutoLoad();
-        },
-      };
-
-      const subscribeProfileChange = (listener) => {
-        if (typeof listener !== 'function') return () => {};
-        profileListeners.add(listener);
-        return () => profileListeners.delete(listener);
-      };
-
-      notifyProfileChange();
-
-      return {
-        autoLoader,
-        autoState: AUTO_STATE,
-        autoProfiles: AUTO_PROFILES,
-        getProfile,
-        subscribeProfileChange,
-        startTurnMeter,
-        collectTurnStats,
-      };
+            catch (error) {
+                clearStatsCache();
+                if (errorHandler?.handle) {
+                    const level = errorHandler.LEVELS?.ERROR || 'error';
+                    errorHandler.handle(error, 'autoload', level);
+                }
+                return {
+                    session: null,
+                    userMessages: 0,
+                    llmMessages: 0,
+                    totalMessages: 0,
+                    error,
+                };
+            }
+        }
+        const notifyScan = (payload) => {
+            stateApi.setState(stateEnum.SCANNING, payload);
+        };
+        const notifyDone = (payload) => {
+            stateApi.setState(stateEnum.DONE, payload);
+        };
+        const notifyError = (payload) => {
+            stateApi.setState(stateEnum.ERROR, payload);
+        };
+        const notifyIdle = (payload) => {
+            stateApi.setState(stateEnum.IDLE, payload);
+        };
+        async function autoLoadAll() {
+            const profile = AUTO_PROFILES[getProfile()] || AUTO_PROFILES.default;
+            const container = ensureScrollContainer();
+            if (!container) {
+                notifyError({
+                    label: '자동 로딩 실패',
+                    message: '채팅 컨테이너를 찾을 수 없습니다.',
+                    tone: 'error',
+                    progress: { value: 1 },
+                });
+                return {
+                    session: null,
+                    userMessages: 0,
+                    llmMessages: 0,
+                    totalMessages: 0,
+                    error: new Error('container missing'),
+                };
+            }
+            AUTO_STATE.running = true;
+            AUTO_STATE.container = container;
+            let stableRounds = 0;
+            let guard = 0;
+            while (AUTO_STATE.running && guard < profile.guardLimit) {
+                guard += 1;
+                notifyScan({
+                    label: '위로 끝까지 로딩',
+                    message: `추가 수집 중 (${guard}/${profile.guardLimit})`,
+                    tone: 'progress',
+                    progress: { indeterminate: true },
+                });
+                const { grew, before, after } = await scrollUpCycle(container, profile);
+                if (!AUTO_STATE.running)
+                    break;
+                const delta = after - before;
+                stableRounds = !grew || delta < 6 ? stableRounds + 1 : 0;
+                if (stableRounds >= profile.maxStableRounds)
+                    break;
+                await sleep(profile.cycleDelayMs);
+            }
+            AUTO_STATE.running = false;
+            const stats = collectTurnStats();
+            if (stats.error) {
+                notifyError({
+                    label: '자동 로딩 실패',
+                    message: '스크롤 후 파싱 실패',
+                    tone: 'error',
+                    progress: { value: 1 },
+                });
+            }
+            else {
+                notifyDone({
+                    label: '자동 로딩 완료',
+                    message: `유저 메시지 ${stats.userMessages}개 확보`,
+                    tone: 'success',
+                    progress: { value: 1 },
+                });
+            }
+            return stats;
+        }
+        async function autoLoadUntilPlayerTurns(target) {
+            const profile = AUTO_PROFILES[getProfile()] || AUTO_PROFILES.default;
+            const container = ensureScrollContainer();
+            if (!container) {
+                notifyError({
+                    label: '자동 로딩 실패',
+                    message: '채팅 컨테이너를 찾을 수 없습니다.',
+                    tone: 'error',
+                    progress: { value: 1 },
+                });
+                return {
+                    session: null,
+                    userMessages: 0,
+                    llmMessages: 0,
+                    totalMessages: 0,
+                    error: new Error('container missing'),
+                };
+            }
+            AUTO_STATE.running = true;
+            AUTO_STATE.container = container;
+            let stableRounds = 0;
+            let stagnantRounds = 0;
+            let loopCount = 0;
+            let prevUserMessages = -1;
+            while (AUTO_STATE.running && loopCount < profile.guardLimit) {
+                loopCount += 1;
+                const stats = collectTurnStats();
+                if (stats.error) {
+                    notifyError({
+                        label: '자동 로딩 실패',
+                        message: '파싱 실패 - DOM 변화를 감지하지 못했습니다.',
+                        tone: 'error',
+                        progress: { value: 1 },
+                    });
+                    break;
+                }
+                if (stats.userMessages >= target) {
+                    notifyDone({
+                        label: '자동 로딩 완료',
+                        message: `목표 달성 · 유저 메시지 ${stats.userMessages}개 확보`,
+                        tone: 'success',
+                        progress: { value: 1 },
+                    });
+                    break;
+                }
+                const ratio = target > 0 ? Math.min(1, stats.userMessages / target) : 0;
+                notifyScan({
+                    label: '메시지 확보 중',
+                    message: `유저 메시지 ${stats.userMessages}/${target}`,
+                    tone: 'progress',
+                    progress: { value: ratio },
+                });
+                const { grew, before, after } = await scrollUpCycle(container, profile);
+                if (!AUTO_STATE.running)
+                    break;
+                const delta = after - before;
+                stableRounds = !grew || delta < 6 ? stableRounds + 1 : 0;
+                stagnantRounds = stats.userMessages === prevUserMessages ? stagnantRounds + 1 : 0;
+                prevUserMessages = stats.userMessages;
+                if (stableRounds >= profile.maxStableRounds || stagnantRounds >= profile.guardLimit) {
+                    notifyDone({
+                        label: '자동 로딩 종료',
+                        message: '추가 데이터를 불러오지 못했습니다. 더 이상 기록이 없거나 막혀있습니다.',
+                        tone: 'warning',
+                        progress: { value: ratio },
+                    });
+                    break;
+                }
+                await sleep(profile.cycleDelayMs);
+            }
+            AUTO_STATE.running = false;
+            const finalStats = collectTurnStats();
+            if (finalStats?.error) {
+                notifyError({
+                    label: '자동 로딩 실패',
+                    message: '메시지 정보를 수집하지 못했습니다.',
+                    tone: 'error',
+                    progress: { value: 1 },
+                });
+                return finalStats;
+            }
+            if (stateApi.getState?.() === stateEnum.SCANNING) {
+                const ratio = target > 0 ? Math.min(1, finalStats.userMessages / target) : 0;
+                notifyDone({
+                    label: '자동 로딩 종료',
+                    message: `유저 메시지 ${finalStats.userMessages}/${target}`,
+                    tone: 'warning',
+                    progress: { value: ratio },
+                });
+            }
+            return finalStats;
+        }
+        function stopAutoLoad() {
+            if (!AUTO_STATE.running)
+                return;
+            AUTO_STATE.running = false;
+            notifyIdle({
+                label: '대기 중',
+                message: '자동 로딩을 중지했습니다.',
+                tone: 'info',
+                progress: { value: 0 },
+            });
+        }
+        function startTurnMeter(meter) {
+            if (!meter)
+                return;
+            const render = () => {
+                const stats = collectTurnStats();
+                if (stats.error) {
+                    meter.textContent = '메시지 측정 실패: DOM을 읽을 수 없습니다.';
+                    return;
+                }
+                meter.textContent = `메시지 현황 · 유저 ${stats.userMessages} · LLM ${stats.llmMessages}`;
+            };
+            render();
+            if (AUTO_STATE.meterTimer)
+                return;
+            AUTO_STATE.meterTimer = setIntervalFn(() => {
+                if (!meter.isConnected) {
+                    clearIntervalFn(AUTO_STATE.meterTimer);
+                    AUTO_STATE.meterTimer = null;
+                    return;
+                }
+                render();
+            }, METER_INTERVAL_MS);
+        }
+        const autoLoader = {
+            lastMode: null,
+            lastTarget: null,
+            lastProfile: AUTO_CFG.profile,
+            async start(mode, target, opts = {}) {
+                if (AUTO_STATE.running) {
+                    setPanelStatus?.('이미 자동 로딩이 진행 중입니다.', 'muted');
+                    return null;
+                }
+                if (opts.profile) {
+                    AUTO_CFG.profile = AUTO_PROFILES[opts.profile] ? opts.profile : 'default';
+                    this.lastProfile = AUTO_CFG.profile;
+                    notifyProfileChange();
+                }
+                this.lastMode = mode;
+                this.lastProfile = AUTO_CFG.profile;
+                try {
+                    if (mode === 'all') {
+                        this.lastTarget = null;
+                        return await autoLoadAll();
+                    }
+                    if (mode === 'turns') {
+                        const numericTarget = Number(target);
+                        const goal = Number.isFinite(numericTarget) ? numericTarget : Number(target) || 0;
+                        if (!goal || goal <= 0) {
+                            setPanelStatus?.('유저 메시지 목표가 올바르지 않습니다.', 'error');
+                            return null;
+                        }
+                        this.lastTarget = goal;
+                        return await autoLoadUntilPlayerTurns(goal);
+                    }
+                }
+                catch (error) {
+                    errorHandler.handle(error, 'autoload', errorHandler.LEVELS?.ERROR);
+                    throw error;
+                }
+                return null;
+            },
+            async startCurrent(profileName) {
+                if (!this.lastMode) {
+                    setPanelStatus?.('재시도할 이전 작업이 없습니다.', 'muted');
+                    return null;
+                }
+                if (profileName) {
+                    AUTO_CFG.profile = AUTO_PROFILES[profileName] ? profileName : 'default';
+                }
+                else {
+                    AUTO_CFG.profile = this.lastProfile || 'default';
+                }
+                this.lastProfile = AUTO_CFG.profile;
+                notifyProfileChange();
+                return this.start(this.lastMode, this.lastTarget);
+            },
+            setProfile(profileName) {
+                const next = AUTO_PROFILES[profileName] ? profileName : 'default';
+                AUTO_CFG.profile = next;
+                this.lastProfile = next;
+                setPanelStatus?.(`프로파일이 '${next}'로 설정되었습니다.`, 'info');
+                notifyProfileChange();
+            },
+            stop() {
+                stopAutoLoad();
+            },
+        };
+        const subscribeProfileChange = (listener) => {
+            if (typeof listener !== 'function')
+                return () => { };
+            profileListeners.add(listener);
+            return () => profileListeners.delete(listener);
+        };
+        notifyProfileChange();
+        return {
+            autoLoader,
+            autoState: AUTO_STATE,
+            autoProfiles: AUTO_PROFILES,
+            getProfile,
+            subscribeProfileChange,
+            startTurnMeter,
+            collectTurnStats,
+        };
     }
 
     /**
@@ -5702,163 +5570,100 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       };
     }
 
-    /**
-     * @typedef {import('../types').ShareWorkflowOptions} ShareWorkflowOptions
-     * @typedef {import('../types').ShareWorkflowApi} ShareWorkflowApi
-     * @typedef {import('../types').PreparedShareResult} PreparedShareResult
-     */
-
-    /**
-     * Builds the share/export workflow orchestrator used by the panel actions.
-     * Validates injected dependencies so downstream flows remain resilient.
-     *
-     * @param {ShareWorkflowOptions} options
-     * @returns {ShareWorkflowApi}
-     */
     function createShareWorkflow(options) {
-      const typedOptions = /** @type {ShareWorkflowOptions} */ (options);
-      const {
-        captureStructuredSnapshot,
-        normalizeTranscript,
-        buildSession,
-        exportRange: exportRangeOption,
-        projectStructuredMessages,
-        cloneSession,
-        applyPrivacyPipeline,
-        privacyConfig,
-        privacyProfiles,
-        formatRedactionCounts,
-        setPanelStatus,
-        toMarkdownExport,
-        toJSONExport,
-        toTXTExport,
-        toStructuredMarkdown,
-        toStructuredJSON,
-        toStructuredTXT,
-        buildExportBundle,
-        buildExportManifest,
-        triggerDownload,
-        clipboard,
-        stateApi: stateApiOption,
-        stateEnum,
-        confirmPrivacyGate,
-        getEntryOrigin,
-        collectSessionStats,
-        alert: alertFn = (msg) => globalThis.alert?.(msg),
-        logger = typeof console !== 'undefined' ? console : null,
-      } = typedOptions;
-      const exportRange =
-        /** @type {import('../types').ExportRangeController | null | undefined} */ (exportRangeOption);
-      const stateApi = /** @type {import('../types').PanelStateApi} */ (stateApiOption);
-      requireDeps(
-        {
-          captureStructuredSnapshot,
-          normalizeTranscript,
-          buildSession,
-          exportRange,
-          projectStructuredMessages,
-          cloneSession,
-          applyPrivacyPipeline,
-          privacyConfig,
-          privacyProfiles,
-          formatRedactionCounts,
-          setPanelStatus,
-          toMarkdownExport,
-          toJSONExport,
-          toTXTExport,
-          toStructuredMarkdown,
-          toStructuredJSON,
-          toStructuredTXT,
-          buildExportBundle,
-          buildExportManifest,
-          triggerDownload,
-          clipboard,
-          stateApi,
-          stateEnum,
-          confirmPrivacyGate,
-          getEntryOrigin,
-          collectSessionStats,
-        },
-        {
-          captureStructuredSnapshot: (fn) => typeof fn === 'function',
-          normalizeTranscript: (fn) => typeof fn === 'function',
-          buildSession: (fn) => typeof fn === 'function',
-          projectStructuredMessages: (fn) => typeof fn === 'function',
-          cloneSession: (fn) => typeof fn === 'function',
-          applyPrivacyPipeline: (fn) => typeof fn === 'function',
-          privacyConfig: (value) => Boolean(value),
-          privacyProfiles: (value) => Boolean(value),
-          formatRedactionCounts: (fn) => typeof fn === 'function',
-          setPanelStatus: (fn) => typeof fn === 'function',
-          toMarkdownExport: (fn) => typeof fn === 'function',
-          toJSONExport: (fn) => typeof fn === 'function',
-          toTXTExport: (fn) => typeof fn === 'function',
-          toStructuredMarkdown: (fn) => typeof fn === 'function',
-          toStructuredJSON: (fn) => typeof fn === 'function',
-          toStructuredTXT: (fn) => typeof fn === 'function',
-          buildExportBundle: (fn) => typeof fn === 'function',
-          buildExportManifest: (fn) => typeof fn === 'function',
-          triggerDownload: (fn) => typeof fn === 'function',
-          exportRange: (
-            /** @type {import('../types').ExportRangeController | null | undefined} */
-            value,
-          ) => Boolean(value?.setTotals),
-          'clipboard.set': (fn) => typeof fn === 'function',
-          stateApi: (
-            /** @type {import('../types').PanelStateApi | null | undefined} */
-            value,
-          ) => Boolean(value?.setState),
-          stateEnum: (value) => Boolean(value),
-          confirmPrivacyGate: (fn) => typeof fn === 'function',
-          getEntryOrigin: (fn) => typeof fn === 'function',
-          collectSessionStats: (fn) => typeof fn === 'function',
-        },
-      );
-
-      /**
-       * Rehydrates the latest transcript snapshot and updates range counters.
-       *
-       * @returns {{ session: import('../types').TranscriptSession; raw: string; snapshot: import('../types').StructuredSnapshot }}
-       */
-      const parseAll = () => {
-        const snapshot = captureStructuredSnapshot({ force: true });
-        const raw = snapshot.legacyLines.join('\n');
-        const normalized = normalizeTranscript(raw);
-        const session = buildSession(normalized);
-        if (!session.turns.length) throw new Error('대화 메시지를 찾을 수 없습니다.');
-        const userCount = session.turns.filter((turn) => turn.channel === 'user').length;
-        const llmCount = session.turns.filter((turn) => turn.channel === 'llm').length;
-        const entryCount = session.turns.reduce((sum, turn) => {
-          if (Array.isArray(turn?.__gmhEntries)) return sum + turn.__gmhEntries.length;
-          return sum + 1;
-        }, 0);
-        exportRange?.setTotals?.({
-          message: session.turns.length,
-          user: userCount,
-          llm: llmCount,
-          entry: entryCount,
+        const typedOptions = options;
+        const { captureStructuredSnapshot, normalizeTranscript, buildSession, exportRange: exportRangeOption, projectStructuredMessages, cloneSession, applyPrivacyPipeline, privacyConfig, privacyProfiles, formatRedactionCounts, setPanelStatus, toMarkdownExport, toJSONExport, toTXTExport, toStructuredMarkdown, toStructuredJSON, toStructuredTXT, buildExportBundle, buildExportManifest, triggerDownload, clipboard, stateApi: stateApiOption, stateEnum, confirmPrivacyGate, getEntryOrigin, collectSessionStats, alert: alertFn = (msg) => globalThis.alert?.(msg), logger = typeof console !== 'undefined' ? console : null, } = typedOptions;
+        const exportRange = exportRangeOption;
+        const stateApi = stateApiOption;
+        requireDeps({
+            captureStructuredSnapshot,
+            normalizeTranscript,
+            buildSession,
+            exportRange,
+            projectStructuredMessages,
+            cloneSession,
+            applyPrivacyPipeline,
+            privacyConfig,
+            privacyProfiles,
+            formatRedactionCounts,
+            setPanelStatus,
+            toMarkdownExport,
+            toJSONExport,
+            toTXTExport,
+            toStructuredMarkdown,
+            toStructuredJSON,
+            toStructuredTXT,
+            buildExportBundle,
+            buildExportManifest,
+            triggerDownload,
+            clipboard,
+            stateApi,
+            stateEnum,
+            confirmPrivacyGate,
+            getEntryOrigin,
+            collectSessionStats,
+        }, {
+            captureStructuredSnapshot: (fn) => typeof fn === 'function',
+            normalizeTranscript: (fn) => typeof fn === 'function',
+            buildSession: (fn) => typeof fn === 'function',
+            projectStructuredMessages: (fn) => typeof fn === 'function',
+            cloneSession: (fn) => typeof fn === 'function',
+            applyPrivacyPipeline: (fn) => typeof fn === 'function',
+            privacyConfig: (value) => Boolean(value),
+            privacyProfiles: (value) => Boolean(value),
+            formatRedactionCounts: (fn) => typeof fn === 'function',
+            setPanelStatus: (fn) => typeof fn === 'function',
+            toMarkdownExport: (fn) => typeof fn === 'function',
+            toJSONExport: (fn) => typeof fn === 'function',
+            toTXTExport: (fn) => typeof fn === 'function',
+            toStructuredMarkdown: (fn) => typeof fn === 'function',
+            toStructuredJSON: (fn) => typeof fn === 'function',
+            toStructuredTXT: (fn) => typeof fn === 'function',
+            buildExportBundle: (fn) => typeof fn === 'function',
+            buildExportManifest: (fn) => typeof fn === 'function',
+            triggerDownload: (fn) => typeof fn === 'function',
+            exportRange: (value) => Boolean(value?.setTotals),
+            'clipboard.set': (fn) => typeof fn === 'function',
+            stateApi: (value) => Boolean(value?.setState),
+            stateEnum: (value) => Boolean(value),
+            confirmPrivacyGate: (fn) => typeof fn === 'function',
+            getEntryOrigin: (fn) => typeof fn === 'function',
+            collectSessionStats: (fn) => typeof fn === 'function',
         });
-        return { session, raw: normalized, snapshot };
-      };
-
-      /**
-       * Applies privacy and range selections before export/copy operations.
-       *
-       * @param {{ confirmLabel?: string; cancelStatusMessage?: string; blockedStatusMessage?: string }} [options]
-       * @returns {Promise<PreparedShareResult | null>}
-       */
-      const prepareShare = async ({ confirmLabel, cancelStatusMessage, blockedStatusMessage } = {}) => {
-        try {
-          stateApi.setState(stateEnum.REDACTING, {
-            label: '민감정보 마스킹 중',
-            message: '레다크션 파이프라인 적용 중...',
-            tone: 'progress',
-            progress: { indeterminate: true },
-          });
-          const { session, raw, snapshot } = parseAll();
-          const privacy = applyPrivacyPipeline(session, raw, privacyConfig.profile, snapshot);
-          if (privacy.blocked) {
-            alertFn(`미성년자 성적 맥락이 감지되어 작업을 중단했습니다.
+        const parseAll = () => {
+            const snapshot = captureStructuredSnapshot({ force: true });
+            const raw = snapshot.legacyLines.join('\n');
+            const normalized = normalizeTranscript(raw);
+            const session = buildSession(normalized);
+            if (!session.turns.length)
+                throw new Error('대화 메시지를 찾을 수 없습니다.');
+            const userCount = session.turns.filter((turn) => turn.channel === 'user').length;
+            const llmCount = session.turns.filter((turn) => turn.channel === 'llm').length;
+            const entryCount = session.turns.reduce((sum, turn) => {
+                if (Array.isArray(turn?.__gmhEntries))
+                    return sum + turn.__gmhEntries.length;
+                return sum + 1;
+            }, 0);
+            exportRange?.setTotals?.({
+                message: session.turns.length,
+                user: userCount,
+                llm: llmCount,
+                entry: entryCount,
+            });
+            return { session, raw: normalized, snapshot };
+        };
+        const prepareShare = async ({ confirmLabel, cancelStatusMessage, blockedStatusMessage, } = {}) => {
+            try {
+                stateApi.setState(stateEnum.REDACTING, {
+                    label: '민감정보 마스킹 중',
+                    message: '레다크션 파이프라인 적용 중...',
+                    tone: 'progress',
+                    progress: { indeterminate: true },
+                });
+                const { session, raw, snapshot } = parseAll();
+                const privacy = applyPrivacyPipeline(session, raw, privacyConfig.profile, snapshot);
+                if (privacy.blocked) {
+                    alertFn(`미성년자 성적 맥락이 감지되어 작업을 중단했습니다.
 
 차단 이유를 확인하려면:
 1. F12 키를 눌러 개발자 도구 열기
@@ -5870,411 +5675,391 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
 ※ 정당한 교육/상담 내용이 차단되었다면 GitHub Issues로 신고해주세요.
 https://github.com/devforai-creator/genit-memory-helper/issues`);
-            stateApi.setState(stateEnum.ERROR, {
-              label: '작업 차단',
-              message: blockedStatusMessage || '미성년자 민감 맥락으로 작업이 차단되었습니다.',
-              tone: 'error',
-              progress: { value: 1 },
-            });
-            return null;
-          }
-          const requestedRange = exportRange?.getRange?.() || { start: null, end: null };
-          const sanitizedUserCount = privacy.sanitizedSession.turns.filter((turn) => turn.channel === 'user').length;
-          const sanitizedLlmCount = privacy.sanitizedSession.turns.filter((turn) => turn.channel === 'llm').length;
-          const sanitizedEntryCount = privacy.sanitizedSession.turns.reduce(
-            (sum, turn) => sum + (Array.isArray(turn?.__gmhEntries) ? turn.__gmhEntries.length : 1),
-            0,
-          );
-          exportRange?.setTotals?.({
-            message: privacy.sanitizedSession.turns.length,
-            user: sanitizedUserCount,
-            llm: sanitizedLlmCount,
-            entry: sanitizedEntryCount,
-          });
-          if (requestedRange.start || requestedRange.end) {
-            exportRange?.setRange?.(requestedRange.start, requestedRange.end);
-          }
-          const selection = exportRange?.apply?.(privacy.sanitizedSession.turns) || {
-            indices: [],
-            ordinals: [],
-            turns: [],
-            rangeDetails: null,
-            info: exportRange?.describe?.(privacy.sanitizedSession.turns.length),
-          };
-          const rangeInfo = selection?.info || exportRange?.describe?.(privacy.sanitizedSession.turns.length);
-          const structuredSelection = projectStructuredMessages(privacy.structured, rangeInfo);
-          const exportSession = /** @type {import('../types').TranscriptSession} */ (
-            cloneSession(privacy.sanitizedSession)
-          );
-          const entryOrigin = typeof getEntryOrigin === 'function' ? getEntryOrigin() : [];
-          const selectedIndices = selection.indices?.length
-            ? selection.indices
-            : privacy.sanitizedSession.turns.map((_, idx) => idx);
-
-          const selectedIndexSet = new Set(selectedIndices);
-
-          exportSession.turns = /** @type {import('../types').TranscriptTurn[]} */ (
-            selectedIndices.map((index, localIndex) => {
-              const original = privacy.sanitizedSession.turns[index] || {};
-              const clone = { ...original };
-              Object.defineProperty(clone, '__gmhIndex', {
-                value: index,
-                enumerable: false,
-              });
-              Object.defineProperty(clone, '__gmhOrdinal', {
-                value: selection.ordinals?.[localIndex] ?? null,
-                enumerable: false,
-              });
-              Object.defineProperty(clone, '__gmhSourceBlock', {
-                value: entryOrigin[index] ?? null,
-                enumerable: false,
-              });
-              return clone;
-            })
-          );
-
-          exportSession.meta = {
-            ...(exportSession.meta || {}),
-            selection: {
-              active: Boolean(selection.info?.active),
-              range: {
-                start: selection.info?.start ?? null,
-                end: selection.info?.end ?? null,
-                count: selection.info?.count ?? null,
-                total: selection.info?.total ?? null,
-              },
-              indices: {
-                start: selection.info?.startIndex ?? null,
-                end: selection.info?.endIndex ?? null,
-              },
-            },
-          };
-
-          const stats = collectSessionStats(exportSession);
-          const overallStats = collectSessionStats(privacy.sanitizedSession);
-          const previewTurns = /** @type {import('../types').TranscriptTurn[]} */ (
-            exportSession.turns.slice(-5)
-          );
-          stateApi.setState(stateEnum.PREVIEW, {
-            label: '미리보기 준비 완료',
-            message: '레다크션 결과를 검토하세요.',
-            tone: 'info',
-            progress: { value: 0.75 },
-          });
-
-          const ok = await confirmPrivacyGate({
-            profile: privacy.profile,
-            counts: privacy.counts,
-            stats,
-            overallStats,
-            rangeInfo,
-            selectedIndices: Array.from(selectedIndexSet),
-            selectedOrdinals: selection.ordinals || [],
-            previewTurns,
-            actionLabel: confirmLabel || '계속',
-          });
-          if (!ok) {
-            stateApi.setState(stateEnum.IDLE, {
-              label: '대기 중',
-              message: cancelStatusMessage || '작업을 취소했습니다.',
-              tone: cancelStatusMessage ? 'muted' : 'info',
-              progress: { value: 0 },
-            });
-            if (cancelStatusMessage) setPanelStatus?.(cancelStatusMessage, 'muted');
-            return null;
-          }
-
-          return {
-            privacy,
-            stats,
-            overallStats,
-            selection,
-            rangeInfo,
-            exportSession,
-            structuredSelection,
-          };
-        } catch (error) {
-          const errorMsg = error?.message || String(error);
-          alertFn(`오류: ${errorMsg}`);
-          stateApi.setState(stateEnum.ERROR, {
-            label: '작업 실패',
-            message: '작업 준비 중 오류가 발생했습니다.',
-            tone: 'error',
-            progress: { value: 1 },
-          });
-          return null;
-        }
-      };
-
-      /**
-       * Executes the export flow for the selected format.
-       *
-       * @param {PreparedShareResult | null} prepared
-       * @param {string} format
-       * @returns {Promise<boolean>}
-       */
-      const performExport = async (prepared, format) => {
-        if (!prepared) return false;
-        try {
-          stateApi.setState(stateEnum.EXPORTING, {
-            label: '내보내기 진행 중',
-            message: `${format.toUpperCase()} 내보내기를 준비하는 중입니다...`,
-            tone: 'progress',
-            progress: { indeterminate: true },
-          });
-          const {
-            privacy,
-            stats,
-            exportSession,
-            selection,
-            overallStats,
-            structuredSelection,
-            rangeInfo: preparedRangeInfo,
-          } = prepared;
-          const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-          const sessionForExport = exportSession || privacy.sanitizedSession;
-          const rangeInfo = preparedRangeInfo || selection?.info || exportRange?.describe?.();
-          const hasCustomRange = Boolean(rangeInfo?.active);
-          const selectionRaw = hasCustomRange
-            ? sessionForExport.turns
-                .map((turn) => {
-                  const label = turn.role === 'narration' ? '내레이션' : turn.speaker || turn.role || '메시지';
-                  return `${label}: ${turn.text}`;
-                })
-                .join('\n')
-            : privacy.sanitizedRaw;
-          const bundleOptions = {
-            structuredSelection,
-            structuredSnapshot: privacy.structured,
-            profile: privacy.profile,
-            playerNames: privacy.playerNames,
-            rangeInfo,
-          };
-          let targetFormat = format;
-          let bundle;
-          let structuredFallback = false;
-          try {
-            bundle = buildExportBundle(sessionForExport, selectionRaw, targetFormat, stamp, bundleOptions);
-          } catch (error) {
-            if (
-              targetFormat === 'structured-json' ||
-              targetFormat === 'structured-md' ||
-              targetFormat === 'structured-txt'
-            ) {
-              logger?.warn?.('[GMH] structured export failed, falling back', error);
-              structuredFallback = true;
-              if (targetFormat === 'structured-json') targetFormat = 'json';
-              else if (targetFormat === 'structured-md') targetFormat = 'md';
-              else targetFormat = 'txt';
-              bundle = buildExportBundle(sessionForExport, selectionRaw, targetFormat, stamp, bundleOptions);
-            } else {
-              throw error;
+                    stateApi.setState(stateEnum.ERROR, {
+                        label: '작업 차단',
+                        message: blockedStatusMessage || '미성년자 민감 맥락으로 작업이 차단되었습니다.',
+                        tone: 'error',
+                        progress: { value: 1 },
+                    });
+                    return null;
+                }
+                const requestedRange = exportRange?.getRange?.() || { start: null, end: null };
+                const sanitizedUserCount = privacy.sanitizedSession.turns.filter((turn) => turn.channel === 'user').length;
+                const sanitizedLlmCount = privacy.sanitizedSession.turns.filter((turn) => turn.channel === 'llm').length;
+                const sanitizedEntryCount = privacy.sanitizedSession.turns.reduce((sum, turn) => sum + (Array.isArray(turn?.__gmhEntries) ? turn.__gmhEntries.length : 1), 0);
+                exportRange?.setTotals?.({
+                    message: privacy.sanitizedSession.turns.length,
+                    user: sanitizedUserCount,
+                    llm: sanitizedLlmCount,
+                    entry: sanitizedEntryCount,
+                });
+                if (requestedRange.start || requestedRange.end) {
+                    exportRange?.setRange?.(requestedRange.start, requestedRange.end);
+                }
+                const selection = exportRange?.apply?.(privacy.sanitizedSession.turns) || {
+                    indices: [],
+                    ordinals: [],
+                    turns: [],
+                    rangeDetails: null,
+                    info: exportRange?.describe?.(privacy.sanitizedSession.turns.length),
+                };
+                const rangeInfo = selection?.info || exportRange?.describe?.(privacy.sanitizedSession.turns.length);
+                const structuredSelection = projectStructuredMessages(privacy.structured, rangeInfo);
+                const exportSession = cloneSession(privacy.sanitizedSession);
+                const entryOrigin = typeof getEntryOrigin === 'function' ? getEntryOrigin() : [];
+                const selectedIndices = selection.indices?.length
+                    ? selection.indices
+                    : privacy.sanitizedSession.turns.map((_, idx) => idx);
+                const selectedIndexSet = new Set(selectedIndices);
+                exportSession.turns = selectedIndices.map((index, localIndex) => {
+                    const original = privacy.sanitizedSession.turns[index] || {};
+                    const clone = { ...original };
+                    Object.defineProperty(clone, '__gmhIndex', {
+                        value: index,
+                        enumerable: false,
+                    });
+                    Object.defineProperty(clone, '__gmhOrdinal', {
+                        value: selection.ordinals?.[localIndex] ?? null,
+                        enumerable: false,
+                    });
+                    Object.defineProperty(clone, '__gmhSourceBlock', {
+                        value: entryOrigin[index] ?? null,
+                        enumerable: false,
+                    });
+                    return clone;
+                });
+                exportSession.meta = {
+                    ...(exportSession.meta || {}),
+                    selection: {
+                        active: Boolean(selection.info?.active),
+                        range: {
+                            start: selection.info?.start ?? null,
+                            end: selection.info?.end ?? null,
+                            count: selection.info?.count ?? null,
+                            total: selection.info?.total ?? null,
+                        },
+                        indices: {
+                            start: selection.info?.startIndex ?? null,
+                            end: selection.info?.endIndex ?? null,
+                        },
+                    },
+                };
+                const stats = collectSessionStats(exportSession);
+                const overallStats = collectSessionStats(privacy.sanitizedSession);
+                const previewTurns = exportSession.turns.slice(-5);
+                stateApi.setState(stateEnum.PREVIEW, {
+                    label: '미리보기 준비 완료',
+                    message: '레다크션 결과를 검토하세요.',
+                    tone: 'info',
+                    progress: { value: 0.75 },
+                });
+                const ok = await confirmPrivacyGate({
+                    profile: privacy.profile,
+                    counts: privacy.counts,
+                    stats,
+                    overallStats,
+                    rangeInfo,
+                    selectedIndices: Array.from(selectedIndexSet),
+                    selectedOrdinals: selection.ordinals || [],
+                    previewTurns,
+                    actionLabel: confirmLabel || '계속',
+                });
+                if (!ok) {
+                    stateApi.setState(stateEnum.IDLE, {
+                        label: '대기 중',
+                        message: cancelStatusMessage || '작업을 취소했습니다.',
+                        tone: cancelStatusMessage ? 'muted' : 'info',
+                        progress: { value: 0 },
+                    });
+                    if (cancelStatusMessage)
+                        setPanelStatus?.(cancelStatusMessage, 'muted');
+                    return null;
+                }
+                return {
+                    privacy,
+                    stats,
+                    overallStats,
+                    selection,
+                    rangeInfo,
+                    exportSession,
+                    structuredSelection,
+                };
             }
-          }
-          const fileBlob = new Blob([bundle.content], { type: bundle.mime });
-          triggerDownload(fileBlob, bundle.filename);
-
-          const manifest = buildExportManifest({
-            profile: privacy.profile,
-            counts: { ...privacy.counts },
-            stats,
-            overallStats,
-            format: targetFormat,
-            warnings: privacy.sanitizedSession.warnings,
-            source: privacy.sanitizedSession.source,
-            range: sessionForExport.meta?.selection || rangeInfo,
-          });
-          const manifestBlob = new Blob([JSON.stringify(manifest, null, 2)], {
-            type: 'application/json',
-          });
-          const manifestName = `${bundle.filename.replace(/\.[^.]+$/, '')}.manifest.json`;
-          triggerDownload(manifestBlob, manifestName);
-
-          const summary = formatRedactionCounts(privacy.counts);
-          const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
-          const messageTotalAvailable = rangeInfo?.messageTotal || sessionForExport.turns.length;
-          const userTotalAvailable = rangeInfo?.userTotal || overallStats?.userMessages || stats.userMessages;
-          const llmTotalAvailable = rangeInfo?.llmTotal || overallStats?.llmMessages || stats.llmMessages;
-          let rangeNote = hasCustomRange
-            ? ` · (선택) 메시지 ${rangeInfo.start}-${rangeInfo.end}/${rangeInfo.total}`
-            : ` · 전체 메시지 ${messageTotalAvailable}개`;
-          if (Number.isFinite(userTotalAvailable)) {
-            rangeNote += ` · 유저 ${stats.userMessages}개`;
-          }
-          if (Number.isFinite(llmTotalAvailable)) {
-            rangeNote += ` · LLM ${stats.llmMessages}개`;
-          }
-          const message = `${targetFormat.toUpperCase()} 내보내기 완료${rangeNote} · ${profileLabel} · ${summary}`;
-          stateApi.setState(stateEnum.DONE, {
-            label: '내보내기 완료',
-            message,
-            tone: 'success',
-            progress: { value: 1 },
-          });
-          if (structuredFallback) {
-            setPanelStatus?.('구조 보존 내보내기에 실패하여 Classic 포맷으로 전환했습니다.', 'warning');
-          }
-          if (privacy.sanitizedSession.warnings.length) {
-            logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
-          }
-          return true;
-        } catch (error) {
-          const errorMsg = error?.message || String(error);
-          alertFn(`오류: ${errorMsg}`);
-          stateApi.setState(stateEnum.ERROR, {
-            label: '내보내기 실패',
-            message: '내보내기 실패',
-            tone: 'error',
-            progress: { value: 1 },
-          });
-          return false;
-        }
-      };
-
-      /**
-       * Copies the last 15 sanitized turns to the clipboard.
-       *
-       * @param {ShareWorkflowApi['prepareShare']} prepareShareFn
-       * @returns {Promise<void>}
-       */
-      const copyRecent = async (prepareShareFn) => {
-        const prepared = await prepareShareFn({
-          confirmLabel: '복사 계속',
-          cancelStatusMessage: '복사를 취소했습니다.',
-          blockedStatusMessage: '미성년자 민감 맥락으로 복사가 차단되었습니다.',
-        });
-        if (!prepared) return;
-        try {
-          stateApi.setState(stateEnum.EXPORTING, {
-            label: '복사 진행 중',
-            message: '최근 15메시지를 복사하는 중입니다...',
-            tone: 'progress',
-            progress: { indeterminate: true },
-          });
-          const { privacy, overallStats, stats } = prepared;
-          const effectiveStats = overallStats || stats;
-          const turns = privacy.sanitizedSession.turns.slice(-15);
-          const md = toMarkdownExport(privacy.sanitizedSession, {
-            turns,
-            includeMeta: false,
-            heading: '## 최근 15메시지',
-          });
-          clipboard.set(md, { type: 'text', mimetype: 'text/plain' });
-          const summary = formatRedactionCounts(privacy.counts);
-          const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
-          const message = `최근 15메시지 복사 완료 · 유저 ${effectiveStats.userMessages}개 · LLM ${effectiveStats.llmMessages}개 · ${profileLabel} · ${summary}`;
-          stateApi.setState(stateEnum.DONE, {
-            label: '복사 완료',
-            message,
-            tone: 'success',
-            progress: { value: 1 },
-          });
-          if (privacy.sanitizedSession.warnings.length) {
-            logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
-          }
-        } catch (error) {
-          const errorMsg = error?.message || String(error);
-          alertFn(`오류: ${errorMsg}`);
-          stateApi.setState(stateEnum.ERROR, {
-            label: '복사 실패',
-            message: '복사 실패',
-            tone: 'error',
-            progress: { value: 1 },
-          });
-        }
-      };
-
-      /**
-       * Copies the full sanitized transcript to the clipboard.
-       *
-       * @param {ShareWorkflowApi['prepareShare']} prepareShareFn
-       * @returns {Promise<void>}
-       */
-      const copyAll = async (prepareShareFn) => {
-        const prepared = await prepareShareFn({
-          confirmLabel: '복사 계속',
-          cancelStatusMessage: '복사를 취소했습니다.',
-          blockedStatusMessage: '미성년자 민감 맥락으로 복사가 차단되었습니다.',
-        });
-        if (!prepared) return;
-        try {
-          stateApi.setState(stateEnum.EXPORTING, {
-            label: '복사 진행 중',
-            message: '전체 Markdown을 복사하는 중입니다...',
-            tone: 'progress',
-            progress: { indeterminate: true },
-          });
-          const { privacy, overallStats, stats } = prepared;
-          const effectiveStats = overallStats || stats;
-          const md = toMarkdownExport(privacy.sanitizedSession);
-          clipboard.set(md, { type: 'text', mimetype: 'text/plain' });
-          const summary = formatRedactionCounts(privacy.counts);
-          const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
-          const message = `전체 Markdown 복사 완료 · 유저 ${effectiveStats.userMessages}개 · LLM ${effectiveStats.llmMessages}개 · ${profileLabel} · ${summary}`;
-          stateApi.setState(stateEnum.DONE, {
-            label: '복사 완료',
-            message,
-            tone: 'success',
-            progress: { value: 1 },
-          });
-          if (privacy.sanitizedSession.warnings.length) {
-            logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
-          }
-        } catch (error) {
-          const errorMsg = error?.message || String(error);
-          alertFn(`오류: ${errorMsg}`);
-          stateApi.setState(stateEnum.ERROR, {
-            label: '복사 실패',
-            message: '복사 실패',
-            tone: 'error',
-            progress: { value: 1 },
-          });
-        }
-      };
-
-      /**
-       * Forces a reparse cycle to refresh sanitized stats without exporting.
-       */
-      const reparse = () => {
-        try {
-          stateApi.setState(stateEnum.REDACTING, {
-            label: '재파싱 중',
-            message: '대화 로그를 다시 분석하는 중입니다...',
-            tone: 'progress',
-            progress: { indeterminate: true },
-          });
-          const { session, raw, snapshot } = parseAll();
-          const privacy = applyPrivacyPipeline(session, raw, privacyConfig.profile, snapshot);
-          const stats = collectSessionStats(privacy.sanitizedSession);
-          const summary = formatRedactionCounts(privacy.counts);
-          const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
-          const extra = privacy.blocked ? ' · ⚠️ 미성년자 맥락 감지' : '';
-          const message = `재파싱 완료 · 유저 ${stats.userMessages}개 · LLM ${stats.llmMessages}개 · 경고 ${
-        privacy.sanitizedSession.warnings.length
-      }건 · ${profileLabel} · ${summary}${extra}`;
-          stateApi.setState(stateEnum.DONE, {
-            label: '재파싱 완료',
-            message,
-            tone: 'info',
-            progress: { value: 1 },
-          });
-          if (privacy.sanitizedSession.warnings.length) {
-            logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
-          }
-        } catch (error) {
-          const errorMsg = error?.message || String(error);
-          alertFn(`오류: ${errorMsg}`);
-        }
-      };
-
-      return {
-        parseAll,
-        prepareShare,
-        performExport,
-        copyRecent,
-        copyAll,
-        reparse,
-      };
+            catch (error) {
+                const errorMsg = error?.message || String(error);
+                alertFn(`오류: ${errorMsg}`);
+                stateApi.setState(stateEnum.ERROR, {
+                    label: '작업 실패',
+                    message: '작업 준비 중 오류가 발생했습니다.',
+                    tone: 'error',
+                    progress: { value: 1 },
+                });
+                return null;
+            }
+        };
+        /**
+         * Executes the export flow for the selected format.
+         *
+         * @param {PreparedShareResult | null} prepared
+         * @param {string} format
+         * @returns {Promise<boolean>}
+         */
+        const performExport = async (prepared, format) => {
+            if (!prepared)
+                return false;
+            try {
+                stateApi.setState(stateEnum.EXPORTING, {
+                    label: '내보내기 진행 중',
+                    message: `${format.toUpperCase()} 내보내기를 준비하는 중입니다...`,
+                    tone: 'progress',
+                    progress: { indeterminate: true },
+                });
+                const { privacy, stats, exportSession, selection, overallStats, structuredSelection, rangeInfo: preparedRangeInfo, } = prepared;
+                const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+                const sessionForExport = exportSession || privacy.sanitizedSession;
+                const rangeInfo = preparedRangeInfo || selection?.info || exportRange?.describe?.();
+                const hasCustomRange = Boolean(rangeInfo?.active);
+                const selectionRaw = hasCustomRange
+                    ? sessionForExport.turns
+                        .map((turn) => {
+                        const label = turn.role === 'narration' ? '내레이션' : turn.speaker || turn.role || '메시지';
+                        return `${label}: ${turn.text}`;
+                    })
+                        .join('\n')
+                    : privacy.sanitizedRaw;
+                const bundleOptions = {
+                    structuredSelection,
+                    structuredSnapshot: privacy.structured,
+                    profile: privacy.profile,
+                    playerNames: privacy.playerNames,
+                    rangeInfo,
+                };
+                let targetFormat = format;
+                let bundle;
+                let structuredFallback = false;
+                try {
+                    bundle = buildExportBundle(sessionForExport, selectionRaw, targetFormat, stamp, bundleOptions);
+                }
+                catch (error) {
+                    if (targetFormat === 'structured-json' ||
+                        targetFormat === 'structured-md' ||
+                        targetFormat === 'structured-txt') {
+                        logger?.warn?.('[GMH] structured export failed, falling back', error);
+                        structuredFallback = true;
+                        if (targetFormat === 'structured-json')
+                            targetFormat = 'json';
+                        else if (targetFormat === 'structured-md')
+                            targetFormat = 'md';
+                        else
+                            targetFormat = 'txt';
+                        bundle = buildExportBundle(sessionForExport, selectionRaw, targetFormat, stamp, bundleOptions);
+                    }
+                    else {
+                        throw error;
+                    }
+                }
+                const fileBlob = new Blob([bundle.content], { type: bundle.mime });
+                triggerDownload(fileBlob, bundle.filename);
+                const manifest = buildExportManifest({
+                    profile: privacy.profile,
+                    counts: { ...privacy.counts },
+                    stats,
+                    overallStats,
+                    format: targetFormat,
+                    warnings: privacy.sanitizedSession.warnings,
+                    source: privacy.sanitizedSession.source,
+                    range: sessionForExport.meta?.selection || rangeInfo,
+                });
+                const manifestBlob = new Blob([JSON.stringify(manifest, null, 2)], {
+                    type: 'application/json',
+                });
+                const manifestName = `${bundle.filename.replace(/\.[^.]+$/, '')}.manifest.json`;
+                triggerDownload(manifestBlob, manifestName);
+                const summary = formatRedactionCounts(privacy.counts);
+                const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
+                const messageTotalAvailable = rangeInfo?.messageTotal || sessionForExport.turns.length;
+                const userTotalAvailable = rangeInfo?.userTotal || overallStats?.userMessages || stats.userMessages;
+                const llmTotalAvailable = rangeInfo?.llmTotal || overallStats?.llmMessages || stats.llmMessages;
+                let rangeNote = hasCustomRange
+                    ? ` · (선택) 메시지 ${rangeInfo.start}-${rangeInfo.end}/${rangeInfo.total}`
+                    : ` · 전체 메시지 ${messageTotalAvailable}개`;
+                if (Number.isFinite(userTotalAvailable)) {
+                    rangeNote += ` · 유저 ${stats.userMessages}개`;
+                }
+                if (Number.isFinite(llmTotalAvailable)) {
+                    rangeNote += ` · LLM ${stats.llmMessages}개`;
+                }
+                const message = `${targetFormat.toUpperCase()} 내보내기 완료${rangeNote} · ${profileLabel} · ${summary}`;
+                stateApi.setState(stateEnum.DONE, {
+                    label: '내보내기 완료',
+                    message,
+                    tone: 'success',
+                    progress: { value: 1 },
+                });
+                if (structuredFallback) {
+                    setPanelStatus?.('구조 보존 내보내기에 실패하여 Classic 포맷으로 전환했습니다.', 'warning');
+                }
+                if (privacy.sanitizedSession.warnings.length) {
+                    logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
+                }
+                return true;
+            }
+            catch (error) {
+                const errorMsg = error?.message || String(error);
+                alertFn(`오류: ${errorMsg}`);
+                stateApi.setState(stateEnum.ERROR, {
+                    label: '내보내기 실패',
+                    message: '내보내기 실패',
+                    tone: 'error',
+                    progress: { value: 1 },
+                });
+                return false;
+            }
+        };
+        /**
+         * Copies the last 15 sanitized turns to the clipboard.
+         *
+         * @param {ShareWorkflowApi['prepareShare']} prepareShareFn
+         * @returns {Promise<void>}
+         */
+        const copyRecent = async (prepareShareFn) => {
+            const prepared = await prepareShareFn({
+                confirmLabel: '복사 계속',
+                cancelStatusMessage: '복사를 취소했습니다.',
+                blockedStatusMessage: '미성년자 민감 맥락으로 복사가 차단되었습니다.',
+            });
+            if (!prepared)
+                return;
+            try {
+                stateApi.setState(stateEnum.EXPORTING, {
+                    label: '복사 진행 중',
+                    message: '최근 15메시지를 복사하는 중입니다...',
+                    tone: 'progress',
+                    progress: { indeterminate: true },
+                });
+                const { privacy, overallStats, stats } = prepared;
+                const effectiveStats = overallStats || stats;
+                const turns = privacy.sanitizedSession.turns.slice(-15);
+                const md = toMarkdownExport(privacy.sanitizedSession, {
+                    turns,
+                    includeMeta: false,
+                    heading: '## 최근 15메시지',
+                });
+                clipboard.set(md, { type: 'text', mimetype: 'text/plain' });
+                const summary = formatRedactionCounts(privacy.counts);
+                const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
+                const message = `최근 15메시지 복사 완료 · 유저 ${effectiveStats.userMessages}개 · LLM ${effectiveStats.llmMessages}개 · ${profileLabel} · ${summary}`;
+                stateApi.setState(stateEnum.DONE, {
+                    label: '복사 완료',
+                    message,
+                    tone: 'success',
+                    progress: { value: 1 },
+                });
+                if (privacy.sanitizedSession.warnings.length) {
+                    logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
+                }
+            }
+            catch (error) {
+                const errorMsg = error?.message || String(error);
+                alertFn(`오류: ${errorMsg}`);
+                stateApi.setState(stateEnum.ERROR, {
+                    label: '복사 실패',
+                    message: '복사 실패',
+                    tone: 'error',
+                    progress: { value: 1 },
+                });
+            }
+        };
+        /**
+         * Copies the full sanitized transcript to the clipboard.
+         *
+         * @param {ShareWorkflowApi['prepareShare']} prepareShareFn
+         * @returns {Promise<void>}
+         */
+        const copyAll = async (prepareShareFn) => {
+            const prepared = await prepareShareFn({
+                confirmLabel: '복사 계속',
+                cancelStatusMessage: '복사를 취소했습니다.',
+                blockedStatusMessage: '미성년자 민감 맥락으로 복사가 차단되었습니다.',
+            });
+            if (!prepared)
+                return;
+            try {
+                stateApi.setState(stateEnum.EXPORTING, {
+                    label: '복사 진행 중',
+                    message: '전체 Markdown을 복사하는 중입니다...',
+                    tone: 'progress',
+                    progress: { indeterminate: true },
+                });
+                const { privacy, overallStats, stats } = prepared;
+                const effectiveStats = overallStats || stats;
+                const md = toMarkdownExport(privacy.sanitizedSession);
+                clipboard.set(md, { type: 'text', mimetype: 'text/plain' });
+                const summary = formatRedactionCounts(privacy.counts);
+                const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
+                const message = `전체 Markdown 복사 완료 · 유저 ${effectiveStats.userMessages}개 · LLM ${effectiveStats.llmMessages}개 · ${profileLabel} · ${summary}`;
+                stateApi.setState(stateEnum.DONE, {
+                    label: '복사 완료',
+                    message,
+                    tone: 'success',
+                    progress: { value: 1 },
+                });
+                if (privacy.sanitizedSession.warnings.length) {
+                    logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
+                }
+            }
+            catch (error) {
+                const errorMsg = error?.message || String(error);
+                alertFn(`오류: ${errorMsg}`);
+                stateApi.setState(stateEnum.ERROR, {
+                    label: '복사 실패',
+                    message: '복사 실패',
+                    tone: 'error',
+                    progress: { value: 1 },
+                });
+            }
+        };
+        /**
+         * Forces a reparse cycle to refresh sanitized stats without exporting.
+         */
+        const reparse = () => {
+            try {
+                stateApi.setState(stateEnum.REDACTING, {
+                    label: '재파싱 중',
+                    message: '대화 로그를 다시 분석하는 중입니다...',
+                    tone: 'progress',
+                    progress: { indeterminate: true },
+                });
+                const { session, raw, snapshot } = parseAll();
+                const privacy = applyPrivacyPipeline(session, raw, privacyConfig.profile, snapshot);
+                const stats = collectSessionStats(privacy.sanitizedSession);
+                const summary = formatRedactionCounts(privacy.counts);
+                const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
+                const extra = privacy.blocked ? ' · ⚠️ 미성년자 맥락 감지' : '';
+                const message = `재파싱 완료 · 유저 ${stats.userMessages}개 · LLM ${stats.llmMessages}개 · 경고 ${privacy.sanitizedSession.warnings.length}건 · ${profileLabel} · ${summary}${extra}`;
+                stateApi.setState(stateEnum.DONE, {
+                    label: '재파싱 완료',
+                    message,
+                    tone: 'info',
+                    progress: { value: 1 },
+                });
+                if (privacy.sanitizedSession.warnings.length) {
+                    logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
+                }
+            }
+            catch (error) {
+                const errorMsg = error?.message || String(error);
+                alertFn(`오류: ${errorMsg}`);
+            }
+        };
+        return {
+            parseAll,
+            prepareShare,
+            performExport,
+            copyRecent,
+            copyAll,
+            reparse,
+        };
     }
 
     /**
@@ -7219,12 +7004,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       return { confirm };
     }
 
-    /**
-     * @typedef {import('../types').GuidePromptOptions} GuidePromptOptions
-     * @typedef {import('../types').GuidePromptStatusMessages} GuidePromptStatusMessages
-     * @typedef {import('../types').ClipboardHelper} ClipboardHelper
-     */
-
     const SUMMARY_GUIDE_PROMPT = `
 당신은 "장기기억 보관용 사서"입니다.
 아래 파일은 캐릭터 채팅 로그를 정형화한 것입니다.
@@ -7246,7 +7025,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
    - 문장은 간결하게.
    - 플레이어 이름은 "플레이어"로 통일.
 `;
-
     const RESUMMARY_GUIDE_PROMPT = `
 아래에는 [이전 요약본]과 [새 로그 파일]이 있습니다.
 이 둘을 통합하여, 2000자 이내의 "최신 장기기억 요약본"을 만드세요.
@@ -7257,73 +7035,35 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 - 출력 구조는 [전체 줄거리 요약] / [주요 관계 변화] / [핵심 테마].
 - 길이는 1200~1800자.
 `;
-
-    /**
-     * Builds helpers that copy guide prompts into the clipboard.
-     *
-     * @param {GuidePromptOptions} [options]
-     * @returns {{
-     *   copySummaryGuide: () => string;
-     *   copyResummaryGuide: () => string;
-     *   prompts: { summary: string; resummary: string };
-     * }}
-     */
-    function createGuidePrompts({
-      clipboard,
-      setPanelStatus,
-      statusMessages = {},
-    } = /** @type {GuidePromptOptions} */ ({})) {
-      if (!clipboard || typeof clipboard.set !== 'function') {
-        throw new Error('createGuidePrompts requires clipboard helper');
-      }
-
-      /**
-       * Sends status updates when the clipboard is updated.
-       *
-       * @param {string} message
-       * @param {string} [tone]
-       * @returns {void}
-       */
-      const notify = (message, tone) => {
-        if (typeof setPanelStatus === 'function' && message) {
-          setPanelStatus(message, tone);
+    function createGuidePrompts({ clipboard, setPanelStatus, statusMessages = {}, }) {
+        if (!clipboard || typeof clipboard.set !== 'function') {
+            throw new Error('createGuidePrompts requires clipboard helper');
         }
-      };
-
-      const summaryMessage = statusMessages.summaryCopied || '요약 프롬프트가 클립보드에 복사되었습니다.';
-      const resummaryMessage =
-        statusMessages.resummaryCopied || '재요약 프롬프트가 클립보드에 복사되었습니다.';
-
-      /**
-       * Copies the summary prompt template to the clipboard.
-       *
-       * @returns {string}
-       */
-      const copySummaryGuide = () => {
-        clipboard.set(SUMMARY_GUIDE_PROMPT, { type: 'text', mimetype: 'text/plain' });
-        notify(summaryMessage, 'success');
-        return SUMMARY_GUIDE_PROMPT;
-      };
-
-      /**
-       * Copies the resummary prompt template to the clipboard.
-       *
-       * @returns {string}
-       */
-      const copyResummaryGuide = () => {
-        clipboard.set(RESUMMARY_GUIDE_PROMPT, { type: 'text', mimetype: 'text/plain' });
-        notify(resummaryMessage, 'success');
-        return RESUMMARY_GUIDE_PROMPT;
-      };
-
-      return {
-        copySummaryGuide,
-        copyResummaryGuide,
-        prompts: {
-          summary: SUMMARY_GUIDE_PROMPT,
-          resummary: RESUMMARY_GUIDE_PROMPT,
-        },
-      };
+        const notify = (message, tone) => {
+            if (typeof setPanelStatus === 'function' && message) {
+                setPanelStatus(message, tone);
+            }
+        };
+        const summaryMessage = statusMessages.summaryCopied || '요약 프롬프트가 클립보드에 복사되었습니다.';
+        const resummaryMessage = statusMessages.resummaryCopied || '재요약 프롬프트가 클립보드에 복사되었습니다.';
+        const copySummaryGuide = () => {
+            clipboard.set(SUMMARY_GUIDE_PROMPT, { type: 'text', mimetype: 'text/plain' });
+            notify(summaryMessage, 'success');
+            return SUMMARY_GUIDE_PROMPT;
+        };
+        const copyResummaryGuide = () => {
+            clipboard.set(RESUMMARY_GUIDE_PROMPT, { type: 'text', mimetype: 'text/plain' });
+            notify(resummaryMessage, 'success');
+            return RESUMMARY_GUIDE_PROMPT;
+        };
+        return {
+            copySummaryGuide,
+            copyResummaryGuide,
+            prompts: {
+                summary: SUMMARY_GUIDE_PROMPT,
+                resummary: RESUMMARY_GUIDE_PROMPT,
+            },
+        };
     }
 
     /**

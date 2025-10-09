@@ -15,8 +15,10 @@
   },
   "include": [
     "src/**/*.ts",
-    "src/features/auto-loader.js",
-    "src/features/share.js",
+    "src/features/auto-loader.ts",
+    "src/features/share.ts",
+    "src/features/guides.ts",
+    "src/features/snapshot.ts",
     "src/privacy/pipeline.ts",
     "src/ui/modal.js",
     "src/ui/panel-interactions.js",

@@ -1,20 +1,33 @@
-import { requireDeps } from '../utils/validation.ts';
+import { requireDeps } from '../utils/validation';
+import type {
+  ShareWorkflowOptions,
+  ShareWorkflowApi,
+  PreparedShareResult,
+  ExportRangeController,
+  PanelStateApi,
+  TranscriptSession,
+  TranscriptTurn,
+  StructuredSnapshot,
+  StructuredSelectionResult,
+  ExportRangeInfo,
+  ClipboardHelper,
+  ExportRangeSelection,
+} from '../types';
 
-/**
- * @typedef {import('../types').ShareWorkflowOptions} ShareWorkflowOptions
- * @typedef {import('../types').ShareWorkflowApi} ShareWorkflowApi
- * @typedef {import('../types').PreparedShareResult} PreparedShareResult
- */
+type PrepareShareOptions = {
+  confirmLabel?: string;
+  cancelStatusMessage?: string;
+  blockedStatusMessage?: string;
+};
 
-/**
- * Builds the share/export workflow orchestrator used by the panel actions.
- * Validates injected dependencies so downstream flows remain resilient.
- *
- * @param {ShareWorkflowOptions} options
- * @returns {ShareWorkflowApi}
- */
-export function createShareWorkflow(options) {
-  const typedOptions = /** @type {ShareWorkflowOptions} */ (options);
+type ParseAllResult = {
+  session: TranscriptSession;
+  raw: string;
+  snapshot: StructuredSnapshot;
+};
+
+export function createShareWorkflow(options: ShareWorkflowOptions): ShareWorkflowApi {
+  const typedOptions = options as ShareWorkflowOptions;
   const {
     captureStructuredSnapshot,
     normalizeTranscript,
@@ -45,9 +58,8 @@ export function createShareWorkflow(options) {
     alert: alertFn = (msg) => globalThis.alert?.(msg),
     logger = typeof console !== 'undefined' ? console : null,
   } = typedOptions;
-  const exportRange =
-    /** @type {import('../types').ExportRangeController | null | undefined} */ (exportRangeOption);
-  const stateApi = /** @type {import('../types').PanelStateApi} */ (stateApiOption);
+  const exportRange = exportRangeOption as ExportRangeController | null | undefined;
+  const stateApi = stateApiOption as PanelStateApi;
   requireDeps(
     {
       captureStructuredSnapshot,
@@ -97,15 +109,9 @@ export function createShareWorkflow(options) {
       buildExportBundle: (fn) => typeof fn === 'function',
       buildExportManifest: (fn) => typeof fn === 'function',
       triggerDownload: (fn) => typeof fn === 'function',
-      exportRange: (
-        /** @type {import('../types').ExportRangeController | null | undefined} */
-        value,
-      ) => Boolean(value?.setTotals),
-      'clipboard.set': (fn) => typeof fn === 'function',
-      stateApi: (
-        /** @type {import('../types').PanelStateApi | null | undefined} */
-        value,
-      ) => Boolean(value?.setState),
+      exportRange: (value: ExportRangeController | null | undefined) => Boolean(value?.setTotals),
+      'clipboard.set': (fn: ClipboardHelper['set']) => typeof fn === 'function',
+      stateApi: (value: PanelStateApi | null | undefined) => Boolean(value?.setState),
       stateEnum: (value) => Boolean(value),
       confirmPrivacyGate: (fn) => typeof fn === 'function',
       getEntryOrigin: (fn) => typeof fn === 'function',
@@ -113,12 +119,7 @@ export function createShareWorkflow(options) {
     },
   );
 
-  /**
-   * Rehydrates the latest transcript snapshot and updates range counters.
-   *
-   * @returns {{ session: import('../types').TranscriptSession; raw: string; snapshot: import('../types').StructuredSnapshot }}
-   */
-  const parseAll = () => {
+  const parseAll = (): ParseAllResult => {
     const snapshot = captureStructuredSnapshot({ force: true });
     const raw = snapshot.legacyLines.join('\n');
     const normalized = normalizeTranscript(raw);
@@ -139,13 +140,11 @@ export function createShareWorkflow(options) {
     return { session, raw: normalized, snapshot };
   };
 
-  /**
-   * Applies privacy and range selections before export/copy operations.
-   *
-   * @param {{ confirmLabel?: string; cancelStatusMessage?: string; blockedStatusMessage?: string }} [options]
-   * @returns {Promise<PreparedShareResult | null>}
-   */
-  const prepareShare = async ({ confirmLabel, cancelStatusMessage, blockedStatusMessage } = {}) => {
+  const prepareShare = async ({
+    confirmLabel,
+    cancelStatusMessage,
+    blockedStatusMessage,
+  }: PrepareShareOptions = {}): Promise<PreparedShareResult | null> => {
     try {
       stateApi.setState(stateEnum.REDACTING, {
         label: '민감정보 마스킹 중',
@@ -192,18 +191,17 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       if (requestedRange.start || requestedRange.end) {
         exportRange?.setRange?.(requestedRange.start, requestedRange.end);
       }
-      const selection = exportRange?.apply?.(privacy.sanitizedSession.turns) || {
-        indices: [],
-        ordinals: [],
-        turns: [],
-        rangeDetails: null,
-        info: exportRange?.describe?.(privacy.sanitizedSession.turns.length),
-      };
+      const selection: ExportRangeSelection =
+        exportRange?.apply?.(privacy.sanitizedSession.turns) || {
+          indices: [],
+          ordinals: [],
+          turns: [],
+          rangeDetails: null,
+          info: exportRange?.describe?.(privacy.sanitizedSession.turns.length),
+        };
       const rangeInfo = selection?.info || exportRange?.describe?.(privacy.sanitizedSession.turns.length);
       const structuredSelection = projectStructuredMessages(privacy.structured, rangeInfo);
-      const exportSession = /** @type {import('../types').TranscriptSession} */ (
-        cloneSession(privacy.sanitizedSession)
-      );
+      const exportSession = cloneSession(privacy.sanitizedSession) as TranscriptSession;
       const entryOrigin = typeof getEntryOrigin === 'function' ? getEntryOrigin() : [];
       const selectedIndices = selection.indices?.length
         ? selection.indices
@@ -211,25 +209,23 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
       const selectedIndexSet = new Set(selectedIndices);
 
-      exportSession.turns = /** @type {import('../types').TranscriptTurn[]} */ (
-        selectedIndices.map((index, localIndex) => {
-          const original = privacy.sanitizedSession.turns[index] || {};
-          const clone = { ...original };
-          Object.defineProperty(clone, '__gmhIndex', {
-            value: index,
-            enumerable: false,
-          });
-          Object.defineProperty(clone, '__gmhOrdinal', {
-            value: selection.ordinals?.[localIndex] ?? null,
-            enumerable: false,
-          });
-          Object.defineProperty(clone, '__gmhSourceBlock', {
-            value: entryOrigin[index] ?? null,
-            enumerable: false,
-          });
-          return clone;
-        })
-      );
+      exportSession.turns = selectedIndices.map((index, localIndex) => {
+        const original = privacy.sanitizedSession.turns[index] || {};
+        const clone = { ...original } as TranscriptTurn;
+        Object.defineProperty(clone, '__gmhIndex', {
+          value: index,
+          enumerable: false,
+        });
+        Object.defineProperty(clone, '__gmhOrdinal', {
+          value: selection.ordinals?.[localIndex] ?? null,
+          enumerable: false,
+        });
+        Object.defineProperty(clone, '__gmhSourceBlock', {
+          value: entryOrigin[index] ?? null,
+          enumerable: false,
+        });
+        return clone;
+      });
 
       exportSession.meta = {
         ...(exportSession.meta || {}),
@@ -250,9 +246,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
       const stats = collectSessionStats(exportSession);
       const overallStats = collectSessionStats(privacy.sanitizedSession);
-      const previewTurns = /** @type {import('../types').TranscriptTurn[]} */ (
-        exportSession.turns.slice(-5)
-      );
+      const previewTurns = exportSession.turns.slice(-5) as TranscriptTurn[];
       stateApi.setState(stateEnum.PREVIEW, {
         label: '미리보기 준비 완료',
         message: '레다크션 결과를 검토하세요.',

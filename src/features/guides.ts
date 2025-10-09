@@ -1,8 +1,4 @@
-/**
- * @typedef {import('../types').GuidePromptOptions} GuidePromptOptions
- * @typedef {import('../types').GuidePromptStatusMessages} GuidePromptStatusMessages
- * @typedef {import('../types').ClipboardHelper} ClipboardHelper
- */
+import type { GuidePromptOptions, GuidePromptStatusMessages, ClipboardHelper } from '../types';
 
 const SUMMARY_GUIDE_PROMPT = `
 당신은 "장기기억 보관용 사서"입니다.
@@ -37,59 +33,39 @@ const RESUMMARY_GUIDE_PROMPT = `
 - 길이는 1200~1800자.
 `;
 
-/**
- * Builds helpers that copy guide prompts into the clipboard.
- *
- * @param {GuidePromptOptions} [options]
- * @returns {{
- *   copySummaryGuide: () => string;
- *   copyResummaryGuide: () => string;
- *   prompts: { summary: string; resummary: string };
- * }}
- */
+export interface GuidePromptExports {
+  copySummaryGuide: () => string;
+  copyResummaryGuide: () => string;
+  prompts: { summary: string; resummary: string };
+}
+
 export function createGuidePrompts({
   clipboard,
   setPanelStatus,
   statusMessages = {},
-} = /** @type {GuidePromptOptions} */ ({})) {
+}: GuidePromptOptions): GuidePromptExports {
   if (!clipboard || typeof clipboard.set !== 'function') {
     throw new Error('createGuidePrompts requires clipboard helper');
   }
 
-  /**
-   * Sends status updates when the clipboard is updated.
-   *
-   * @param {string} message
-   * @param {string} [tone]
-   * @returns {void}
-   */
-  const notify = (message, tone) => {
+  const notify = (message: string, tone?: string): void => {
     if (typeof setPanelStatus === 'function' && message) {
       setPanelStatus(message, tone);
     }
   };
 
-  const summaryMessage = statusMessages.summaryCopied || '요약 프롬프트가 클립보드에 복사되었습니다.';
+  const summaryMessage =
+    statusMessages.summaryCopied || '요약 프롬프트가 클립보드에 복사되었습니다.';
   const resummaryMessage =
     statusMessages.resummaryCopied || '재요약 프롬프트가 클립보드에 복사되었습니다.';
 
-  /**
-   * Copies the summary prompt template to the clipboard.
-   *
-   * @returns {string}
-   */
-  const copySummaryGuide = () => {
+  const copySummaryGuide = (): string => {
     clipboard.set(SUMMARY_GUIDE_PROMPT, { type: 'text', mimetype: 'text/plain' });
     notify(summaryMessage, 'success');
     return SUMMARY_GUIDE_PROMPT;
   };
 
-  /**
-   * Copies the resummary prompt template to the clipboard.
-   *
-   * @returns {string}
-   */
-  const copyResummaryGuide = () => {
+  const copyResummaryGuide = (): string => {
     clipboard.set(RESUMMARY_GUIDE_PROMPT, { type: 'text', mimetype: 'text/plain' });
     notify(resummaryMessage, 'success');
     return RESUMMARY_GUIDE_PROMPT;
