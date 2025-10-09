@@ -87,10 +87,10 @@ Rollup (see `rollup.config.js`) stitches these modules into the single userscrip
 
 - `src/core/state.js` / `createStateManager`: centralises progress + status transitions consumed by auto-loader/export routines.
 - `src/core/export-range.js`: range calculator used by UI controls and exporters; coordinates bookmarks via `src/core/turn-bookmarks.js`.
-- `src/features/share.js`: end-to-end export workflow (privacy gate, manifest, download) injected with clipboard + GM APIs.
+- `src/features/share.ts`: end-to-end export workflow (privacy gate, manifest, download) injected with clipboard + GM APIs.
 - `src/features/guides.js`: houses the 요약/재요약 prompt templates and exposes copy helpers for reuse and testing.
 - `src/ui/panel-interactions.js`: centralises panel wiring (privacy profile select, export buttons, quick export flow) and composes range/guide/shortcut bindings.
-- `src/ui/privacy-gate.js`: renders both legacy overlay and modern modal variants of the privacy confirmation step, accepting injected DOM/style/modals for testing.
+- `src/ui/privacy-gate.ts`: renders both legacy overlay and modern modal variants of the privacy confirmation step, accepting injected DOM/style/modals for testing.
 - `src/ui/guide-controls.js`: binds the “Guides & Tools” panel buttons, delegating to injected feature functions.
 - `src/ui/range-controls.js`, `src/ui/auto-loader-controls.js`, `src/ui/panel-shortcuts.js`: modern panel wiring for range selection, auto-load toggles, and keyboard shortcuts.
 - `src/privacy/*`: profile settings, pattern constants, redaction pipeline and validation utilities.
@@ -105,7 +105,7 @@ Rollup (see `rollup.config.js`) stitches these modules into the single userscrip
 3. **Privacy Pass**: `src/privacy/pipeline.js` redacts the selected turns using the active profile/settings store.
 4. **Format Conversion**: `src/export/writers-*.js` serialise the sanitized session into JSON/MD/TXT.
 5. **Manifest Generation**: `src/export/manifest.js` records redaction statistics for reproducibility.
-6. **UI Feedback**: `src/ui/state-view.js` and `src/ui/status-manager.js` mirror state transitions in the panel, while `src/ui/guide-controls.js` and `src/features/guides.js` manage clipboard workflows.
+6. **UI Feedback**: `src/ui/state-view.ts` and `src/ui/status-manager.ts` mirror state transitions in the panel, while `src/ui/guide-controls.js` and `src/features/guides.js` manage clipboard workflows.
 
 ### Testing Architecture
 

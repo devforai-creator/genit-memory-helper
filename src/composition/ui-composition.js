@@ -3,7 +3,7 @@ import { createPanelVisibility } from '../ui/panel-visibility.ts';
 import { createStatusManager } from '../ui/status-manager.ts';
 import { createStateView } from '../ui/state-view.ts';
 import { createPrivacyConfigurator } from '../ui/privacy-config.ts';
-import { createPanelSettingsController } from '../ui/panel-settings-modal.js';
+import { createPanelSettingsController } from '../ui/panel-settings-modal.ts';
 
 /**
  * Composes core UI helpers (modal, panel visibility, status view, privacy controls).

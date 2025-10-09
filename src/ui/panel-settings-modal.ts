@@ -1,25 +1,31 @@
-import { ensureDesignSystemStyles } from './styles.ts';
+import { ensureDesignSystemStyles } from './styles';
+import type { ModalController, PanelSettingsController } from '../types';
 
-/**
- * @typedef {import('../types').PanelSettingsController} PanelSettingsController
- * @typedef {import('../types').PanelSettingsValue} PanelSettingsValue
- * @typedef {import('../types').ModalController} ModalController
- */
+interface PanelSettingsModalOptions {
+  panelSettings: PanelSettingsController;
+  modal: ModalController;
+  setPanelStatus(message: string, tone?: string | null): void;
+  configurePrivacyLists(): Promise<void> | void;
+  documentRef?: Document | null;
+}
 
-/**
- * @typedef {object} PanelSettingsModalOptions
- * @property {PanelSettingsController} panelSettings
- * @property {ModalController} modal
- * @property {(message: string, tone?: string | null) => void} setPanelStatus
- * @property {() => Promise<void> | void} configurePrivacyLists
- * @property {Document | null} [documentRef]
- */
+type PanelSettingsAction = 'privacy' | 'reset' | 'save';
+
+interface BuildRowConfig {
+  id: string;
+  label: string;
+  description?: string;
+  control: HTMLElement;
+}
+
+interface BuildRowResult {
+  row: HTMLDivElement;
+  control: HTMLElement;
+  controls: HTMLDivElement;
+}
 
 /**
  * Provides the modal workflow for editing panel settings and privacy lists.
- *
- * @param {PanelSettingsModalOptions} [options]
- * @returns {{ openPanelSettings: () => Promise<void> }}
  */
 export function createPanelSettingsController({
   panelSettings,
@@ -27,7 +33,7 @@ export function createPanelSettingsController({
   setPanelStatus,
   configurePrivacyLists,
   documentRef = typeof document !== 'undefined' ? document : null,
-} = {}) {
+}: PanelSettingsModalOptions): { openPanelSettings: () => Promise<void> } {
   if (!panelSettings) throw new Error('createPanelSettingsController requires panelSettings');
   if (!modal) throw new Error('createPanelSettingsController requires modal');
   if (!setPanelStatus) throw new Error('createPanelSettingsController requires setPanelStatus');
@@ -38,12 +44,41 @@ export function createPanelSettingsController({
 
   const doc = documentRef;
 
-  /**
-   * Opens the settings modal and applies user selections.
-   * @returns {Promise<void>}
-   */
-  const openPanelSettings = async () => {
+  const buildRow = ({ id, label, description, control }: BuildRowConfig): BuildRowResult => {
+    const row = doc.createElement('div');
+    row.className = 'gmh-settings-row';
+
+    const main = doc.createElement('div');
+    main.className = 'gmh-settings-row__main';
+
+    const labelEl = doc.createElement('div');
+    labelEl.className = 'gmh-settings-row__label';
+    labelEl.textContent = label;
+    main.appendChild(labelEl);
+
+    if (description) {
+      const desc = doc.createElement('div');
+      desc.className = 'gmh-settings-row__description';
+      desc.textContent = description;
+      main.appendChild(desc);
+    }
+
+    row.appendChild(main);
+    control.id = id;
+
+    const controls = doc.createElement('div');
+    controls.style.display = 'flex';
+    controls.style.alignItems = 'center';
+    controls.style.gap = '8px';
+    controls.appendChild(control);
+    row.appendChild(controls);
+
+    return { row, control, controls };
+  };
+
+  const openPanelSettings = async (): Promise<void> => {
     ensureDesignSystemStyles(doc);
+
     let keepOpen = true;
     while (keepOpen) {
       keepOpen = false;
@@ -51,8 +86,9 @@ export function createPanelSettingsController({
       const behavior = {
         autoHideEnabled: settings.behavior?.autoHideEnabled !== false,
         autoHideDelayMs:
-          Number(settings.behavior?.autoHideDelayMs) && Number(settings.behavior?.autoHideDelayMs) > 0
-            ? Math.round(Number(settings.behavior.autoHideDelayMs))
+          Number(settings.behavior?.autoHideDelayMs) &&
+          Number(settings.behavior?.autoHideDelayMs) > 0
+            ? Math.round(Number(settings.behavior?.autoHideDelayMs))
             : 10000,
         collapseOnOutside: settings.behavior?.collapseOnOutside !== false,
         collapseOnFocus: settings.behavior?.collapseOnFocus === true,
@@ -63,39 +99,10 @@ export function createPanelSettingsController({
       const grid = doc.createElement('div');
       grid.className = 'gmh-settings-grid';
 
-      /**
-       * @param {{ id: string; label: string; description?: string; control: HTMLElement }} config
-       * @returns {{ row: HTMLElement; control: HTMLElement; controls: HTMLElement }}
-       */
-      const buildRow = ({ id, label, description, control }) => {
-        const row = doc.createElement('div');
-        row.className = 'gmh-settings-row';
-        const main = doc.createElement('div');
-        main.className = 'gmh-settings-row__main';
-        const labelEl = doc.createElement('div');
-        labelEl.className = 'gmh-settings-row__label';
-        labelEl.textContent = label;
-        main.appendChild(labelEl);
-        if (description) {
-          const desc = doc.createElement('div');
-          desc.className = 'gmh-settings-row__description';
-          desc.textContent = description;
-          main.appendChild(desc);
-        }
-        row.appendChild(main);
-        control.id = id;
-        const controls = doc.createElement('div');
-        controls.style.display = 'flex';
-        controls.style.alignItems = 'center';
-        controls.style.gap = '8px';
-        controls.appendChild(control);
-        row.appendChild(controls);
-        return { row, control, controls };
-      };
-
       const autoHideToggle = doc.createElement('input');
       autoHideToggle.type = 'checkbox';
       autoHideToggle.checked = behavior.autoHideEnabled;
+
       const autoHideDelay = doc.createElement('input');
       autoHideDelay.type = 'number';
       autoHideDelay.min = '5';
@@ -103,6 +110,7 @@ export function createPanelSettingsController({
       autoHideDelay.step = '1';
       autoHideDelay.value = `${Math.round(behavior.autoHideDelayMs / 1000)}`;
       autoHideDelay.disabled = !behavior.autoHideEnabled;
+
       const delayUnit = doc.createElement('span');
       delayUnit.textContent = '초';
       delayUnit.style.fontSize = '12px';
@@ -170,7 +178,7 @@ export function createPanelSettingsController({
         }).row,
       );
 
-      const modalResult = await modal.open({
+      const modalResult = (await modal.open({
         title: 'GMH 설정',
         size: 'large',
         content: grid,
@@ -195,7 +203,7 @@ export function createPanelSettingsController({
             value: 'save',
           },
         ],
-      });
+      })) as PanelSettingsAction | false | null | undefined;
 
       if (!modalResult) {
         setPanelStatus('패널 설정 변경을 취소했습니다.', 'muted');

@@ -3864,153 +3864,107 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     }
 
     const PANEL_SETTINGS_STORAGE_KEY = 'gmh_panel_settings_v1';
-
-    /**
-     * @typedef {import('../types').PanelSettingsController} PanelSettingsController
-     * @typedef {import('../types').PanelSettingsValue} PanelSettingsValue
-     * @typedef {import('../types').PanelSettingsLayout} PanelSettingsLayout
-     * @typedef {import('../types').PanelSettingsBehavior} PanelSettingsBehavior
-     */
-
-    /**
-     * @typedef {object} PanelSettingsOptions
-     * @property {<T>(value: T) => T} clone
-     * @property {(target: PanelSettingsValue, patch: unknown) => PanelSettingsValue} deepMerge
-     * @property {Pick<Storage, 'getItem' | 'setItem'> | null} [storage]
-     * @property {Console | { warn?: (...args: unknown[]) => void } | null} [logger]
-     */
-
-    /**
-     * Creates the panel settings store with persistence, change notifications, and defaults.
-     *
-     * @param {PanelSettingsOptions} [options]
-     * @returns {PanelSettingsController}
-     */
-    function createPanelSettings({
-      clone,
-      deepMerge,
-      storage = typeof localStorage !== 'undefined' ? localStorage : null,
-      logger = typeof console !== 'undefined' ? console : null,
-    } = {}) {
-      if (typeof clone !== 'function' || typeof deepMerge !== 'function') {
-        throw new Error('createPanelSettings requires clone and deepMerge helpers');
-      }
-
-      /** @type {PanelSettingsValue} */
-      const DEFAULTS = {
+    const DEFAULTS = {
         layout: {
-          anchor: 'right',
-          offset: 16,
-          bottom: 16,
-          width: null,
-          height: null,
+            anchor: 'right',
+            offset: 16,
+            bottom: 16,
+            width: null,
+            height: null,
         },
         behavior: {
-          autoHideEnabled: true,
-          autoHideDelayMs: 10000,
-          collapseOnOutside: false,
-          collapseOnFocus: false,
-          allowDrag: true,
-          allowResize: true,
+            autoHideEnabled: true,
+            autoHideDelayMs: 10000,
+            collapseOnOutside: false,
+            collapseOnFocus: false,
+            allowDrag: true,
+            allowResize: true,
         },
-      };
-
-      const log = logger || { warn: () => {} };
-      const settingsStore = storage;
-
-      let settings = clone(DEFAULTS);
-
-      if (settingsStore) {
-        try {
-          const raw = settingsStore.getItem(PANEL_SETTINGS_STORAGE_KEY);
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            settings = deepMerge(clone(DEFAULTS), parsed);
-          }
-        } catch (err) {
-          log?.warn?.('[GMH] failed to load panel settings', err);
-          settings = clone(DEFAULTS);
+    };
+    /**
+     * Creates the panel settings store with persistence, change notifications, and defaults.
+     */
+    function createPanelSettings({ clone, deepMerge, storage = typeof localStorage !== 'undefined' ? localStorage : null, logger = typeof console !== 'undefined' ? console : null, }) {
+        if (typeof clone !== 'function' || typeof deepMerge !== 'function') {
+            throw new Error('createPanelSettings requires clone and deepMerge helpers');
         }
-      }
-
-      /** @type {Set<(value: PanelSettingsValue) => void>} */
-      const listeners = new Set();
-
-      /**
-       * @returns {void}
-       */
-      const persist = () => {
-        if (!settingsStore) return;
-        try {
-          settingsStore.setItem(PANEL_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
-        } catch (err) {
-          log?.warn?.('[GMH] failed to persist panel settings', err);
+        let settings = clone(DEFAULTS);
+        const log = logger ?? { warn: () => { } };
+        const settingsStore = storage ?? null;
+        if (settingsStore) {
+            try {
+                const raw = settingsStore.getItem(PANEL_SETTINGS_STORAGE_KEY);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    settings = deepMerge(clone(DEFAULTS), parsed);
+                }
+            }
+            catch (error) {
+                log?.warn?.('[GMH] failed to load panel settings', error);
+                settings = clone(DEFAULTS);
+            }
         }
-      };
-
-      /**
-       * @returns {void}
-       */
-      const notify = () => {
-        const snapshot = clone(settings);
-        listeners.forEach((listener) => {
-          try {
-            listener(snapshot);
-          } catch (err) {
-            log?.warn?.('[GMH] panel settings listener failed', err);
-          }
-        });
-      };
-
-      return {
-        STORAGE_KEY: PANEL_SETTINGS_STORAGE_KEY,
-        defaults: clone(DEFAULTS),
-        /**
-         * @returns {PanelSettingsValue}
-         */
-        get() {
-          return clone(settings);
-        },
-        /**
-         * @param {Partial<PanelSettingsValue>} patch
-         * @returns {PanelSettingsValue}
-         */
-        update(patch) {
-          if (!patch || typeof patch !== 'object') return clone(settings);
-          const nextSettings = deepMerge(settings, patch);
-          const before = JSON.stringify(settings);
-          const after = JSON.stringify(nextSettings);
-          if (after === before) return clone(settings);
-          settings = nextSettings;
-          persist();
-          notify();
-          return clone(settings);
-        },
-        /**
-         * @returns {PanelSettingsValue}
-         */
-        reset() {
-          const before = JSON.stringify(settings);
-          const defaultsString = JSON.stringify(DEFAULTS);
-          if (before === defaultsString) {
-            settings = clone(DEFAULTS);
-            return clone(settings);
-          }
-          settings = clone(DEFAULTS);
-          persist();
-          notify();
-          return clone(settings);
-        },
-        /**
-         * @param {(value: PanelSettingsValue) => void} listener
-         * @returns {() => void}
-         */
-        onChange(listener) {
-          if (typeof listener !== 'function') return () => {};
-          listeners.add(listener);
-          return () => listeners.delete(listener);
-        },
-      };
+        const listeners = new Set();
+        const persist = () => {
+            if (!settingsStore)
+                return;
+            try {
+                settingsStore.setItem(PANEL_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+            }
+            catch (error) {
+                log?.warn?.('[GMH] failed to persist panel settings', error);
+            }
+        };
+        const notify = () => {
+            const snapshot = clone(settings);
+            listeners.forEach((listener) => {
+                try {
+                    listener(snapshot);
+                }
+                catch (error) {
+                    log?.warn?.('[GMH] panel settings listener failed', error);
+                }
+            });
+        };
+        const controller = {
+            STORAGE_KEY: PANEL_SETTINGS_STORAGE_KEY,
+            defaults: clone(DEFAULTS),
+            get() {
+                return clone(settings);
+            },
+            update(patch) {
+                if (!patch || typeof patch !== 'object')
+                    return clone(settings);
+                const nextSettings = deepMerge(settings, patch);
+                const before = JSON.stringify(settings);
+                const after = JSON.stringify(nextSettings);
+                if (after === before)
+                    return clone(settings);
+                settings = nextSettings;
+                persist();
+                notify();
+                return clone(settings);
+            },
+            reset() {
+                const current = JSON.stringify(settings);
+                const defaultsString = JSON.stringify(DEFAULTS);
+                if (current === defaultsString) {
+                    settings = clone(DEFAULTS);
+                    return clone(settings);
+                }
+                settings = clone(DEFAULTS);
+                persist();
+                notify();
+                return clone(settings);
+            },
+            onChange(listener) {
+                if (typeof listener !== 'function')
+                    return () => { };
+                listeners.add(listener);
+                return () => listeners.delete(listener);
+            },
+        };
+        return controller;
     }
 
     const normalizeBlocks = (collection) => {
@@ -6897,539 +6851,347 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     }
 
     const DEFAULT_PREVIEW_LIMIT = 5;
-
-    /**
-     * @typedef {import('../types').StructuredSnapshotMessage} StructuredSnapshotMessage
-     * @typedef {import('../types').StructuredSelectionRangeInfo} StructuredSelectionRangeInfo
-     * @typedef {import('../types').ExportRangeInfo} ExportRangeInfo
-     * @typedef {import('../types').ModalController} ModalController
-     */
-
-    /**
-     * @typedef {object} PrivacyGateStats
-     * @property {number} userMessages
-     * @property {number} llmMessages
-     * @property {number} [totalMessages]
-     * @property {number} [entryCount]
-     * @property {Record<string, unknown>} [metadata]
-     */
-
-    /**
-     * @typedef {object} PrivacyGateCounts
-     * @property {Record<string, number>} [redactions]
-     * @property {Record<string, number>} [details]
-     * @property {number} [total]
-     * @property {Record<string, unknown>} [metadata]
-     */
-
-    /**
-     * @typedef {object} PrivacyPreviewTurn
-     * @property {string} [role]
-     * @property {string} [speaker]
-     * @property {string} [text]
-     * @property {number} [__gmhIndex]
-     * @property {number} [__gmhOrdinal]
-     * @property {StructuredSnapshotMessage['parts']} [parts]
-     */
-
-    /**
-     * @typedef {object} PrivacyGateConfirmOptions
-     * @property {string} profile
-     * @property {PrivacyGateCounts | Record<string, number>} counts
-     * @property {PrivacyGateStats} stats
-     * @property {PrivacyGateStats | null} [overallStats]
-     * @property {StructuredSelectionRangeInfo | ExportRangeInfo | null} [rangeInfo]
-     * @property {number[]} [selectedIndices]
-     * @property {number[]} [selectedOrdinals]
-     * @property {PrivacyPreviewTurn[]} [previewTurns]
-     * @property {string} [actionLabel]
-     * @property {string} [heading]
-     * @property {string} [subheading]
-     */
-
-    /**
-     * @typedef {object} PrivacyGateOptions
-     * @property {Document | null} [documentRef]
-     * @property {(counts: Record<string, number>) => string} [formatRedactionCounts]
-     * @property {Record<string, { label?: string }>} [privacyProfiles]
-     * @property {number} [previewLimit]
-     * @property {(value: string) => string} [truncateText]
-     */
-
-    /**
-     * @typedef {PrivacyGateOptions & {
-     *   ensureLegacyPreviewStyles?: () => void;
-     * }} LegacyPrivacyGateOptions
-     */
-
-    /**
-     * @typedef {PrivacyGateOptions & {
-     *   ensureDesignSystemStyles?: () => void;
-     *   modal?: ModalController | null;
-     * }} ModernPrivacyGateOptions
-     */
-
-    /**
-     * Validates that a document reference is available.
-     * @param {Document | null | undefined} documentRef
-     * @returns {Document}
-     */
     const ensureDocument = (documentRef) => {
-      if (!documentRef || typeof documentRef.createElement !== 'function') {
-        throw new Error('privacy gate requires a document reference');
-      }
-      return documentRef;
+        if (!documentRef || typeof documentRef.createElement !== 'function') {
+            throw new Error('privacy gate requires a document reference');
+        }
+        return documentRef;
     };
-
-    /**
-     * Truncates preview text to a configurable length.
-     * @param {unknown} value
-     * @param {number} [max=220]
-     * @returns {string}
-     */
     const defaultTruncate = (value, max = 220) => {
-      const text = String(value || '').trim();
-      if (text.length <= max) return text;
-      return `${text.slice(0, max - 1)}…`;
+        const text = String(value ?? '').trim();
+        if (text.length <= max)
+            return text;
+        return `${text.slice(0, max - 1)}…`;
     };
-
-    /**
-     * Renders preview turn items for the privacy gate.
-     * @param {object} params
-     * @param {Document | null | undefined} params.documentRef
-     * @param {PrivacyPreviewTurn[] | StructuredSnapshotMessage[] | null | undefined} params.previewTurns
-     * @param {number} params.previewLimit
-     * @param {StructuredSelectionRangeInfo | ExportRangeInfo | null | undefined} params.rangeInfo
-     * @param {number[]} params.selectedIndices
-     * @param {number[]} params.selectedOrdinals
-     * @param {(value: unknown, max?: number) => string} [params.truncateText]
-     * @param {boolean} params.modern
-     * @returns {HTMLElement}
-     */
-    const buildTurns = ({
-      documentRef,
-      previewTurns,
-      previewLimit,
-      rangeInfo,
-      selectedIndices,
-      selectedOrdinals,
-      truncateText,
-      modern,
-    }) => {
-      const doc = ensureDocument(documentRef);
-      const list = doc.createElement('ul');
-      list.className = modern ? 'gmh-turn-list' : 'gmh-preview-turns';
-      const highlightActive = rangeInfo?.active;
-      const selectedIndexSet = new Set(selectedIndices || []);
-      const ordinalLookup = new Map();
-      (selectedIndices || []).forEach((idx, i) => {
-        const ord = selectedOrdinals?.[i] ?? null;
-        ordinalLookup.set(idx, ord);
-      });
-
-      const turns = Array.isArray(previewTurns) ? previewTurns : [];
-      turns.slice(-previewLimit).forEach((turn) => {
-        if (!turn) return;
-        const item = doc.createElement('li');
-        item.className = modern ? 'gmh-turn-list__item' : 'gmh-preview-turn';
-        item.tabIndex = 0;
-
-        const sourceIndex = typeof turn.__gmhIndex === 'number' ? turn.__gmhIndex : null;
-        if (sourceIndex !== null) item.dataset.turnIndex = String(sourceIndex);
-
-        const playerOrdinal = (() => {
-          if (typeof turn.__gmhOrdinal === 'number') return turn.__gmhOrdinal;
-          if (sourceIndex !== null && ordinalLookup.has(sourceIndex)) {
-            return ordinalLookup.get(sourceIndex);
-          }
-          return null;
-        })();
-        if (typeof playerOrdinal === 'number') {
-          item.dataset.playerTurn = String(playerOrdinal);
+    const normalizeCounts = (counts) => {
+        if (!counts)
+            return {};
+        if (typeof counts === 'object' &&
+            'redactions' in counts &&
+            counts.redactions &&
+            typeof counts.redactions === 'object') {
+            return counts.redactions;
         }
-
-        if (highlightActive && sourceIndex !== null && selectedIndexSet.has(sourceIndex)) {
-          item.classList.add(modern ? 'gmh-turn-list__item--selected' : 'gmh-preview-turn--selected');
-        }
-
-        const speaker = doc.createElement('div');
-        speaker.className = modern ? 'gmh-turn-list__speaker' : 'gmh-preview-turn-speaker';
-        const speakerLabel = doc.createElement('span');
-        speakerLabel.textContent = `${turn.speaker || '??'} · ${turn.role}`;
-        speaker.appendChild(speakerLabel);
-
-        if (typeof playerOrdinal === 'number' && playerOrdinal > 0) {
-          const badge = doc.createElement('span');
-          badge.className = modern ? 'gmh-turn-list__badge' : 'gmh-turn-list__badge';
-          badge.textContent = `메시지 ${playerOrdinal}`;
-          speaker.appendChild(badge);
-        }
-
-        const text = doc.createElement('div');
-        text.className = modern ? 'gmh-turn-list__text' : 'gmh-preview-turn-text';
-        const truncate = typeof truncateText === 'function' ? truncateText : defaultTruncate;
-        text.textContent = truncate(turn.text || '');
-
-        item.appendChild(speaker);
-        item.appendChild(text);
-        list.appendChild(item);
-      });
-
-      if (!list.children.length) {
-        const empty = doc.createElement(modern ? 'li' : 'div');
-        empty.className = modern
-          ? 'gmh-turn-list__item gmh-turn-list__empty'
-          : 'gmh-preview-turn';
-        const emptyText = modern ? empty : doc.createElement('div');
-        if (!modern) {
-          emptyText.className = 'gmh-preview-turn-text';
-          emptyText.textContent = '표시할 메시지가 없습니다. 상단 요약만 확인해주세요.';
-          empty.appendChild(emptyText);
-        } else {
-          empty.textContent = '표시할 메시지가 없습니다. 상단 요약만 확인해주세요.';
-        }
-        list.appendChild(empty);
-      }
-
-      return list;
+        return counts;
     };
-
-    /**
-     * Builds the summary box summarizing counts and stats for the dialog.
-     * @param {object} params
-     * @param {Document | null | undefined} params.documentRef
-     * @param {(counts: Record<string, number>) => string} [params.formatRedactionCounts]
-     * @param {Record<string, { label?: string }>} [params.privacyProfiles]
-     * @param {string} params.profile
-     * @param {Record<string, number>} params.counts
-     * @param {PrivacyGateStats} params.stats
-     * @param {PrivacyGateStats | null} [params.overallStats]
-     * @param {StructuredSelectionRangeInfo | ExportRangeInfo | null | undefined} [params.rangeInfo]
-     * @param {boolean} params.modern
-     * @returns {HTMLElement}
-     */
-    const buildSummaryBox = ({
-      documentRef,
-      formatRedactionCounts,
-      privacyProfiles,
-      profile,
-      counts,
-      stats,
-      overallStats,
-      rangeInfo,
-      modern,
-    }) => {
-      const doc = ensureDocument(documentRef);
-      const summary = typeof formatRedactionCounts === 'function'
-        ? formatRedactionCounts(counts)
-        : '';
-      const profileLabel = privacyProfiles?.[profile]?.label || profile;
-      const turnsLabel = overallStats
-        ? `유저 메시지 ${stats.userMessages}/${overallStats.userMessages} · 전체 메시지 ${stats.totalMessages}/${overallStats.totalMessages}`
-        : `유저 메시지 ${stats.userMessages} · 전체 메시지 ${stats.totalMessages}`;
-
-      const container = doc.createElement('div');
-      container.className = modern ? 'gmh-privacy-summary' : 'gmh-preview-summary';
-
-      const createRow = (labelText, valueText) => {
-        const row = doc.createElement('div');
-        if (modern) {
-          row.className = 'gmh-privacy-summary__row';
-          const labelEl = doc.createElement('span');
-          labelEl.className = 'gmh-privacy-summary__label';
-          labelEl.textContent = labelText;
-          const valueEl = doc.createElement('span');
-          valueEl.textContent = valueText;
-          row.appendChild(labelEl);
-          row.appendChild(valueEl);
-        } else {
-          const strong = doc.createElement('strong');
-          strong.textContent = labelText;
-          const value = doc.createElement('span');
-          value.textContent = valueText;
-          row.appendChild(strong);
-          row.appendChild(value);
-        }
-        return row;
-      };
-
-      [
-        createRow('프로필', profileLabel),
-        createRow('메시지 수', turnsLabel),
-        createRow('레다크션', summary),
-      ].forEach((row) => container.appendChild(row));
-
-      if (rangeInfo?.total) {
-        const messageTotal = rangeInfo.messageTotal ?? rangeInfo.total;
-        const rangeText = rangeInfo.active
-          ? `메시지 ${rangeInfo.start}-${rangeInfo.end} · ${rangeInfo.count}/${messageTotal}`
-          : `메시지 ${messageTotal}개 전체`;
-        const extraParts = [];
-        if (Number.isFinite(rangeInfo.userTotal)) extraParts.push(`유저 ${rangeInfo.userTotal}개`);
-        if (Number.isFinite(rangeInfo.llmTotal)) extraParts.push(`LLM ${rangeInfo.llmTotal}개`);
-        const complement = extraParts.length ? ` · ${extraParts.join(' · ')}` : '';
-        container.appendChild(createRow('범위', rangeText + complement));
-      }
-
-      return container;
-    };
-
-    /**
-     * Builds the classic privacy confirmation dialog rendered inside the legacy panel.
-     *
-     * @param {LegacyPrivacyGateOptions} [options]
-     * @returns {{ confirm: (confirmOptions?: PrivacyGateConfirmOptions) => Promise<boolean> }}
-     */
-    function createLegacyPrivacyGate({
-      documentRef = typeof document !== 'undefined' ? document : null,
-      formatRedactionCounts,
-      privacyProfiles,
-      ensureLegacyPreviewStyles,
-      truncateText = defaultTruncate,
-      previewLimit = DEFAULT_PREVIEW_LIMIT,
-    } = {}) {
-      const doc = ensureDocument(documentRef);
-      if (typeof ensureLegacyPreviewStyles !== 'function') {
-        throw new Error('legacy privacy gate requires ensureLegacyPreviewStyles');
-      }
-
-      /**
-       * Opens the legacy overlay preview and resolves with the user choice.
-       * @param {PrivacyGateConfirmOptions} [params]
-       * @returns {Promise<boolean>}
-       */
-      const confirm = ({
-        profile,
-        counts,
-        stats,
-        overallStats = null,
-        rangeInfo = null,
-        selectedIndices = [],
-        selectedOrdinals = [],
-        previewTurns = [],
-        actionLabel = '계속',
-        heading = '공유 전 확인',
-        subheading = '외부로 공유하기 전에 민감정보가 없는지 확인하세요.',
-      } = {}) => {
-        ensureLegacyPreviewStyles();
-
-        const overlay = doc.createElement('div');
-        overlay.className = 'gmh-preview-overlay';
-        const card = doc.createElement('div');
-        card.className = 'gmh-preview-card';
-        overlay.appendChild(card);
-
-        const header = doc.createElement('div');
-        header.className = 'gmh-preview-header';
-        const headerLabel = doc.createElement('span');
-        headerLabel.textContent = heading;
-        header.appendChild(headerLabel);
-        const closeBtn = doc.createElement('button');
-        closeBtn.type = 'button';
-        closeBtn.className = 'gmh-preview-close';
-        closeBtn.setAttribute('aria-label', '닫기');
-        closeBtn.textContent = '✕';
-        header.appendChild(closeBtn);
-        card.appendChild(header);
-
-        const body = doc.createElement('div');
-        body.className = 'gmh-preview-body';
-        body.appendChild(
-          buildSummaryBox({
-            documentRef: doc,
-            formatRedactionCounts,
-            privacyProfiles,
-            profile,
-            counts,
-            stats,
-            overallStats,
-            rangeInfo,
-            modern: false,
-          }),
-        );
-
-        const previewTitle = doc.createElement('div');
-        previewTitle.style.fontWeight = '600';
-        previewTitle.style.color = '#cbd5f5';
-        previewTitle.textContent = `미리보기 (${Math.min(previewTurns.length, previewLimit)}메시지)`;
-        body.appendChild(previewTitle);
-
-        body.appendChild(
-          buildTurns({
-            documentRef: doc,
-            previewTurns,
-            previewLimit,
-            rangeInfo,
-            selectedIndices,
-            selectedOrdinals,
-            truncateText,
-            modern: false,
-          }),
-        );
-
-        const footnote = doc.createElement('div');
-        footnote.className = 'gmh-preview-footnote';
-        footnote.textContent = subheading;
-        body.appendChild(footnote);
-
-        card.appendChild(body);
-
-        const actions = doc.createElement('div');
-        actions.className = 'gmh-preview-actions';
-        const cancelBtn = doc.createElement('button');
-        cancelBtn.type = 'button';
-        cancelBtn.className = 'gmh-preview-cancel';
-        cancelBtn.textContent = '취소';
-        const confirmBtn = doc.createElement('button');
-        confirmBtn.type = 'button';
-        confirmBtn.className = 'gmh-preview-confirm';
-        confirmBtn.textContent = actionLabel;
-        actions.appendChild(cancelBtn);
-        actions.appendChild(confirmBtn);
-        card.appendChild(actions);
-
-        const bodyEl = doc.body || doc.querySelector('body');
-        if (!bodyEl) throw new Error('document body missing');
-        const prevOverflow = bodyEl.style.overflow;
-        bodyEl.style.overflow = 'hidden';
-        bodyEl.appendChild(overlay);
-
-        return new Promise((resolve) => {
-          const cleanup = (result) => {
-            bodyEl.style.overflow = prevOverflow;
-            overlay.remove();
-            doc.removeEventListener('keydown', onKey);
-            resolve(result);
-          };
-
-          const onKey = (event) => {
-            if (event.key === 'Escape') cleanup(false);
-          };
-          doc.addEventListener('keydown', onKey);
-
-          overlay.addEventListener('click', (event) => {
-            if (event.target === overlay) cleanup(false);
-          });
-          closeBtn.addEventListener('click', () => cleanup(false));
-          cancelBtn.addEventListener('click', () => cleanup(false));
-          confirmBtn.addEventListener('click', () => cleanup(true));
+    const buildTurns = ({ documentRef, previewTurns, previewLimit, rangeInfo, selectedIndices, selectedOrdinals, truncateText, modern, }) => {
+        const doc = ensureDocument(documentRef);
+        const list = doc.createElement('ul');
+        list.className = modern ? 'gmh-turn-list' : 'gmh-preview-turns';
+        const highlightActive = Boolean(rangeInfo?.active);
+        const selectedIndexSet = new Set(selectedIndices ?? []);
+        const ordinalLookup = new Map();
+        (selectedIndices ?? []).forEach((index, i) => {
+            const ordinal = selectedOrdinals?.[i] ?? null;
+            ordinalLookup.set(index, ordinal);
         });
-      };
-
-      return { confirm };
+        const turns = Array.isArray(previewTurns) ? previewTurns : [];
+        turns.slice(-previewLimit).forEach((turnRaw) => {
+            if (!turnRaw)
+                return;
+            const turn = turnRaw;
+            const item = doc.createElement('li');
+            item.className = modern ? 'gmh-turn-list__item' : 'gmh-preview-turn';
+            item.tabIndex = 0;
+            const turnData = turn;
+            const sourceIndex = typeof turnData.__gmhIndex === 'number' ? turnData.__gmhIndex : null;
+            if (sourceIndex !== null)
+                item.dataset.turnIndex = String(sourceIndex);
+            const playerOrdinal = typeof turnData.__gmhOrdinal === 'number'
+                ? turnData.__gmhOrdinal
+                : sourceIndex !== null && ordinalLookup.has(sourceIndex)
+                    ? ordinalLookup.get(sourceIndex) ?? null
+                    : null;
+            if (typeof playerOrdinal === 'number') {
+                item.dataset.playerTurn = String(playerOrdinal);
+            }
+            if (highlightActive && sourceIndex !== null && selectedIndexSet.has(sourceIndex)) {
+                item.classList.add(modern ? 'gmh-turn-list__item--selected' : 'gmh-preview-turn--selected');
+            }
+            const speaker = doc.createElement('div');
+            speaker.className = modern ? 'gmh-turn-list__speaker' : 'gmh-preview-turn-speaker';
+            const speakerLabel = doc.createElement('span');
+            const speakerName = typeof turn.speaker === 'string' && turn.speaker.trim().length ? turn.speaker : '??';
+            const roleLabel = typeof turn.role === 'string' ? turn.role : '';
+            speakerLabel.textContent = `${speakerName} · ${roleLabel}`;
+            speaker.appendChild(speakerLabel);
+            if (typeof playerOrdinal === 'number' && playerOrdinal > 0) {
+                const badge = doc.createElement('span');
+                badge.className = modern ? 'gmh-turn-list__badge' : 'gmh-turn-list__badge';
+                badge.textContent = `메시지 ${playerOrdinal}`;
+                speaker.appendChild(badge);
+            }
+            const text = doc.createElement('div');
+            text.className = modern ? 'gmh-turn-list__text' : 'gmh-preview-turn-text';
+            const truncate = typeof truncateText === 'function' ? truncateText : defaultTruncate;
+            const turnText = typeof turn.text === 'string'
+                ? turn.text
+                : typeof turn.text === 'string'
+                    ? turn.text
+                    : '';
+            text.textContent = truncate(turnText || '');
+            item.appendChild(speaker);
+            item.appendChild(text);
+            list.appendChild(item);
+        });
+        if (!list.children.length) {
+            const empty = doc.createElement(modern ? 'li' : 'div');
+            empty.className = modern
+                ? 'gmh-turn-list__item gmh-turn-list__empty'
+                : 'gmh-preview-turn';
+            if (modern) {
+                empty.textContent = '표시할 메시지가 없습니다. 상단 요약만 확인해주세요.';
+            }
+            else {
+                const emptyText = doc.createElement('div');
+                emptyText.className = 'gmh-preview-turn-text';
+                emptyText.textContent = '표시할 메시지가 없습니다. 상단 요약만 확인해주세요.';
+                empty.appendChild(emptyText);
+            }
+            list.appendChild(empty);
+        }
+        return list;
+    };
+    const buildSummaryBox = ({ documentRef, formatRedactionCounts, privacyProfiles, profile, counts, stats, overallStats = null, rangeInfo, modern, }) => {
+        const doc = ensureDocument(documentRef);
+        const summaryCounts = normalizeCounts(counts);
+        const summary = typeof formatRedactionCounts === 'function' ? formatRedactionCounts(summaryCounts) : '';
+        const profileLabel = privacyProfiles?.[profile]?.label ?? profile;
+        const statsTotal = stats.totalMessages ?? stats.userMessages + stats.llmMessages;
+        const overallTotal = overallStats?.totalMessages ?? overallStats?.userMessages ?? statsTotal;
+        const turnsLabel = overallStats
+            ? `유저 메시지 ${stats.userMessages}/${overallStats.userMessages} · 전체 메시지 ${statsTotal}/${overallTotal}`
+            : `유저 메시지 ${stats.userMessages} · 전체 메시지 ${statsTotal}`;
+        const container = doc.createElement('div');
+        container.className = modern ? 'gmh-privacy-summary' : 'gmh-preview-summary';
+        const createRow = (labelText, valueText) => {
+            const row = doc.createElement('div');
+            if (modern) {
+                row.className = 'gmh-privacy-summary__row';
+                const labelEl = doc.createElement('span');
+                labelEl.className = 'gmh-privacy-summary__label';
+                labelEl.textContent = labelText;
+                const valueEl = doc.createElement('span');
+                valueEl.textContent = valueText;
+                row.appendChild(labelEl);
+                row.appendChild(valueEl);
+            }
+            else {
+                const strong = doc.createElement('strong');
+                strong.textContent = labelText;
+                const value = doc.createElement('span');
+                value.textContent = valueText;
+                row.appendChild(strong);
+                row.appendChild(value);
+            }
+            return row;
+        };
+        [
+            createRow('프로필', profileLabel),
+            createRow('메시지 수', turnsLabel),
+            createRow('레다크션', summary),
+        ].forEach((row) => container.appendChild(row));
+        if (rangeInfo?.total) {
+            const messageTotal = (typeof rangeInfo.messageTotal === 'number' && Number.isFinite(rangeInfo.messageTotal)
+                ? rangeInfo.messageTotal
+                : null) ?? rangeInfo.total;
+            const rangeText = rangeInfo.active
+                ? `메시지 ${rangeInfo.start}-${rangeInfo.end} · ${rangeInfo.count}/${messageTotal}`
+                : `메시지 ${messageTotal}개 전체`;
+            const extraParts = [];
+            if (typeof rangeInfo.userTotal === 'number' && Number.isFinite(rangeInfo.userTotal)) {
+                extraParts.push(`유저 ${rangeInfo.userTotal}개`);
+            }
+            if (typeof rangeInfo.llmTotal === 'number' && Number.isFinite(rangeInfo.llmTotal)) {
+                extraParts.push(`LLM ${rangeInfo.llmTotal}개`);
+            }
+            const complement = extraParts.length ? ` · ${extraParts.join(' · ')}` : '';
+            container.appendChild(createRow('범위', rangeText + complement));
+        }
+        return container;
+    };
+    function createLegacyPrivacyGate({ documentRef = typeof document !== 'undefined' ? document : null, formatRedactionCounts, privacyProfiles, ensureLegacyPreviewStyles, truncateText = defaultTruncate, previewLimit = DEFAULT_PREVIEW_LIMIT, } = {}) {
+        const doc = ensureDocument(documentRef);
+        if (typeof ensureLegacyPreviewStyles !== 'function') {
+            throw new Error('legacy privacy gate requires ensureLegacyPreviewStyles');
+        }
+        const confirm = async (options) => {
+            const { profile, counts, stats, overallStats = null, rangeInfo = null, selectedIndices = [], selectedOrdinals = [], previewTurns = [], actionLabel = '계속', heading = '공유 전 확인', subheading = '외부로 공유하기 전에 민감정보가 없는지 확인하세요.', } = options;
+            if (!profile)
+                throw new Error('privacy gate confirm requires profile');
+            if (!counts)
+                throw new Error('privacy gate confirm requires counts');
+            if (!stats)
+                throw new Error('privacy gate confirm requires stats');
+            ensureLegacyPreviewStyles();
+            const overlay = doc.createElement('div');
+            overlay.className = 'gmh-preview-overlay';
+            const card = doc.createElement('div');
+            card.className = 'gmh-preview-card';
+            overlay.appendChild(card);
+            const header = doc.createElement('div');
+            header.className = 'gmh-preview-header';
+            const headerLabel = doc.createElement('span');
+            headerLabel.textContent = heading;
+            header.appendChild(headerLabel);
+            const closeBtn = doc.createElement('button');
+            closeBtn.type = 'button';
+            closeBtn.className = 'gmh-preview-close';
+            closeBtn.setAttribute('aria-label', '닫기');
+            closeBtn.textContent = '✕';
+            header.appendChild(closeBtn);
+            card.appendChild(header);
+            const body = doc.createElement('div');
+            body.className = 'gmh-preview-body';
+            body.appendChild(buildSummaryBox({
+                documentRef: doc,
+                formatRedactionCounts,
+                privacyProfiles,
+                profile,
+                counts,
+                stats,
+                overallStats,
+                rangeInfo,
+                modern: false,
+            }));
+            const previewList = Array.isArray(previewTurns) ? previewTurns : [];
+            const previewTitle = doc.createElement('div');
+            previewTitle.style.fontWeight = '600';
+            previewTitle.style.color = '#cbd5f5';
+            previewTitle.textContent = `미리보기 (${Math.min(previewList.length, previewLimit)}메시지)`;
+            body.appendChild(previewTitle);
+            body.appendChild(buildTurns({
+                documentRef: doc,
+                previewTurns: previewList,
+                previewLimit,
+                rangeInfo,
+                selectedIndices,
+                selectedOrdinals,
+                truncateText,
+                modern: false,
+            }));
+            const footnote = doc.createElement('div');
+            footnote.className = 'gmh-preview-footnote';
+            footnote.textContent = subheading;
+            body.appendChild(footnote);
+            card.appendChild(body);
+            const actions = doc.createElement('div');
+            actions.className = 'gmh-preview-actions';
+            const cancelBtn = doc.createElement('button');
+            cancelBtn.type = 'button';
+            cancelBtn.className = 'gmh-preview-cancel';
+            cancelBtn.textContent = '취소';
+            const confirmBtn = doc.createElement('button');
+            confirmBtn.type = 'button';
+            confirmBtn.className = 'gmh-preview-confirm';
+            confirmBtn.textContent = actionLabel;
+            actions.appendChild(cancelBtn);
+            actions.appendChild(confirmBtn);
+            card.appendChild(actions);
+            const bodyEl = doc.body || doc.querySelector('body');
+            if (!bodyEl)
+                throw new Error('document body missing');
+            const prevOverflow = bodyEl.style.overflow;
+            bodyEl.style.overflow = 'hidden';
+            bodyEl.appendChild(overlay);
+            return new Promise((resolve) => {
+                const cleanup = (result) => {
+                    bodyEl.style.overflow = prevOverflow;
+                    overlay.remove();
+                    doc.removeEventListener('keydown', onKey);
+                    resolve(result);
+                };
+                const onKey = (event) => {
+                    if (event.key === 'Escape')
+                        cleanup(false);
+                };
+                doc.addEventListener('keydown', onKey);
+                overlay.addEventListener('click', (event) => {
+                    if (event.target === overlay)
+                        cleanup(false);
+                });
+                closeBtn.addEventListener('click', () => cleanup(false));
+                cancelBtn.addEventListener('click', () => cleanup(false));
+                confirmBtn.addEventListener('click', () => cleanup(true));
+            });
+        };
+        return { confirm };
     }
-
-    /**
-     * Builds the modern privacy confirmation modal using design-system styles.
-     *
-     * @param {ModernPrivacyGateOptions} [options]
-     * @returns {{ confirm: (confirmOptions?: PrivacyGateConfirmOptions) => Promise<boolean> }}
-     */
-    function createModernPrivacyGate({
-      documentRef = typeof document !== 'undefined' ? document : null,
-      formatRedactionCounts,
-      privacyProfiles,
-      ensureDesignSystemStyles,
-      modal,
-      truncateText = defaultTruncate,
-      previewLimit = DEFAULT_PREVIEW_LIMIT,
-    } = {}) {
-      const doc = ensureDocument(documentRef);
-      if (typeof ensureDesignSystemStyles !== 'function') {
-        throw new Error('modern privacy gate requires ensureDesignSystemStyles');
-      }
-      if (!modal || typeof modal.open !== 'function') {
-        throw new Error('modern privacy gate requires modal.open');
-      }
-
-      /**
-       * Opens the design-system modal and resolves with the user's decision.
-       * @param {PrivacyGateConfirmOptions} [params]
-       * @returns {Promise<boolean>}
-       */
-      const confirm = ({
-        profile,
-        counts,
-        stats,
-        overallStats = null,
-        rangeInfo = null,
-        selectedIndices = [],
-        selectedOrdinals = [],
-        previewTurns = [],
-        actionLabel = '계속',
-        heading = '공유 전 확인',
-        subheading = '외부로 공유하기 전에 민감정보가 없는지 확인하세요.',
-      } = {}) => {
-        ensureDesignSystemStyles();
-
-        const stack = doc.createElement('div');
-        stack.className = 'gmh-modal-stack';
-
-        stack.appendChild(
-          buildSummaryBox({
-            documentRef: doc,
-            formatRedactionCounts,
-            privacyProfiles,
-            profile,
-            counts,
-            stats,
-            overallStats,
-            rangeInfo,
-            modern: true,
-          }),
-        );
-
-        const previewTitle = doc.createElement('div');
-        previewTitle.className = 'gmh-section-title';
-        previewTitle.textContent = `미리보기 (${Math.min(previewTurns.length, previewLimit)}메시지)`;
-        stack.appendChild(previewTitle);
-
-        stack.appendChild(
-          buildTurns({
-            documentRef: doc,
-            previewTurns,
-            previewLimit,
-            rangeInfo,
-            selectedIndices,
-            selectedOrdinals,
-            truncateText,
-            modern: true,
-          }),
-        );
-
-        const footnote = doc.createElement('div');
-        footnote.className = 'gmh-modal-footnote';
-        footnote.textContent = subheading;
-        stack.appendChild(footnote);
-
-        return modal
-          .open({
-            title: heading,
-            description: '',
-            content: stack,
-            size: 'medium',
-            initialFocus: '[data-action="confirm"]',
-            actions: [
-              {
-                id: 'cancel',
-                label: '취소',
-                variant: 'secondary',
-                value: false,
-                attrs: { 'data-action': 'cancel' },
-              },
-              {
-                id: 'confirm',
-                label: actionLabel,
-                variant: 'primary',
-                value: true,
-                attrs: { 'data-action': 'confirm' },
-              },
-            ],
-          })
-          .then((result) => Boolean(result));
-      };
-
-      return { confirm };
+    function createModernPrivacyGate({ documentRef = typeof document !== 'undefined' ? document : null, formatRedactionCounts, privacyProfiles, ensureDesignSystemStyles, modal, truncateText = defaultTruncate, previewLimit = DEFAULT_PREVIEW_LIMIT, } = {}) {
+        const doc = ensureDocument(documentRef);
+        if (typeof ensureDesignSystemStyles !== 'function') {
+            throw new Error('modern privacy gate requires ensureDesignSystemStyles');
+        }
+        if (!modal || typeof modal.open !== 'function') {
+            throw new Error('modern privacy gate requires modal.open');
+        }
+        const confirm = async (options) => {
+            const { profile, counts, stats, overallStats = null, rangeInfo = null, selectedIndices = [], selectedOrdinals = [], previewTurns = [], actionLabel = '계속', heading = '공유 전 확인', subheading = '외부로 공유하기 전에 민감정보가 없는지 확인하세요.', } = options;
+            if (!profile)
+                throw new Error('privacy gate confirm requires profile');
+            if (!counts)
+                throw new Error('privacy gate confirm requires counts');
+            if (!stats)
+                throw new Error('privacy gate confirm requires stats');
+            ensureDesignSystemStyles();
+            const stack = doc.createElement('div');
+            stack.className = 'gmh-modal-stack';
+            stack.appendChild(buildSummaryBox({
+                documentRef: doc,
+                formatRedactionCounts,
+                privacyProfiles,
+                profile,
+                counts,
+                stats,
+                overallStats,
+                rangeInfo,
+                modern: true,
+            }));
+            const previewList = Array.isArray(previewTurns) ? previewTurns : [];
+            const previewTitle = doc.createElement('div');
+            previewTitle.className = 'gmh-section-title';
+            previewTitle.textContent = `미리보기 (${Math.min(previewList.length, previewLimit)}메시지)`;
+            stack.appendChild(previewTitle);
+            stack.appendChild(buildTurns({
+                documentRef: doc,
+                previewTurns: previewList,
+                previewLimit,
+                rangeInfo,
+                selectedIndices,
+                selectedOrdinals,
+                truncateText,
+                modern: true,
+            }));
+            const footnote = doc.createElement('div');
+            footnote.className = 'gmh-modal-footnote';
+            footnote.textContent = subheading;
+            stack.appendChild(footnote);
+            const result = await modal.open({
+                title: heading,
+                description: '',
+                content: stack,
+                size: 'medium',
+                initialFocus: '[data-action="confirm"]',
+                actions: [
+                    {
+                        id: 'cancel',
+                        label: '취소',
+                        variant: 'secondary',
+                        value: false,
+                        attrs: { 'data-action': 'cancel' },
+                    },
+                    {
+                        id: 'confirm',
+                        label: actionLabel,
+                        variant: 'primary',
+                        value: true,
+                        attrs: { 'data-action': 'confirm' },
+                    },
+                ],
+            });
+            return Boolean(result);
+        };
+        return { confirm };
     }
 
     const SUMMARY_GUIDE_PROMPT = `
@@ -9316,73 +9078,22 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     }
 
     /**
-     * @typedef {import('../types').PanelSettingsController} PanelSettingsController
-     * @typedef {import('../types').PanelSettingsValue} PanelSettingsValue
-     * @typedef {import('../types').ModalController} ModalController
-     */
-
-    /**
-     * @typedef {object} PanelSettingsModalOptions
-     * @property {PanelSettingsController} panelSettings
-     * @property {ModalController} modal
-     * @property {(message: string, tone?: string | null) => void} setPanelStatus
-     * @property {() => Promise<void> | void} configurePrivacyLists
-     * @property {Document | null} [documentRef]
-     */
-
-    /**
      * Provides the modal workflow for editing panel settings and privacy lists.
-     *
-     * @param {PanelSettingsModalOptions} [options]
-     * @returns {{ openPanelSettings: () => Promise<void> }}
      */
-    function createPanelSettingsController({
-      panelSettings,
-      modal,
-      setPanelStatus,
-      configurePrivacyLists,
-      documentRef = typeof document !== 'undefined' ? document : null,
-    } = {}) {
-      if (!panelSettings) throw new Error('createPanelSettingsController requires panelSettings');
-      if (!modal) throw new Error('createPanelSettingsController requires modal');
-      if (!setPanelStatus) throw new Error('createPanelSettingsController requires setPanelStatus');
-      if (!configurePrivacyLists) {
-        throw new Error('createPanelSettingsController requires configurePrivacyLists');
-      }
-      if (!documentRef) throw new Error('createPanelSettingsController requires document');
-
-      const doc = documentRef;
-
-      /**
-       * Opens the settings modal and applies user selections.
-       * @returns {Promise<void>}
-       */
-      const openPanelSettings = async () => {
-        ensureDesignSystemStyles(doc);
-        let keepOpen = true;
-        while (keepOpen) {
-          keepOpen = false;
-          const settings = panelSettings.get();
-          const behavior = {
-            autoHideEnabled: settings.behavior?.autoHideEnabled !== false,
-            autoHideDelayMs:
-              Number(settings.behavior?.autoHideDelayMs) && Number(settings.behavior?.autoHideDelayMs) > 0
-                ? Math.round(Number(settings.behavior.autoHideDelayMs))
-                : 10000,
-            collapseOnOutside: settings.behavior?.collapseOnOutside !== false,
-            collapseOnFocus: settings.behavior?.collapseOnFocus === true,
-            allowDrag: settings.behavior?.allowDrag !== false,
-            allowResize: settings.behavior?.allowResize !== false,
-          };
-
-          const grid = doc.createElement('div');
-          grid.className = 'gmh-settings-grid';
-
-          /**
-           * @param {{ id: string; label: string; description?: string; control: HTMLElement }} config
-           * @returns {{ row: HTMLElement; control: HTMLElement; controls: HTMLElement }}
-           */
-          const buildRow = ({ id, label, description, control }) => {
+    function createPanelSettingsController({ panelSettings, modal, setPanelStatus, configurePrivacyLists, documentRef = typeof document !== 'undefined' ? document : null, }) {
+        if (!panelSettings)
+            throw new Error('createPanelSettingsController requires panelSettings');
+        if (!modal)
+            throw new Error('createPanelSettingsController requires modal');
+        if (!setPanelStatus)
+            throw new Error('createPanelSettingsController requires setPanelStatus');
+        if (!configurePrivacyLists) {
+            throw new Error('createPanelSettingsController requires configurePrivacyLists');
+        }
+        if (!documentRef)
+            throw new Error('createPanelSettingsController requires document');
+        const doc = documentRef;
+        const buildRow = ({ id, label, description, control }) => {
             const row = doc.createElement('div');
             row.className = 'gmh-settings-row';
             const main = doc.createElement('div');
@@ -9392,10 +9103,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             labelEl.textContent = label;
             main.appendChild(labelEl);
             if (description) {
-              const desc = doc.createElement('div');
-              desc.className = 'gmh-settings-row__description';
-              desc.textContent = description;
-              main.appendChild(desc);
+                const desc = doc.createElement('div');
+                desc.className = 'gmh-settings-row__description';
+                desc.textContent = description;
+                main.appendChild(desc);
             }
             row.appendChild(main);
             control.id = id;
@@ -9406,153 +9117,149 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             controls.appendChild(control);
             row.appendChild(controls);
             return { row, control, controls };
-          };
-
-          const autoHideToggle = doc.createElement('input');
-          autoHideToggle.type = 'checkbox';
-          autoHideToggle.checked = behavior.autoHideEnabled;
-          const autoHideDelay = doc.createElement('input');
-          autoHideDelay.type = 'number';
-          autoHideDelay.min = '5';
-          autoHideDelay.max = '60';
-          autoHideDelay.step = '1';
-          autoHideDelay.value = `${Math.round(behavior.autoHideDelayMs / 1000)}`;
-          autoHideDelay.disabled = !behavior.autoHideEnabled;
-          const delayUnit = doc.createElement('span');
-          delayUnit.textContent = '초';
-          delayUnit.style.fontSize = '12px';
-          delayUnit.style.color = 'var(--gmh-muted)';
-
-          autoHideToggle.addEventListener('change', () => {
-            autoHideDelay.disabled = !autoHideToggle.checked;
-          });
-
-          const autoHideRow = buildRow({
-            id: 'gmh-settings-autohide',
-            label: '자동 접힘',
-            description: '패널이 유휴 상태로 유지되면 자동으로 접습니다.',
-            control: autoHideToggle,
-          });
-          autoHideRow.controls.appendChild(autoHideDelay);
-          autoHideRow.controls.appendChild(delayUnit);
-          grid.appendChild(autoHideRow.row);
-
-          const collapseOutsideToggle = doc.createElement('input');
-          collapseOutsideToggle.type = 'checkbox';
-          collapseOutsideToggle.checked = behavior.collapseOnOutside;
-          grid.appendChild(
-            buildRow({
-              id: 'gmh-settings-collapse-outside',
-              label: '밖을 클릭하면 접기',
-              description: '패널 외부를 클릭하면 곧바로 접습니다. ⚠️ 모바일에서는 비활성화 권장',
-              control: collapseOutsideToggle,
-            }).row,
-          );
-
-          const focusModeToggle = doc.createElement('input');
-          focusModeToggle.type = 'checkbox';
-          focusModeToggle.checked = behavior.collapseOnFocus;
-          grid.appendChild(
-            buildRow({
-              id: 'gmh-settings-focus-collapse',
-              label: '집중 모드',
-              description: '입력 필드나 버튼에 포커스가 이동하면 패널을 접습니다.',
-              control: focusModeToggle,
-            }).row,
-          );
-
-          const dragToggle = doc.createElement('input');
-          dragToggle.type = 'checkbox';
-          dragToggle.checked = behavior.allowDrag;
-          grid.appendChild(
-            buildRow({
-              id: 'gmh-settings-drag',
-              label: '드래그 이동',
-              description: '상단 그립으로 패널 위치를 조정할 수 있습니다.',
-              control: dragToggle,
-            }).row,
-          );
-
-          const resizeToggle = doc.createElement('input');
-          resizeToggle.type = 'checkbox';
-          resizeToggle.checked = behavior.allowResize;
-          grid.appendChild(
-            buildRow({
-              id: 'gmh-settings-resize',
-              label: '크기 조절',
-              description: '우측 하단 손잡이로 패널 크기를 바꿉니다.',
-              control: resizeToggle,
-            }).row,
-          );
-
-          const modalResult = await modal.open({
-            title: 'GMH 설정',
-            size: 'large',
-            content: grid,
-            initialFocus: '#gmh-settings-autohide',
-            actions: [
-              {
-                id: 'privacy',
-                label: '민감어 관리',
-                variant: 'secondary',
-                value: 'privacy',
-              },
-              {
-                id: 'reset',
-                label: '기본값 복원',
-                variant: 'secondary',
-                value: 'reset',
-              },
-              {
-                id: 'save',
-                label: '저장',
-                variant: 'primary',
-                value: 'save',
-              },
-            ],
-          });
-
-          if (!modalResult) {
-            setPanelStatus('패널 설정 변경을 취소했습니다.', 'muted');
-            return;
-          }
-
-          if (modalResult === 'privacy') {
-            await configurePrivacyLists();
-            keepOpen = true;
-            continue;
-          }
-
-          if (modalResult === 'reset') {
-            panelSettings.reset();
-            setPanelStatus('패널 설정을 기본값으로 되돌렸습니다.', 'success');
-            keepOpen = true;
-            continue;
-          }
-
-          const delaySeconds = Number(autoHideDelay.value);
-          const safeDelay = Number.isFinite(delaySeconds)
-            ? Math.min(Math.max(5, Math.round(delaySeconds)), 120)
-            : 10;
-
-          panelSettings.update({
-            behavior: {
-              autoHideEnabled: autoHideToggle.checked,
-              autoHideDelayMs: safeDelay * 1000,
-              collapseOnOutside: collapseOutsideToggle.checked,
-              collapseOnFocus: focusModeToggle.checked,
-              allowDrag: dragToggle.checked,
-              allowResize: resizeToggle.checked,
-            },
-          });
-
-          setPanelStatus('패널 설정을 저장했습니다.', 'success');
-        }
-      };
-
-      return {
-        openPanelSettings,
-      };
+        };
+        const openPanelSettings = async () => {
+            ensureDesignSystemStyles(doc);
+            let keepOpen = true;
+            while (keepOpen) {
+                keepOpen = false;
+                const settings = panelSettings.get();
+                const behavior = {
+                    autoHideEnabled: settings.behavior?.autoHideEnabled !== false,
+                    autoHideDelayMs: Number(settings.behavior?.autoHideDelayMs) &&
+                        Number(settings.behavior?.autoHideDelayMs) > 0
+                        ? Math.round(Number(settings.behavior?.autoHideDelayMs))
+                        : 10000,
+                    collapseOnOutside: settings.behavior?.collapseOnOutside !== false,
+                    collapseOnFocus: settings.behavior?.collapseOnFocus === true,
+                    allowDrag: settings.behavior?.allowDrag !== false,
+                    allowResize: settings.behavior?.allowResize !== false,
+                };
+                const grid = doc.createElement('div');
+                grid.className = 'gmh-settings-grid';
+                const autoHideToggle = doc.createElement('input');
+                autoHideToggle.type = 'checkbox';
+                autoHideToggle.checked = behavior.autoHideEnabled;
+                const autoHideDelay = doc.createElement('input');
+                autoHideDelay.type = 'number';
+                autoHideDelay.min = '5';
+                autoHideDelay.max = '60';
+                autoHideDelay.step = '1';
+                autoHideDelay.value = `${Math.round(behavior.autoHideDelayMs / 1000)}`;
+                autoHideDelay.disabled = !behavior.autoHideEnabled;
+                const delayUnit = doc.createElement('span');
+                delayUnit.textContent = '초';
+                delayUnit.style.fontSize = '12px';
+                delayUnit.style.color = 'var(--gmh-muted)';
+                autoHideToggle.addEventListener('change', () => {
+                    autoHideDelay.disabled = !autoHideToggle.checked;
+                });
+                const autoHideRow = buildRow({
+                    id: 'gmh-settings-autohide',
+                    label: '자동 접힘',
+                    description: '패널이 유휴 상태로 유지되면 자동으로 접습니다.',
+                    control: autoHideToggle,
+                });
+                autoHideRow.controls.appendChild(autoHideDelay);
+                autoHideRow.controls.appendChild(delayUnit);
+                grid.appendChild(autoHideRow.row);
+                const collapseOutsideToggle = doc.createElement('input');
+                collapseOutsideToggle.type = 'checkbox';
+                collapseOutsideToggle.checked = behavior.collapseOnOutside;
+                grid.appendChild(buildRow({
+                    id: 'gmh-settings-collapse-outside',
+                    label: '밖을 클릭하면 접기',
+                    description: '패널 외부를 클릭하면 곧바로 접습니다. ⚠️ 모바일에서는 비활성화 권장',
+                    control: collapseOutsideToggle,
+                }).row);
+                const focusModeToggle = doc.createElement('input');
+                focusModeToggle.type = 'checkbox';
+                focusModeToggle.checked = behavior.collapseOnFocus;
+                grid.appendChild(buildRow({
+                    id: 'gmh-settings-focus-collapse',
+                    label: '집중 모드',
+                    description: '입력 필드나 버튼에 포커스가 이동하면 패널을 접습니다.',
+                    control: focusModeToggle,
+                }).row);
+                const dragToggle = doc.createElement('input');
+                dragToggle.type = 'checkbox';
+                dragToggle.checked = behavior.allowDrag;
+                grid.appendChild(buildRow({
+                    id: 'gmh-settings-drag',
+                    label: '드래그 이동',
+                    description: '상단 그립으로 패널 위치를 조정할 수 있습니다.',
+                    control: dragToggle,
+                }).row);
+                const resizeToggle = doc.createElement('input');
+                resizeToggle.type = 'checkbox';
+                resizeToggle.checked = behavior.allowResize;
+                grid.appendChild(buildRow({
+                    id: 'gmh-settings-resize',
+                    label: '크기 조절',
+                    description: '우측 하단 손잡이로 패널 크기를 바꿉니다.',
+                    control: resizeToggle,
+                }).row);
+                const modalResult = (await modal.open({
+                    title: 'GMH 설정',
+                    size: 'large',
+                    content: grid,
+                    initialFocus: '#gmh-settings-autohide',
+                    actions: [
+                        {
+                            id: 'privacy',
+                            label: '민감어 관리',
+                            variant: 'secondary',
+                            value: 'privacy',
+                        },
+                        {
+                            id: 'reset',
+                            label: '기본값 복원',
+                            variant: 'secondary',
+                            value: 'reset',
+                        },
+                        {
+                            id: 'save',
+                            label: '저장',
+                            variant: 'primary',
+                            value: 'save',
+                        },
+                    ],
+                }));
+                if (!modalResult) {
+                    setPanelStatus('패널 설정 변경을 취소했습니다.', 'muted');
+                    return;
+                }
+                if (modalResult === 'privacy') {
+                    await configurePrivacyLists();
+                    keepOpen = true;
+                    continue;
+                }
+                if (modalResult === 'reset') {
+                    panelSettings.reset();
+                    setPanelStatus('패널 설정을 기본값으로 되돌렸습니다.', 'success');
+                    keepOpen = true;
+                    continue;
+                }
+                const delaySeconds = Number(autoHideDelay.value);
+                const safeDelay = Number.isFinite(delaySeconds)
+                    ? Math.min(Math.max(5, Math.round(delaySeconds)), 120)
+                    : 10;
+                panelSettings.update({
+                    behavior: {
+                        autoHideEnabled: autoHideToggle.checked,
+                        autoHideDelayMs: safeDelay * 1000,
+                        collapseOnOutside: collapseOutsideToggle.checked,
+                        collapseOnFocus: focusModeToggle.checked,
+                        allowDrag: dragToggle.checked,
+                        allowResize: resizeToggle.checked,
+                    },
+                });
+                setPanelStatus('패널 설정을 저장했습니다.', 'success');
+            }
+        };
+        return {
+            openPanelSettings,
+        };
     }
 
     /**

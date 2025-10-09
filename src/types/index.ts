@@ -94,13 +94,15 @@ export interface PanelSettingsValue {
 }
 
 export interface PanelSettingsController {
+  STORAGE_KEY?: string;
   defaults?: {
     layout?: PanelSettingsLayout;
     behavior?: PanelSettingsBehavior;
   };
   get(): PanelSettingsValue;
-  update(value: PanelSettingsValue): void;
-  onChange(listener: (next: PanelSettingsValue) => void): void;
+  update(value: Partial<PanelSettingsValue>): PanelSettingsValue;
+  reset(): PanelSettingsValue;
+  onChange(listener: (next: PanelSettingsValue) => void): () => void;
 }
 
 export interface PanelVisibilityController {
@@ -705,7 +707,7 @@ export interface ModalAction {
 export interface ModalOpenOptions {
   title?: string;
   description?: string;
-  size?: 'small' | 'large';
+  size?: 'small' | 'medium' | 'large';
   bodyClass?: string;
   content?: Node | string | null;
   actions?: ModalAction[];
