@@ -1,112 +1,93 @@
-import { GMH_STATE } from './state.js';
+import { GMH_STATE } from './state';
+import type { ErrorHandler, ErrorHandlerOptions, ErrorLogEntry, PanelStateApi } from '../types';
 
-/**
- * @typedef {import('../types').ErrorHandler} ErrorHandler
- * @typedef {import('../types').ErrorHandlerOptions} ErrorHandlerOptions
- * @typedef {import('../types').ErrorLogEntry} ErrorLogEntry
- * @typedef {import('../types').PanelStateApi} PanelStateApi
- */
+const noop = (): void => {};
 
-/**
- * @returns {void}
- */
-const noop = () => {};
-
-/** @type {Record<string, string>} */
 export const ERROR_LEVELS = {
   DEBUG: 'debug',
   INFO: 'info',
   WARN: 'warn',
   ERROR: 'error',
   FATAL: 'fatal',
-};
+} as const;
 
-/** @type {Record<string, string>} */
-export const ERROR_CONTEXT_LABELS = {
+type ErrorLevel = (typeof ERROR_LEVELS)[keyof typeof ERROR_LEVELS];
+
+export const ERROR_CONTEXT_LABELS: Record<string, string> = {
   'privacy/load': '프라이버시 설정 로드 실패',
   'privacy/save': '프라이버시 설정 저장 실패',
   'privacy/redact': '레다크션 실패',
   'storage/read': '저장소 읽기 실패',
   'storage/write': '저장소 쓰기 실패',
-  'snapshot': 'DOM 스냅샷 실패',
-  'parse': '파싱 실패',
+  snapshot: 'DOM 스냅샷 실패',
+  parse: '파싱 실패',
   'parse/structured': '구조화 파싱 실패',
-  'export': '내보내기 실패',
+  export: '내보내기 실패',
   'export/file': '파일 다운로드 실패',
   'export/clipboard': '클립보드 복사 실패',
-  'autoload': '자동 로딩 실패',
+  autoload: '자동 로딩 실패',
   'autoload/scroll': '자동 스크롤 실패',
   'ui/panel': '패널 렌더링 실패',
   'ui/modal': '모달 표시 실패',
-  'adapter': '어댑터 오류',
+  adapter: '어댑터 오류',
   'adapter/detect': '어댑터 감지 실패',
-  'range': '범위 계산 실패',
-  'bookmark': '북마크 오류',
+  range: '범위 계산 실패',
+  bookmark: '북마크 오류',
 };
 
 const ERROR_LOG_KEY = 'gmh_error_log';
 const ERROR_LOG_MAX = 100;
 
-/**
- * @param {string} level
- * @returns {string}
- */
-const normalizeLevel = (level) => {
+const normalizeLevel = (level: string): ErrorLevel => {
   const validLevels = Object.values(ERROR_LEVELS);
-  return validLevels.includes(level) ? level : ERROR_LEVELS.ERROR;
+  return validLevels.includes(level as ErrorLevel) ? (level as ErrorLevel) : ERROR_LEVELS.ERROR;
 };
 
-/**
- * @param {unknown} error
- * @returns {string}
- */
-const extractMessage = (error) => {
+const extractMessage = (error: unknown): string => {
   if (!error) return '알 수 없는 오류';
   if (typeof error === 'string') return error;
-  if (typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
-    return error.message;
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string') return message;
   }
   return String(error);
 };
 
-/**
- * @param {Console | { info?: (...args: unknown[]) => void; warn?: (...args: unknown[]) => void; error?: (...args: unknown[]) => void } | null | undefined} consoleLike
- * @returns {Console | { info?: (...args: unknown[]) => void; warn?: (...args: unknown[]) => void; error?: (...args: unknown[]) => void }}
- */
-const ensureConsole = (consoleLike) => {
+type ConsoleLike =
+  | Console
+  | {
+      info?: (...args: unknown[]) => void;
+      warn?: (...args: unknown[]) => void;
+      error?: (...args: unknown[]) => void;
+    };
+
+const ensureConsole = (consoleLike?: ConsoleLike | null): ConsoleLike => {
   if (consoleLike) return consoleLike;
   if (typeof console !== 'undefined') return console;
   return { info: noop, warn: noop, error: noop };
 };
 
-/**
- * @param {ErrorHandlerOptions} [options]
- * @returns {ErrorHandler}
- */
 export const createErrorHandler = ({
   console: consoleLike,
   alert: alertImpl,
   localStorage,
   state,
-} = {}) => {
+}: ErrorHandlerOptions = {}): ErrorHandler => {
   const logger = ensureConsole(consoleLike);
   const info = typeof logger.info === 'function' ? logger.info.bind(logger) : noop;
   const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop;
   const error = typeof logger.error === 'function' ? logger.error.bind(logger) : noop;
   const alertFn = typeof alertImpl === 'function' ? alertImpl : noop;
-  /** @type {Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null | undefined} */
-  const storage = localStorage;
-  /** @type {PanelStateApi | undefined} */
-  const stateApi = state;
+  const storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null | undefined =
+    localStorage;
+  const stateApi: PanelStateApi | undefined = state ?? undefined;
 
-  /**
-   * @param {string | undefined} context
-   * @param {string} message
-   * @param {unknown} original
-   * @param {string} level
-   * @returns {void}
-   */
-  const logToConsole = (context, message, original, level) => {
+  const logToConsole = (
+    context: string | undefined,
+    message: string,
+    original: unknown,
+    level: ErrorLevel,
+  ): void => {
     const prefix = `[GMH:${context}]`;
     switch (level) {
       case ERROR_LEVELS.DEBUG:
@@ -121,13 +102,7 @@ export const createErrorHandler = ({
     }
   };
 
-  /**
-   * @param {string | undefined} context
-   * @param {string} message
-   * @param {string} level
-   * @returns {void}
-   */
-  const updateUIState = (context, message, level) => {
+  const updateUIState = (context: string | undefined, message: string, level: ErrorLevel): void => {
     if (!stateApi || typeof stateApi.setState !== 'function') return;
     const label = ERROR_CONTEXT_LABELS[context] || '오류 발생';
     try {
@@ -142,12 +117,7 @@ export const createErrorHandler = ({
     }
   };
 
-  /**
-   * @param {string | undefined} context
-   * @param {string} message
-   * @returns {void}
-   */
-  const alertUser = (context, message) => {
+  const alertUser = (context: string | undefined, message: string): void => {
     const label = ERROR_CONTEXT_LABELS[context] || '오류';
     try {
       alertFn(`${label}\n\n${message}`);
@@ -156,16 +126,11 @@ export const createErrorHandler = ({
     }
   };
 
-  /**
-   * @param {ErrorLogEntry} data
-   * @returns {void}
-   */
-  const persistError = (data) => {
+  const persistError = (data: ErrorLogEntry): void => {
     if (!storage || typeof storage.getItem !== 'function') return;
     try {
       const stored = storage.getItem(ERROR_LOG_KEY);
-      /** @type {ErrorLogEntry[]} */
-      const errors = stored ? JSON.parse(stored) : [];
+      const errors = stored ? (JSON.parse(stored) as ErrorLogEntry[]) : [];
       errors.push(data);
       if (errors.length > ERROR_LOG_MAX) {
         errors.splice(0, errors.length - ERROR_LOG_MAX);
@@ -178,19 +143,13 @@ export const createErrorHandler = ({
 
   const handler = {
     LEVELS: ERROR_LEVELS,
-    /**
-     * @param {unknown} errorInput
-     * @param {string} [context]
-     * @param {string} [level]
-     * @returns {string}
-     */
-    handle(errorInput, context, level = ERROR_LEVELS.ERROR) {
+    handle(errorInput: unknown, context?: string, level: string = ERROR_LEVELS.ERROR) {
       const message = extractMessage(errorInput);
       const timestamp = new Date().toISOString();
       const normalizedLevel = normalizeLevel(level);
-      let stackValue = null;
+      let stackValue: string | null = null;
       if (typeof errorInput === 'object' && errorInput) {
-        const stackCandidate = /** @type {{ stack?: unknown }} */ (errorInput).stack;
+        const stackCandidate = (errorInput as { stack?: unknown }).stack;
         if (typeof stackCandidate === 'string') {
           stackValue = stackCandidate;
         }
@@ -220,7 +179,7 @@ export const createErrorHandler = ({
       if (!storage || typeof storage.getItem !== 'function') return [];
       try {
         const stored = storage.getItem(ERROR_LOG_KEY);
-        return stored ? /** @type {ErrorLogEntry[]} */ (JSON.parse(stored)) : [];
+        return stored ? (JSON.parse(stored) as ErrorLogEntry[]) : [];
       } catch (err) {
         warn('[GMH] Failed to read error log', err);
         return [];
@@ -238,7 +197,7 @@ export const createErrorHandler = ({
     },
   };
 
-  return /** @type {ErrorHandler} */ (handler);
+  return handler as ErrorHandler;
 };
 
 export default createErrorHandler;
