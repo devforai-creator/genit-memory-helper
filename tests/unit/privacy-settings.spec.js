@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 
-import { createPrivacyStore } from '../../src/privacy/settings.js';
-import { STORAGE_KEYS } from '../../src/privacy/constants.js';
+import { createPrivacyStore } from '../../src/privacy/settings.ts';
+import { STORAGE_KEYS } from '../../src/privacy/constants.ts';
 
 const MAX_ITEMS = 1000;
 const MAX_ITEM_LENGTH = 200;

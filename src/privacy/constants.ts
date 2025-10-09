@@ -2,7 +2,7 @@ export const STORAGE_KEYS = {
   privacyProfile: 'gmh_privacy_profile',
   privacyBlacklist: 'gmh_privacy_blacklist',
   privacyWhitelist: 'gmh_privacy_whitelist',
-};
+} as const;
 
 export const PRIVACY_PROFILES = {
   safe: {
@@ -23,6 +23,8 @@ export const PRIVACY_PROFILES = {
     maskAddressHints: false,
     maskNarrativeSensitive: false,
   },
-};
+} as const;
 
-export const DEFAULT_PRIVACY_PROFILE = 'safe';
+export type PrivacyProfileKey = keyof typeof PRIVACY_PROFILES;
+
+export const DEFAULT_PRIVACY_PROFILE: PrivacyProfileKey = 'safe';

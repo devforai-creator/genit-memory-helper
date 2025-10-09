@@ -1,22 +1,60 @@
-import { STORAGE_KEYS, PRIVACY_PROFILES, DEFAULT_PRIVACY_PROFILE } from './constants.js';
+import { STORAGE_KEYS, PRIVACY_PROFILES, DEFAULT_PRIVACY_PROFILE } from './constants';
 import { CONFIG } from '../config.js';
+import type { ErrorHandler } from '../types';
 
-const noop = () => {};
+const noop = (): void => {};
 const MAX_CUSTOM_LIST_ITEMS = CONFIG.LIMITS.PRIVACY_LIST_MAX;
 const MAX_CUSTOM_ITEM_LENGTH = CONFIG.LIMITS.PRIVACY_ITEM_MAX;
 const DISALLOWED_PATTERN = /<|>|javascript:/i;
 
-const sanitizeList = (items = [], collapseSpaces = (value) => value) => {
+type CollapseSpaces = (value: string) => string;
+
+type PrivacyProfilesMap = Record<
+  string,
+  {
+    key?: string;
+    label?: string;
+    maskAddressHints?: boolean;
+    maskNarrativeSensitive?: boolean;
+    [key: string]: unknown;
+  }
+>;
+
+type SanitizedListResult = {
+  list: string[];
+  invalidType: boolean;
+  truncated: boolean;
+  clipped: boolean;
+};
+
+export type PrivacyStoreConfig = {
+  profile: string;
+  blacklist: string[];
+  whitelist: string[];
+};
+
+export type PrivacyStore = {
+  config: PrivacyStoreConfig;
+  load: () => PrivacyStoreConfig;
+  persist: () => PrivacyStoreConfig;
+  setProfile: (profileKey: string) => PrivacyStoreConfig;
+  setCustomList: (type: 'blacklist' | 'whitelist', items: unknown) => PrivacyStoreConfig;
+};
+
+type PrivacyStoreOptions = {
+  storage?: Pick<Storage, 'getItem' | 'setItem'> | null;
+  errorHandler?: ErrorHandler | null;
+  collapseSpaces?: CollapseSpaces;
+  defaultProfile?: string;
+  profiles?: PrivacyProfilesMap;
+};
+
+const sanitizeList = (items: unknown, collapseSpaces: CollapseSpaces): SanitizedListResult => {
   if (!Array.isArray(items)) {
-    return {
-      list: [],
-      invalidType: Boolean(items),
-      truncated: false,
-      clipped: false,
-    };
+    return { list: [], invalidType: Boolean(items), truncated: false, clipped: false };
   }
 
-  const list = [];
+  const list: string[] = [];
   let invalidType = false;
   let truncated = false;
   let clipped = false;
@@ -32,7 +70,7 @@ const sanitizeList = (items = [], collapseSpaces = (value) => value) => {
       continue;
     }
     const collapsed = collapseSpaces(raw);
-    const collapsedString = typeof collapsed === 'string' ? collapsed : String(collapsed || '');
+    const collapsedString = typeof collapsed === 'string' ? collapsed : String(collapsed ?? '');
     const trimmed = collapsedString.trim();
     if (!trimmed) {
       if (raw.trim?.()) invalidType = true;
@@ -55,38 +93,39 @@ const sanitizeList = (items = [], collapseSpaces = (value) => value) => {
   return { list, invalidType, truncated, clipped };
 };
 
-/**
- * Persists privacy configuration (profile and custom lists) with validation and logging hooks.
- */
 export const createPrivacyStore = ({
   storage,
   errorHandler,
-  collapseSpaces,
+  collapseSpaces = (value: string) => value,
   defaultProfile = DEFAULT_PRIVACY_PROFILE,
   profiles = PRIVACY_PROFILES,
-} = {}) => {
-  const config = {
+}: PrivacyStoreOptions = {}): PrivacyStore => {
+  const config: PrivacyStoreConfig = {
     profile: defaultProfile,
     blacklist: [],
     whitelist: [],
   };
 
-  const safeHandle = (err, context, level) => {
+  const safeHandle = (err: unknown, context?: string, level?: string): void => {
     if (!errorHandler?.handle) return;
     const severity = level || errorHandler.LEVELS?.WARN;
     try {
       errorHandler.handle(err, context, severity);
-    } catch (noopErr) {
-      noop(noopErr);
+    } catch {
+      noop();
     }
   };
 
-  const warnListIssue = (type, reason, context) => {
+  const warnListIssue = (type: string, reason: string, context: string): void => {
     const message = `[GMH] ${type} ${reason}`;
     safeHandle(new Error(message), context, errorHandler?.LEVELS?.WARN);
   };
 
-  const applySanitizedList = (items, type, context) => {
+  const applySanitizedList = (
+    items: unknown,
+    type: string,
+    context: string,
+  ): string[] => {
     const { list, invalidType, truncated, clipped } = sanitizeList(items, collapseSpaces);
     if (invalidType) warnListIssue(type, 'contains invalid entries; dropping invalid values.', context);
     if (truncated) warnListIssue(type, `exceeded ${MAX_CUSTOM_LIST_ITEMS} entries; extra values dropped.`, context);
@@ -94,7 +133,7 @@ export const createPrivacyStore = ({
     return list;
   };
 
-  const readItem = (key) => {
+  const readItem = (key: string): string | null => {
     if (!storage || typeof storage.getItem !== 'function') return null;
     try {
       return storage.getItem(key);
@@ -104,7 +143,7 @@ export const createPrivacyStore = ({
     }
   };
 
-  const writeItem = (key, value) => {
+  const writeItem = (key: string, value: string): void => {
     if (!storage || typeof storage.setItem !== 'function') return;
     try {
       storage.setItem(key, value);
@@ -113,54 +152,47 @@ export const createPrivacyStore = ({
     }
   };
 
-  const load = () => {
+  const loadLists = (raw: string | null, label: string): string[] => {
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      return applySanitizedList(parsed, label, 'privacy/load');
+    } catch (err) {
+      safeHandle(err, 'privacy/load');
+      return [];
+    }
+  };
+
+  const load = (): PrivacyStoreConfig => {
     const profileKey = readItem(STORAGE_KEYS.privacyProfile) || defaultProfile;
-
     const rawBlacklist = readItem(STORAGE_KEYS.privacyBlacklist);
-    const blacklist = (() => {
-      if (!rawBlacklist) return [];
-      try {
-        const parsed = JSON.parse(rawBlacklist);
-        return applySanitizedList(parsed, 'privacy blacklist', 'privacy/load');
-      } catch (err) {
-        safeHandle(err, 'privacy/load');
-        return [];
-      }
-    })();
-
     const rawWhitelist = readItem(STORAGE_KEYS.privacyWhitelist);
-    const whitelist = (() => {
-      if (!rawWhitelist) return [];
-      try {
-        const parsed = JSON.parse(rawWhitelist);
-        return applySanitizedList(parsed, 'privacy whitelist', 'privacy/load');
-      } catch (err) {
-        safeHandle(err, 'privacy/load');
-        return [];
-      }
-    })();
 
     config.profile = profiles[profileKey] ? profileKey : defaultProfile;
-    config.blacklist = blacklist;
-    config.whitelist = whitelist;
+    config.blacklist = loadLists(rawBlacklist, 'privacy blacklist');
+    config.whitelist = loadLists(rawWhitelist, 'privacy whitelist');
     return config;
   };
 
-  const persist = () => {
+  const persist = (): PrivacyStoreConfig => {
     writeItem(STORAGE_KEYS.privacyProfile, config.profile);
     writeItem(STORAGE_KEYS.privacyBlacklist, JSON.stringify(config.blacklist || []));
     writeItem(STORAGE_KEYS.privacyWhitelist, JSON.stringify(config.whitelist || []));
     return config;
   };
 
-  const setProfile = (profileKey) => {
+  const setProfile = (profileKey: string): PrivacyStoreConfig => {
     config.profile = profiles[profileKey] ? profileKey : defaultProfile;
     return persist();
   };
 
-  const setCustomList = (type, items) => {
-    if (type === 'blacklist') config.blacklist = applySanitizedList(items, 'privacy blacklist', 'privacy/save');
-    if (type === 'whitelist') config.whitelist = applySanitizedList(items, 'privacy whitelist', 'privacy/save');
+  const setCustomList = (type: 'blacklist' | 'whitelist', items: unknown): PrivacyStoreConfig => {
+    if (type === 'blacklist') {
+      config.blacklist = applySanitizedList(items, 'privacy blacklist', 'privacy/save');
+    }
+    if (type === 'whitelist') {
+      config.whitelist = applySanitizedList(items, 'privacy whitelist', 'privacy/save');
+    }
     return persist();
   };
 

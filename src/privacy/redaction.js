@@ -1,4 +1,4 @@
-import { PRIVACY_PROFILES, DEFAULT_PRIVACY_PROFILE } from './constants.js';
+import { PRIVACY_PROFILES, DEFAULT_PRIVACY_PROFILE } from './constants.ts';
 import { luhnValid } from '../utils/validation.ts';
 
 export const REDACTION_PATTERNS = {

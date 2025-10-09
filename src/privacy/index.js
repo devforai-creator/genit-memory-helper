@@ -1,5 +1,5 @@
-export { STORAGE_KEYS, PRIVACY_PROFILES, DEFAULT_PRIVACY_PROFILE } from './constants.js';
-export { createPrivacyStore } from './settings.js';
+export { STORAGE_KEYS, PRIVACY_PROFILES, DEFAULT_PRIVACY_PROFILE } from './constants.ts';
+export { createPrivacyStore } from './settings.ts';
 export {
   REDACTION_PATTERNS,
   escapeForRegex,

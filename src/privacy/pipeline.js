@@ -1,4 +1,4 @@
-import { DEFAULT_PRIVACY_PROFILE, PRIVACY_PROFILES } from './constants.js';
+import { DEFAULT_PRIVACY_PROFILE, PRIVACY_PROFILES } from './constants.ts';
 
 /**
  * @typedef {import('../types').PrivacyPipelineDependencies} PrivacyPipelineDependencies
