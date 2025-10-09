@@ -282,9 +282,10 @@ export function createRangeControls({
 
         const lookupOrdinalByIndex = messageIndexer?.lookupOrdinalByIndex;
         const lookupOrdinalByMessageId = messageIndexer?.lookupOrdinalByMessageId;
+        const numericIndex = typeof index === 'number' && Number.isFinite(index) ? index : null;
         const resolvedOrdinal = [
-          Number.isFinite(index) && typeof lookupOrdinalByIndex === 'function'
-            ? lookupOrdinalByIndex(index)
+          numericIndex !== null && typeof lookupOrdinalByIndex === 'function'
+            ? lookupOrdinalByIndex(numericIndex)
             : null,
           messageIdAttr && typeof lookupOrdinalByMessageId === 'function'
             ? lookupOrdinalByMessageId(messageIdAttr)

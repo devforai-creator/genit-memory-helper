@@ -151,7 +151,7 @@ export interface MessageIndexerOptions {
     listMessageBlocks?(doc: Document | Element): Iterable<Element> | Element[] | NodeListOf<Element> | null;
     detectRole?(block: Element): string;
   } | null;
-  getEntryOrigin?: () => number[];
+  getEntryOrigin?: () => Array<number | null>;
 }
 
 export interface TurnBookmarkEntry {
@@ -214,7 +214,7 @@ export interface ExportRangeInfo {
 
 export interface ExportRangeSelection {
   indices: number[];
-  ordinals?: number[];
+  ordinals?: Array<number | null>;
   info?: ExportRangeInfo | null;
   turns?: TranscriptTurn[];
   rangeDetails?: {
@@ -305,7 +305,7 @@ export interface TranscriptParseResult {
   metaHints: TranscriptMetaHints;
 }
 
-export type EntryOriginProvider = () => number[];
+export type EntryOriginProvider = () => Array<number | null>;
 
 export interface AutoLoaderOptions {
   stateApi: PanelStateApi;
@@ -374,28 +374,32 @@ export interface AutoLoaderExports {
 }
 
 export interface StructuredSnapshotMessagePart {
-  speaker?: string;
-  role?: string;
-  flavor?: string;
-  type?: string;
-  text?: string;
-  language?: string;
+  speaker?: string | null;
+  role?: string | null;
+  flavor?: string | null;
+  type?: string | null;
+  text?: string | null;
+  language?: string | null;
   lines?: string[];
   legacyLines?: string[];
   items?: string[];
-  alt?: string;
-  title?: string;
-  level?: number;
+  alt?: string | null;
+  title?: string | null;
+  level?: number | null;
   ordered?: boolean;
-  src?: string;
+  src?: string | null;
+  legacyFormat?: string | null;
   [key: string]: unknown;
 }
 
 export interface StructuredSnapshotMessage {
-  speaker?: string;
-  role?: string;
-  channel?: string;
-  ordinal?: number;
+  id?: string | null;
+  index?: number | null;
+  ordinal?: number | null;
+  userOrdinal?: number | null;
+  speaker?: string | null;
+  role?: string | null;
+  channel?: string | null;
   parts?: StructuredSnapshotMessagePart[];
   legacyLines?: string[];
   [key: string]: unknown;
@@ -404,7 +408,7 @@ export interface StructuredSnapshotMessage {
 export interface StructuredSnapshot {
   messages: StructuredSnapshotMessage[];
   legacyLines: string[];
-  entryOrigin: unknown[];
+  entryOrigin: Array<number | null>;
   errors: unknown[];
   generatedAt: number;
   [key: string]: unknown;
@@ -565,7 +569,7 @@ export interface SnapshotCaptureOptions {
 
 export interface StructuredSnapshotReaderOptions {
   getActiveAdapter: () => SnapshotAdapter | null | undefined;
-  setEntryOriginProvider?: (provider: () => number[]) => void;
+  setEntryOriginProvider?: (provider: () => Array<number | null>) => void;
   documentRef?: Document | null;
 }
 
@@ -618,7 +622,10 @@ export interface ShareWorkflowOptions {
   normalizeTranscript(raw: string): string;
   buildSession(raw: string): TranscriptSession;
   exportRange?: ExportRangeController;
-  projectStructuredMessages(structured: StructuredSnapshot, info?: ExportRangeInfo | null): StructuredSelectionResult;
+  projectStructuredMessages(
+    structured: StructuredSnapshot | null | undefined,
+    info?: ExportRangeInfo | null,
+  ): StructuredSelectionResult;
   cloneSession(session: TranscriptSession): TranscriptSession;
   applyPrivacyPipeline(session: TranscriptSession, raw: string, profile: string, snapshot?: StructuredSnapshot | null): PrivacyPipelineResult;
   privacyConfig: { profile: string; [key: string]: unknown };
@@ -644,7 +651,7 @@ export interface ShareWorkflowOptions {
   stateApi: PanelStateApi;
   stateEnum: Record<string, string> & { PREVIEW?: string; EXPORTING?: string; REDACTING?: string; DONE?: string; ERROR?: string; IDLE?: string };
   confirmPrivacyGate(options: Record<string, unknown>): Promise<boolean>;
-  getEntryOrigin(): unknown[];
+  getEntryOrigin(): Array<number | null>;
   collectSessionStats(session: TranscriptSession): { userMessages: number; llmMessages: number; [key: string]: unknown };
   alert?(message: string): void;
   logger?: Console | { log?: (...args: unknown[]) => void; warn?: (...args: unknown[]) => void };

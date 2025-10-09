@@ -346,16 +346,12 @@ export function createPanelVisibility({
     const effectiveHeight = height || rect.height || 320;
 
     const bottomLimit = Math.max(MIN_GAP, viewportHeight - effectiveHeight - MIN_GAP);
-    const bottom = Math.min(
-      Math.max(MIN_GAP, layout.bottom ?? DEFAULT_LAYOUT.bottom),
-      bottomLimit,
-    );
+    const resolvedBottom = layout.bottom ?? DEFAULT_LAYOUT.bottom ?? MIN_GAP;
+    const bottom = Math.min(Math.max(MIN_GAP, resolvedBottom), bottomLimit);
 
     const horizontalLimit = Math.max(MIN_GAP, viewportWidth - MIN_GAP - 160);
-    const offset = Math.min(
-      Math.max(MIN_GAP, layout.offset ?? DEFAULT_LAYOUT.offset),
-      horizontalLimit,
-    );
+    const resolvedOffset = layout.offset ?? DEFAULT_LAYOUT.offset ?? MIN_GAP;
+    const offset = Math.min(Math.max(MIN_GAP, resolvedOffset), horizontalLimit);
 
     if (layout.anchor === 'left') {
       panelEl.style.left = `${offset}px`;
@@ -671,11 +667,11 @@ export function createPanelVisibility({
 
     const horizontalRoom = Math.max(
       MIN_GAP,
-      viewportWidth - (currentLayout.offset ?? DEFAULT_LAYOUT.offset) - MIN_GAP,
+      viewportWidth - (currentLayout.offset ?? DEFAULT_LAYOUT.offset ?? MIN_GAP) - MIN_GAP,
     );
     const verticalRoom = Math.max(
       MIN_GAP,
-      viewportHeight - (currentLayout.bottom ?? DEFAULT_LAYOUT.bottom) - MIN_GAP,
+      viewportHeight - (currentLayout.bottom ?? DEFAULT_LAYOUT.bottom ?? MIN_GAP) - MIN_GAP,
     );
 
     let nextWidth = resizeSession.width + dx;
@@ -711,9 +707,10 @@ export function createPanelVisibility({
 
   const open = ({ focus = false, persist = false } = {}): boolean => {
     if (!panelEl) return false;
+    const targetPanel = panelEl;
     if (!modernMode) {
-      if (focus && typeof panelEl.focus === 'function') {
-        requestAnimationFrame(() => panelEl.focus({ preventScroll: true }));
+      if (focus && typeof targetPanel.focus === 'function') {
+        requestAnimationFrame(() => targetPanel.focus({ preventScroll: true }));
       }
       return true;
     }

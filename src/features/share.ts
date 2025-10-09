@@ -109,15 +109,31 @@ export function createShareWorkflow(options: ShareWorkflowOptions): ShareWorkflo
       buildExportBundle: (fn) => typeof fn === 'function',
       buildExportManifest: (fn) => typeof fn === 'function',
       triggerDownload: (fn) => typeof fn === 'function',
-      exportRange: (value: ExportRangeController | null | undefined) => Boolean(value?.setTotals),
-      'clipboard.set': (fn: ClipboardHelper['set']) => typeof fn === 'function',
-      stateApi: (value: PanelStateApi | null | undefined) => Boolean(value?.setState),
+      exportRange: (value) => {
+        const controller = value as ExportRangeController | null | undefined;
+        return Boolean(controller?.setTotals);
+      },
+      'clipboard.set': (fn) => typeof fn === 'function',
+      stateApi: (value) => {
+        const api = value as PanelStateApi | null | undefined;
+        return Boolean(api?.setState);
+      },
       stateEnum: (value) => Boolean(value),
       confirmPrivacyGate: (fn) => typeof fn === 'function',
       getEntryOrigin: (fn) => typeof fn === 'function',
       collectSessionStats: (fn) => typeof fn === 'function',
     },
   );
+
+  const resolveStateKey = (value: string | undefined, fallback: string): string =>
+    typeof value === 'string' && value.length > 0 ? value : fallback;
+
+  const setState = (value: string | undefined, fallback: string, payload: unknown): void => {
+    stateApi.setState(resolveStateKey(value, fallback), payload);
+  };
+
+  const toErrorMessage = (err: unknown): string =>
+    err instanceof Error && typeof err.message === 'string' ? err.message : String(err);
 
   const parseAll = (): ParseAllResult => {
     const snapshot = captureStructuredSnapshot({ force: true });
@@ -146,7 +162,7 @@ export function createShareWorkflow(options: ShareWorkflowOptions): ShareWorkflo
     blockedStatusMessage,
   }: PrepareShareOptions = {}): Promise<PreparedShareResult | null> => {
     try {
-      stateApi.setState(stateEnum.REDACTING, {
+      setState(stateEnum.REDACTING, 'REDACTING', {
         label: '민감정보 마스킹 중',
         message: '레다크션 파이프라인 적용 중...',
         tone: 'progress',
@@ -167,7 +183,7 @@ export function createShareWorkflow(options: ShareWorkflowOptions): ShareWorkflo
 
 ※ 정당한 교육/상담 내용이 차단되었다면 GitHub Issues로 신고해주세요.
 https://github.com/devforai-creator/genit-memory-helper/issues`);
-        stateApi.setState(stateEnum.ERROR, {
+        setState(stateEnum.ERROR, 'ERROR', {
           label: '작업 차단',
           message: blockedStatusMessage || '미성년자 민감 맥락으로 작업이 차단되었습니다.',
           tone: 'error',
@@ -247,7 +263,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       const stats = collectSessionStats(exportSession);
       const overallStats = collectSessionStats(privacy.sanitizedSession);
       const previewTurns = exportSession.turns.slice(-5) as TranscriptTurn[];
-      stateApi.setState(stateEnum.PREVIEW, {
+      setState(stateEnum.PREVIEW, 'PREVIEW', {
         label: '미리보기 준비 완료',
         message: '레다크션 결과를 검토하세요.',
         tone: 'info',
@@ -266,7 +282,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         actionLabel: confirmLabel || '계속',
       });
       if (!ok) {
-        stateApi.setState(stateEnum.IDLE, {
+        setState(stateEnum.IDLE, 'IDLE', {
           label: '대기 중',
           message: cancelStatusMessage || '작업을 취소했습니다.',
           tone: cancelStatusMessage ? 'muted' : 'info',
@@ -286,9 +302,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         structuredSelection,
       };
     } catch (error) {
-      const errorMsg = error?.message || String(error);
+      const errorMsg = toErrorMessage(error);
       alertFn(`오류: ${errorMsg}`);
-      stateApi.setState(stateEnum.ERROR, {
+      setState(stateEnum.ERROR, 'ERROR', {
         label: '작업 실패',
         message: '작업 준비 중 오류가 발생했습니다.',
         tone: 'error',
@@ -305,10 +321,13 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
    * @param {string} format
    * @returns {Promise<boolean>}
    */
-  const performExport = async (prepared, format) => {
+  const performExport = async (
+    prepared: PreparedShareResult | null,
+    format: string,
+  ): Promise<boolean> => {
     if (!prepared) return false;
     try {
-      stateApi.setState(stateEnum.EXPORTING, {
+      setState(stateEnum.EXPORTING, 'EXPORTING', {
         label: '내보내기 진행 중',
         message: `${format.toUpperCase()} 내보내기를 준비하는 중입니다...`,
         tone: 'progress',
@@ -370,7 +389,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         profile: privacy.profile,
         counts: { ...privacy.counts },
         stats,
-        overallStats,
+        overallStats: overallStats ?? undefined,
         format: targetFormat,
         warnings: privacy.sanitizedSession.warnings,
         source: privacy.sanitizedSession.source,
@@ -384,12 +403,21 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
       const summary = formatRedactionCounts(privacy.counts);
       const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
-      const messageTotalAvailable = rangeInfo?.messageTotal || sessionForExport.turns.length;
-      const userTotalAvailable = rangeInfo?.userTotal || overallStats?.userMessages || stats.userMessages;
-      const llmTotalAvailable = rangeInfo?.llmTotal || overallStats?.llmMessages || stats.llmMessages;
-      let rangeNote = hasCustomRange
-        ? ` · (선택) 메시지 ${rangeInfo.start}-${rangeInfo.end}/${rangeInfo.total}`
-        : ` · 전체 메시지 ${messageTotalAvailable}개`;
+      const messageTotalAvailable =
+        rangeInfo?.messageTotal ?? sessionForExport.turns.length;
+      const userTotalAvailable =
+        rangeInfo?.userTotal ?? overallStats?.userMessages ?? stats.userMessages;
+      const llmTotalAvailable =
+        rangeInfo?.llmTotal ?? overallStats?.llmMessages ?? stats.llmMessages;
+      let rangeNote: string;
+      if (hasCustomRange && rangeInfo) {
+        const startLabel = rangeInfo.start ?? '?';
+        const endLabel = rangeInfo.end ?? '?';
+        const totalLabel = rangeInfo.total ?? '?';
+        rangeNote = ` · (선택) 메시지 ${startLabel}-${endLabel}/${totalLabel}`;
+      } else {
+        rangeNote = ` · 전체 메시지 ${messageTotalAvailable}개`;
+      }
       if (Number.isFinite(userTotalAvailable)) {
         rangeNote += ` · 유저 ${stats.userMessages}개`;
       }
@@ -397,7 +425,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         rangeNote += ` · LLM ${stats.llmMessages}개`;
       }
       const message = `${targetFormat.toUpperCase()} 내보내기 완료${rangeNote} · ${profileLabel} · ${summary}`;
-      stateApi.setState(stateEnum.DONE, {
+      setState(stateEnum.DONE, 'DONE', {
         label: '내보내기 완료',
         message,
         tone: 'success',
@@ -411,9 +439,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       }
       return true;
     } catch (error) {
-      const errorMsg = error?.message || String(error);
+      const errorMsg = toErrorMessage(error);
       alertFn(`오류: ${errorMsg}`);
-      stateApi.setState(stateEnum.ERROR, {
+      setState(stateEnum.ERROR, 'ERROR', {
         label: '내보내기 실패',
         message: '내보내기 실패',
         tone: 'error',
@@ -429,7 +457,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
    * @param {ShareWorkflowApi['prepareShare']} prepareShareFn
    * @returns {Promise<void>}
    */
-  const copyRecent = async (prepareShareFn) => {
+  const copyRecent = async (prepareShareFn: ShareWorkflowApi['prepareShare']): Promise<void> => {
     const prepared = await prepareShareFn({
       confirmLabel: '복사 계속',
       cancelStatusMessage: '복사를 취소했습니다.',
@@ -437,7 +465,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     });
     if (!prepared) return;
     try {
-      stateApi.setState(stateEnum.EXPORTING, {
+      setState(stateEnum.EXPORTING, 'EXPORTING', {
         label: '복사 진행 중',
         message: '최근 15메시지를 복사하는 중입니다...',
         tone: 'progress',
@@ -455,7 +483,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       const summary = formatRedactionCounts(privacy.counts);
       const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
       const message = `최근 15메시지 복사 완료 · 유저 ${effectiveStats.userMessages}개 · LLM ${effectiveStats.llmMessages}개 · ${profileLabel} · ${summary}`;
-      stateApi.setState(stateEnum.DONE, {
+      setState(stateEnum.DONE, 'DONE', {
         label: '복사 완료',
         message,
         tone: 'success',
@@ -465,9 +493,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
       }
     } catch (error) {
-      const errorMsg = error?.message || String(error);
+      const errorMsg = toErrorMessage(error);
       alertFn(`오류: ${errorMsg}`);
-      stateApi.setState(stateEnum.ERROR, {
+      setState(stateEnum.ERROR, 'ERROR', {
         label: '복사 실패',
         message: '복사 실패',
         tone: 'error',
@@ -482,7 +510,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
    * @param {ShareWorkflowApi['prepareShare']} prepareShareFn
    * @returns {Promise<void>}
    */
-  const copyAll = async (prepareShareFn) => {
+  const copyAll = async (prepareShareFn: ShareWorkflowApi['prepareShare']): Promise<void> => {
     const prepared = await prepareShareFn({
       confirmLabel: '복사 계속',
       cancelStatusMessage: '복사를 취소했습니다.',
@@ -490,7 +518,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     });
     if (!prepared) return;
     try {
-      stateApi.setState(stateEnum.EXPORTING, {
+      setState(stateEnum.EXPORTING, 'EXPORTING', {
         label: '복사 진행 중',
         message: '전체 Markdown을 복사하는 중입니다...',
         tone: 'progress',
@@ -503,7 +531,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       const summary = formatRedactionCounts(privacy.counts);
       const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
       const message = `전체 Markdown 복사 완료 · 유저 ${effectiveStats.userMessages}개 · LLM ${effectiveStats.llmMessages}개 · ${profileLabel} · ${summary}`;
-      stateApi.setState(stateEnum.DONE, {
+      setState(stateEnum.DONE, 'DONE', {
         label: '복사 완료',
         message,
         tone: 'success',
@@ -513,9 +541,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
       }
     } catch (error) {
-      const errorMsg = error?.message || String(error);
+      const errorMsg = toErrorMessage(error);
       alertFn(`오류: ${errorMsg}`);
-      stateApi.setState(stateEnum.ERROR, {
+      setState(stateEnum.ERROR, 'ERROR', {
         label: '복사 실패',
         message: '복사 실패',
         tone: 'error',
@@ -527,9 +555,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
   /**
    * Forces a reparse cycle to refresh sanitized stats without exporting.
    */
-  const reparse = () => {
+  const reparse = (): void => {
     try {
-      stateApi.setState(stateEnum.REDACTING, {
+      setState(stateEnum.REDACTING, 'REDACTING', {
         label: '재파싱 중',
         message: '대화 로그를 다시 분석하는 중입니다...',
         tone: 'progress',
@@ -544,7 +572,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       const message = `재파싱 완료 · 유저 ${stats.userMessages}개 · LLM ${stats.llmMessages}개 · 경고 ${
         privacy.sanitizedSession.warnings.length
       }건 · ${profileLabel} · ${summary}${extra}`;
-      stateApi.setState(stateEnum.DONE, {
+      setState(stateEnum.DONE, 'DONE', {
         label: '재파싱 완료',
         message,
         tone: 'info',
@@ -554,7 +582,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
       }
     } catch (error) {
-      const errorMsg = error?.message || String(error);
+      const errorMsg = toErrorMessage(error);
       alertFn(`오류: ${errorMsg}`);
     }
   };

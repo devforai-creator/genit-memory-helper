@@ -58,7 +58,7 @@ export const setEntryOriginProvider = (provider: EntryOriginProvider | null | un
   entryOriginProvider = typeof provider === 'function' ? provider : () => [];
 };
 
-const getEntryOrigin = (): number[] => {
+const getEntryOrigin = (): Array<number | null> => {
   const origin = entryOriginProvider();
   return Array.isArray(origin) ? origin.slice() : [];
 };
@@ -339,7 +339,9 @@ export const deriveMeta = (metaHints: TranscriptMetaHints, turns: TranscriptTurn
   let userCount = 0;
   let llmCount = 0;
   for (const turn of turns) {
-    if (turn.role === 'player' || turn.role === 'npc') actorSet.add(turn.speaker);
+    if ((turn.role === 'player' || turn.role === 'npc') && typeof turn.speaker === 'string') {
+      actorSet.add(turn.speaker);
+    }
     if (turn.channel === 'user') userCount += 1;
     else if (turn.channel === 'llm') llmCount += 1;
   }

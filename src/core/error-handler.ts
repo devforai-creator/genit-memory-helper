@@ -104,7 +104,7 @@ export const createErrorHandler = ({
 
   const updateUIState = (context: string | undefined, message: string, level: ErrorLevel): void => {
     if (!stateApi || typeof stateApi.setState !== 'function') return;
-    const label = ERROR_CONTEXT_LABELS[context] || '오류 발생';
+    const label = (context ? ERROR_CONTEXT_LABELS[context] : undefined) || '오류 발생';
     try {
       stateApi.setState(GMH_STATE.ERROR, {
         label,
@@ -118,7 +118,7 @@ export const createErrorHandler = ({
   };
 
   const alertUser = (context: string | undefined, message: string): void => {
-    const label = ERROR_CONTEXT_LABELS[context] || '오류';
+    const label = (context ? ERROR_CONTEXT_LABELS[context] : undefined) || '오류';
     try {
       alertFn(`${label}\n\n${message}`);
     } catch (err) {

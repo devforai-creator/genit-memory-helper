@@ -84,7 +84,7 @@ export function createStateView({
   let unsubscribe: (() => void) | null = null;
 
   const clamp = (value?: number | null): number => {
-    if (!Number.isFinite(value)) return 0;
+    if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
     if (value < 0) return 0;
     if (value > 1) return 1;
     return value;

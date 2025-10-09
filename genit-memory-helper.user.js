@@ -278,7 +278,7 @@ var GMHBundle = (function (exports) {
         const updateUIState = (context, message, level) => {
             if (!stateApi || typeof stateApi.setState !== 'function')
                 return;
-            const label = ERROR_CONTEXT_LABELS[context] || '오류 발생';
+            const label = (context ? ERROR_CONTEXT_LABELS[context] : undefined) || '오류 발생';
             try {
                 stateApi.setState(GMH_STATE.ERROR, {
                     label,
@@ -292,7 +292,7 @@ var GMHBundle = (function (exports) {
             }
         };
         const alertUser = (context, message) => {
-            const label = ERROR_CONTEXT_LABELS[context] || '오류';
+            const label = (context ? ERROR_CONTEXT_LABELS[context] : undefined) || '오류';
             try {
                 alertFn(`${label}\n\n${message}`);
             }
@@ -1057,7 +1057,7 @@ var GMHBundle = (function (exports) {
             }
             const entryOrigin = getOrigins() || [];
             const entryOriginIndices = Array.isArray(entryOrigin)
-                ? entryOrigin.filter((idx) => Number.isInteger(idx) && idx >= 0)
+                ? entryOrigin.filter((idx) => typeof idx === 'number' && Number.isInteger(idx) && idx >= 0)
                 : [];
             const uniqueEntryCount = entryOriginIndices.length ? new Set(entryOriginIndices).size : 0;
             const entryCount = blocks.length || uniqueEntryCount;
@@ -1538,7 +1538,7 @@ var GMHBundle = (function (exports) {
             return roleNodes.find((node) => {
                 const role = node.getAttribute('role') || '';
                 return /log|list|main|region/i.test(role) && isScrollable(node);
-            });
+            }) ?? null;
         };
         const findByTextHint = (root = document) => {
             const hints = selectors.textHints || [];
@@ -1552,7 +1552,7 @@ var GMHBundle = (function (exports) {
                     return false;
                 return hints.some((hint) => text.includes(hint));
             });
-            return nodes.find((node) => isScrollable(node));
+            return nodes.find((node) => isScrollable(node)) ?? null;
         };
         const getChatContainer = (doc = document) => {
             const direct = firstMatch(selectors.chatContainers, doc);
@@ -2041,12 +2041,13 @@ var GMHBundle = (function (exports) {
         };
         const extractNameFromGroup = (group) => {
             const nameNode = firstMatch(selectors.npcName, group);
-            let name = nameNode?.getAttribute?.('data-author-name') || nameNode?.textContent;
+            let name = nameNode?.getAttribute?.('data-author-name') ?? nameNode?.textContent ?? null;
             if (!name) {
                 name =
-                    group.getAttribute('data-author') ||
-                        group.getAttribute('data-username') ||
-                        group.getAttribute('data-name');
+                    group.getAttribute('data-author') ??
+                        group.getAttribute('data-username') ??
+                        group.getAttribute('data-name') ??
+                        null;
             }
             return stripQuotes(collapseSpaces(name || '')).slice(0, 40);
         };
@@ -2109,9 +2110,8 @@ var GMHBundle = (function (exports) {
                 queueNode(node, false);
             });
             const playerNames = resolvePlayerNames();
-            const knownLabels = new Set([collector?.defaults?.playerName]
-                .concat(playerNames)
-                .filter(Boolean)
+            const knownLabels = new Set([collector?.defaults?.playerName, ...playerNames]
+                .filter((name) => typeof name === 'string' && name.trim().length > 0)
                 .map((name) => name.trim()));
             const shouldSkipNarrationLine = (text, element) => {
                 const clean = text.trim();
@@ -2275,9 +2275,10 @@ var GMHBundle = (function (exports) {
                 block?.getAttribute?.('data-id') ||
                 null;
             const firstSpeakerPart = parts.find((part) => part?.speaker);
+            const collectorPlayerName = collector?.defaults?.playerName ?? playerGuess;
             const speaker = firstSpeakerPart?.speaker ||
                 (role === 'player'
-                    ? collector.defaults.playerName
+                    ? collectorPlayerName
                     : role === 'narration'
                         ? '내레이션'
                         : role === 'npc'
@@ -3688,8 +3689,9 @@ var GMHBundle = (function (exports) {
         let userCount = 0;
         let llmCount = 0;
         for (const turn of turns) {
-            if (turn.role === 'player' || turn.role === 'npc')
+            if ((turn.role === 'player' || turn.role === 'npc') && typeof turn.speaker === 'string') {
                 actorSet.add(turn.speaker);
+            }
             if (turn.channel === 'user')
                 userCount += 1;
             else if (turn.channel === 'llm')
@@ -4002,6 +4004,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         return controller;
     }
 
+    const toErrorMessage = (err) => err instanceof Error && typeof err.message === 'string' ? err.message : String(err);
     const normalizeBlocks = (collection) => {
         if (!collection)
             return [];
@@ -4068,7 +4071,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
                 const handler = errorHandler?.handle ? errorHandler : null;
                 const message = handler?.handle
                     ? handler.handle(error, 'snapshot', handler.LEVELS?.ERROR)
-                    : error?.message || String(error);
+                    : toErrorMessage(error);
                 setPanelStatus(`스냅샷 실패: ${message}`, 'error');
             }
         };
@@ -4096,7 +4099,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
                 blockIdCounter += 1;
                 blockIdRegistry.set(block, blockIdCounter);
             }
-            return blockIdRegistry.get(block);
+            return blockIdRegistry.get(block) ?? null;
         };
         const fingerprintText = (value) => {
             if (!value)
@@ -4169,7 +4172,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
                 }
             }
             catch (error) {
-                errors.push(error?.message || String(error));
+                errors.push(toErrorMessage(error));
             }
             if (!structured) {
                 const fallbackLines = [];
@@ -4184,7 +4187,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
                     adapter?.emitTranscriptLines?.(block, pushLine);
                 }
                 catch (error) {
-                    errors.push(error?.message || String(error));
+                    errors.push(toErrorMessage(error));
                 }
                 lines = fallbackLines;
             }
@@ -4324,17 +4327,24 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
                 return { messages, sourceTotal: total, range: { ...baseRange, active: false } };
             }
             let filtered = messages;
-            if (Number.isFinite(baseRange.messageStartIndex) && Number.isFinite(baseRange.messageEndIndex)) {
-                const lower = Math.min(baseRange.messageStartIndex, baseRange.messageEndIndex);
-                const upper = Math.max(baseRange.messageStartIndex, baseRange.messageEndIndex);
+            const { messageStartIndex, messageEndIndex, start, end } = baseRange;
+            if (typeof messageStartIndex === 'number' &&
+                Number.isFinite(messageStartIndex) &&
+                typeof messageEndIndex === 'number' &&
+                Number.isFinite(messageEndIndex)) {
+                const lower = Math.min(messageStartIndex, messageEndIndex);
+                const upper = Math.max(messageStartIndex, messageEndIndex);
                 filtered = messages.filter((message) => {
                     const idx = Number(message?.index);
                     return Number.isFinite(idx) ? idx >= lower && idx <= upper : false;
                 });
             }
-            else if (Number.isFinite(baseRange.start) && Number.isFinite(baseRange.end)) {
-                const lowerOrdinal = Math.min(baseRange.start, baseRange.end);
-                const upperOrdinal = Math.max(baseRange.start, baseRange.end);
+            else if (typeof start === 'number' &&
+                Number.isFinite(start) &&
+                typeof end === 'number' &&
+                Number.isFinite(end)) {
+                const lowerOrdinal = Math.min(start, end);
+                const upperOrdinal = Math.max(start, end);
                 filtered = messages.filter((message) => {
                     const ord = Number(message?.ordinal);
                     return Number.isFinite(ord) ? ord >= lowerOrdinal && ord <= upperOrdinal : false;
@@ -4410,6 +4420,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         const setIntervalFn = typeof win?.setInterval === 'function' ? win.setInterval.bind(win) : setInterval;
         const clearIntervalFn = typeof win?.clearInterval === 'function' ? win.clearInterval.bind(win) : clearInterval;
         const AUTO_PROFILES = CONFIG.TIMING.AUTO_LOADER.PROFILES;
+        const isProfileKey = (value) => value === 'default' || value === 'stability' || value === 'fast';
+        const resolveProfileKey = (value) => isProfileKey(value) ? value : 'default';
+        const resolveStateKey = (value, fallback) => typeof value === 'string' && value.length > 0 ? value : fallback;
         const AUTO_CFG = {
             profile: 'default',
         };
@@ -4515,7 +4528,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
                 return null;
             const total = Number.isFinite(summary.totalMessages) ? summary.totalMessages : 'na';
             const user = Number.isFinite(summary.userMessages) ? summary.userMessages : 'na';
-            const stamp = summary.timestamp || 'na';
+            const stamp = typeof summary.timestamp === 'number' && Number.isFinite(summary.timestamp)
+                ? summary.timestamp
+                : 'na';
             return `${total}:${user}:${stamp}`;
         };
         function collectTurnStats(options = {}) {
@@ -4612,19 +4627,19 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             }
         }
         const notifyScan = (payload) => {
-            stateApi.setState(stateEnum.SCANNING, payload);
+            stateApi.setState(resolveStateKey(stateEnum.SCANNING, 'SCANNING'), payload);
         };
         const notifyDone = (payload) => {
-            stateApi.setState(stateEnum.DONE, payload);
+            stateApi.setState(resolveStateKey(stateEnum.DONE, 'DONE'), payload);
         };
         const notifyError = (payload) => {
-            stateApi.setState(stateEnum.ERROR, payload);
+            stateApi.setState(resolveStateKey(stateEnum.ERROR, 'ERROR'), payload);
         };
         const notifyIdle = (payload) => {
-            stateApi.setState(stateEnum.IDLE, payload);
+            stateApi.setState(resolveStateKey(stateEnum.IDLE, 'IDLE'), payload);
         };
         async function autoLoadAll() {
-            const profile = AUTO_PROFILES[getProfile()] || AUTO_PROFILES.default;
+            const profile = AUTO_PROFILES[resolveProfileKey(getProfile())];
             const container = ensureScrollContainer();
             if (!container) {
                 notifyError({
@@ -4683,7 +4698,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             return stats;
         }
         async function autoLoadUntilPlayerTurns(target) {
-            const profile = AUTO_PROFILES[getProfile()] || AUTO_PROFILES.default;
+            const profile = AUTO_PROFILES[resolveProfileKey(getProfile())];
             const container = ensureScrollContainer();
             if (!container) {
                 notifyError({
@@ -4801,8 +4816,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
                 return;
             AUTO_STATE.meterTimer = setIntervalFn(() => {
                 if (!meter.isConnected) {
-                    clearIntervalFn(AUTO_STATE.meterTimer);
-                    AUTO_STATE.meterTimer = null;
+                    if (AUTO_STATE.meterTimer !== null) {
+                        clearIntervalFn(AUTO_STATE.meterTimer);
+                        AUTO_STATE.meterTimer = null;
+                    }
                     return;
                 }
                 render();
@@ -4818,7 +4835,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
                     return null;
                 }
                 if (opts.profile) {
-                    AUTO_CFG.profile = AUTO_PROFILES[opts.profile] ? opts.profile : 'default';
+                    AUTO_CFG.profile = resolveProfileKey(opts.profile);
                     this.lastProfile = AUTO_CFG.profile;
                     notifyProfileChange();
                 }
@@ -4852,17 +4869,17 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
                     return null;
                 }
                 if (profileName) {
-                    AUTO_CFG.profile = AUTO_PROFILES[profileName] ? profileName : 'default';
+                    AUTO_CFG.profile = resolveProfileKey(profileName);
                 }
                 else {
-                    AUTO_CFG.profile = this.lastProfile || 'default';
+                    AUTO_CFG.profile = resolveProfileKey(this.lastProfile || null);
                 }
                 this.lastProfile = AUTO_CFG.profile;
                 notifyProfileChange();
                 return this.start(this.lastMode, this.lastTarget);
             },
             setProfile(profileName) {
-                const next = AUTO_PROFILES[profileName] ? profileName : 'default';
+                const next = resolveProfileKey(profileName);
                 AUTO_CFG.profile = next;
                 this.lastProfile = next;
                 setPanelStatus?.(`프로파일이 '${next}'로 설정되었습니다.`, 'info');
@@ -5423,9 +5440,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
                     const index = toNumber(indexAttr);
                     const lookupOrdinalByIndex = messageIndexer?.lookupOrdinalByIndex;
                     const lookupOrdinalByMessageId = messageIndexer?.lookupOrdinalByMessageId;
+                    const numericIndex = typeof index === 'number' && Number.isFinite(index) ? index : null;
                     const resolvedOrdinal = [
-                        Number.isFinite(index) && typeof lookupOrdinalByIndex === 'function'
-                            ? lookupOrdinalByIndex(index)
+                        numericIndex !== null && typeof lookupOrdinalByIndex === 'function'
+                            ? lookupOrdinalByIndex(numericIndex)
                             : null,
                         messageIdAttr && typeof lookupOrdinalByMessageId === 'function'
                             ? lookupOrdinalByMessageId(messageIdAttr)
@@ -5655,14 +5673,25 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             buildExportBundle: (fn) => typeof fn === 'function',
             buildExportManifest: (fn) => typeof fn === 'function',
             triggerDownload: (fn) => typeof fn === 'function',
-            exportRange: (value) => Boolean(value?.setTotals),
+            exportRange: (value) => {
+                const controller = value;
+                return Boolean(controller?.setTotals);
+            },
             'clipboard.set': (fn) => typeof fn === 'function',
-            stateApi: (value) => Boolean(value?.setState),
+            stateApi: (value) => {
+                const api = value;
+                return Boolean(api?.setState);
+            },
             stateEnum: (value) => Boolean(value),
             confirmPrivacyGate: (fn) => typeof fn === 'function',
             getEntryOrigin: (fn) => typeof fn === 'function',
             collectSessionStats: (fn) => typeof fn === 'function',
         });
+        const resolveStateKey = (value, fallback) => typeof value === 'string' && value.length > 0 ? value : fallback;
+        const setState = (value, fallback, payload) => {
+            stateApi.setState(resolveStateKey(value, fallback), payload);
+        };
+        const toErrorMessage = (err) => err instanceof Error && typeof err.message === 'string' ? err.message : String(err);
         const parseAll = () => {
             const snapshot = captureStructuredSnapshot({ force: true });
             const raw = snapshot.legacyLines.join('\n');
@@ -5687,7 +5716,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         };
         const prepareShare = async ({ confirmLabel, cancelStatusMessage, blockedStatusMessage, } = {}) => {
             try {
-                stateApi.setState(stateEnum.REDACTING, {
+                setState(stateEnum.REDACTING, 'REDACTING', {
                     label: '민감정보 마스킹 중',
                     message: '레다크션 파이프라인 적용 중...',
                     tone: 'progress',
@@ -5708,7 +5737,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
 ※ 정당한 교육/상담 내용이 차단되었다면 GitHub Issues로 신고해주세요.
 https://github.com/devforai-creator/genit-memory-helper/issues`);
-                    stateApi.setState(stateEnum.ERROR, {
+                    setState(stateEnum.ERROR, 'ERROR', {
                         label: '작업 차단',
                         message: blockedStatusMessage || '미성년자 민감 맥락으로 작업이 차단되었습니다.',
                         tone: 'error',
@@ -5780,7 +5809,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 const stats = collectSessionStats(exportSession);
                 const overallStats = collectSessionStats(privacy.sanitizedSession);
                 const previewTurns = exportSession.turns.slice(-5);
-                stateApi.setState(stateEnum.PREVIEW, {
+                setState(stateEnum.PREVIEW, 'PREVIEW', {
                     label: '미리보기 준비 완료',
                     message: '레다크션 결과를 검토하세요.',
                     tone: 'info',
@@ -5798,7 +5827,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                     actionLabel: confirmLabel || '계속',
                 });
                 if (!ok) {
-                    stateApi.setState(stateEnum.IDLE, {
+                    setState(stateEnum.IDLE, 'IDLE', {
                         label: '대기 중',
                         message: cancelStatusMessage || '작업을 취소했습니다.',
                         tone: cancelStatusMessage ? 'muted' : 'info',
@@ -5819,9 +5848,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 };
             }
             catch (error) {
-                const errorMsg = error?.message || String(error);
+                const errorMsg = toErrorMessage(error);
                 alertFn(`오류: ${errorMsg}`);
-                stateApi.setState(stateEnum.ERROR, {
+                setState(stateEnum.ERROR, 'ERROR', {
                     label: '작업 실패',
                     message: '작업 준비 중 오류가 발생했습니다.',
                     tone: 'error',
@@ -5841,7 +5870,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             if (!prepared)
                 return false;
             try {
-                stateApi.setState(stateEnum.EXPORTING, {
+                setState(stateEnum.EXPORTING, 'EXPORTING', {
                     label: '내보내기 진행 중',
                     message: `${format.toUpperCase()} 내보내기를 준비하는 중입니다...`,
                     tone: 'progress',
@@ -5897,7 +5926,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                     profile: privacy.profile,
                     counts: { ...privacy.counts },
                     stats,
-                    overallStats,
+                    overallStats: overallStats ?? undefined,
                     format: targetFormat,
                     warnings: privacy.sanitizedSession.warnings,
                     source: privacy.sanitizedSession.source,
@@ -5910,12 +5939,19 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 triggerDownload(manifestBlob, manifestName);
                 const summary = formatRedactionCounts(privacy.counts);
                 const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
-                const messageTotalAvailable = rangeInfo?.messageTotal || sessionForExport.turns.length;
-                const userTotalAvailable = rangeInfo?.userTotal || overallStats?.userMessages || stats.userMessages;
-                const llmTotalAvailable = rangeInfo?.llmTotal || overallStats?.llmMessages || stats.llmMessages;
-                let rangeNote = hasCustomRange
-                    ? ` · (선택) 메시지 ${rangeInfo.start}-${rangeInfo.end}/${rangeInfo.total}`
-                    : ` · 전체 메시지 ${messageTotalAvailable}개`;
+                const messageTotalAvailable = rangeInfo?.messageTotal ?? sessionForExport.turns.length;
+                const userTotalAvailable = rangeInfo?.userTotal ?? overallStats?.userMessages ?? stats.userMessages;
+                const llmTotalAvailable = rangeInfo?.llmTotal ?? overallStats?.llmMessages ?? stats.llmMessages;
+                let rangeNote;
+                if (hasCustomRange && rangeInfo) {
+                    const startLabel = rangeInfo.start ?? '?';
+                    const endLabel = rangeInfo.end ?? '?';
+                    const totalLabel = rangeInfo.total ?? '?';
+                    rangeNote = ` · (선택) 메시지 ${startLabel}-${endLabel}/${totalLabel}`;
+                }
+                else {
+                    rangeNote = ` · 전체 메시지 ${messageTotalAvailable}개`;
+                }
                 if (Number.isFinite(userTotalAvailable)) {
                     rangeNote += ` · 유저 ${stats.userMessages}개`;
                 }
@@ -5923,7 +5959,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                     rangeNote += ` · LLM ${stats.llmMessages}개`;
                 }
                 const message = `${targetFormat.toUpperCase()} 내보내기 완료${rangeNote} · ${profileLabel} · ${summary}`;
-                stateApi.setState(stateEnum.DONE, {
+                setState(stateEnum.DONE, 'DONE', {
                     label: '내보내기 완료',
                     message,
                     tone: 'success',
@@ -5938,9 +5974,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 return true;
             }
             catch (error) {
-                const errorMsg = error?.message || String(error);
+                const errorMsg = toErrorMessage(error);
                 alertFn(`오류: ${errorMsg}`);
-                stateApi.setState(stateEnum.ERROR, {
+                setState(stateEnum.ERROR, 'ERROR', {
                     label: '내보내기 실패',
                     message: '내보내기 실패',
                     tone: 'error',
@@ -5964,7 +6000,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             if (!prepared)
                 return;
             try {
-                stateApi.setState(stateEnum.EXPORTING, {
+                setState(stateEnum.EXPORTING, 'EXPORTING', {
                     label: '복사 진행 중',
                     message: '최근 15메시지를 복사하는 중입니다...',
                     tone: 'progress',
@@ -5982,7 +6018,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 const summary = formatRedactionCounts(privacy.counts);
                 const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
                 const message = `최근 15메시지 복사 완료 · 유저 ${effectiveStats.userMessages}개 · LLM ${effectiveStats.llmMessages}개 · ${profileLabel} · ${summary}`;
-                stateApi.setState(stateEnum.DONE, {
+                setState(stateEnum.DONE, 'DONE', {
                     label: '복사 완료',
                     message,
                     tone: 'success',
@@ -5993,9 +6029,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 }
             }
             catch (error) {
-                const errorMsg = error?.message || String(error);
+                const errorMsg = toErrorMessage(error);
                 alertFn(`오류: ${errorMsg}`);
-                stateApi.setState(stateEnum.ERROR, {
+                setState(stateEnum.ERROR, 'ERROR', {
                     label: '복사 실패',
                     message: '복사 실패',
                     tone: 'error',
@@ -6018,7 +6054,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             if (!prepared)
                 return;
             try {
-                stateApi.setState(stateEnum.EXPORTING, {
+                setState(stateEnum.EXPORTING, 'EXPORTING', {
                     label: '복사 진행 중',
                     message: '전체 Markdown을 복사하는 중입니다...',
                     tone: 'progress',
@@ -6031,7 +6067,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 const summary = formatRedactionCounts(privacy.counts);
                 const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
                 const message = `전체 Markdown 복사 완료 · 유저 ${effectiveStats.userMessages}개 · LLM ${effectiveStats.llmMessages}개 · ${profileLabel} · ${summary}`;
-                stateApi.setState(stateEnum.DONE, {
+                setState(stateEnum.DONE, 'DONE', {
                     label: '복사 완료',
                     message,
                     tone: 'success',
@@ -6042,9 +6078,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 }
             }
             catch (error) {
-                const errorMsg = error?.message || String(error);
+                const errorMsg = toErrorMessage(error);
                 alertFn(`오류: ${errorMsg}`);
-                stateApi.setState(stateEnum.ERROR, {
+                setState(stateEnum.ERROR, 'ERROR', {
                     label: '복사 실패',
                     message: '복사 실패',
                     tone: 'error',
@@ -6057,7 +6093,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
          */
         const reparse = () => {
             try {
-                stateApi.setState(stateEnum.REDACTING, {
+                setState(stateEnum.REDACTING, 'REDACTING', {
                     label: '재파싱 중',
                     message: '대화 로그를 다시 분석하는 중입니다...',
                     tone: 'progress',
@@ -6070,7 +6106,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
                 const extra = privacy.blocked ? ' · ⚠️ 미성년자 맥락 감지' : '';
                 const message = `재파싱 완료 · 유저 ${stats.userMessages}개 · LLM ${stats.llmMessages}개 · 경고 ${privacy.sanitizedSession.warnings.length}건 · ${profileLabel} · ${summary}${extra}`;
-                stateApi.setState(stateEnum.DONE, {
+                setState(stateEnum.DONE, 'DONE', {
                     label: '재파싱 완료',
                     message,
                     tone: 'info',
@@ -6081,7 +6117,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 }
             }
             catch (error) {
-                const errorMsg = error?.message || String(error);
+                const errorMsg = toErrorMessage(error);
                 alertFn(`오류: ${errorMsg}`);
             }
         };
@@ -7820,9 +7856,11 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             const rect = panelEl.getBoundingClientRect();
             const effectiveHeight = height || rect.height || 320;
             const bottomLimit = Math.max(MIN_GAP, viewportHeight - effectiveHeight - MIN_GAP);
-            const bottom = Math.min(Math.max(MIN_GAP, layout.bottom ?? DEFAULT_LAYOUT.bottom), bottomLimit);
+            const resolvedBottom = layout.bottom ?? DEFAULT_LAYOUT.bottom ?? MIN_GAP;
+            const bottom = Math.min(Math.max(MIN_GAP, resolvedBottom), bottomLimit);
             const horizontalLimit = Math.max(MIN_GAP, viewportWidth - MIN_GAP - 160);
-            const offset = Math.min(Math.max(MIN_GAP, layout.offset ?? DEFAULT_LAYOUT.offset), horizontalLimit);
+            const resolvedOffset = layout.offset ?? DEFAULT_LAYOUT.offset ?? MIN_GAP;
+            const offset = Math.min(Math.max(MIN_GAP, resolvedOffset), horizontalLimit);
             if (layout.anchor === 'left') {
                 panelEl.style.left = `${offset}px`;
                 panelEl.style.right = 'auto';
@@ -8154,8 +8192,8 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             const viewportHeight = win.innerHeight || doc.documentElement.clientHeight || 720;
             const dx = event.clientX - resizeSession.startX;
             const dy = event.clientY - resizeSession.startY;
-            const horizontalRoom = Math.max(MIN_GAP, viewportWidth - (currentLayout.offset ?? DEFAULT_LAYOUT.offset) - MIN_GAP);
-            const verticalRoom = Math.max(MIN_GAP, viewportHeight - (currentLayout.bottom ?? DEFAULT_LAYOUT.bottom) - MIN_GAP);
+            const horizontalRoom = Math.max(MIN_GAP, viewportWidth - (currentLayout.offset ?? DEFAULT_LAYOUT.offset ?? MIN_GAP) - MIN_GAP);
+            const verticalRoom = Math.max(MIN_GAP, viewportHeight - (currentLayout.bottom ?? DEFAULT_LAYOUT.bottom ?? MIN_GAP) - MIN_GAP);
             let nextWidth = resizeSession.width + dx;
             let nextHeight = resizeSession.height + dy;
             nextWidth = Math.min(Math.max(260, nextWidth), horizontalRoom);
@@ -8185,9 +8223,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         const open = ({ focus = false, persist = false } = {}) => {
             if (!panelEl)
                 return false;
+            const targetPanel = panelEl;
             if (!modernMode) {
-                if (focus && typeof panelEl.focus === 'function') {
-                    requestAnimationFrame(() => panelEl.focus({ preventScroll: true }));
+                if (focus && typeof targetPanel.focus === 'function') {
+                    requestAnimationFrame(() => targetPanel.focus({ preventScroll: true }));
                 }
                 return true;
             }
@@ -8425,7 +8464,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         let progressLabelEl = null;
         let unsubscribe = null;
         const clamp = (value) => {
-            if (!Number.isFinite(value))
+            if (typeof value !== 'number' || !Number.isFinite(value))
                 return 0;
             if (value < 0)
                 return 0;
@@ -8962,6 +9001,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         };
         const scriptVersion = detectScriptVersion();
         GMH.VERSION = scriptVersion;
+        const toErrorMessage = (err) => err instanceof Error && typeof err.message === 'string' ? err.message : String(err);
         const { getActiveAdapter, updatePlayerNames, } = composeAdapters({
             GMH,
             adapterRegistry,
@@ -9140,7 +9180,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             PRIVACY_PROFILES,
             DEFAULT_PRIVACY_PROFILE,
             collapseSpaces,
-            privacyRedactText: redactText,
+            privacyRedactText: (value, profileKey, counts, config, profiles) => redactText(value, profileKey, counts ?? {}, config, profiles),
             hasMinorSexualContext,
             getPlayerNames,
             ENV,
@@ -9355,7 +9395,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                         catch (error) {
                             const level = errorHandler.LEVELS?.ERROR || 'error';
                             errorHandler.handle(error, 'privacy/redact', level);
-                            return { error: error?.message || String(error) };
+                            return { error: toErrorMessage(error) };
                         }
                     },
                     profiles: PRIVACY_PROFILES,

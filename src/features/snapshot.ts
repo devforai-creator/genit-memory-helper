@@ -18,6 +18,9 @@ type CacheEntry = {
   signature: string;
 };
 
+const toErrorMessage = (err: unknown): string =>
+  err instanceof Error && typeof err.message === 'string' ? err.message : String(err);
+
 const normalizeBlocks = (
   collection: Iterable<Element> | Element[] | NodeListOf<Element> | null | undefined,
 ): Element[] => {
@@ -96,7 +99,7 @@ export function createSnapshotFeature({
       const handler = errorHandler?.handle ? errorHandler : null;
       const message = handler?.handle
         ? handler.handle(error, 'snapshot', handler.LEVELS?.ERROR)
-        : error?.message || String(error);
+        : toErrorMessage(error);
       setPanelStatus(`스냅샷 실패: ${message}`, 'error');
     }
   };
@@ -115,7 +118,7 @@ export function createStructuredSnapshotReader({
   if (!getActiveAdapter) throw new Error('createStructuredSnapshotReader requires getActiveAdapter');
   const doc = ensureDocument(documentRef);
 
-  let entryOrigin: number[] = [];
+  let entryOrigin: Array<number | null> = [];
   let latestStructuredSnapshot: StructuredSnapshot | null = null;
   let blockCache: WeakMap<Element, CacheEntry> = new WeakMap();
   let blockIdRegistry: WeakMap<Element, number> = new WeakMap();
@@ -131,7 +134,7 @@ export function createStructuredSnapshotReader({
       blockIdCounter += 1;
       blockIdRegistry.set(block, blockIdCounter);
     }
-    return blockIdRegistry.get(block);
+    return blockIdRegistry.get(block) ?? null;
   };
 
   const fingerprintText = (value: string | null | undefined): string => {
@@ -209,7 +212,7 @@ export function createStructuredSnapshotReader({
         }, []);
       }
     } catch (error) {
-      errors.push(error?.message || String(error));
+      errors.push(toErrorMessage(error));
     }
 
     if (!structured) {
@@ -223,7 +226,7 @@ export function createStructuredSnapshotReader({
       try {
         adapter?.emitTranscriptLines?.(block, pushLine);
       } catch (error) {
-        errors.push(error?.message || String(error));
+        errors.push(toErrorMessage(error));
       }
       lines = fallbackLines;
     }
@@ -372,16 +375,27 @@ export function createStructuredSnapshotReader({
     }
 
     let filtered = messages;
-    if (Number.isFinite(baseRange.messageStartIndex) && Number.isFinite(baseRange.messageEndIndex)) {
-      const lower = Math.min(baseRange.messageStartIndex, baseRange.messageEndIndex);
-      const upper = Math.max(baseRange.messageStartIndex, baseRange.messageEndIndex);
+    const { messageStartIndex, messageEndIndex, start, end } = baseRange;
+    if (
+      typeof messageStartIndex === 'number' &&
+      Number.isFinite(messageStartIndex) &&
+      typeof messageEndIndex === 'number' &&
+      Number.isFinite(messageEndIndex)
+    ) {
+      const lower = Math.min(messageStartIndex, messageEndIndex);
+      const upper = Math.max(messageStartIndex, messageEndIndex);
       filtered = messages.filter((message) => {
         const idx = Number(message?.index);
         return Number.isFinite(idx) ? idx >= lower && idx <= upper : false;
       });
-    } else if (Number.isFinite(baseRange.start) && Number.isFinite(baseRange.end)) {
-      const lowerOrdinal = Math.min(baseRange.start, baseRange.end);
-      const upperOrdinal = Math.max(baseRange.start, baseRange.end);
+    } else if (
+      typeof start === 'number' &&
+      Number.isFinite(start) &&
+      typeof end === 'number' &&
+      Number.isFinite(end)
+    ) {
+      const lowerOrdinal = Math.min(start, end);
+      const upperOrdinal = Math.max(start, end);
       filtered = messages.filter((message) => {
         const ord = Number(message?.ordinal);
         return Number.isFinite(ord) ? ord >= lowerOrdinal && ord <= upperOrdinal : false;
@@ -413,7 +427,7 @@ export function createStructuredSnapshotReader({
     return Array.isArray(snapshot.messages) ? snapshot.messages.slice() : [];
   };
 
-  const getEntryOrigin = (): number[] => entryOrigin.slice();
+  const getEntryOrigin = (): Array<number | null> => entryOrigin.slice();
 
   return {
     captureStructuredSnapshot,

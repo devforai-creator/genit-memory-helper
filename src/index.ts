@@ -83,6 +83,7 @@ import type {
   ExportBundleResult,
   ExportManifest,
   ExportManifestOptions,
+  PanelSettingsValue,
   ShareWorkflowOptions,
   StructuredJSONOptions,
   StructuredMarkdownOptions,
@@ -133,6 +134,9 @@ interface GMHFlags {
   const scriptVersion = detectScriptVersion();
 
   GMH.VERSION = scriptVersion;
+
+  const toErrorMessage = (err: unknown): string =>
+    err instanceof Error && typeof err.message === 'string' ? err.message : String(err);
 
   const {
     genitAdapter,
@@ -216,7 +220,7 @@ interface GMHFlags {
   GMH.Settings = {
     panel: {
       get: () => PanelSettings.get(),
-      update: (patch) => PanelSettings.update(patch),
+      update: (patch: Partial<PanelSettingsValue>) => PanelSettings.update(patch),
       reset: () => PanelSettings.reset(),
       defaults: PanelSettings.defaults,
       STORAGE_KEY: PanelSettings.STORAGE_KEY,
@@ -234,7 +238,7 @@ interface GMHFlags {
   const turnBookmarks = createTurnBookmarks({ console: ENV.console });
   GMH.Core.TurnBookmarks = turnBookmarks;
 
-  let getSnapshotEntryOrigin: (() => number[]) | null = null;
+  let getSnapshotEntryOrigin: (() => Array<number | null>) | null = null;
 
   const messageIndexer = createMessageIndexer({
     console: ENV.console,
@@ -368,7 +372,8 @@ interface GMHFlags {
     PRIVACY_PROFILES,
     DEFAULT_PRIVACY_PROFILE,
     collapseSpaces,
-    privacyRedactText,
+    privacyRedactText: (value, profileKey, counts, config, profiles) =>
+      privacyRedactText(value, profileKey, counts ?? {}, config, profiles),
     hasMinorSexualContext,
     getPlayerNames,
     ENV,
@@ -648,7 +653,7 @@ interface GMHFlags {
   if (!PAGE_WINDOW.__GMHTest) {
     Object.defineProperty(PAGE_WINDOW, '__GMHTest', {
       value: {
-        runPrivacyCheck(rawText, profileKey = 'safe') {
+        runPrivacyCheck(rawText: string, profileKey: string = 'safe') {
           try {
             const normalized = normalizeTranscript(rawText || '');
             const session = buildSession(normalized);
@@ -656,7 +661,7 @@ interface GMHFlags {
           } catch (error) {
             const level = errorHandler.LEVELS?.ERROR || 'error';
             errorHandler.handle(error, 'privacy/redact', level);
-            return { error: error?.message || String(error) };
+            return { error: toErrorMessage(error) };
           }
         },
         profiles: PRIVACY_PROFILES,
@@ -707,8 +712,8 @@ interface GMHFlags {
     setPanelStatus,
     configurePrivacyLists,
     openPanelSettings,
-    openPanel: (options) => PanelVisibility.open(options),
-    closePanel: (reason) => PanelVisibility.close(reason),
+    openPanel: (options?: { focus?: boolean; persist?: boolean }) => PanelVisibility.open(options),
+    closePanel: (reason?: string) => PanelVisibility.close(reason),
     togglePanel: () => PanelVisibility.toggle(),
     isPanelCollapsed: () => PanelVisibility.isCollapsed(),
   });

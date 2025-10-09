@@ -68,7 +68,7 @@ export const createMessageIndexer = ({
   const exportRangeRef: ExportRangeController | null | undefined = exportRange;
   const getAdapter: () => AdapterRef =
     typeof getActiveAdapter === 'function' ? getActiveAdapter : () => null;
-  const getOrigins: () => number[] =
+  const getOrigins: () => Array<number | null> =
     typeof getEntryOrigin === 'function' ? getEntryOrigin : () => [];
 
   if (!documentRef) {
@@ -171,7 +171,9 @@ export const createMessageIndexer = ({
 
     const entryOrigin = getOrigins() || [];
     const entryOriginIndices = Array.isArray(entryOrigin)
-      ? entryOrigin.filter((idx) => Number.isInteger(idx) && idx >= 0)
+      ? entryOrigin.filter(
+          (idx): idx is number => typeof idx === 'number' && Number.isInteger(idx) && idx >= 0,
+        )
       : [];
     const uniqueEntryCount = entryOriginIndices.length ? new Set(entryOriginIndices).size : 0;
     const entryCount = blocks.length || uniqueEntryCount;

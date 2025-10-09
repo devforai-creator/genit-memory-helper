@@ -5,7 +5,7 @@ type CreatePrivacyStoreFn = typeof import('../privacy/settings').createPrivacySt
 type CreatePrivacyPipelineFn = typeof import('../privacy/pipeline').createPrivacyPipeline;
 
 type CollapseSpacesFn = (value: string) => string;
-type PrivacyProfiles = Record<string, Record<string, unknown>>;
+type PrivacyProfiles = Record<string, { key: string } & Record<string, unknown>>;
 type PrivacyRedactTextFn = (
   value: string,
   profileKey: string,

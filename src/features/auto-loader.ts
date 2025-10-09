@@ -1,4 +1,5 @@
 import { CONFIG } from '../config';
+import type { AutoLoaderProfile, AutoLoaderProfileKey } from '../config';
 import type {
   AutoLoaderExports,
   AutoLoaderOptions,
@@ -7,6 +8,7 @@ import type {
   AutoLoaderController,
   ExportRangeController,
   MessageIndexer,
+  MessageIndexerSummary,
   StructuredSnapshot,
   TranscriptSession,
   TranscriptTurn,
@@ -74,7 +76,16 @@ export function createAutoLoader({
 
   const AUTO_PROFILES = CONFIG.TIMING.AUTO_LOADER.PROFILES;
 
-  const AUTO_CFG: { profile: string } = {
+  const isProfileKey = (value: string | null | undefined): value is AutoLoaderProfileKey =>
+    value === 'default' || value === 'stability' || value === 'fast';
+
+  const resolveProfileKey = (value: string | null | undefined): AutoLoaderProfileKey =>
+    isProfileKey(value) ? value : 'default';
+
+  const resolveStateKey = (value: string | undefined, fallback: string): string =>
+    typeof value === 'string' && value.length > 0 ? value : fallback;
+
+  const AUTO_CFG: { profile: AutoLoaderProfileKey } = {
     profile: 'default',
   };
 
@@ -88,7 +99,7 @@ export function createAutoLoader({
     meterTimer: null,
   };
 
-  const profileListeners = new Set<(profile: string) => void>();
+  const profileListeners = new Set<(profile: AutoLoaderProfileKey) => void>();
   const warnWithHandler = (err: unknown, context: string, fallbackMessage: string) => {
     if (errorHandler?.handle) {
       const level = errorHandler.LEVELS?.WARN || 'warn';
@@ -160,7 +171,10 @@ export function createAutoLoader({
     });
   }
 
-  async function scrollUpCycle(container: Element | null, profile: any) {
+  async function scrollUpCycle(
+    container: Element | null,
+    profile: AutoLoaderProfile,
+  ): Promise<{ grew: boolean; before: number; after: number }> {
     if (!container) return { grew: false, before: 0, after: 0 };
     const target = container as ScrollElement;
     const before = target.scrollHeight;
@@ -175,7 +189,7 @@ export function createAutoLoader({
     data: null,
   };
 
-  const clearStatsCache = () => {
+  const clearStatsCache = (): void => {
     statsCache.summaryKey = null;
     statsCache.rawKey = null;
     statsCache.data = null;
@@ -183,17 +197,19 @@ export function createAutoLoader({
 
   let lastSessionSignature = windowRef?.location?.href || (typeof location !== 'undefined' ? location.href : null);
 
-  const makeSummaryKey = (summary) => {
+  const makeSummaryKey = (summary: MessageIndexerSummary | null | undefined): string | null => {
     if (!summary) return null;
     const total = Number.isFinite(summary.totalMessages) ? summary.totalMessages : 'na';
     const user = Number.isFinite(summary.userMessages) ? summary.userMessages : 'na';
-    const stamp = summary.timestamp || 'na';
+    const stamp = typeof summary.timestamp === 'number' && Number.isFinite(summary.timestamp)
+      ? summary.timestamp
+      : 'na';
     return `${total}:${user}:${stamp}`;
   };
 
   function collectTurnStats(options: CollectStatsOptions = {}): AutoLoaderStats {
     const force = Boolean(options.force);
-    let summary: any = null;
+    let summary: MessageIndexerSummary | null = null;
     try {
       const currentSignature = windowRef?.location?.href || (typeof location !== 'undefined' ? location.href : null);
       if (currentSignature && currentSignature !== lastSessionSignature) {
@@ -285,24 +301,24 @@ export function createAutoLoader({
     }
   }
 
-  const notifyScan = (payload) => {
-    stateApi.setState(stateEnum.SCANNING, payload);
+  const notifyScan = (payload: unknown): void => {
+    stateApi.setState(resolveStateKey(stateEnum.SCANNING, 'SCANNING'), payload);
   };
 
-  const notifyDone = (payload) => {
-    stateApi.setState(stateEnum.DONE, payload);
+  const notifyDone = (payload: unknown): void => {
+    stateApi.setState(resolveStateKey(stateEnum.DONE, 'DONE'), payload);
   };
 
-  const notifyError = (payload) => {
-    stateApi.setState(stateEnum.ERROR, payload);
+  const notifyError = (payload: unknown): void => {
+    stateApi.setState(resolveStateKey(stateEnum.ERROR, 'ERROR'), payload);
   };
 
-  const notifyIdle = (payload) => {
-    stateApi.setState(stateEnum.IDLE, payload);
+  const notifyIdle = (payload: unknown): void => {
+    stateApi.setState(resolveStateKey(stateEnum.IDLE, 'IDLE'), payload);
   };
 
   async function autoLoadAll(): Promise<AutoLoaderStats> {
-    const profile = AUTO_PROFILES[getProfile()] || AUTO_PROFILES.default;
+    const profile = AUTO_PROFILES[resolveProfileKey(getProfile())];
     const container = ensureScrollContainer();
     if (!container) {
       notifyError({
@@ -361,7 +377,7 @@ export function createAutoLoader({
   }
 
   async function autoLoadUntilPlayerTurns(target: number): Promise<AutoLoaderStats> {
-    const profile = AUTO_PROFILES[getProfile()] || AUTO_PROFILES.default;
+    const profile = AUTO_PROFILES[resolveProfileKey(getProfile())];
     const container = ensureScrollContainer();
     if (!container) {
       notifyError({
@@ -469,7 +485,7 @@ export function createAutoLoader({
     });
   }
 
-  function startTurnMeter(meter) {
+  function startTurnMeter(meter: HTMLElement | null): void {
     if (!meter) return;
     const render = () => {
       const stats = collectTurnStats();
@@ -483,8 +499,10 @@ export function createAutoLoader({
     if (AUTO_STATE.meterTimer) return;
     AUTO_STATE.meterTimer = setIntervalFn(() => {
       if (!meter.isConnected) {
-        clearIntervalFn(AUTO_STATE.meterTimer);
-        AUTO_STATE.meterTimer = null;
+        if (AUTO_STATE.meterTimer !== null) {
+          clearIntervalFn(AUTO_STATE.meterTimer);
+          AUTO_STATE.meterTimer = null;
+        }
         return;
       }
       render();
@@ -501,7 +519,7 @@ export function createAutoLoader({
         return null;
       }
       if (opts.profile) {
-        AUTO_CFG.profile = AUTO_PROFILES[opts.profile] ? opts.profile : 'default';
+        AUTO_CFG.profile = resolveProfileKey(opts.profile);
         this.lastProfile = AUTO_CFG.profile;
         notifyProfileChange();
       }
@@ -534,16 +552,16 @@ export function createAutoLoader({
         return null;
       }
       if (profileName) {
-        AUTO_CFG.profile = AUTO_PROFILES[profileName] ? profileName : 'default';
+        AUTO_CFG.profile = resolveProfileKey(profileName);
       } else {
-        AUTO_CFG.profile = this.lastProfile || 'default';
+        AUTO_CFG.profile = resolveProfileKey(this.lastProfile || null);
       }
       this.lastProfile = AUTO_CFG.profile;
       notifyProfileChange();
       return this.start(this.lastMode, this.lastTarget);
     },
     setProfile(profileName) {
-      const next = AUTO_PROFILES[profileName] ? profileName : 'default';
+      const next = resolveProfileKey(profileName);
       AUTO_CFG.profile = next;
       this.lastProfile = next;
       setPanelStatus?.(`프로파일이 '${next}'로 설정되었습니다.`, 'info');
@@ -554,7 +572,9 @@ export function createAutoLoader({
     },
   };
 
-  const subscribeProfileChange = (listener) => {
+  const subscribeProfileChange = (
+    listener: ((profile: AutoLoaderProfileKey) => void) | null | undefined,
+  ): (() => void) => {
     if (typeof listener !== 'function') return () => {};
     profileListeners.add(listener);
     return () => profileListeners.delete(listener);

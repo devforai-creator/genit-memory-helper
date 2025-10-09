@@ -215,7 +215,7 @@ export const createGenitAdapter = ({
     return roleNodes.find((node) => {
       const role = node.getAttribute('role') || '';
       return /log|list|main|region/i.test(role) && isScrollable(node);
-    });
+    }) ?? null;
   };
 
   const findByTextHint = (root: Document | Element = document): Element | null => {
@@ -227,7 +227,7 @@ export const createGenitAdapter = ({
       if (!text || text.length > 400) return false;
       return hints.some((hint) => text.includes(hint));
     });
-    return nodes.find((node) => isScrollable(node));
+    return nodes.find((node) => isScrollable(node)) ?? null;
   };
 
   const getChatContainer = (doc: Document = document): Element | null => {
@@ -372,7 +372,7 @@ export const createGenitAdapter = ({
   ): StructuredSnapshotMessagePart => {
     const baseLines = Array.isArray(options.lines) ? options.lines.slice() : [];
     const partType = options.type || resolvePartType(node as Element | null);
-    const part: StructuredSnapshotMessagePart = {
+    const part: StructuredSnapshotMessagePart & { lines: string[] } = {
       type: partType,
       flavor: context.flavor || 'speech',
       role: context.role || null,
@@ -707,14 +707,16 @@ export const createGenitAdapter = ({
     });
   };
 
-  const extractNameFromGroup = (group) => {
+  const extractNameFromGroup = (group: Element): string => {
     const nameNode = firstMatch(selectors.npcName, group);
-    let name = nameNode?.getAttribute?.('data-author-name') || nameNode?.textContent;
+    let name: string | null =
+      nameNode?.getAttribute?.('data-author-name') ?? nameNode?.textContent ?? null;
     if (!name) {
       name =
-        group.getAttribute('data-author') ||
-        group.getAttribute('data-username') ||
-        group.getAttribute('data-name');
+        group.getAttribute('data-author') ??
+        group.getAttribute('data-username') ??
+        group.getAttribute('data-name') ??
+        null;
     }
     return stripQuotes(collapseSpaces(name || '')).slice(0, 40);
   };
@@ -789,9 +791,8 @@ export const createGenitAdapter = ({
 
     const playerNames = resolvePlayerNames();
     const knownLabels = new Set(
-      [collector?.defaults?.playerName]
-        .concat(playerNames)
-        .filter(Boolean)
+      [collector?.defaults?.playerName, ...playerNames]
+        .filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
         .map((name) => name.trim()),
     );
     const shouldSkipNarrationLine = (text: string, element?: Element | null) => {
@@ -957,10 +958,11 @@ export const createGenitAdapter = ({
       block?.getAttribute?.('data-id') ||
       null;
     const firstSpeakerPart = parts.find((part) => part?.speaker);
+    const collectorPlayerName = collector?.defaults?.playerName ?? playerGuess;
     const speaker =
       firstSpeakerPart?.speaker ||
       (role === 'player'
-        ? collector.defaults.playerName
+        ? collectorPlayerName
         : role === 'narration'
         ? '내레이션'
         : role === 'npc'
