@@ -671,7 +671,7 @@ const toJSONExportLegacy = withPlayerNames(toJSONExport);
 
 ---
 
-### Phase 5: Adapters/UI/Composition (4-6주) 🔄 **진행 중**
+### Phase 5: Adapters/UI/Composition (4-6주) ✅ **완료**
 
 **Phase 5-1: Adapters (3개)** ✅ **완료**
 - ✅ registry.ts, genit.ts, index.ts
@@ -688,9 +688,9 @@ const toJSONExportLegacy = withPlayerNames(toJSONExport);
 - ✅ 5-3d: range-controls.ts, auto-loader-controls.ts, guide-controls.ts
 - ✅ 5-3e: panel-modern.ts, panel-legacy.ts, panel-interactions.ts, panel-shortcuts.ts
 
-**Phase 5-4: Composition (5개)** 🔄 **진행 중**
-- 🔄 5-4a: adapter-composition.ts, privacy-composition.ts (진행 중)
-- ⏳ 5-4b: share-composition.ts, ui-composition.ts, bootstrap.ts (예정)
+**Phase 5-4: Composition (5개)** ✅ **완료**
+- ✅ 5-4a: adapter-composition.ts, privacy-composition.ts
+- ✅ 5-4b: share-composition.ts, ui-composition.ts, bootstrap.ts
 
 - Tampermonkey 타입: `npm install -D @types/tampermonkey`
 
