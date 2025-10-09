@@ -1,3 +1,20 @@
+/**
+ * @typedef {import('../types').SnapshotFeatureOptions} SnapshotFeatureOptions
+ * @typedef {import('../types').SnapshotCaptureOptions} SnapshotCaptureOptions
+ * @typedef {import('../types').SnapshotAdapter} SnapshotAdapter
+ * @typedef {import('../types').StructuredSnapshotReaderOptions} StructuredSnapshotReaderOptions
+ * @typedef {import('../types').StructuredSnapshot} StructuredSnapshot
+ * @typedef {import('../types').StructuredSnapshotMessage} StructuredSnapshotMessage
+ * @typedef {import('../types').StructuredSnapshotMessagePart} StructuredSnapshotMessagePart
+ * @typedef {import('../types').StructuredSelectionResult} StructuredSelectionResult
+ */
+
+/**
+ * Ensures a usable Document reference is provided for DOM operations.
+ *
+ * @param {Document | null | undefined} documentRef
+ * @returns {Document}
+ */
 const ensureDocument = (documentRef) => {
   if (!documentRef || typeof documentRef.createElement !== 'function') {
     throw new Error('snapshot feature requires a document reference');
@@ -5,6 +22,12 @@ const ensureDocument = (documentRef) => {
   return documentRef;
 };
 
+/**
+ * Creates a helper that describes DOM nodes using a short CSS-like path.
+ *
+ * @param {Document | null | undefined} documentRef
+ * @returns {(node: Element | null | undefined) => string | null}
+ */
 const createDescribeNode = (documentRef) => {
   const doc = ensureDocument(documentRef);
   const ElementCtor = doc?.defaultView?.Element || (typeof Element !== 'undefined' ? Element : null);
@@ -28,6 +51,9 @@ const createDescribeNode = (documentRef) => {
 
 /**
  * Produces utilities for capturing DOM snapshots for diagnostics/export workflows.
+ *
+ * @param {SnapshotFeatureOptions} options
+ * @returns {{ describeNode: ReturnType<typeof createDescribeNode>; downloadDomSnapshot: () => void }}
  */
 export function createSnapshotFeature({
   getActiveAdapter,
@@ -43,6 +69,11 @@ export function createSnapshotFeature({
 
   const describeNode = createDescribeNode(documentRef);
 
+  /**
+   * Captures adapter state and DOM metadata into a JSON snapshot.
+   *
+   * @returns {void}
+   */
   const downloadDomSnapshot = () => {
     const doc = documentRef;
     const loc = locationRef;
@@ -86,7 +117,7 @@ export function createStructuredSnapshotReader({
   getActiveAdapter,
   setEntryOriginProvider,
   documentRef = typeof document !== 'undefined' ? document : null,
-} = {}) {
+} = /** @type {StructuredSnapshotReaderOptions} */ ({})) {
   if (!getActiveAdapter) throw new Error('createStructuredSnapshotReader requires getActiveAdapter');
   const doc = ensureDocument(documentRef);
 
@@ -100,6 +131,12 @@ export function createStructuredSnapshotReader({
     setEntryOriginProvider(() => entryOrigin);
   }
 
+  /**
+   * Resolves a stable numeric identifier for a DOM block element.
+   *
+   * @param {Element | null | undefined} block
+   * @returns {number | null}
+   */
   const getBlockId = (block) => {
     if (!block) return null;
     if (!blockIdRegistry.has(block)) {
@@ -109,6 +146,12 @@ export function createStructuredSnapshotReader({
     return blockIdRegistry.get(block);
   };
 
+  /**
+   * Produces a stable fingerprint for a block's textual content.
+   *
+   * @param {string | null | undefined} value
+   * @returns {string}
+   */
   const fingerprintText = (value) => {
     if (!value) return '0:0';
     let hash = 0;
@@ -118,6 +161,12 @@ export function createStructuredSnapshotReader({
     return `${value.length}:${hash.toString(16)}`;
   };
 
+  /**
+   * Builds a signature string representing a structured block.
+   *
+   * @param {Element | null | undefined} block
+   * @returns {string}
+   */
   const getBlockSignature = (block) => {
     if (!block || typeof block.getAttribute !== 'function') return 'none';
     const idAttr =
@@ -129,6 +178,12 @@ export function createStructuredSnapshotReader({
     return `text:${fingerprintText(text)}`;
   };
 
+  /**
+   * Deep clones structured message payloads to avoid adapter mutation.
+   *
+   * @param {StructuredSnapshotMessage | null | undefined} message
+   * @returns {StructuredSnapshotMessage | null}
+   */
   const cloneStructuredMessage = (message) => {
     if (!message || typeof message !== 'object') return null;
     const cloned = { ...message };
@@ -141,6 +196,14 @@ export function createStructuredSnapshotReader({
     return cloned;
   };
 
+  /**
+   * Retrieves or regenerates a cache entry for a DOM block.
+   *
+   * @param {SnapshotAdapter | null | undefined} adapter
+   * @param {Element | null | undefined} block
+   * @param {boolean} forceReparse
+   * @returns {{ structured: StructuredSnapshotMessage | null; lines: string[]; errors: string[]; signature: string }}
+   */
   const ensureCacheEntry = (adapter, block, forceReparse) => {
     if (!block) return { structured: null, lines: [], errors: [] };
     const signature = getBlockSignature(block);
@@ -199,6 +262,12 @@ export function createStructuredSnapshotReader({
     return entry;
   };
 
+  /**
+   * Creates a structured snapshot of chat messages and raw legacy lines.
+   *
+   * @param {SnapshotCaptureOptions} [options]
+   * @returns {StructuredSnapshot}
+   */
   const captureStructuredSnapshot = (options = {}) => {
     const { force } = options || {};
     if (force) {
@@ -294,9 +363,22 @@ export function createStructuredSnapshotReader({
     return latestStructuredSnapshot;
   };
 
+  /**
+   * Reads normalized transcript text from the cached snapshot.
+   *
+   * @param {SnapshotCaptureOptions} [options]
+   * @returns {string}
+   */
   const readTranscriptText = (options = {}) =>
     captureStructuredSnapshot(options).legacyLines.join('\n');
 
+  /**
+   * Projects structured messages into a filtered range selection.
+   *
+   * @param {StructuredSnapshot | null | undefined} structuredSnapshot
+   * @param {import('../types').ExportRangeInfo | null | undefined} rangeInfo
+   * @returns {StructuredSelectionResult}
+   */
   const projectStructuredMessages = (structuredSnapshot, rangeInfo) => {
     if (!structuredSnapshot) {
       return {
@@ -361,6 +443,12 @@ export function createStructuredSnapshotReader({
     };
   };
 
+  /**
+   * Retrieves structured messages, optionally forcing a fresh capture.
+   *
+   * @param {SnapshotCaptureOptions} [options]
+   * @returns {StructuredSnapshotMessage[]}
+   */
   const readStructuredMessages = (options = {}) => {
     const { force } = options || {};
     if (!force && latestStructuredSnapshot) {
@@ -372,6 +460,11 @@ export function createStructuredSnapshotReader({
     return Array.isArray(snapshot.messages) ? snapshot.messages.slice() : [];
   };
 
+  /**
+   * Returns the captured origin map for legacy transcript lines.
+   *
+   * @returns {number[]}
+   */
   const getEntryOrigin = () => entryOrigin.slice();
 
   return {

@@ -406,6 +406,10 @@ export interface StripLegacySpeechOptions {
   playerMark?: string;
 }
 
+export interface ClipboardHelper {
+  set(value: string, options?: { type?: string; mimetype?: string; [key: string]: unknown }): void;
+}
+
 export interface ClassicJSONExportOptions {
   playerNames?: string[];
 }
@@ -446,6 +450,51 @@ export interface StructuredTXTOptions {
   rangeInfo?: ExportRangeInfo | StructuredSelectionRangeInfo | null;
   playerNames?: string[];
   playerMark?: string;
+}
+
+export interface GuidePromptStatusMessages {
+  summaryCopied?: string;
+  resummaryCopied?: string;
+  [key: string]: unknown;
+}
+
+export interface GuidePromptOptions {
+  clipboard: ClipboardHelper;
+  setPanelStatus?: (message: string, tone?: string) => void;
+  statusMessages?: GuidePromptStatusMessages;
+}
+
+export interface SnapshotAdapter {
+  findContainer?(doc: Document): Element | null;
+  listMessageBlocks?(root: Document | Element): Iterable<Element> | Element[] | NodeListOf<Element> | null;
+  collectStructuredMessage?(block: Element): StructuredSnapshotMessage | null;
+  emitTranscriptLines?(block: Element, pushLine: (line: string) => void): void;
+  dumpSelectors?(): unknown;
+  resetInfoRegistry?(): void;
+}
+
+export interface SnapshotFeatureOptions {
+  getActiveAdapter: () => SnapshotAdapter | null | undefined;
+  triggerDownload: (blob: Blob, filename: string) => void;
+  setPanelStatus: (message: string, tone?: string) => void;
+  errorHandler:
+    | ErrorHandler
+    | {
+        handle?: (error: unknown, context?: string, level?: string) => string;
+        LEVELS?: Record<string, string>;
+      };
+  documentRef?: Document | null;
+  locationRef?: Location | null;
+}
+
+export interface SnapshotCaptureOptions {
+  force?: boolean;
+}
+
+export interface StructuredSnapshotReaderOptions {
+  getActiveAdapter: () => SnapshotAdapter | null | undefined;
+  setEntryOriginProvider?: (provider: () => number[]) => void;
+  documentRef?: Document | null;
 }
 
 export interface ExportBundleOptions {
