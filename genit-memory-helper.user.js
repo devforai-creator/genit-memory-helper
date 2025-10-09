@@ -2840,8 +2840,25 @@ var GMHBundle = (function (exports) {
         };
     };
 
+    /**
+     * @typedef {import('../types').TranscriptSession} TranscriptSession
+     * @typedef {import('../types').TranscriptTurn} TranscriptTurn
+     * @typedef {import('../types').ClassicJSONExportOptions} ClassicJSONExportOptions
+     * @typedef {import('../types').ClassicTXTExportOptions} ClassicTXTExportOptions
+     * @typedef {import('../types').ClassicMarkdownExportOptions} ClassicMarkdownExportOptions
+     * @typedef {import('../types').StripLegacySpeechOptions} StripLegacySpeechOptions
+     */
+
     const DEFAULT_PLAYER_MARK$1 = '⟦PLAYER⟧ ';
 
+    /**
+     * Removes helper prefixes from legacy transcript lines.
+     *
+     * @param {string | null | undefined} line
+     * @param {string | null | undefined} role
+     * @param {StripLegacySpeechOptions} [options]
+     * @returns {string}
+     */
     const stripLegacySpeechLine = (line, role, { playerMark = DEFAULT_PLAYER_MARK$1 } = {}) => {
       if (!line) return '';
       let text = line;
@@ -2855,6 +2872,14 @@ var GMHBundle = (function (exports) {
       return text.trim();
     };
 
+    /**
+     * Serializes a transcript session into a classic JSON payload.
+     *
+     * @param {TranscriptSession} session
+     * @param {string} normalizedRaw
+     * @param {ClassicJSONExportOptions} [options]
+     * @returns {string}
+     */
     const toJSONExport = (session, normalizedRaw, { playerNames = [] } = {}) => {
       const payload = {
         version: '1.0',
@@ -2869,14 +2894,22 @@ var GMHBundle = (function (exports) {
       return JSON.stringify(payload, null, 2);
     };
 
+    /**
+     * Formats a transcript session into a readable plain-text export.
+     *
+     * @param {TranscriptSession} session
+     * @param {ClassicTXTExportOptions} [opts]
+     * @returns {string}
+     */
     const toTXTExport = (session, opts = {}) => {
       const { turns = session?.turns || [], includeMeta = true } = opts;
       const lines = [];
       if (includeMeta) {
+        const actors = Array.isArray(session?.meta?.actors) ? session.meta.actors : [];
         if (session?.meta?.title) lines.push(`# TITLE: ${session.meta.title}`);
         if (session?.meta?.date) lines.push(`# DATE: ${session.meta.date}`);
         if (session?.meta?.place) lines.push(`# PLACE: ${session.meta.place}`);
-        if (session?.meta?.actors?.length) lines.push(`# ACTORS: ${session.meta.actors.join(', ')}`);
+        if (actors.length) lines.push(`# ACTORS: ${actors.join(', ')}`);
         lines.push('');
       }
       turns.forEach((turn) => {
@@ -2886,6 +2919,13 @@ var GMHBundle = (function (exports) {
       return lines.join('\n').trim();
     };
 
+    /**
+     * Produces a Markdown export for the provided transcript session.
+     *
+     * @param {TranscriptSession} session
+     * @param {ClassicMarkdownExportOptions} [opts]
+     * @returns {string}
+     */
     const toMarkdownExport = (session, opts = {}) => {
       const {
         turns = session?.turns || [],
@@ -2895,12 +2935,12 @@ var GMHBundle = (function (exports) {
 
       const lines = [heading];
       if (includeMeta) {
+        const actors = Array.isArray(session?.meta?.actors) ? session.meta.actors : [];
         const metaLines = [];
         if (session?.meta?.date) metaLines.push(`- 날짜: ${session.meta.date}`);
         if (session?.meta?.place) metaLines.push(`- 장소: ${session.meta.place}`);
         if (session?.meta?.mode) metaLines.push(`- 모드: ${session.meta.mode}`);
-        if (session?.meta?.actors?.length)
-          metaLines.push(`- 참여자: ${session.meta.actors.join(', ')}`);
+        if (actors.length) metaLines.push(`- 참여자: ${actors.join(', ')}`);
         if (metaLines.length) {
           lines.push(metaLines.join('\n'));
           lines.push('');
@@ -2920,16 +2960,45 @@ var GMHBundle = (function (exports) {
       return lines.join('\n').trim();
     };
 
+    /**
+     * @typedef {import('../types').StructuredSnapshotMessage} StructuredSnapshotMessage
+     * @typedef {import('../types').StructuredSnapshotMessagePart} StructuredSnapshotMessagePart
+     * @typedef {import('../types').StructuredMarkdownOptions} StructuredMarkdownOptions
+     * @typedef {import('../types').StructuredJSONOptions} StructuredJSONOptions
+     * @typedef {import('../types').StructuredTXTOptions} StructuredTXTOptions
+     * @typedef {import('../types').StripLegacySpeechOptions} StripLegacySpeechOptions
+     * @typedef {import('../types').StructuredSelectionResult} StructuredSelectionResult
+     * @typedef {import('../types').TranscriptSession} TranscriptSession
+     * @typedef {import('../types').StructuredSelectionRangeInfo} StructuredSelectionRangeInfo
+     */
+
     const DEFAULT_PLAYER_MARK = '⟦PLAYER⟧ ';
 
+    /**
+     * Converts snapshot message parts into Markdown-friendly lines.
+     *
+     * @param {StructuredSnapshotMessagePart | null | undefined} part
+     * @param {StructuredSnapshotMessage | null | undefined} message
+     * @param {StripLegacySpeechOptions} [options]
+     * @returns {string[]}
+     */
     const renderStructuredMarkdownPart = (part, message, { playerMark = DEFAULT_PLAYER_MARK } = {}) => {
       const out = [];
+      /** @type {string[]} */
       const fallbackLines = Array.isArray(part?.legacyLines) ? part.legacyLines : [];
-      const baseLines = Array.isArray(part?.lines) && part.lines.length
-        ? part.lines
-        : fallbackLines.map((line) =>
-            stripLegacySpeechLine(line, part?.role || message?.role, { playerMark }),
-          );
+      /** @type {string[]} */
+      let baseLines;
+      if (Array.isArray(part?.lines) && part.lines.length) {
+        baseLines = /** @type {string[]} */ (part.lines);
+      } else {
+        baseLines = fallbackLines.map((line) =>
+          stripLegacySpeechLine(
+            String(line ?? ''),
+            /** @type {string | null | undefined} */ (part?.role || message?.role),
+            { playerMark },
+          ),
+        );
+      }
       const safeLines = baseLines.filter((line) => typeof line === 'string' && line.trim().length);
       const flavor = part?.flavor || 'speech';
 
@@ -3002,6 +3071,12 @@ var GMHBundle = (function (exports) {
       return out;
     };
 
+    /**
+     * Formats structured snapshot data into a Markdown document.
+     *
+     * @param {StructuredMarkdownOptions} [options]
+     * @returns {string}
+     */
     const toStructuredMarkdown = (options = {}) => {
       const {
         messages = [],
@@ -3039,7 +3114,7 @@ var GMHBundle = (function (exports) {
         const roleLabel = message?.role && message.role !== 'narration' ? ` (${message.role})` : '';
         lines.push(`## ${ordinal}${speakerLabel}${roleLabel}`.trim());
         const parts = Array.isArray(message?.parts) && message.parts.length
-          ? message.parts
+          ? /** @type {StructuredSnapshotMessagePart[]} */ (message.parts)
           : [
               {
                 type: 'paragraph',
@@ -3047,8 +3122,12 @@ var GMHBundle = (function (exports) {
                 role: message?.role,
                 speaker: message?.speaker,
                 lines: Array.isArray(message?.legacyLines)
-                  ? message.legacyLines.map((line) =>
-                      stripLegacySpeechLine(line, message?.role, { playerMark }),
+                  ? /** @type {string[]} */ (message.legacyLines).map((line) =>
+                      stripLegacySpeechLine(
+                        String(line ?? ''),
+                        /** @type {string | null | undefined} */ (message?.role),
+                        { playerMark },
+                      ),
                     )
                   : [],
               },
@@ -3068,6 +3147,12 @@ var GMHBundle = (function (exports) {
       return lines.join('\n').replace(/\n{3,}/g, '\n\n');
     };
 
+    /**
+     * Serializes structured transcript context into JSON output.
+     *
+     * @param {StructuredJSONOptions} [options]
+     * @returns {string}
+     */
     const toStructuredJSON = (options = {}) => {
       const {
         session,
@@ -3079,7 +3164,11 @@ var GMHBundle = (function (exports) {
         normalizedRaw,
       } = options;
       const generatedAt = new Date().toISOString();
-      const messages = structuredSelection?.messages || structuredSnapshot?.messages || [];
+      const messages = Array.isArray(structuredSelection?.messages)
+        ? structuredSelection.messages
+        : Array.isArray(structuredSnapshot?.messages)
+        ? structuredSnapshot.messages
+        : [];
       const structuredMeta = {
         total_messages:
           structuredSelection?.sourceTotal ?? structuredSnapshot?.messages?.length ?? messages.length,
@@ -3109,6 +3198,12 @@ var GMHBundle = (function (exports) {
       return JSON.stringify(payload, null, 2);
     };
 
+    /**
+     * Writes structured transcript data to a plaintext summary.
+     *
+     * @param {StructuredTXTOptions} [options]
+     * @returns {string}
+     */
     const toStructuredTXT = (options = {}) => {
       const {
         messages = [],
@@ -3135,6 +3230,12 @@ var GMHBundle = (function (exports) {
       }
       lines.push('');
 
+      /**
+       * Builds a header tag for a structured message row.
+       *
+       * @param {StructuredSnapshotMessage | null | undefined} message
+       * @returns {string}
+       */
       const formatSpeakerTag = (message) => {
         const ordinalLabel = Number.isFinite(message?.ordinal) ? `#${message.ordinal}` : '#?';
         const speaker =
@@ -3143,11 +3244,18 @@ var GMHBundle = (function (exports) {
         return `[${ordinalLabel}][${speaker}][${roleLabel}]`;
       };
 
+      /**
+       * Appends structured part lines to the output buffer.
+       *
+       * @param {StructuredSnapshotMessagePart | null | undefined} part
+       * @param {string} messageSpeaker
+       * @returns {void}
+       */
       const appendPartLines = (part, messageSpeaker) => {
         const partLines = Array.isArray(part?.lines) && part.lines.length
-          ? part.lines
+          ? /** @type {string[]} */ (part.lines)
           : Array.isArray(part?.legacyLines)
-          ? part.legacyLines
+          ? /** @type {string[]} */ (part.legacyLines)
           : [];
         const speakerName = part?.speaker || messageSpeaker;
         switch (part?.type) {

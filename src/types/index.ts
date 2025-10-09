@@ -389,6 +389,52 @@ export interface StructuredSelectionResult {
   [key: string]: unknown;
 }
 
+export interface StripLegacySpeechOptions {
+  playerMark?: string;
+}
+
+export interface ClassicJSONExportOptions {
+  playerNames?: string[];
+}
+
+export interface ClassicTXTExportOptions {
+  turns?: TranscriptTurn[];
+  includeMeta?: boolean;
+}
+
+export interface ClassicMarkdownExportOptions extends ClassicTXTExportOptions {
+  heading?: string;
+}
+
+export interface StructuredMarkdownOptions {
+  messages?: StructuredSnapshotMessage[];
+  session?: TranscriptSession;
+  profile?: string;
+  rangeInfo?: ExportRangeInfo | StructuredSelectionRangeInfo | null;
+  playerNames?: string[];
+  playerMark?: string;
+}
+
+export interface StructuredJSONOptions {
+  session?: TranscriptSession;
+  structuredSelection?: StructuredSelectionResult | null;
+  structuredSnapshot?: StructuredSnapshot | null;
+  profile?: string;
+  playerNames?: string[];
+  rangeInfo?: ExportRangeInfo | StructuredSelectionRangeInfo | null;
+  normalizedRaw?: string;
+  playerMark?: string;
+}
+
+export interface StructuredTXTOptions {
+  messages?: StructuredSnapshotMessage[];
+  session?: TranscriptSession;
+  profile?: string;
+  rangeInfo?: ExportRangeInfo | StructuredSelectionRangeInfo | null;
+  playerNames?: string[];
+  playerMark?: string;
+}
+
 export interface ExportBundleOptions {
   structuredSelection?: StructuredSelectionResult | null;
   structuredSnapshot?: StructuredSnapshot | null;
@@ -445,12 +491,12 @@ export interface ShareWorkflowOptions {
   privacyProfiles: Record<string, { label?: string; [key: string]: unknown }>;
   formatRedactionCounts(counts: Record<string, number>): string;
   setPanelStatus?(message: string, tone?: string): void;
-  toMarkdownExport(session: TranscriptSession, options?: Record<string, unknown>): string;
-  toJSONExport(session: TranscriptSession, options?: Record<string, unknown>): string;
-  toTXTExport(session: TranscriptSession, options?: Record<string, unknown>): string;
-  toStructuredMarkdown(session: TranscriptSession, options?: Record<string, unknown>): string;
-  toStructuredJSON(session: TranscriptSession, options?: Record<string, unknown>): string;
-  toStructuredTXT(session: TranscriptSession, options?: Record<string, unknown>): string;
+  toMarkdownExport(session: TranscriptSession, options?: ClassicMarkdownExportOptions): string;
+  toJSONExport(session: TranscriptSession, options?: ClassicJSONExportOptions): string;
+  toTXTExport(session: TranscriptSession, options?: ClassicTXTExportOptions): string;
+  toStructuredMarkdown(options?: StructuredMarkdownOptions): string;
+  toStructuredJSON(options?: StructuredJSONOptions): string;
+  toStructuredTXT(options?: StructuredTXTOptions): string;
   buildExportBundle(
     session: TranscriptSession,
     rawSelection: string,
