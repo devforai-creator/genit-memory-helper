@@ -20,8 +20,6 @@
     "src/features/guides.ts",
     "src/features/snapshot.ts",
     "src/privacy/pipeline.ts",
-    "src/ui/panel-interactions.js",
-    "src/ui/panel-shortcuts.js",
     "src/core/state.ts",
     "src/core/error-handler.ts",
     "src/core/export-range.ts",

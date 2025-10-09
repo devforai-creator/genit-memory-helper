@@ -1,31 +1,26 @@
-/**
- * @typedef {import('../types').GenitAdapter} GenitAdapter
- */
+import type { GenitAdapter } from '../types';
 
-/**
- * @typedef {object} StateViewApi
- * @property {(bindings?: { progressFill?: HTMLElement | null; progressLabel?: HTMLElement | null }) => void} bind
- */
+interface StateViewBindings {
+  progressFill?: HTMLElement | null;
+  progressLabel?: HTMLElement | null;
+}
 
-/**
- * @typedef {object} ModernPanelOptions
- * @property {Document | null} [documentRef]
- * @property {() => void} ensureStyles
- * @property {string} [version]
- * @property {() => GenitAdapter | null | undefined} getActiveAdapter
- * @property {(element: HTMLElement | null) => void} attachStatusElement
- * @property {StateViewApi} stateView
- * @property {(panel: Element, options?: { modern?: boolean }) => void} bindPanelInteractions
- * @property {string} [panelId]
- * @property {Console | { warn?: (...args: unknown[]) => void } | null} [logger]
- */
+interface StateViewApi {
+  bind(bindings?: StateViewBindings): void;
+}
 
-/**
- * Mounts the modern (React-inspired) panel layout.
- *
- * @param {ModernPanelOptions} [options]
- * @returns {{ mount: () => Element | null }}
- */
+interface ModernPanelOptions {
+  documentRef?: Document | null;
+  ensureStyles: () => void;
+  version?: string;
+  getActiveAdapter: () => GenitAdapter | null | undefined;
+  attachStatusElement: (element: HTMLElement | null) => void;
+  stateView: StateViewApi;
+  bindPanelInteractions: (panel: Element, options?: { modern?: boolean }) => void;
+  panelId?: string;
+  logger?: Console | { warn?: (...args: unknown[]) => void } | null;
+}
+
 export function createModernPanel({
   documentRef = typeof document !== 'undefined' ? document : null,
   ensureStyles,
@@ -36,7 +31,7 @@ export function createModernPanel({
   bindPanelInteractions,
   panelId = 'genit-memory-helper-panel',
   logger = typeof console !== 'undefined' ? console : null,
-} = {}) {
+}: ModernPanelOptions): { mount: () => Element | null } {
   const doc = documentRef;
   if (!doc) throw new Error('createModernPanel requires documentRef');
   if (typeof ensureStyles !== 'function') throw new Error('createModernPanel requires ensureStyles');
@@ -50,11 +45,7 @@ export function createModernPanel({
 
   const log = logger || { warn: () => {} };
 
-  /**
-   * Ensures the modern panel is attached to the DOM.
-   * @returns {Element | null}
-   */
-  const mount = () => {
+  const mount = (): Element | null => {
     ensureStyles();
     const existing = doc.querySelector(`#${panelId}`);
     if (existing) return existing;
@@ -184,23 +175,21 @@ export function createModernPanel({
     }
     anchor.appendChild(panel);
 
-    const statusEl = panel.querySelector('#gmh-status');
-    if (typeof attachStatusElement === 'function') {
-      attachStatusElement(statusEl);
-    }
+    const statusEl = panel.querySelector<HTMLElement>('#gmh-status');
+    attachStatusElement(statusEl ?? null);
     if (statusEl) {
       statusEl.setAttribute('role', 'status');
       statusEl.setAttribute('aria-live', 'polite');
     }
 
-    const progressFill = panel.querySelector('#gmh-progress-fill');
-    const progressLabel = panel.querySelector('#gmh-progress-label');
+    const progressFill = panel.querySelector<HTMLElement>('#gmh-progress-fill');
+    const progressLabel = panel.querySelector<HTMLElement>('#gmh-progress-label');
     stateView.bind({ progressFill, progressLabel });
 
     try {
       bindPanelInteractions(panel, { modern: true });
-    } catch (err) {
-      log?.warn?.('[GMH] panel interactions init failed', err);
+    } catch (error) {
+      log?.warn?.('[GMH] panel interactions init failed', error);
     }
 
     return panel;

@@ -89,10 +89,10 @@ Rollup (see `rollup.config.js`) stitches these modules into the single userscrip
 - `src/core/export-range.js`: range calculator used by UI controls and exporters; coordinates bookmarks via `src/core/turn-bookmarks.js`.
 - `src/features/share.ts`: end-to-end export workflow (privacy gate, manifest, download) injected with clipboard + GM APIs.
 - `src/features/guides.js`: houses the 요약/재요약 prompt templates and exposes copy helpers for reuse and testing.
-- `src/ui/panel-interactions.js`: centralises panel wiring (privacy profile select, export buttons, quick export flow) and composes range/guide/shortcut bindings.
+- `src/ui/panel-interactions.ts`: centralises panel wiring (privacy profile select, export buttons, quick export flow) and composes range/guide/shortcut bindings.
 - `src/ui/privacy-gate.ts`: renders both legacy overlay and modern modal variants of the privacy confirmation step, accepting injected DOM/style/modals for testing.
 - `src/ui/guide-controls.ts`: binds the “Guides & Tools” panel buttons, delegating to injected feature functions.
-- `src/ui/range-controls.ts`, `src/ui/auto-loader-controls.ts`, `src/ui/panel-shortcuts.js`: modern panel wiring for range selection, auto-load toggles, and keyboard shortcuts.
+- `src/ui/range-controls.ts`, `src/ui/auto-loader-controls.ts`, `src/ui/panel-shortcuts.ts`: modern panel wiring for range selection, auto-load toggles, and keyboard shortcuts.
 - `src/privacy/*`: profile settings, pattern constants, redaction pipeline and validation utilities.
 - `src/export/*`: DOM snapshot parsers plus structured/classic writers and manifest generator.
 

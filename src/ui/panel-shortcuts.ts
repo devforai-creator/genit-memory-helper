@@ -1,17 +1,17 @@
-/**
- * Registers keyboard shortcuts for panel visibility and auto-loader actions.
- *
- * @typedef {import('../types').PanelShortcutsOptions} PanelShortcutsOptions
- * @returns {{ bindShortcuts: (panel: Element | null, options?: { modern?: boolean }) => void }}
- */
+import type { PanelShortcutsOptions } from '../types';
+
+interface BindOptions {
+  modern?: boolean;
+}
+
 export function createPanelShortcuts({
-  windowRef = typeof window !== 'undefined' ? window : null,
+  windowRef = typeof window !== 'undefined' ? window : (undefined as unknown as Window & typeof globalThis),
   panelVisibility,
   autoLoader,
   autoState,
   configurePrivacyLists,
   modal,
-} = /** @type {PanelShortcutsOptions} */ ({})) {
+}: PanelShortcutsOptions): { bindShortcuts: (panel: Element | null, options?: BindOptions) => void } {
   if (!windowRef) throw new Error('createPanelShortcuts requires window reference');
   if (!panelVisibility) throw new Error('createPanelShortcuts requires panelVisibility');
   if (!autoLoader) throw new Error('createPanelShortcuts requires autoLoader');
@@ -20,31 +20,25 @@ export function createPanelShortcuts({
 
   let shortcutsBound = false;
 
-  /**
-   * @param {Element | null} panel
-   * @param {{ modern?: boolean }} [options]
-   * @returns {void}
-   */
-  const bindShortcuts = (panel, { modern } = {}) => {
+  const bindShortcuts = (panel: Element | null, { modern }: BindOptions = {}): void => {
     if (!modern || shortcutsBound) return;
     if (!panel) return;
 
     const win = windowRef;
-    /**
-     * @param {KeyboardEvent} event
-     * @returns {void}
-     */
-    const handler = (event) => {
+    const handler = (event: KeyboardEvent): void => {
       if (!event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
       const key = event.key?.toLowerCase();
       const target = event.target;
+
       if (target instanceof win.HTMLElement) {
         const tag = target.tagName.toLowerCase();
         const isInputLike =
           ['input', 'textarea', 'select'].includes(tag) || target.isContentEditable;
-        if (isInputLike && !['g', 'm'].includes(key)) return;
+        if (isInputLike && !['g', 'm', 's', 'p', 'e'].includes(key)) return;
       }
+
       if (modal?.isOpen?.()) return;
+
       switch (key) {
         case 'g':
           event.preventDefault();
@@ -64,13 +58,11 @@ export function createPanelShortcuts({
           break;
         case 'p':
           event.preventDefault();
-          configurePrivacyLists();
+          void configurePrivacyLists();
           break;
         case 'e':
           event.preventDefault();
-          /** @type {HTMLButtonElement | null} */ (
-            panel.querySelector('#gmh-export')
-          )?.click();
+          panel.querySelector<HTMLButtonElement>('#gmh-export')?.click();
           break;
         default:
           break;
@@ -85,3 +77,5 @@ export function createPanelShortcuts({
     bindShortcuts,
   };
 }
+
+export default createPanelShortcuts;

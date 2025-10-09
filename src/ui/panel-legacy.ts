@@ -1,29 +1,19 @@
-/**
- * @typedef {import('../types').GenitAdapter} GenitAdapter
- */
+import type { GenitAdapter } from '../types';
 
-/**
- * @typedef {object} LegacyStateViewApi
- * @property {() => void} bind
- */
+interface LegacyStateViewApi {
+  bind(): void;
+}
 
-/**
- * @typedef {object} LegacyPanelOptions
- * @property {Document | null} [documentRef]
- * @property {() => GenitAdapter | null | undefined} getActiveAdapter
- * @property {(element: HTMLElement | null) => void} attachStatusElement
- * @property {(message: string, tone?: string | null) => void} setPanelStatus
- * @property {LegacyStateViewApi} stateView
- * @property {(panel: Element, options?: { modern?: boolean }) => void} bindPanelInteractions
- * @property {string} [panelId]
- */
+interface LegacyPanelOptions {
+  documentRef?: Document | null;
+  getActiveAdapter: () => GenitAdapter | null | undefined;
+  attachStatusElement: (element: HTMLElement | null) => void;
+  setPanelStatus: (message: string, tone?: string | null) => void;
+  stateView: LegacyStateViewApi;
+  bindPanelInteractions: (panel: Element, options?: { modern?: boolean }) => void;
+  panelId?: string;
+}
 
-/**
- * Mounts the legacy panel layout for older styling.
- *
- * @param {LegacyPanelOptions} [options]
- * @returns {{ mount: () => Element | null }}
- */
 export function createLegacyPanel({
   documentRef = typeof document !== 'undefined' ? document : null,
   getActiveAdapter,
@@ -32,7 +22,7 @@ export function createLegacyPanel({
   stateView,
   bindPanelInteractions,
   panelId = 'genit-memory-helper-panel',
-} = {}) {
+}: LegacyPanelOptions): { mount: () => Element | null } {
   const doc = documentRef;
   if (!doc) throw new Error('createLegacyPanel requires documentRef');
   if (typeof getActiveAdapter !== 'function') {
@@ -51,11 +41,7 @@ export function createLegacyPanel({
     throw new Error('createLegacyPanel requires bindPanelInteractions');
   }
 
-  /**
-   * Creates the legacy panel markup if necessary and returns it.
-   * @returns {Element | null}
-   */
-  const mount = () => {
+  const mount = (): Element | null => {
     const existing = doc.querySelector(`#${panelId}`);
     if (existing) return existing;
 
@@ -130,8 +116,8 @@ export function createLegacyPanel({
     if (!anchor) return null;
     anchor.appendChild(panel);
 
-    const statusEl = panel.querySelector('#gmh-status');
-    attachStatusElement(statusEl);
+    const statusEl = panel.querySelector<HTMLElement>('#gmh-status');
+    attachStatusElement(statusEl ?? null);
     setPanelStatus('준비 완료', 'info');
     stateView.bind();
     bindPanelInteractions(panel, { modern: false });

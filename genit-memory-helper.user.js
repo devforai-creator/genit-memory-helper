@@ -5502,90 +5502,70 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         return { bindRangeControls };
     }
 
-    /**
-     * Registers keyboard shortcuts for panel visibility and auto-loader actions.
-     *
-     * @typedef {import('../types').PanelShortcutsOptions} PanelShortcutsOptions
-     * @returns {{ bindShortcuts: (panel: Element | null, options?: { modern?: boolean }) => void }}
-     */
-    function createPanelShortcuts({
-      windowRef = typeof window !== 'undefined' ? window : null,
-      panelVisibility,
-      autoLoader,
-      autoState,
-      configurePrivacyLists,
-      modal,
-    } = /** @type {PanelShortcutsOptions} */ ({})) {
-      if (!windowRef) throw new Error('createPanelShortcuts requires window reference');
-      if (!panelVisibility) throw new Error('createPanelShortcuts requires panelVisibility');
-      if (!autoLoader) throw new Error('createPanelShortcuts requires autoLoader');
-      if (!autoState) throw new Error('createPanelShortcuts requires autoState');
-      if (!configurePrivacyLists) throw new Error('createPanelShortcuts requires configurePrivacyLists');
-
-      let shortcutsBound = false;
-
-      /**
-       * @param {Element | null} panel
-       * @param {{ modern?: boolean }} [options]
-       * @returns {void}
-       */
-      const bindShortcuts = (panel, { modern } = {}) => {
-        if (!modern || shortcutsBound) return;
-        if (!panel) return;
-
-        const win = windowRef;
-        /**
-         * @param {KeyboardEvent} event
-         * @returns {void}
-         */
-        const handler = (event) => {
-          if (!event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
-          const key = event.key?.toLowerCase();
-          const target = event.target;
-          if (target instanceof win.HTMLElement) {
-            const tag = target.tagName.toLowerCase();
-            const isInputLike =
-              ['input', 'textarea', 'select'].includes(tag) || target.isContentEditable;
-            if (isInputLike && !['g', 'm'].includes(key)) return;
-          }
-          if (modal?.isOpen?.()) return;
-          switch (key) {
-            case 'g':
-              event.preventDefault();
-              panelVisibility.open({ focus: true, persist: true });
-              break;
-            case 'm':
-              event.preventDefault();
-              panelVisibility.toggle();
-              break;
-            case 's':
-              event.preventDefault();
-              if (!autoState.running) {
-                autoLoader
-                  .start('all')
-                  .catch((error) => win.console?.warn?.('[GMH] auto shortcut', error));
-              }
-              break;
-            case 'p':
-              event.preventDefault();
-              configurePrivacyLists();
-              break;
-            case 'e':
-              event.preventDefault();
-              /** @type {HTMLButtonElement | null} */ (
-                panel.querySelector('#gmh-export')
-              )?.click();
-              break;
-          }
+    function createPanelShortcuts({ windowRef = typeof window !== 'undefined' ? window : undefined, panelVisibility, autoLoader, autoState, configurePrivacyLists, modal, }) {
+        if (!windowRef)
+            throw new Error('createPanelShortcuts requires window reference');
+        if (!panelVisibility)
+            throw new Error('createPanelShortcuts requires panelVisibility');
+        if (!autoLoader)
+            throw new Error('createPanelShortcuts requires autoLoader');
+        if (!autoState)
+            throw new Error('createPanelShortcuts requires autoState');
+        if (!configurePrivacyLists)
+            throw new Error('createPanelShortcuts requires configurePrivacyLists');
+        let shortcutsBound = false;
+        const bindShortcuts = (panel, { modern } = {}) => {
+            if (!modern || shortcutsBound)
+                return;
+            if (!panel)
+                return;
+            const win = windowRef;
+            const handler = (event) => {
+                if (!event.altKey || event.ctrlKey || event.metaKey || event.repeat)
+                    return;
+                const key = event.key?.toLowerCase();
+                const target = event.target;
+                if (target instanceof win.HTMLElement) {
+                    const tag = target.tagName.toLowerCase();
+                    const isInputLike = ['input', 'textarea', 'select'].includes(tag) || target.isContentEditable;
+                    if (isInputLike && !['g', 'm', 's', 'p', 'e'].includes(key))
+                        return;
+                }
+                if (modal?.isOpen?.())
+                    return;
+                switch (key) {
+                    case 'g':
+                        event.preventDefault();
+                        panelVisibility.open({ focus: true, persist: true });
+                        break;
+                    case 'm':
+                        event.preventDefault();
+                        panelVisibility.toggle();
+                        break;
+                    case 's':
+                        event.preventDefault();
+                        if (!autoState.running) {
+                            autoLoader
+                                .start('all')
+                                .catch((error) => win.console?.warn?.('[GMH] auto shortcut', error));
+                        }
+                        break;
+                    case 'p':
+                        event.preventDefault();
+                        void configurePrivacyLists();
+                        break;
+                    case 'e':
+                        event.preventDefault();
+                        panel.querySelector('#gmh-export')?.click();
+                        break;
+                }
+            };
+            win.addEventListener('keydown', handler);
+            shortcutsBound = true;
         };
-
-        win.addEventListener('keydown', handler);
-        shortcutsBound = true;
-      };
-
-      return {
-        bindShortcuts,
-      };
+        return {
+            bindShortcuts,
+        };
     }
 
     function createShareWorkflow(options) {
@@ -6080,307 +6060,190 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         };
     }
 
-    /**
-     * Connects panel buttons, share workflow actions, and keyboard shortcuts.
-     *
-     * @typedef {import('../types').PanelInteractionsOptions} PanelInteractionsOptions
-     * @returns {{ bindPanelInteractions: (panel: Element | null, options?: { modern?: boolean }) => void; syncPrivacyProfileSelect: (profileKey?: string | null) => void }}
-     */
-    function createPanelInteractions({
-      panelVisibility,
-      setPanelStatus,
-      setPrivacyProfile,
-      getPrivacyProfile,
-      privacyProfiles,
-      configurePrivacyLists,
-      openPanelSettings,
-      ensureAutoLoadControlsModern,
-      ensureAutoLoadControlsLegacy,
-      mountStatusActionsModern,
-      mountStatusActionsLegacy,
-      bindRangeControls,
-      bindShortcuts,
-      bindGuideControls,
-      prepareShare,
-      performExport,
-      copyRecentShare,
-      copyAllShare,
-      autoLoader,
-      autoState,
-      stateApi,
-      stateEnum,
-      alert: alertFn = (message) => globalThis.alert?.(message),
-      logger = typeof console !== 'undefined' ? console : null,
-    } = /** @type {PanelInteractionsOptions} */ ({})) {
-      if (!panelVisibility) throw new Error('createPanelInteractions requires panelVisibility');
-      if (!setPrivacyProfile) throw new Error('createPanelInteractions requires setPrivacyProfile');
-      if (!bindRangeControls) throw new Error('createPanelInteractions requires bindRangeControls');
-      if (!bindShortcuts) throw new Error('createPanelInteractions requires bindShortcuts');
-      if (!prepareShare || !performExport || !copyRecentShare || !copyAllShare) {
-        throw new Error('createPanelInteractions requires share workflow helpers');
-      }
-      if (!stateApi || !stateEnum) {
-        throw new Error('createPanelInteractions requires state helpers');
-      }
-
-      /** @type {HTMLSelectElement | null} */
-      let privacySelect = null;
-
-      /**
-       * @param {string | null | undefined} [profileKey]
-       * @returns {void}
-       */
-      const syncPrivacyProfileSelect = (profileKey) => {
-        if (!privacySelect) return;
-        const nextValue = profileKey ?? getPrivacyProfile?.();
-        if (typeof nextValue === 'string' && privacySelect.value !== nextValue) {
-          privacySelect.value = nextValue;
+    const DEFAULT_ALERT = (message) => {
+        globalThis.alert?.(message);
+    };
+    function createPanelInteractions({ panelVisibility, setPanelStatus, setPrivacyProfile, getPrivacyProfile, privacyProfiles, configurePrivacyLists, openPanelSettings, ensureAutoLoadControlsModern, ensureAutoLoadControlsLegacy, mountStatusActionsModern, mountStatusActionsLegacy, bindRangeControls, bindShortcuts, bindGuideControls, prepareShare, performExport, copyRecentShare, copyAllShare, autoLoader, autoState, stateApi, stateEnum, alert: alertFn = DEFAULT_ALERT, logger = typeof console !== 'undefined' ? console : null, }) {
+        if (!panelVisibility)
+            throw new Error('createPanelInteractions requires panelVisibility');
+        if (!setPrivacyProfile)
+            throw new Error('createPanelInteractions requires setPrivacyProfile');
+        if (!bindRangeControls)
+            throw new Error('createPanelInteractions requires bindRangeControls');
+        if (!bindShortcuts)
+            throw new Error('createPanelInteractions requires bindShortcuts');
+        if (!prepareShare || !performExport || !copyRecentShare || !copyAllShare) {
+            throw new Error('createPanelInteractions requires share workflow helpers');
         }
-      };
-
-      /**
-       * @param {string} message
-       * @param {string} [tone]
-       */
-      const notify = (message, tone) => {
-        if (typeof setPanelStatus === 'function' && message) {
-          setPanelStatus(message, tone);
+        if (!stateApi || !stateEnum) {
+            throw new Error('createPanelInteractions requires state helpers');
         }
-      };
-
-      /**
-       * @param {Element | null} panel
-       * @param {{ modern?: boolean }} [options]
-       */
-      const attachShareHandlers = (panel, { modern = false } = {}) => {
-        /** @type {HTMLSelectElement | null} */
-        const exportFormatSelect = panel.querySelector('#gmh-export-format');
-        /** @type {HTMLButtonElement | null} */
-        const quickExportBtn = panel.querySelector('#gmh-quick-export');
-
-        /**
-         * @param {{ confirmLabel?: string; cancelStatusMessage?: string; blockedStatusMessage?: string }} [options]
-         * @returns {ReturnType<PanelInteractionsOptions['prepareShare']>}
-         */
-        const prepareShareWithDialog = (options = {}) =>
-          prepareShare({
-            confirmLabel: options.confirmLabel,
-            cancelStatusMessage: options.cancelStatusMessage,
-            blockedStatusMessage: options.blockedStatusMessage,
-          });
-
-        /**
-         * @param {string} format
-         * @param {{ confirmLabel?: string; cancelStatusMessage?: string; blockedStatusMessage?: string }} [options]
-         * @returns {Promise<void>}
-         */
-        const exportWithFormat = async (format, options = {}) => {
-          const prepared = await prepareShareWithDialog(options);
-          if (!prepared) return;
-          await performExport(prepared, format);
+        let privacySelect = null;
+        const notify = (message, tone) => {
+            if (typeof setPanelStatus === 'function' && message) {
+                setPanelStatus(message, tone);
+            }
         };
-
-        /**
-         * @returns {ReturnType<PanelInteractionsOptions['copyRecentShare']>}
-         */
-        const copyRecent = () => copyRecentShare(prepareShareWithDialog);
-        /**
-         * @returns {ReturnType<PanelInteractionsOptions['copyAllShare']>}
-         */
-        const copyAll = () => copyAllShare(prepareShareWithDialog);
-
-        /** @type {HTMLButtonElement | null} */
-        const copyRecentBtn = panel.querySelector('#gmh-copy-recent');
-        if (copyRecentBtn) {
-          copyRecentBtn.onclick = () => copyRecent();
-        }
-
-        /** @type {HTMLButtonElement | null} */
-        const copyAllBtn = panel.querySelector('#gmh-copy-all');
-        if (copyAllBtn) {
-          copyAllBtn.onclick = () => copyAll();
-        }
-
-        /** @type {HTMLButtonElement | null} */
-        const exportBtn = panel.querySelector('#gmh-export');
-        if (exportBtn) {
-          exportBtn.onclick = async () => {
-            const format = exportFormatSelect?.value || 'json';
-            await exportWithFormat(format, {
-              confirmLabel: '내보내기 진행',
-              cancelStatusMessage: '내보내기를 취소했습니다.',
-              blockedStatusMessage: '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
+        const syncPrivacyProfileSelect = (profileKey) => {
+            if (!privacySelect)
+                return;
+            const nextValue = profileKey ?? getPrivacyProfile?.();
+            if (typeof nextValue === 'string' && privacySelect.value !== nextValue) {
+                privacySelect.value = nextValue;
+            }
+        };
+        const prepareShareWithDialog = (options) => prepareShare({
+            confirmLabel: options?.confirmLabel,
+            cancelStatusMessage: options?.cancelStatusMessage,
+            blockedStatusMessage: options?.blockedStatusMessage,
+        });
+        const exportWithFormat = async (format, options = {}) => {
+            const prepared = await prepareShareWithDialog({
+                confirmLabel: options.confirmLabel,
+                cancelStatusMessage: options.cancelStatusMessage,
+                blockedStatusMessage: options.blockedStatusMessage,
             });
-          };
-        }
-
-        if (quickExportBtn) {
-          quickExportBtn.onclick = async () => {
-            if (autoState?.running) {
-              notify('이미 자동 로딩이 진행 중입니다.', 'muted');
-              return;
+            if (!prepared)
+                return;
+            await performExport(prepared, format);
+        };
+        const copyRecent = () => copyRecentShare(prepareShareWithDialog);
+        const copyAll = () => copyAllShare(prepareShareWithDialog);
+        const isAutoRunning = () => Boolean(autoState?.running);
+        const attachShareHandlers = (panel, modern = false) => {
+            const exportFormatSelect = panel.querySelector('#gmh-export-format');
+            const quickExportBtn = panel.querySelector('#gmh-quick-export');
+            const copyRecentBtn = panel.querySelector('#gmh-copy-recent');
+            copyRecentBtn?.addEventListener('click', () => void copyRecent());
+            const copyAllBtn = panel.querySelector('#gmh-copy-all');
+            copyAllBtn?.addEventListener('click', () => void copyAll());
+            const exportBtn = panel.querySelector('#gmh-export');
+            exportBtn?.addEventListener('click', async () => {
+                const format = exportFormatSelect?.value || 'json';
+                await exportWithFormat(format, {
+                    confirmLabel: '내보내기 진행',
+                    cancelStatusMessage: '내보내기를 취소했습니다.',
+                    blockedStatusMessage: '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
+                });
+            });
+            if (quickExportBtn) {
+                quickExportBtn.addEventListener('click', async () => {
+                    if (!autoLoader || typeof autoLoader.start !== 'function') {
+                        notify('자동 로더 기능을 사용할 수 없습니다.', 'warning');
+                        return;
+                    }
+                    if (isAutoRunning()) {
+                        notify('이미 자동 로딩이 진행 중입니다.', 'muted');
+                        return;
+                    }
+                    const originalText = quickExportBtn.textContent;
+                    quickExportBtn.disabled = true;
+                    quickExportBtn.textContent = '진행 중...';
+                    try {
+                        stateApi.setState(stateEnum.SCANNING, {
+                            label: '원클릭 내보내기',
+                            message: '전체 로딩 중...',
+                            tone: 'progress',
+                            progress: { indeterminate: true },
+                        });
+                        await autoLoader.start('all');
+                        const format = exportFormatSelect?.value || 'json';
+                        await exportWithFormat(format, {
+                            confirmLabel: `${format.toUpperCase()} 내보내기`,
+                            cancelStatusMessage: '내보내기를 취소했습니다.',
+                            blockedStatusMessage: '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
+                        });
+                    }
+                    catch (error) {
+                        const message = error && typeof error === 'object' && 'message' in error
+                            ? String(error.message)
+                            : String(error);
+                        alertFn?.(`오류: ${message}`);
+                        stateApi.setState(stateEnum.ERROR, {
+                            label: '원클릭 실패',
+                            message: '원클릭 내보내기 실패',
+                            tone: 'error',
+                            progress: { value: 1 },
+                        });
+                    }
+                    finally {
+                        quickExportBtn.disabled = false;
+                        quickExportBtn.textContent = originalText ?? '';
+                    }
+                });
             }
-            const originalText = quickExportBtn.textContent;
-            quickExportBtn.disabled = true;
-            quickExportBtn.textContent = '진행 중...';
-            try {
-              stateApi.setState(stateEnum.SCANNING, {
-                label: '원클릭 내보내기',
-                message: '전체 로딩 중...',
-                tone: 'progress',
-                progress: { indeterminate: true },
-              });
-              await autoLoader?.start?.('all');
-              const format = exportFormatSelect?.value || 'json';
-              await exportWithFormat(format, {
-                confirmLabel: `${format.toUpperCase()} 내보내기`,
-                cancelStatusMessage: '내보내기를 취소했습니다.',
-                blockedStatusMessage: '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
-              });
-            } catch (error) {
-              alertFn?.(`오류: ${(error && error.message) || error}`);
-              stateApi.setState(stateEnum.ERROR, {
-                label: '원클릭 실패',
-                message: '원클릭 내보내기 실패',
-                tone: 'error',
-                progress: { value: 1 },
-              });
-            } finally {
-              quickExportBtn.disabled = false;
-              quickExportBtn.textContent = originalText;
+        };
+        const bindPanelInteractions = (panel, { modern = false } = {}) => {
+            if (!panel || typeof panel.querySelector !== 'function') {
+                logger?.warn?.('[GMH] panel interactions: invalid panel element');
+                return;
             }
-          };
-        }
-      };
-
-      /**
-       * @param {Element | null} panel
-       * @param {{ modern?: boolean }} [options]
-       * @returns {void}
-       */
-      const bindPanelInteractions = (panel, { modern = false } = {}) => {
-        if (!panel || typeof panel.querySelector !== 'function') {
-          if (logger?.warn) {
-            logger.warn('[GMH] panel interactions: invalid panel element');
-          }
-          return;
-        }
-
-        panelVisibility.bind(panel, { modern });
-
-        privacySelect = /** @type {HTMLSelectElement | null} */ (panel.querySelector('#gmh-privacy-profile'));
-        if (privacySelect) {
-          syncPrivacyProfileSelect();
-          privacySelect.onchange = (event) => {
-            const value = /** @type {HTMLSelectElement} */ (event.target).value;
-            setPrivacyProfile(value);
-            const label = privacyProfiles?.[value]?.label || value;
-            notify(`프라이버시 프로필이 ${label}로 설정되었습니다.`, 'info');
-          };
-        }
-
-        /** @type {HTMLButtonElement | null} */
-        const privacyConfigBtn = panel.querySelector('#gmh-privacy-config');
-        if (privacyConfigBtn) {
-          privacyConfigBtn.onclick = () => configurePrivacyLists?.();
-        }
-
-        /** @type {HTMLButtonElement | null} */
-        const settingsBtn = panel.querySelector('#gmh-panel-settings');
-        if (settingsBtn) {
-          settingsBtn.onclick = () => openPanelSettings?.();
-        }
-
-        if (modern) {
-          ensureAutoLoadControlsModern?.(panel);
-          mountStatusActionsModern?.(panel);
-        } else {
-          ensureAutoLoadControlsLegacy?.(panel);
-          mountStatusActionsLegacy?.(panel);
-        }
-
-        bindRangeControls(panel);
-        bindShortcuts(panel, { modern });
-        bindGuideControls?.(panel);
-
-        attachShareHandlers(panel, { modern });
-      };
-
-      return {
-        bindPanelInteractions,
-        syncPrivacyProfileSelect,
-      };
+            panelVisibility.bind(panel, { modern });
+            privacySelect = panel.querySelector('#gmh-privacy-profile');
+            if (privacySelect) {
+                syncPrivacyProfileSelect();
+                privacySelect.addEventListener('change', (event) => {
+                    const value = event.target.value;
+                    setPrivacyProfile(value);
+                    const label = privacyProfiles?.[value]?.label || value;
+                    notify(`프라이버시 프로필이 ${label}로 설정되었습니다.`, 'info');
+                });
+            }
+            const privacyConfigBtn = panel.querySelector('#gmh-privacy-config');
+            privacyConfigBtn?.addEventListener('click', () => {
+                void configurePrivacyLists?.();
+            });
+            const settingsBtn = panel.querySelector('#gmh-panel-settings');
+            settingsBtn?.addEventListener('click', () => {
+                openPanelSettings?.();
+            });
+            if (modern) {
+                ensureAutoLoadControlsModern?.(panel);
+                mountStatusActionsModern?.(panel);
+            }
+            else {
+                ensureAutoLoadControlsLegacy?.(panel);
+                mountStatusActionsLegacy?.(panel);
+            }
+            bindRangeControls(panel);
+            bindShortcuts(panel, { modern });
+            bindGuideControls?.(panel);
+            attachShareHandlers(panel, modern);
+        };
+        return {
+            bindPanelInteractions,
+            syncPrivacyProfileSelect,
+        };
     }
 
-    /**
-     * @typedef {import('../types').GenitAdapter} GenitAdapter
-     */
-
-    /**
-     * @typedef {object} StateViewApi
-     * @property {(bindings?: { progressFill?: HTMLElement | null; progressLabel?: HTMLElement | null }) => void} bind
-     */
-
-    /**
-     * @typedef {object} ModernPanelOptions
-     * @property {Document | null} [documentRef]
-     * @property {() => void} ensureStyles
-     * @property {string} [version]
-     * @property {() => GenitAdapter | null | undefined} getActiveAdapter
-     * @property {(element: HTMLElement | null) => void} attachStatusElement
-     * @property {StateViewApi} stateView
-     * @property {(panel: Element, options?: { modern?: boolean }) => void} bindPanelInteractions
-     * @property {string} [panelId]
-     * @property {Console | { warn?: (...args: unknown[]) => void } | null} [logger]
-     */
-
-    /**
-     * Mounts the modern (React-inspired) panel layout.
-     *
-     * @param {ModernPanelOptions} [options]
-     * @returns {{ mount: () => Element | null }}
-     */
-    function createModernPanel({
-      documentRef = typeof document !== 'undefined' ? document : null,
-      ensureStyles,
-      version = '0.0.0-dev',
-      getActiveAdapter,
-      attachStatusElement,
-      stateView,
-      bindPanelInteractions,
-      panelId = 'genit-memory-helper-panel',
-      logger = typeof console !== 'undefined' ? console : null,
-    } = {}) {
-      const doc = documentRef;
-      if (!doc) throw new Error('createModernPanel requires documentRef');
-      if (typeof ensureStyles !== 'function') throw new Error('createModernPanel requires ensureStyles');
-      if (typeof getActiveAdapter !== 'function') throw new Error('createModernPanel requires getActiveAdapter');
-      if (!stateView || typeof stateView.bind !== 'function') {
-        throw new Error('createModernPanel requires stateView with bind');
-      }
-      if (typeof bindPanelInteractions !== 'function') {
-        throw new Error('createModernPanel requires bindPanelInteractions');
-      }
-
-      const log = logger || { warn: () => {} };
-
-      /**
-       * Ensures the modern panel is attached to the DOM.
-       * @returns {Element | null}
-       */
-      const mount = () => {
-        ensureStyles();
-        const existing = doc.querySelector(`#${panelId}`);
-        if (existing) return existing;
-
-        const panel = doc.createElement('div');
-        panel.id = panelId;
-        panel.className = 'gmh-panel';
-        panel.setAttribute('role', 'region');
-        panel.setAttribute('aria-label', 'Genit Memory Helper');
-        panel.tabIndex = -1;
-        panel.dataset.version = version;
-        panel.innerHTML = `
+    function createModernPanel({ documentRef = typeof document !== 'undefined' ? document : null, ensureStyles, version = '0.0.0-dev', getActiveAdapter, attachStatusElement, stateView, bindPanelInteractions, panelId = 'genit-memory-helper-panel', logger = typeof console !== 'undefined' ? console : null, }) {
+        const doc = documentRef;
+        if (!doc)
+            throw new Error('createModernPanel requires documentRef');
+        if (typeof ensureStyles !== 'function')
+            throw new Error('createModernPanel requires ensureStyles');
+        if (typeof getActiveAdapter !== 'function')
+            throw new Error('createModernPanel requires getActiveAdapter');
+        if (!stateView || typeof stateView.bind !== 'function') {
+            throw new Error('createModernPanel requires stateView with bind');
+        }
+        if (typeof bindPanelInteractions !== 'function') {
+            throw new Error('createModernPanel requires bindPanelInteractions');
+        }
+        const log = logger || { warn: () => { } };
+        const mount = () => {
+            ensureStyles();
+            const existing = doc.querySelector(`#${panelId}`);
+            if (existing)
+                return existing;
+            const panel = doc.createElement('div');
+            panel.id = panelId;
+            panel.className = 'gmh-panel';
+            panel.setAttribute('role', 'region');
+            panel.setAttribute('aria-label', 'Genit Memory Helper');
+            panel.tabIndex = -1;
+            panel.dataset.version = version;
+            panel.innerHTML = `
       <div class="gmh-panel__header">
         <button
           id="gmh-panel-drag-handle"
@@ -6489,110 +6352,65 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       </section>
       <div id="gmh-panel-resize-handle" class="gmh-panel__resize-handle" aria-hidden="true"></div>
     `;
-
-        const adapter = getActiveAdapter();
-        const anchor = adapter?.getPanelAnchor?.(doc) || doc.body;
-        if (!anchor) {
-          log?.warn?.('[GMH] modern panel anchor missing');
-          return null;
-        }
-        anchor.appendChild(panel);
-
-        const statusEl = panel.querySelector('#gmh-status');
-        if (typeof attachStatusElement === 'function') {
-          attachStatusElement(statusEl);
-        }
-        if (statusEl) {
-          statusEl.setAttribute('role', 'status');
-          statusEl.setAttribute('aria-live', 'polite');
-        }
-
-        const progressFill = panel.querySelector('#gmh-progress-fill');
-        const progressLabel = panel.querySelector('#gmh-progress-label');
-        stateView.bind({ progressFill, progressLabel });
-
-        try {
-          bindPanelInteractions(panel, { modern: true });
-        } catch (err) {
-          log?.warn?.('[GMH] panel interactions init failed', err);
-        }
-
-        return panel;
-      };
-
-      return { mount };
+            const adapter = getActiveAdapter();
+            const anchor = adapter?.getPanelAnchor?.(doc) || doc.body;
+            if (!anchor) {
+                log?.warn?.('[GMH] modern panel anchor missing');
+                return null;
+            }
+            anchor.appendChild(panel);
+            const statusEl = panel.querySelector('#gmh-status');
+            attachStatusElement(statusEl ?? null);
+            if (statusEl) {
+                statusEl.setAttribute('role', 'status');
+                statusEl.setAttribute('aria-live', 'polite');
+            }
+            const progressFill = panel.querySelector('#gmh-progress-fill');
+            const progressLabel = panel.querySelector('#gmh-progress-label');
+            stateView.bind({ progressFill, progressLabel });
+            try {
+                bindPanelInteractions(panel, { modern: true });
+            }
+            catch (error) {
+                log?.warn?.('[GMH] panel interactions init failed', error);
+            }
+            return panel;
+        };
+        return { mount };
     }
 
-    /**
-     * @typedef {import('../types').GenitAdapter} GenitAdapter
-     */
-
-    /**
-     * @typedef {object} LegacyStateViewApi
-     * @property {() => void} bind
-     */
-
-    /**
-     * @typedef {object} LegacyPanelOptions
-     * @property {Document | null} [documentRef]
-     * @property {() => GenitAdapter | null | undefined} getActiveAdapter
-     * @property {(element: HTMLElement | null) => void} attachStatusElement
-     * @property {(message: string, tone?: string | null) => void} setPanelStatus
-     * @property {LegacyStateViewApi} stateView
-     * @property {(panel: Element, options?: { modern?: boolean }) => void} bindPanelInteractions
-     * @property {string} [panelId]
-     */
-
-    /**
-     * Mounts the legacy panel layout for older styling.
-     *
-     * @param {LegacyPanelOptions} [options]
-     * @returns {{ mount: () => Element | null }}
-     */
-    function createLegacyPanel({
-      documentRef = typeof document !== 'undefined' ? document : null,
-      getActiveAdapter,
-      attachStatusElement,
-      setPanelStatus,
-      stateView,
-      bindPanelInteractions,
-      panelId = 'genit-memory-helper-panel',
-    } = {}) {
-      const doc = documentRef;
-      if (!doc) throw new Error('createLegacyPanel requires documentRef');
-      if (typeof getActiveAdapter !== 'function') {
-        throw new Error('createLegacyPanel requires getActiveAdapter');
-      }
-      if (typeof attachStatusElement !== 'function') {
-        throw new Error('createLegacyPanel requires attachStatusElement');
-      }
-      if (typeof setPanelStatus !== 'function') {
-        throw new Error('createLegacyPanel requires setPanelStatus');
-      }
-      if (!stateView || typeof stateView.bind !== 'function') {
-        throw new Error('createLegacyPanel requires stateView with bind');
-      }
-      if (typeof bindPanelInteractions !== 'function') {
-        throw new Error('createLegacyPanel requires bindPanelInteractions');
-      }
-
-      /**
-       * Creates the legacy panel markup if necessary and returns it.
-       * @returns {Element | null}
-       */
-      const mount = () => {
-        const existing = doc.querySelector(`#${panelId}`);
-        if (existing) return existing;
-
-        const panel = doc.createElement('div');
-        panel.id = panelId;
-        panel.style.cssText = `
+    function createLegacyPanel({ documentRef = typeof document !== 'undefined' ? document : null, getActiveAdapter, attachStatusElement, setPanelStatus, stateView, bindPanelInteractions, panelId = 'genit-memory-helper-panel', }) {
+        const doc = documentRef;
+        if (!doc)
+            throw new Error('createLegacyPanel requires documentRef');
+        if (typeof getActiveAdapter !== 'function') {
+            throw new Error('createLegacyPanel requires getActiveAdapter');
+        }
+        if (typeof attachStatusElement !== 'function') {
+            throw new Error('createLegacyPanel requires attachStatusElement');
+        }
+        if (typeof setPanelStatus !== 'function') {
+            throw new Error('createLegacyPanel requires setPanelStatus');
+        }
+        if (!stateView || typeof stateView.bind !== 'function') {
+            throw new Error('createLegacyPanel requires stateView with bind');
+        }
+        if (typeof bindPanelInteractions !== 'function') {
+            throw new Error('createLegacyPanel requires bindPanelInteractions');
+        }
+        const mount = () => {
+            const existing = doc.querySelector(`#${panelId}`);
+            if (existing)
+                return existing;
+            const panel = doc.createElement('div');
+            panel.id = panelId;
+            panel.style.cssText = `
       position: fixed; right: 16px; bottom: 16px; z-index: 999999;
       background: #0b1020; color: #fff; padding: 10px 12px; border-radius: 10px;
       font: 12px/1.3 ui-sans-serif, system-ui; box-shadow: 0 8px 20px rgba(0,0,0,.4);
       display: grid; gap: 8px; min-width: 260px;
     `;
-        panel.innerHTML = `
+            panel.innerHTML = `
       <div style="font-weight:600">Genit Memory Helper</div>
       <div style="display:flex; gap:8px; align-items:center;">
         <select id="gmh-privacy-profile" style="flex:1; background:#111827; color:#f1f5f9; border:1px solid #1f2937; border-radius:8px; padding:8px;">
@@ -6649,22 +6467,19 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       </div>
       <div id="gmh-status" style="opacity:.85"></div>
     `;
-
-        const adapter = getActiveAdapter();
-        const anchor = adapter?.getPanelAnchor?.(doc) || doc.body;
-        if (!anchor) return null;
-        anchor.appendChild(panel);
-
-        const statusEl = panel.querySelector('#gmh-status');
-        attachStatusElement(statusEl);
-        setPanelStatus('준비 완료', 'info');
-        stateView.bind();
-        bindPanelInteractions(panel, { modern: false });
-
-        return panel;
-      };
-
-      return { mount };
+            const adapter = getActiveAdapter();
+            const anchor = adapter?.getPanelAnchor?.(doc) || doc.body;
+            if (!anchor)
+                return null;
+            anchor.appendChild(panel);
+            const statusEl = panel.querySelector('#gmh-status');
+            attachStatusElement(statusEl ?? null);
+            setPanelStatus('준비 완료', 'info');
+            stateView.bind();
+            bindPanelInteractions(panel, { modern: false });
+            return panel;
+        };
+        return { mount };
     }
 
     const DEFAULT_PREVIEW_LIMIT = 5;

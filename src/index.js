@@ -62,11 +62,11 @@ import { createSnapshotFeature, createStructuredSnapshotReader } from './feature
 import { createAutoLoader } from './features/auto-loader.ts';
 import { createAutoLoaderControls } from './ui/auto-loader-controls.ts';
 import { createRangeControls } from './ui/range-controls.ts';
-import { createPanelShortcuts } from './ui/panel-shortcuts.js';
+import { createPanelShortcuts } from './ui/panel-shortcuts.ts';
 import { createShareWorkflow } from './features/share.ts';
-import { createPanelInteractions } from './ui/panel-interactions.js';
-import { createModernPanel } from './ui/panel-modern.js';
-import { createLegacyPanel } from './ui/panel-legacy.js';
+import { createPanelInteractions } from './ui/panel-interactions.ts';
+import { createModernPanel } from './ui/panel-modern.ts';
+import { createLegacyPanel } from './ui/panel-legacy.ts';
 import { createLegacyPrivacyGate, createModernPrivacyGate } from './ui/privacy-gate.ts';
 import { createGuidePrompts } from './features/guides.ts';
 import { createGuideControls } from './ui/guide-controls.ts';
