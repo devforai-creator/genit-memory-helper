@@ -72,9 +72,9 @@ import { createGuidePrompts } from './features/guides.ts';
 import { createGuideControls } from './ui/guide-controls.ts';
 import { composeAdapters } from './composition/adapter-composition.ts';
 import { composePrivacy } from './composition/privacy-composition.ts';
-import { composeShareWorkflow } from './composition/share-composition.js';
-import { composeUI } from './composition/ui-composition.js';
-import { setupBootstrap } from './composition/bootstrap.js';
+import { composeShareWorkflow } from './composition/share-composition.ts';
+import { composeUI } from './composition/ui-composition.ts';
+import { setupBootstrap } from './composition/bootstrap.ts';
 import { CONFIG } from './config.js';
 
 (function () {

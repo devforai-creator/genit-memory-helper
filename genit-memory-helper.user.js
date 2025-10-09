@@ -7160,141 +7160,68 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         };
     };
 
-    function cloneSession(session) {
-      const clonedTurns = Array.isArray(session?.turns)
-        ? session.turns.map((turn) => {
-            const clone = { ...turn };
-            if (Array.isArray(turn.__gmhEntries)) {
-              Object.defineProperty(clone, '__gmhEntries', {
-                value: turn.__gmhEntries.slice(),
-                enumerable: false,
-                writable: true,
-                configurable: true,
-              });
-            }
-            if (Array.isArray(turn.__gmhSourceBlocks)) {
-              Object.defineProperty(clone, '__gmhSourceBlocks', {
-                value: turn.__gmhSourceBlocks.slice(),
-                enumerable: false,
-                writable: true,
-                configurable: true,
-              });
-            }
-            return clone;
-          })
-        : [];
-      return {
-        meta: { ...(session?.meta || {}) },
-        turns: clonedTurns,
-        warnings: Array.isArray(session?.warnings) ? [...session.warnings] : [],
-        source: session?.source,
-      };
-    }
-
-    function collectSessionStats(session) {
-      if (!session) return { userMessages: 0, llmMessages: 0, totalMessages: 0, warnings: 0 };
-      const userMessages = session.turns?.filter((turn) => turn.channel === 'user')?.length || 0;
-      const llmMessages = session.turns?.filter((turn) => turn.channel === 'llm')?.length || 0;
-      const totalMessages = session.turns?.length || 0;
-      const warnings = session.warnings?.length || 0;
-      return { userMessages, llmMessages, totalMessages, warnings };
-    }
-
+    const cloneSession = (session) => {
+        const clonedTurns = Array.isArray(session?.turns)
+            ? session.turns.map((turn) => {
+                const clone = { ...turn };
+                if (Array.isArray(turn.__gmhEntries)) {
+                    Object.defineProperty(clone, '__gmhEntries', {
+                        value: turn.__gmhEntries.slice(),
+                        enumerable: false,
+                        writable: true,
+                        configurable: true,
+                    });
+                }
+                if (Array.isArray(turn.__gmhSourceBlocks)) {
+                    Object.defineProperty(clone, '__gmhSourceBlocks', {
+                        value: turn.__gmhSourceBlocks.slice(),
+                        enumerable: false,
+                        writable: true,
+                        configurable: true,
+                    });
+                }
+                return clone;
+            })
+            : [];
+        const clonedSession = {
+            turns: clonedTurns,
+            meta: { ...(session?.meta || {}) },
+            warnings: Array.isArray(session?.warnings) ? [...session.warnings] : [],
+            source: session?.source,
+        };
+        if (Array.isArray(session?.player_names)) {
+            clonedSession.player_names = [...session.player_names];
+        }
+        return clonedSession;
+    };
+    const collectSessionStats = (session) => {
+        if (!session) {
+            return { userMessages: 0, llmMessages: 0, totalMessages: 0, warnings: 0 };
+        }
+        const turns = Array.isArray(session.turns) ? session.turns : [];
+        const userMessages = turns.filter((turn) => turn.channel === 'user').length;
+        const llmMessages = turns.filter((turn) => turn.channel === 'llm').length;
+        const totalMessages = turns.length;
+        const warnings = Array.isArray(session.warnings) ? session.warnings.length : 0;
+        return { userMessages, llmMessages, totalMessages, warnings };
+    };
     /**
      * Wires the share workflow with grouped dependencies returned from index.
      *
-     * @param {object} options - Dependency container.
-     * @param {Function} options.createShareWorkflow - Share workflow factory.
-     * @param {Function} options.captureStructuredSnapshot - Structured snapshot capture helper.
-     * @param {Function} options.normalizeTranscript - Transcript normaliser.
-     * @param {Function} options.buildSession - Session builder.
-     * @param {object} options.exportRange - Export range controller.
-     * @param {Function} options.projectStructuredMessages - Structured message projector.
-     * @param {Function} options.applyPrivacyPipeline - Privacy pipeline executor.
-     * @param {object} options.privacyConfig - Active privacy configuration reference.
-     * @param {object} options.privacyProfiles - Supported privacy profiles.
-     * @param {Function} options.formatRedactionCounts - Formatter for redaction metrics.
-     * @param {Function} options.setPanelStatus - Panel status setter.
-     * @param {Function} options.toMarkdownExport - Classic markdown exporter.
-     * @param {Function} options.toJSONExport - Classic JSON exporter.
-     * @param {Function} options.toTXTExport - Classic TXT exporter.
-     * @param {Function} options.toStructuredMarkdown - Structured markdown exporter.
-     * @param {Function} options.toStructuredJSON - Structured JSON exporter.
-     * @param {Function} options.toStructuredTXT - Structured TXT exporter.
-     * @param {Function} options.buildExportBundle - Bundle builder.
-     * @param {Function} options.buildExportManifest - Manifest builder.
-     * @param {Function} options.triggerDownload - Download helper.
-     * @param {object} options.clipboard - Clipboard helpers.
-     * @param {object} options.stateApi - State manager API.
-     * @param {object} options.stateEnum - State enum reference.
-     * @param {Function} options.confirmPrivacyGate - Privacy confirmation helper.
-     * @param {Function} options.getEntryOrigin - Entry origin accessor.
-     * @param {object} options.logger - Logger implementation.
-     * @returns {object} Share workflow API with helper statistics.
+     * @param options Dependency container.
+     * @returns Share workflow API with helper statistics.
      */
-    function composeShareWorkflow({
-      createShareWorkflow,
-      captureStructuredSnapshot,
-      normalizeTranscript,
-      buildSession,
-      exportRange,
-      projectStructuredMessages,
-      applyPrivacyPipeline,
-      privacyConfig,
-      privacyProfiles,
-      formatRedactionCounts,
-      setPanelStatus,
-      toMarkdownExport,
-      toJSONExport,
-      toTXTExport,
-      toStructuredMarkdown,
-      toStructuredJSON,
-      toStructuredTXT,
-      buildExportBundle,
-      buildExportManifest,
-      triggerDownload,
-      clipboard,
-      stateApi,
-      stateEnum,
-      confirmPrivacyGate,
-      getEntryOrigin,
-      logger,
-    }) {
-      const shareApi = createShareWorkflow({
-        captureStructuredSnapshot,
-        normalizeTranscript,
-        buildSession,
-        exportRange,
-        projectStructuredMessages,
-        cloneSession,
-        applyPrivacyPipeline,
-        privacyConfig,
-        privacyProfiles,
-        formatRedactionCounts,
-        setPanelStatus,
-        toMarkdownExport,
-        toJSONExport,
-        toTXTExport,
-        toStructuredMarkdown,
-        toStructuredJSON,
-        toStructuredTXT,
-        buildExportBundle,
-        buildExportManifest,
-        triggerDownload,
-        clipboard,
-        stateApi,
-        stateEnum,
-        confirmPrivacyGate,
-        getEntryOrigin,
-        collectSessionStats,
-        logger,
-      });
-
-      return {
-        ...shareApi,
-        collectSessionStats,
-      };
-    }
+    const composeShareWorkflow = ({ createShareWorkflow, ...options }) => {
+        const shareApi = createShareWorkflow({
+            ...options,
+            cloneSession,
+            collectSessionStats,
+        });
+        return {
+            ...shareApi,
+            collectSessionStats,
+        };
+    };
 
     /**
      * Creates the shared modal controller used across classic/modern panels.
@@ -8823,210 +8750,165 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     /**
      * Composes core UI helpers (modal, panel visibility, status view, privacy controls).
      *
-     * @param {object} options - Dependency container.
-     * @param {typeof import('../core/namespace.ts').GMH} options.GMH - Global namespace reference.
-     * @param {Document} options.documentRef - Document handle.
-     * @param {Window} options.windowRef - Window handle.
-     * @param {object} options.PanelSettings - Panel settings API.
-     * @param {object} options.stateManager - State manager instance.
-     * @param {object} options.stateEnum - State enum map.
-     * @param {object} options.ENV - Environment shims (console/storage).
-     * @param {object} options.privacyConfig - Active privacy configuration object.
-     * @param {object} options.privacyProfiles - Privacy profile definitions.
-     * @param {Function} options.setCustomList - Setter for custom privacy lists.
-     * @param {Function} options.parseListInput - Parser for list inputs.
-     * @param {Function} options.isModernUIActive - Getter returning whether modern UI is enabled.
-     * @returns {object} Composed UI helpers.
+     * @param options Dependency container.
+     * @returns Composed UI helpers.
      */
-    function composeUI({
-      GMH,
-      documentRef,
-      windowRef,
-      PanelSettings,
-      stateManager,
-      stateEnum,
-      ENV,
-      privacyConfig,
-      privacyProfiles,
-      setCustomList,
-      parseListInput,
-      isModernUIActive,
-    }) {
-      const modal = createModal({ documentRef, windowRef });
-      GMH.UI.Modal = modal;
-
-      const panelVisibility = createPanelVisibility({
-        panelSettings: PanelSettings,
-        stateEnum,
-        stateApi: stateManager,
-        modal,
-        documentRef,
-        windowRef,
-        storage: ENV.localStorage,
-        logger: ENV.console,
-      });
-
-      const statusManager = createStatusManager({ panelVisibility });
-      const { setStatus: setPanelStatus, attachStatusElement } = statusManager;
-
-      const stateView = createStateView({
-        stateApi: stateManager,
-        statusManager,
-        stateEnum,
-      });
-      GMH.UI.StateView = stateView;
-
-      const { configurePrivacyLists } = createPrivacyConfigurator({
-        privacyConfig,
-        setCustomList,
-        parseListInput,
-        setPanelStatus,
-        modal,
-        isModernUIActive,
-        documentRef,
-        windowRef,
-      });
-
-      const { openPanelSettings } = createPanelSettingsController({
-        panelSettings: PanelSettings,
-        modal,
-        setPanelStatus,
-        configurePrivacyLists,
-        documentRef,
-      });
-
-      return {
-        modal,
-        panelVisibility,
-        statusManager,
-        setPanelStatus,
-        attachStatusElement,
-        stateView,
-        configurePrivacyLists,
-        openPanelSettings,
-      };
-    }
+    const composeUI = ({ GMH, documentRef, windowRef, PanelSettings, stateManager, stateEnum, ENV, privacyConfig, privacyProfiles: _privacyProfiles, setCustomList, parseListInput, isModernUIActive, }) => {
+        const modal = createModal({ documentRef, windowRef });
+        GMH.UI.Modal = modal;
+        const panelVisibility = createPanelVisibility({
+            panelSettings: PanelSettings,
+            stateEnum,
+            stateApi: stateManager,
+            modal,
+            documentRef,
+            windowRef,
+            storage: ENV.localStorage ?? null,
+            logger: ENV.console ?? null,
+        });
+        const statusManager = createStatusManager({ panelVisibility });
+        const { setStatus: setPanelStatus, attachStatusElement } = statusManager;
+        const stateView = createStateView({
+            stateApi: stateManager,
+            statusManager,
+            stateEnum,
+        });
+        GMH.UI.StateView = stateView;
+        const { configurePrivacyLists } = createPrivacyConfigurator({
+            privacyConfig,
+            setCustomList,
+            parseListInput,
+            setPanelStatus,
+            modal,
+            isModernUIActive,
+            documentRef,
+            windowRef,
+        });
+        const { openPanelSettings } = createPanelSettingsController({
+            panelSettings: PanelSettings,
+            modal,
+            setPanelStatus,
+            configurePrivacyLists,
+            documentRef,
+        });
+        return {
+            modal,
+            panelVisibility,
+            statusManager,
+            setPanelStatus,
+            attachStatusElement,
+            stateView,
+            configurePrivacyLists,
+            openPanelSettings,
+        };
+    };
 
     /**
      * Sets up panel mounting, boot sequencing, teardown hooks, and mutation observer.
      *
-     * @param {object} options - Dependency container.
-     * @param {Document} options.documentRef - Document handle.
-     * @param {Window} options.windowRef - Window handle.
-     * @param {Function} options.mountPanelModern - Modern panel mount function.
-     * @param {Function} options.mountPanelLegacy - Legacy panel mount function.
-     * @param {Function} options.isModernUIActive - Getter describing whether modern UI is active.
-     * @param {object} options.Flags - Feature flags.
-     * @param {object} options.errorHandler - Error handler instance.
-     * @param {object} options.messageIndexer - Message indexer reference.
-     * @param {object} options.bookmarkListener - Bookmark listener reference.
+     * @param options Dependency container.
+     * @returns Mount/boot control helpers.
      */
-    function setupBootstrap({
-      documentRef,
-      windowRef,
-      mountPanelModern,
-      mountPanelLegacy,
-      isModernUIActive,
-      Flags,
-      errorHandler,
-      messageIndexer,
-      bookmarkListener,
-    }) {
-      const doc = documentRef;
-      const win = windowRef;
-      const MutationObserverCtor = win.MutationObserver || globalThis.MutationObserver;
-      const requestFrame = typeof win.requestAnimationFrame === 'function'
-        ? win.requestAnimationFrame.bind(win)
-        : (cb) => setTimeout(cb, 16);
-
-      let panelMounted = false;
-      let bootInProgress = false;
-      let observerScheduled = false;
-
-      const mountPanel = () => {
-        if (isModernUIActive()) {
-          mountPanelModern();
-        } else {
-          if (Flags.killSwitch) {
-            const level = errorHandler.LEVELS?.INFO || 'info';
-            errorHandler.handle('modern UI disabled by kill switch', 'ui/panel', level);
-          }
-          mountPanelLegacy();
-        }
-      };
-
-      const boot = () => {
-        if (panelMounted || bootInProgress) return;
-        bootInProgress = true;
-        try {
-          mountPanel();
-          messageIndexer?.start?.();
-          bookmarkListener?.start?.();
-          panelMounted = Boolean(doc.querySelector('#genit-memory-helper-panel'));
-        } catch (e) {
-          const level = errorHandler.LEVELS?.ERROR || 'error';
-          errorHandler.handle(e, 'ui/panel', level);
-        } finally {
-          bootInProgress = false;
-        }
-      };
-
-      const registerReadyHook = () => {
-        if (doc.readyState === 'complete' || doc.readyState === 'interactive') {
-          setTimeout(boot, 1200);
-        } else {
-          win.addEventListener('DOMContentLoaded', () => setTimeout(boot, 1200));
-        }
-      };
-
-      const registerTeardown = () => {
-        if (win.__GMHTeardownHook) return;
-        const teardown = () => {
-          panelMounted = false;
-          bootInProgress = false;
-          try {
-            bookmarkListener?.stop?.();
-          } catch (err) {
-            const level = errorHandler.LEVELS?.WARN || 'warn';
-            errorHandler.handle(err, 'bookmark', level);
-          }
-          try {
-            messageIndexer?.stop?.();
-          } catch (err) {
-            const level = errorHandler.LEVELS?.WARN || 'warn';
-            errorHandler.handle(err, 'adapter', level);
-          }
-        };
-        win.addEventListener('pagehide', teardown);
-        win.addEventListener('beforeunload', teardown);
-        win.__GMHTeardownHook = true;
-      };
-
-      const registerMutationObserver = () => {
-        if (!MutationObserverCtor) return;
-        const observer = new MutationObserverCtor(() => {
-          if (observerScheduled || bootInProgress) return;
-          observerScheduled = true;
-          requestFrame(() => {
-            observerScheduled = false;
-            const panelNode = doc.querySelector('#genit-memory-helper-panel');
-            if (panelNode) {
-              panelMounted = true;
-              return;
+    const setupBootstrap = ({ documentRef, windowRef, mountPanelModern, mountPanelLegacy, isModernUIActive, Flags, errorHandler, messageIndexer, bookmarkListener, }) => {
+        const doc = documentRef;
+        const win = windowRef;
+        const MutationObserverCtor = win.MutationObserver || globalThis.MutationObserver;
+        const requestFrame = typeof win.requestAnimationFrame === 'function'
+            ? win.requestAnimationFrame.bind(win)
+            : (callback) => (win.setTimeout?.(callback, 16) ?? setTimeout(callback, 16));
+        let panelMounted = false;
+        let bootInProgress = false;
+        let observerScheduled = false;
+        const mountPanel = () => {
+            if (isModernUIActive()) {
+                mountPanelModern();
+                return;
             }
-            panelMounted = false;
-            boot();
-          });
-        });
-        observer.observe(doc.documentElement || doc.body, { subtree: true, childList: true });
-      };
-
-      registerReadyHook();
-      registerTeardown();
-      registerMutationObserver();
-
-      return { boot, mountPanel };
-    }
+            if (Flags.killSwitch) {
+                const level = errorHandler.LEVELS?.INFO || 'info';
+                errorHandler.handle('modern UI disabled by kill switch', 'ui/panel', level);
+            }
+            mountPanelLegacy();
+        };
+        const boot = () => {
+            if (panelMounted || bootInProgress)
+                return;
+            bootInProgress = true;
+            try {
+                mountPanel();
+                messageIndexer?.start?.();
+                bookmarkListener?.start?.();
+                panelMounted = Boolean(doc.querySelector('#genit-memory-helper-panel'));
+            }
+            catch (error) {
+                const level = errorHandler.LEVELS?.ERROR || 'error';
+                errorHandler.handle(error, 'ui/panel', level);
+            }
+            finally {
+                bootInProgress = false;
+            }
+        };
+        const registerReadyHook = () => {
+            if (doc.readyState === 'complete' || doc.readyState === 'interactive') {
+                setTimeout(boot, 1200);
+            }
+            else {
+                win.addEventListener('DOMContentLoaded', () => setTimeout(boot, 1200));
+            }
+        };
+        const registerTeardown = () => {
+            if (win.__GMHTeardownHook)
+                return;
+            const teardown = () => {
+                panelMounted = false;
+                bootInProgress = false;
+                try {
+                    bookmarkListener?.stop?.();
+                }
+                catch (err) {
+                    const level = errorHandler.LEVELS?.WARN || 'warn';
+                    errorHandler.handle(err, 'bookmark', level);
+                }
+                try {
+                    messageIndexer?.stop?.();
+                }
+                catch (err) {
+                    const level = errorHandler.LEVELS?.WARN || 'warn';
+                    errorHandler.handle(err, 'adapter', level);
+                }
+            };
+            win.addEventListener('pagehide', teardown);
+            win.addEventListener('beforeunload', teardown);
+            win.__GMHTeardownHook = true;
+        };
+        const registerMutationObserver = () => {
+            if (!MutationObserverCtor)
+                return;
+            const target = doc.documentElement || doc.body;
+            if (!target)
+                return;
+            const observer = new MutationObserverCtor(() => {
+                if (observerScheduled || bootInProgress)
+                    return;
+                observerScheduled = true;
+                requestFrame(() => {
+                    observerScheduled = false;
+                    const panelNode = doc.querySelector('#genit-memory-helper-panel');
+                    if (panelNode) {
+                        panelMounted = true;
+                        return;
+                    }
+                    panelMounted = false;
+                    boot();
+                });
+            });
+            observer.observe(target, { subtree: true, childList: true });
+        };
+        registerReadyHook();
+        registerTeardown();
+        registerMutationObserver();
+        return { boot, mountPanel };
+    };
 
     (function () {
 

@@ -1,18 +1,38 @@
+import type { BookmarkListener, ErrorHandler, MessageIndexer } from '../types';
+
+type BootstrapWindow = (Window & typeof globalThis) & { __GMHTeardownHook?: boolean };
+
+type BootstrapFlags = {
+  killSwitch?: boolean;
+  [key: string]: unknown;
+};
+
+type RequestFrame = (callback: FrameRequestCallback) => number;
+
+interface SetupBootstrapOptions {
+  documentRef: Document;
+  windowRef: BootstrapWindow;
+  mountPanelModern: () => void;
+  mountPanelLegacy: () => void;
+  isModernUIActive: () => boolean;
+  Flags: BootstrapFlags;
+  errorHandler: ErrorHandler;
+  messageIndexer: MessageIndexer | null;
+  bookmarkListener: BookmarkListener | null;
+}
+
+interface SetupBootstrapResult {
+  boot: () => void;
+  mountPanel: () => void;
+}
+
 /**
  * Sets up panel mounting, boot sequencing, teardown hooks, and mutation observer.
  *
- * @param {object} options - Dependency container.
- * @param {Document} options.documentRef - Document handle.
- * @param {Window} options.windowRef - Window handle.
- * @param {Function} options.mountPanelModern - Modern panel mount function.
- * @param {Function} options.mountPanelLegacy - Legacy panel mount function.
- * @param {Function} options.isModernUIActive - Getter describing whether modern UI is active.
- * @param {object} options.Flags - Feature flags.
- * @param {object} options.errorHandler - Error handler instance.
- * @param {object} options.messageIndexer - Message indexer reference.
- * @param {object} options.bookmarkListener - Bookmark listener reference.
+ * @param options Dependency container.
+ * @returns Mount/boot control helpers.
  */
-export function setupBootstrap({
+export const setupBootstrap = ({
   documentRef,
   windowRef,
   mountPanelModern,
@@ -22,31 +42,34 @@ export function setupBootstrap({
   errorHandler,
   messageIndexer,
   bookmarkListener,
-}) {
+}: SetupBootstrapOptions): SetupBootstrapResult => {
   const doc = documentRef;
   const win = windowRef;
-  const MutationObserverCtor = win.MutationObserver || globalThis.MutationObserver;
-  const requestFrame = typeof win.requestAnimationFrame === 'function'
-    ? win.requestAnimationFrame.bind(win)
-    : (cb) => setTimeout(cb, 16);
+  const MutationObserverCtor: typeof MutationObserver | undefined =
+    win.MutationObserver || globalThis.MutationObserver;
+  const requestFrame: RequestFrame =
+    typeof win.requestAnimationFrame === 'function'
+      ? win.requestAnimationFrame.bind(win)
+      : (callback: FrameRequestCallback) => (win.setTimeout?.(callback, 16) ?? setTimeout(callback, 16));
 
   let panelMounted = false;
   let bootInProgress = false;
   let observerScheduled = false;
 
-  const mountPanel = () => {
+  const mountPanel = (): void => {
     if (isModernUIActive()) {
       mountPanelModern();
-    } else {
-      if (Flags.killSwitch) {
-        const level = errorHandler.LEVELS?.INFO || 'info';
-        errorHandler.handle('modern UI disabled by kill switch', 'ui/panel', level);
-      }
-      mountPanelLegacy();
+      return;
     }
+
+    if (Flags.killSwitch) {
+      const level = errorHandler.LEVELS?.INFO || 'info';
+      errorHandler.handle('modern UI disabled by kill switch', 'ui/panel', level);
+    }
+    mountPanelLegacy();
   };
 
-  const boot = () => {
+  const boot = (): void => {
     if (panelMounted || bootInProgress) return;
     bootInProgress = true;
     try {
@@ -54,15 +77,15 @@ export function setupBootstrap({
       messageIndexer?.start?.();
       bookmarkListener?.start?.();
       panelMounted = Boolean(doc.querySelector('#genit-memory-helper-panel'));
-    } catch (e) {
+    } catch (error) {
       const level = errorHandler.LEVELS?.ERROR || 'error';
-      errorHandler.handle(e, 'ui/panel', level);
+      errorHandler.handle(error, 'ui/panel', level);
     } finally {
       bootInProgress = false;
     }
   };
 
-  const registerReadyHook = () => {
+  const registerReadyHook = (): void => {
     if (doc.readyState === 'complete' || doc.readyState === 'interactive') {
       setTimeout(boot, 1200);
     } else {
@@ -70,9 +93,10 @@ export function setupBootstrap({
     }
   };
 
-  const registerTeardown = () => {
+  const registerTeardown = (): void => {
     if (win.__GMHTeardownHook) return;
-    const teardown = () => {
+
+    const teardown = (): void => {
       panelMounted = false;
       bootInProgress = false;
       try {
@@ -88,13 +112,17 @@ export function setupBootstrap({
         errorHandler.handle(err, 'adapter', level);
       }
     };
+
     win.addEventListener('pagehide', teardown);
     win.addEventListener('beforeunload', teardown);
     win.__GMHTeardownHook = true;
   };
 
-  const registerMutationObserver = () => {
+  const registerMutationObserver = (): void => {
     if (!MutationObserverCtor) return;
+    const target = doc.documentElement || doc.body;
+    if (!target) return;
+
     const observer = new MutationObserverCtor(() => {
       if (observerScheduled || bootInProgress) return;
       observerScheduled = true;
@@ -109,7 +137,7 @@ export function setupBootstrap({
         boot();
       });
     });
-    observer.observe(doc.documentElement || doc.body, { subtree: true, childList: true });
+    observer.observe(target, { subtree: true, childList: true });
   };
 
   registerReadyHook();
@@ -117,6 +145,6 @@ export function setupBootstrap({
   registerMutationObserver();
 
   return { boot, mountPanel };
-}
+};
 
 export default setupBootstrap;
