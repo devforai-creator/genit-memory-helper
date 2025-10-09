@@ -3222,8 +3222,33 @@ var GMHBundle = (function (exports) {
       return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
     };
 
+    /**
+     * @typedef {import('../types').TranscriptSession} TranscriptSession
+     * @typedef {import('../types').StructuredSnapshot} StructuredSnapshot
+     * @typedef {import('../types').ExportBundleOptions} ExportBundleOptions
+     * @typedef {import('../types').ExportBundleResult} ExportBundleResult
+     * @typedef {import('../types').ExportManifestOptions} ExportManifestOptions
+     * @typedef {import('../types').ExportManifest} ExportManifest
+     * @typedef {import('../types').ExportRangeInfo} ExportRangeInfo
+     */
+
+    /**
+     * Generates a sanitized timestamp token for export file naming.
+     *
+     * @returns {string}
+     */
     const defaultStamp = () => new Date().toISOString().replace(/[:.]/g, '-');
 
+    /**
+     * Builds an export payload from available exporters and structured data.
+     *
+     * @param {TranscriptSession} session
+     * @param {string} normalizedRaw
+     * @param {string} format
+     * @param {string | null | undefined} stamp
+     * @param {ExportBundleOptions} [options]
+     * @returns {ExportBundleResult}
+     */
     const buildExportBundle = (
       session,
       normalizedRaw,
@@ -3326,6 +3351,12 @@ var GMHBundle = (function (exports) {
       };
     };
 
+    /**
+     * Constructs a manifest entry describing the generated export bundle.
+     *
+     * @param {ExportManifestOptions} params
+     * @returns {ExportManifest}
+     */
     const buildExportManifest = ({
       profile,
       counts,
@@ -3350,20 +3381,57 @@ var GMHBundle = (function (exports) {
       source,
     });
 
+    /**
+     * @typedef {import('../types').TranscriptTurn} TranscriptTurn
+     * @typedef {import('../types').TranscriptMetaHints} TranscriptMetaHints
+     * @typedef {import('../types').TranscriptMeta} TranscriptMeta
+     * @typedef {import('../types').TranscriptParseResult} TranscriptParseResult
+     * @typedef {import('../types').TranscriptSession} TranscriptSession
+     * @typedef {import('../types').EntryOriginProvider} EntryOriginProvider
+     */
+
+    /** @type {readonly string[]} */
     const PLAYER_NAME_FALLBACKS = ['플레이어', '소중한코알라5299'];
+
+    /** @type {string} */
     const PLAYER_MARK = '⟦PLAYER⟧ ';
+
+    /** @type {RegExp} */
     const HEADER_RE =
       /^(\d+월\s*\d+일.*?\d{1,2}:\d{2})\s*\|\s*([^|]+?)\s*\|\s*📍\s*([^|]+)\s*\|?(.*)$/;
+
+    /** @type {RegExp} */
     const CODE_RE = /^([A-J])\/(\d+)\/(\d+)\/(\d+)\/(\d+)$/i;
+
+    /** @type {readonly string[]} */
     const META_KEYWORDS = ['지도', '등장', 'Actors', '배우', '기록코드', 'Codes', 'SCENE'];
+
+    /** @type {readonly string[]} */
     const SYSTEM_ALIASES = ['player', '플레이어', '유저', '나'];
 
+    /**
+     * Builds a lowercase alias set for player comparison.
+     *
+     * @param {string[]} names
+     * @returns {Set<string>}
+     */
     const buildAliasSet = (names) => new Set(names.map((n) => n.toLowerCase()).concat(SYSTEM_ALIASES));
 
+    /** @type {string[]} */
     let playerNames = [...PLAYER_NAME_FALLBACKS];
+
+    /** @type {Set<string>} */
     let playerAliases = buildAliasSet(playerNames);
+
+    /** @type {EntryOriginProvider} */
     let entryOriginProvider = () => [];
 
+    /**
+     * Overrides the dynamic player name list while preserving fallbacks.
+     *
+     * @param {string[]} [names]
+     * @returns {void}
+     */
     const setPlayerNames = (names = []) => {
       const next = Array.from(
         new Set(
@@ -3376,19 +3444,46 @@ var GMHBundle = (function (exports) {
       playerAliases = buildAliasSet(playerNames);
     };
 
+    /**
+     * Returns a copy of the currently active player names for downstream logic.
+     *
+     * @returns {string[]}
+     */
     const getPlayerNames = () => playerNames.slice();
 
+    /**
+     * Registers a function that supplies transcript line origins for range lookup.
+     *
+     * @param {EntryOriginProvider | null | undefined} provider
+     * @returns {void}
+     */
     const setEntryOriginProvider = (provider) => {
       entryOriginProvider = typeof provider === 'function' ? provider : () => [];
     };
 
+    /**
+     * Resolves origin indices for normalized transcript lines.
+     *
+     * @returns {number[]}
+     */
     const getEntryOrigin = () => {
       const origin = entryOriginProvider();
       return Array.isArray(origin) ? origin.slice() : [];
     };
 
+    /**
+     * Picks the primary (first) player label for role matching.
+     *
+     * @returns {string}
+     */
     const primaryPlayerName = () => getPlayerNames()[0] || PLAYER_NAME_FALLBACKS[0];
 
+    /**
+     * Cleans a raw line label into a normalized speaker name.
+     *
+     * @param {string} [name]
+     * @returns {string}
+     */
     const normalizeSpeakerName = (name) => {
       const stripped = collapseSpaces(String(name || '')).replace(/[\[\]{}()]+/g, '').replace(/^[-•]+/, '').trim();
       if (!stripped) return '내레이션';
@@ -3398,15 +3493,33 @@ var GMHBundle = (function (exports) {
       return stripped;
     };
 
+    /**
+     * Maps a speaker label to a canonical conversation role.
+     *
+     * @param {string} name
+     * @returns {'player' | 'npc' | 'narration'}
+     */
     const roleForSpeaker = (name) => {
       if (name === '내레이션') return 'narration';
       if (getPlayerNames().includes(name)) return 'player';
       return 'npc';
     };
 
+    /**
+     * Standardizes raw transcript text for downstream parsing routines.
+     *
+     * @param {string} raw
+     * @returns {string}
+     */
     const normalizeTranscript = (raw) =>
       stripTicks(normNL(String(raw ?? ''))).replace(/[\t\u00a0\u200b]/g, ' ');
 
+    /**
+     * Heuristically determines if a line should be treated as narration.
+     *
+     * @param {string} line
+     * @returns {boolean}
+     */
     const looksNarrative = (line) => {
       const s = line.trim();
       if (!s) return false;
@@ -3422,8 +3535,20 @@ var GMHBundle = (function (exports) {
       return false;
     };
 
+    /**
+     * Detects actor stats/metadata rows that should be skipped during parsing.
+     *
+     * @param {string} line
+     * @returns {boolean}
+     */
     const isActorStatsLine = (line) => /\|/.test(line) && /❤️|💗|💦|🪣/.test(line);
 
+    /**
+     * Determines whether a normalized line qualifies as metadata.
+     *
+     * @param {string} line
+     * @returns {boolean}
+     */
     const isMetaLine = (line) => {
       const stripped = stripBrackets(line);
       if (!stripped) return true;
@@ -3438,16 +3563,32 @@ var GMHBundle = (function (exports) {
       return false;
     };
 
+    /**
+     * Parses a normalized transcript into structured turns and metadata hints.
+     *
+     * @param {string} raw
+     * @returns {TranscriptParseResult}
+     */
     const parseTurns = (raw) => {
       const lines = normalizeTranscript(raw).split('\n');
       const originLines = getEntryOrigin();
+      /** @type {TranscriptTurn[]} */
       const turns = [];
+      /** @type {string[]} */
       const warnings = [];
+      /** @type {TranscriptMetaHints} */
       const metaHints = { header: null, codes: [], titles: [] };
 
       let currentSceneId = 1;
       let pendingSpeaker = null;
 
+      /**
+       * Appends normalized line indexes to a transcript turn.
+       *
+       * @param {TranscriptTurn | undefined} turn
+       * @param {number[]} [lineIndexes]
+       * @returns {void}
+       */
       const addEntriesToTurn = (turn, lineIndexes = []) => {
         if (!turn) return;
         const normalized = Array.from(
@@ -3479,6 +3620,15 @@ var GMHBundle = (function (exports) {
         }
       };
 
+      /**
+       * Registers a turn with inferred channels and scene grouping.
+       *
+       * @param {string | null | undefined} speaker
+       * @param {string} text
+       * @param {'player' | 'npc' | 'narration' | null | undefined} roleOverride
+       * @param {number[]} [lineIndexes]
+       * @returns {void}
+       */
       const pushTurn = (speaker, text, roleOverride, lineIndexes = []) => {
         const textClean = sanitizeText(text);
         if (!textClean) return;
@@ -3635,7 +3785,15 @@ var GMHBundle = (function (exports) {
       return { turns, warnings, metaHints };
     };
 
+    /**
+     * Produces derived metadata using meta hints and structured turns.
+     *
+     * @param {TranscriptMetaHints} metaHints
+     * @param {TranscriptTurn[]} turns
+     * @returns {TranscriptMeta}
+     */
     const deriveMeta = (metaHints, turns) => {
+      /** @type {TranscriptMeta} */
       const meta = {};
       if (metaHints.header) {
         const [, time, modeRaw, placeRaw] = metaHints.header;
@@ -3663,6 +3821,12 @@ var GMHBundle = (function (exports) {
       return meta;
     };
 
+    /**
+     * Generates a structured transcript session payload from raw text.
+     *
+     * @param {string} raw
+     * @returns {TranscriptSession}
+     */
     const buildSession = (raw) => {
       const { turns, warnings, metaHints } = parseTurns(raw);
       const meta = deriveMeta(metaHints, turns);

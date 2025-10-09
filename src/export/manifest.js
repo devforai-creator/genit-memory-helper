@@ -5,8 +5,33 @@ import {
   toStructuredTXT,
 } from './writers-structured.js';
 
+/**
+ * @typedef {import('../types').TranscriptSession} TranscriptSession
+ * @typedef {import('../types').StructuredSnapshot} StructuredSnapshot
+ * @typedef {import('../types').ExportBundleOptions} ExportBundleOptions
+ * @typedef {import('../types').ExportBundleResult} ExportBundleResult
+ * @typedef {import('../types').ExportManifestOptions} ExportManifestOptions
+ * @typedef {import('../types').ExportManifest} ExportManifest
+ * @typedef {import('../types').ExportRangeInfo} ExportRangeInfo
+ */
+
+/**
+ * Generates a sanitized timestamp token for export file naming.
+ *
+ * @returns {string}
+ */
 const defaultStamp = () => new Date().toISOString().replace(/[:.]/g, '-');
 
+/**
+ * Builds an export payload from available exporters and structured data.
+ *
+ * @param {TranscriptSession} session
+ * @param {string} normalizedRaw
+ * @param {string} format
+ * @param {string | null | undefined} stamp
+ * @param {ExportBundleOptions} [options]
+ * @returns {ExportBundleResult}
+ */
 export const buildExportBundle = (
   session,
   normalizedRaw,
@@ -109,6 +134,12 @@ export const buildExportBundle = (
   };
 };
 
+/**
+ * Constructs a manifest entry describing the generated export bundle.
+ *
+ * @param {ExportManifestOptions} params
+ * @returns {ExportManifest}
+ */
 export const buildExportManifest = ({
   profile,
   counts,

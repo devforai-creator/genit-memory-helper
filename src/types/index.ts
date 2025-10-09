@@ -257,6 +257,33 @@ export interface TranscriptSession {
   [key: string]: unknown;
 }
 
+export interface TranscriptMetaHints {
+  header: RegExpExecArray | null;
+  codes: string[];
+  titles: string[];
+}
+
+export interface TranscriptMeta {
+  date?: string;
+  mode?: string;
+  place?: string;
+  title?: string;
+  actors?: string[];
+  player?: string;
+  turn_count?: number;
+  message_count?: number;
+  channel_counts?: { user: number; llm: number };
+  [key: string]: unknown;
+}
+
+export interface TranscriptParseResult {
+  turns: TranscriptTurn[];
+  warnings: string[];
+  metaHints: TranscriptMetaHints;
+}
+
+export type EntryOriginProvider = () => number[];
+
 export interface AutoLoaderOptions {
   stateApi: PanelStateApi;
   stateEnum: Record<string, string> & {
@@ -346,12 +373,72 @@ export interface StructuredSnapshot {
   [key: string]: unknown;
 }
 
+export interface StructuredSelectionRangeInfo {
+  active: boolean;
+  start: number | null;
+  end: number | null;
+  messageStartIndex: number | null;
+  messageEndIndex: number | null;
+  [key: string]: unknown;
+}
+
+export interface StructuredSelectionResult {
+  messages: StructuredSnapshotMessage[];
+  sourceTotal: number;
+  range: StructuredSelectionRangeInfo;
+  [key: string]: unknown;
+}
+
+export interface ExportBundleOptions {
+  structuredSelection?: StructuredSelectionResult | null;
+  structuredSnapshot?: StructuredSnapshot | null;
+  profile?: string;
+  playerNames?: string[];
+  rangeInfo?: ExportRangeInfo | null;
+  playerMark?: string;
+  [key: string]: unknown;
+}
+
+export interface ExportBundleResult {
+  content: string;
+  filename: string;
+  mime: string;
+  stamp: string;
+  format: string;
+}
+
+export interface ExportManifestOptions {
+  profile?: string;
+  counts?: Record<string, unknown>;
+  stats?: Record<string, unknown>;
+  overallStats?: Record<string, unknown>;
+  format?: string;
+  warnings?: unknown[];
+  source?: unknown;
+  range?: ExportRangeInfo | null | undefined | Record<string, unknown> | unknown;
+  version?: string;
+}
+
+export interface ExportManifest {
+  tool: string;
+  version?: string;
+  generated_at: string;
+  profile?: string;
+  counts?: Record<string, unknown>;
+  stats?: Record<string, unknown>;
+  overall_stats?: Record<string, unknown>;
+  range?: ExportRangeInfo | null | undefined | Record<string, unknown> | unknown;
+  format?: string;
+  warnings?: unknown[];
+  source?: unknown;
+}
+
 export interface ShareWorkflowOptions {
   captureStructuredSnapshot(options?: { force?: boolean }): StructuredSnapshot;
   normalizeTranscript(raw: string): string;
   buildSession(raw: string): TranscriptSession;
   exportRange?: ExportRangeController;
-  projectStructuredMessages(structured: StructuredSnapshot, info?: ExportRangeInfo | null): unknown;
+  projectStructuredMessages(structured: StructuredSnapshot, info?: ExportRangeInfo | null): StructuredSelectionResult;
   cloneSession(session: TranscriptSession): TranscriptSession;
   applyPrivacyPipeline(session: TranscriptSession, raw: string, profile: string, snapshot?: StructuredSnapshot | null): PrivacyPipelineResult;
   privacyConfig: { profile: string; [key: string]: unknown };
@@ -369,9 +456,9 @@ export interface ShareWorkflowOptions {
     rawSelection: string,
     format: string,
     stamp: string,
-    options?: Record<string, unknown>,
-  ): { content: string; filename: string; mime: string };
-  buildExportManifest(options: Record<string, unknown>): Record<string, unknown>;
+    options?: ExportBundleOptions,
+  ): ExportBundleResult;
+  buildExportManifest(options: ExportManifestOptions): ExportManifest;
   triggerDownload(blob: Blob, filename: string): void;
   clipboard: { set(value: string, options?: Record<string, unknown>): void };
   stateApi: PanelStateApi;
@@ -390,7 +477,7 @@ export interface PreparedShareResult {
   selection: ExportRangeSelection | null;
   rangeInfo: ExportRangeInfo | null | undefined;
   exportSession: TranscriptSession;
-  structuredSelection: unknown;
+  structuredSelection: StructuredSelectionResult | null;
 }
 
 export interface ShareWorkflowApi {
