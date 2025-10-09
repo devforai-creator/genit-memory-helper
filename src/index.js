@@ -6,7 +6,7 @@ import { createErrorHandler } from './core/error-handler.ts';
 import { createExportRange } from './core/export-range.ts';
 import { createTurnBookmarks } from './core/turn-bookmarks.ts';
 import { createMessageIndexer } from './core/message-indexer.ts';
-import { createBookmarkListener } from './core/bookmark-listener.js';
+import { createBookmarkListener } from './core/bookmark-listener.ts';
 import {
   adapterRegistry,
   registerAdapterConfig,

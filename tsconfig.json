@@ -28,7 +28,7 @@
     "src/core/export-range.ts",
     "src/core/message-indexer.ts",
     "src/core/turn-bookmarks.ts",
-    "src/core/bookmark-listener.js",
+    "src/core/bookmark-listener.ts",
     "types/**/*.d.ts"
   ],
   "exclude": ["dist", "node_modules"]

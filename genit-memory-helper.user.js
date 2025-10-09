@@ -1158,105 +1158,80 @@ var GMHBundle = (function (exports) {
         return api;
     };
 
-    /**
-     * @typedef {import('../types').BookmarkListenerOptions} BookmarkListenerOptions
-     * @typedef {import('../types').BookmarkListener} BookmarkListener
-     * @typedef {import('../types').MessageIndexer} MessageIndexer
-     * @typedef {import('../types').TurnBookmarks} TurnBookmarks
-     */
-
-    /**
-     * @returns {void}
-     */
-    const noop = () => {};
-
-    /**
-     * @param {BookmarkListenerOptions} [options]
-     * @returns {BookmarkListener}
-     */
-    const createBookmarkListener = ({
-      document: documentLike,
-      ElementClass,
-      messageIndexer,
-      turnBookmarks,
-      console: consoleLike,
-    } = {}) => {
-      const doc = documentLike || (typeof document !== 'undefined' ? document : undefined);
-      if (!doc) {
-        throw new Error('createBookmarkListener requires a document reference');
-      }
-      /** @type {typeof Element | undefined} */
-      const ElementRef = ElementClass || (typeof Element !== 'undefined' ? Element : undefined);
-      /** @type {TurnBookmarks | null | undefined} */
-      const bookmarks = turnBookmarks;
-      /** @type {MessageIndexer | null | undefined} */
-      const indexer = messageIndexer;
-      const logger = consoleLike || (typeof console !== 'undefined' ? console : {});
-      const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop;
-
-      let active = false;
-
-      /**
-       * @param {MouseEvent} event
-       * @returns {void}
-       */
-      const handleBookmarkCandidate = (event) => {
-        const target = event.target;
-        if (!ElementRef || !(target instanceof ElementRef)) return;
-        const message = target.closest('[data-gmh-message-index], [data-turn-index]');
-        if (!message) return;
-        const indexAttr =
-          message.getAttribute('data-gmh-message-index') || message.getAttribute('data-turn-index');
-        if (indexAttr === null) return;
-        const ordinalAttr =
-          message.getAttribute('data-gmh-message-ordinal') || message.getAttribute('data-message-ordinal');
-        const messageIdAttr =
-          message.getAttribute('data-gmh-message-id') || message.getAttribute('data-message-id');
-        const index = Number(indexAttr);
-
-        const lookupOrdinalByIndex = indexer?.lookupOrdinalByIndex?.bind(indexer);
-        const lookupOrdinalByMessageId = indexer?.lookupOrdinalByMessageId?.bind(indexer);
-
-        const resolvedOrdinal = [
-          Number.isFinite(index) && typeof lookupOrdinalByIndex === 'function'
-            ? lookupOrdinalByIndex(index)
-            : null,
-          messageIdAttr && typeof lookupOrdinalByMessageId === 'function'
-            ? lookupOrdinalByMessageId(messageIdAttr)
-            : null,
-          ordinalAttr !== null ? Number(ordinalAttr) : null,
-        ].find((value) => Number.isFinite(value) && value > 0);
-
-        if (!Number.isFinite(index)) return;
-        if (!bookmarks || typeof bookmarks.record !== 'function') {
-          warn('[GMH] bookmark listener missing turnBookmarks.record');
-          return;
+    const noop = () => { };
+    const resolveDocument = (doc) => doc ?? (typeof document !== 'undefined' ? document : undefined);
+    const resolveElementClass = (ElementClass) => ElementClass ?? (typeof Element !== 'undefined' ? Element : undefined);
+    const resolveConsole = (consoleLike) => consoleLike ?? (typeof console !== 'undefined' ? console : {});
+    const resolveMessageIndexer = (indexer) => indexer ?? null;
+    const resolveTurnBookmarks = (bookmarks) => bookmarks ?? null;
+    const ensureWarn = (logger) => typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop;
+    const toElement = (target, ElementRef) => {
+        if (!ElementRef || !target || !(target instanceof ElementRef))
+            return null;
+        return target;
+    };
+    const lookupOrdinal = (index, messageId, indexer, ordinalAttr) => {
+        const byIndex = Number.isFinite(index) && indexer?.lookupOrdinalByIndex
+            ? indexer.lookupOrdinalByIndex(index)
+            : null;
+        const byMessageId = messageId && indexer?.lookupOrdinalByMessageId
+            ? indexer.lookupOrdinalByMessageId(messageId)
+            : null;
+        const byAttribute = ordinalAttr !== null && ordinalAttr !== undefined ? Number(ordinalAttr) : null;
+        const resolved = [byIndex, byMessageId, byAttribute].find((value) => typeof value === 'number' && Number.isFinite(value) && value > 0);
+        return typeof resolved === 'number' ? resolved : null;
+    };
+    const createBookmarkListener = ({ document: documentLike, ElementClass, messageIndexer, turnBookmarks, console: consoleLike, } = {}) => {
+        const doc = resolveDocument(documentLike);
+        if (!doc) {
+            throw new Error('createBookmarkListener requires a document reference');
         }
-        bookmarks.record(
-          index,
-          Number.isFinite(resolvedOrdinal) ? resolvedOrdinal : null,
-          messageIdAttr || null,
-          'message',
-        );
-      };
-
-      const api = {
-        start() {
-          if (active) return;
-          doc.addEventListener('click', handleBookmarkCandidate, true);
-          active = true;
-        },
-        stop() {
-          if (!active) return;
-          doc.removeEventListener('click', handleBookmarkCandidate, true);
-          active = false;
-        },
-        isActive() {
-          return active;
-        },
-      };
-
-      return /** @type {BookmarkListener} */ (api);
+        const ElementRef = resolveElementClass(ElementClass);
+        const bookmarks = resolveTurnBookmarks(turnBookmarks);
+        const indexer = resolveMessageIndexer(messageIndexer);
+        const logger = resolveConsole(consoleLike);
+        const warn = ensureWarn(logger);
+        let active = false;
+        const handleBookmarkCandidate = (event) => {
+            const target = toElement(event.target, ElementRef);
+            if (!target)
+                return;
+            const message = target.closest('[data-gmh-message-index], [data-turn-index]');
+            if (!message)
+                return;
+            const indexAttr = message.getAttribute('data-gmh-message-index') ?? message.getAttribute('data-turn-index');
+            if (indexAttr === null)
+                return;
+            const index = Number(indexAttr);
+            if (!Number.isFinite(index))
+                return;
+            const ordinalAttr = message.getAttribute('data-gmh-message-ordinal') ?? message.getAttribute('data-message-ordinal');
+            const messageIdAttr = message.getAttribute('data-gmh-message-id') ?? message.getAttribute('data-message-id');
+            const resolvedOrdinal = lookupOrdinal(index, messageIdAttr, indexer, ordinalAttr);
+            if (!bookmarks || typeof bookmarks.record !== 'function') {
+                warn('[GMH] bookmark listener missing turnBookmarks.record');
+                return;
+            }
+            bookmarks.record(index, resolvedOrdinal, messageIdAttr ?? null, 'message');
+        };
+        const api = {
+            start() {
+                if (active)
+                    return;
+                doc.addEventListener('click', handleBookmarkCandidate, true);
+                active = true;
+            },
+            stop() {
+                if (!active)
+                    return;
+                doc.removeEventListener('click', handleBookmarkCandidate, true);
+                active = false;
+            },
+            isActive() {
+                return active;
+            },
+        };
+        return api;
     };
 
     const configs = new Map();
