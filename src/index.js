@@ -43,7 +43,7 @@ import {
   parseTurns,
   deriveMeta,
   buildSession,
-} from './export/index.js';
+} from './export/index';
 import {
   normNL,
   stripTicks,
