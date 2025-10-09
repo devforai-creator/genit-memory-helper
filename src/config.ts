@@ -1,3 +1,33 @@
+export interface ConfigLimits {
+  PRIVACY_LIST_MAX: number;
+  PRIVACY_ITEM_MAX: number;
+  PREVIEW_TURN_LIMIT: number;
+}
+
+export interface AutoLoaderProfile {
+  cycleDelayMs: number;
+  settleTimeoutMs: number;
+  maxStableRounds: number;
+  guardLimit: number;
+}
+
+export type AutoLoaderProfileKey = 'default' | 'stability' | 'fast';
+
+export interface AutoLoaderConfig {
+  METER_INTERVAL_MS: number;
+  PROFILES: Record<AutoLoaderProfileKey, AutoLoaderProfile>;
+}
+
+export interface ConfigTiming {
+  BOOT_DELAY_MS: number;
+  AUTO_LOADER: AutoLoaderConfig;
+}
+
+export interface Config {
+  LIMITS: ConfigLimits;
+  TIMING: ConfigTiming;
+}
+
 export const CONFIG = {
   LIMITS: {
     PRIVACY_LIST_MAX: 1000,
@@ -30,6 +60,6 @@ export const CONFIG = {
       },
     },
   },
-};
+} satisfies Config;
 
 export default CONFIG;

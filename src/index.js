@@ -1,6 +1,6 @@
 import { GMH } from './core/namespace.ts';
 import { clone, deepMerge } from './core/utils.ts';
-import { ENV } from './env.js';
+import { ENV } from './env.ts';
 import { GMH_STATE, createStateManager } from './core/state.ts';
 import { createErrorHandler } from './core/error-handler.ts';
 import { createExportRange } from './core/export-range.ts';
@@ -55,7 +55,7 @@ import {
 } from './utils/text.ts';
 import { sleep, triggerDownload, isScrollable } from './utils/dom.ts';
 import { luhnValid } from './utils/validation.ts';
-import { withPlayerNames } from './utils/factories.js';
+import { withPlayerNames } from './utils/factories.ts';
 import { ensureLegacyPreviewStyles, ensureDesignSystemStyles } from './ui/styles.ts';
 import { createPanelSettings } from './ui/panel-settings.ts';
 import { createSnapshotFeature, createStructuredSnapshotReader } from './features/snapshot.ts';
@@ -75,7 +75,7 @@ import { composePrivacy } from './composition/privacy-composition.ts';
 import { composeShareWorkflow } from './composition/share-composition.ts';
 import { composeUI } from './composition/ui-composition.ts';
 import { setupBootstrap } from './composition/bootstrap.ts';
-import { CONFIG } from './config.js';
+import { CONFIG } from './config.ts';
 
 (function () {
   'use strict';

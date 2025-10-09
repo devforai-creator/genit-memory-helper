@@ -55,33 +55,57 @@ var GMHBundle = (function (exports) {
         return base;
     };
 
+    const noop$6 = () => { };
     const fallbackClipboard = (text) => {
-      if (typeof navigator !== 'undefined' && navigator?.clipboard?.writeText) {
-        navigator.clipboard.writeText(text).catch(() => {});
-      }
+        if (typeof navigator !== 'undefined' && navigator?.clipboard?.writeText) {
+            navigator.clipboard.writeText(text).catch(noop$6);
+        }
     };
-
-    const detectWindow = () => {
-      if (typeof unsafeWindow !== 'undefined') return unsafeWindow;
-      if (typeof window !== 'undefined') return window;
-      return undefined;
+    const detectWindow = (globals) => {
+        if (globals.unsafeWindow)
+            return globals.unsafeWindow;
+        if (typeof window !== 'undefined')
+            return window;
+        return undefined;
     };
-
-    const detectGMInfo = () => {
-      if (typeof GM_info !== 'undefined' && GM_info?.script) {
-        return GM_info;
-      }
-      return { script: { version: '0.0.0-dev' } };
+    const detectGMInfo = (globals) => {
+        if (globals.GM_info?.script) {
+            return globals.GM_info;
+        }
+        return {
+            script: {
+                name: 'genit-memory-helper',
+                version: '0.0.0-dev',
+            },
+        };
     };
-
+    const detectClipboard = (globals) => {
+        if (typeof globals.GM_setClipboard === 'function') {
+            return globals.GM_setClipboard.bind(globals);
+        }
+        return fallbackClipboard;
+    };
+    const detectConsole = () => {
+        if (typeof console !== 'undefined')
+            return console;
+        return {
+            log: noop$6,
+            warn: noop$6,
+            error: noop$6,
+        };
+    };
+    const detectStorage = () => {
+        if (typeof localStorage !== 'undefined')
+            return localStorage;
+        return undefined;
+    };
+    const globals = globalThis;
     const ENV = {
-      window: detectWindow(),
-      GM_setClipboard:
-        typeof GM_setClipboard === 'function' ? GM_setClipboard : fallbackClipboard,
-      GM_info: detectGMInfo(),
-      console: typeof console !== 'undefined' ? console : { log() {}, warn() {}, error() {} },
-      localStorage:
-        typeof localStorage !== 'undefined' ? localStorage : undefined,
+        window: detectWindow(globals),
+        GM_setClipboard: detectClipboard(globals),
+        GM_info: detectGMInfo(globals),
+        console: detectConsole(),
+        localStorage: detectStorage(),
     };
 
     const noop$5 = () => { };
@@ -2358,36 +2382,36 @@ var GMHBundle = (function (exports) {
     const DEFAULT_PRIVACY_PROFILE = 'safe';
 
     const CONFIG = {
-      LIMITS: {
-        PRIVACY_LIST_MAX: 1000,
-        PRIVACY_ITEM_MAX: 200,
-        PREVIEW_TURN_LIMIT: 5,
-      },
-      TIMING: {
-        AUTO_LOADER: {
-          METER_INTERVAL_MS: 1500,
-          PROFILES: {
-            default: {
-              cycleDelayMs: 700,
-              settleTimeoutMs: 2000,
-              maxStableRounds: 3,
-              guardLimit: 60,
-            },
-            stability: {
-              cycleDelayMs: 1200,
-              settleTimeoutMs: 2600,
-              maxStableRounds: 5,
-              guardLimit: 140,
-            },
-            fast: {
-              cycleDelayMs: 350,
-              settleTimeoutMs: 900,
-              maxStableRounds: 2,
-              guardLimit: 40,
-            },
-          },
+        LIMITS: {
+            PRIVACY_LIST_MAX: 1000,
+            PRIVACY_ITEM_MAX: 200,
+            PREVIEW_TURN_LIMIT: 5,
         },
-      },
+        TIMING: {
+            AUTO_LOADER: {
+                METER_INTERVAL_MS: 1500,
+                PROFILES: {
+                    default: {
+                        cycleDelayMs: 700,
+                        settleTimeoutMs: 2000,
+                        maxStableRounds: 3,
+                        guardLimit: 60,
+                    },
+                    stability: {
+                        cycleDelayMs: 1200,
+                        settleTimeoutMs: 2600,
+                        maxStableRounds: 5,
+                        guardLimit: 140,
+                    },
+                    fast: {
+                        cycleDelayMs: 350,
+                        settleTimeoutMs: 900,
+                        maxStableRounds: 2,
+                        guardLimit: 40,
+                    },
+                },
+            },
+        },
     };
 
     const MAX_CUSTOM_LIST_ITEMS = CONFIG.LIMITS.PRIVACY_LIST_MAX;
@@ -3689,14 +3713,22 @@ var GMHBundle = (function (exports) {
     };
 
     /**
-     * Wraps export functions so they automatically receive current player name context.
+     * Wraps export functions so they always receive the latest player name context.
+     *
+     * @template Session - Export session payload type.
+     * @template Raw - Raw transcript type.
+     * @template Options - Additional export options.
+     * @template Result - Export function result type.
+     * @param getPlayerNames Retrieves the current player name list.
+     * @param exportFn Export implementation that accepts player-aware options.
+     * @returns Export function that injects `playerNames` automatically.
      */
-    const withPlayerNames = (getPlayerNames, exportFn) =>
-      (session, raw, options = {}) =>
-        exportFn(session, raw, {
-          playerNames: getPlayerNames(),
-          ...options,
+    const withPlayerNames = (getPlayerNames, exportFn) => {
+        return (session, raw, options) => exportFn(session, raw, {
+            playerNames: getPlayerNames(),
+            ...(options ?? {}),
         });
+    };
 
     /**
      * CSS used for the legacy preview privacy overlay.

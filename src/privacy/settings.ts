@@ -1,5 +1,5 @@
 import { STORAGE_KEYS, PRIVACY_PROFILES, DEFAULT_PRIVACY_PROFILE } from './constants';
-import { CONFIG } from '../config.js';
+import { CONFIG } from '../config';
 import type { ErrorHandler } from '../types';
 
 const noop = (): void => {};
