@@ -4855,106 +4855,64 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         };
     }
 
-    /**
-     * @typedef {import('../types').AutoLoaderController} AutoLoaderController
-     * @typedef {import('../types').AutoLoaderExports} AutoLoaderExports
-     */
-
-    /**
-     * @typedef {object} AutoLoaderControlsOptions
-     * @property {Document | null} [documentRef]
-     * @property {AutoLoaderController} autoLoader
-     * @property {AutoLoaderExports['autoState']} autoState
-     * @property {(message: string, tone?: string | null) => void} [setPanelStatus]
-     * @property {(meter: HTMLElement | null) => void} startTurnMeter
-     * @property {() => string} getAutoProfile
-     * @property {(listener: () => void) => void} subscribeProfileChange
-     * @property {() => Promise<void> | void} [downloadDomSnapshot]
-     */
-
-    /**
-     * @typedef {object} AutoLoaderControls
-     * @property {(panel: Element | null) => void} ensureAutoLoadControlsModern
-     * @property {(panel: Element | null) => void} ensureAutoLoadControlsLegacy
-     * @property {(panel: Element | null) => void} mountStatusActionsModern
-     * @property {(panel: Element | null) => void} mountStatusActionsLegacy
-     */
-
-    /**
-     * Generates UI hooks for controlling the auto-loader and download status buttons.
-     *
-     * @param {AutoLoaderControlsOptions} [options]
-     * @returns {AutoLoaderControls}
-     */
-    function createAutoLoaderControls({
-      documentRef = typeof document !== 'undefined' ? document : null,
-      autoLoader,
-      autoState,
-      setPanelStatus,
-      startTurnMeter,
-      getAutoProfile,
-      subscribeProfileChange,
-      downloadDomSnapshot,
-    } = {}) {
-      if (!documentRef) throw new Error('createAutoLoaderControls requires document reference');
-      if (!autoLoader) throw new Error('createAutoLoaderControls requires autoLoader');
-      if (!autoState) throw new Error('createAutoLoaderControls requires autoState');
-      if (!startTurnMeter) throw new Error('createAutoLoaderControls requires startTurnMeter');
-      if (!getAutoProfile) throw new Error('createAutoLoaderControls requires getAutoProfile');
-      if (!subscribeProfileChange) {
-        throw new Error('createAutoLoaderControls requires subscribeProfileChange');
-      }
-
-      const doc = documentRef;
-      const profileSelectElements = new Set();
-
-      /**
-       * Synchronizes the profile dropdowns with the latest active profile.
-       * @returns {void}
-       */
-      const syncProfileSelects = () => {
-        const profile = getAutoProfile();
-        for (const el of Array.from(profileSelectElements)) {
-          if (!el || !el.isConnected) {
-            profileSelectElements.delete(el);
-            continue;
-          }
-          el.value = profile;
+    function createAutoLoaderControls({ documentRef = typeof document !== 'undefined' ? document : null, autoLoader, autoState, setPanelStatus, startTurnMeter, getAutoProfile, subscribeProfileChange, downloadDomSnapshot, }) {
+        if (!documentRef)
+            throw new Error('createAutoLoaderControls requires document reference');
+        if (!autoLoader)
+            throw new Error('createAutoLoaderControls requires autoLoader');
+        if (!autoState)
+            throw new Error('createAutoLoaderControls requires autoState');
+        if (!startTurnMeter)
+            throw new Error('createAutoLoaderControls requires startTurnMeter');
+        if (!getAutoProfile)
+            throw new Error('createAutoLoaderControls requires getAutoProfile');
+        if (!subscribeProfileChange) {
+            throw new Error('createAutoLoaderControls requires subscribeProfileChange');
         }
-      };
-
-      subscribeProfileChange(syncProfileSelects);
-
-      /**
-       * Adds profile select elements to the synchronization set.
-       * @param {HTMLSelectElement | null} select
-       * @returns {void}
-       */
-      const registerProfileSelect = (select) => {
-        if (!select) return;
-        profileSelectElements.add(select);
-        syncProfileSelects();
-        select.onchange = (event) => {
-          autoLoader.setProfile(event.target.value);
+        const doc = documentRef;
+        const profileSelectElements = new Set();
+        const syncProfileSelects = () => {
+            const profile = getAutoProfile();
+            for (const el of Array.from(profileSelectElements)) {
+                if (!el || !el.isConnected) {
+                    profileSelectElements.delete(el);
+                    continue;
+                }
+                el.value = profile;
+            }
         };
-      };
-
-      /**
-       * Ensures the modern auto-loader controls markup exists within the panel.
-       * @param {Element | null} panel
-       * @returns {void}
-       */
-      const ensureAutoLoadControlsModern = (panel) => {
-        if (!panel) return;
-        let wrap = panel.querySelector('#gmh-autoload-controls');
-        if (!wrap) {
-          wrap = doc.createElement('div');
-          wrap.id = 'gmh-autoload-controls';
-          panel.appendChild(wrap);
-        }
-        if (wrap.dataset.ready === 'true') return;
-        wrap.dataset.ready = 'true';
-        wrap.innerHTML = `
+        subscribeProfileChange(syncProfileSelects);
+        const registerProfileSelect = (select) => {
+            if (!select)
+                return;
+            profileSelectElements.add(select);
+            syncProfileSelects();
+            select.addEventListener('change', (event) => {
+                const target = event.target;
+                autoLoader.setProfile(target.value);
+            });
+        };
+        const toggleControls = (disabled, buttons) => {
+            buttons.forEach((btn) => {
+                if (!btn)
+                    return;
+                btn.disabled = disabled;
+                btn.classList.toggle('gmh-disabled', disabled);
+            });
+        };
+        const ensureAutoLoadControlsModern = (panel) => {
+            if (!panel)
+                return;
+            let wrap = panel.querySelector('#gmh-autoload-controls');
+            if (!wrap) {
+                wrap = doc.createElement('div');
+                wrap.id = 'gmh-autoload-controls';
+                panel.appendChild(wrap);
+            }
+            if (wrap.dataset.ready === 'true')
+                return;
+            wrap.dataset.ready = 'true';
+            wrap.innerHTML = `
       <div class="gmh-field-row">
         <button id="gmh-autoload-all" class="gmh-panel-btn gmh-panel-btn--accent">위로 끝까지 로딩</button>
         <button id="gmh-autoload-stop" class="gmh-panel-btn gmh-panel-btn--warn gmh-panel-btn--compact">정지</button>
@@ -4965,69 +4923,58 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       </div>
       <div id="gmh-turn-meter" class="gmh-subtext"></div>
     `;
-
-        const btnAll = wrap.querySelector('#gmh-autoload-all');
-        const btnStop = wrap.querySelector('#gmh-autoload-stop');
-        const btnTurns = wrap.querySelector('#gmh-autoload-turns-btn');
-        const inputTurns = wrap.querySelector('#gmh-autoload-turns');
-        const meter = wrap.querySelector('#gmh-turn-meter');
-
-        const toggleControls = (disabled) => {
-          btnAll.disabled = disabled;
-          btnTurns.disabled = disabled;
-          btnAll.classList.toggle('gmh-disabled', disabled);
-          btnTurns.classList.toggle('gmh-disabled', disabled);
+            const btnAll = wrap.querySelector('#gmh-autoload-all');
+            const btnStop = wrap.querySelector('#gmh-autoload-stop');
+            const btnTurns = wrap.querySelector('#gmh-autoload-turns-btn');
+            const inputTurns = wrap.querySelector('#gmh-autoload-turns');
+            const meter = wrap.querySelector('#gmh-turn-meter');
+            const disableControls = (disabled) => toggleControls(disabled, [btnAll, btnTurns]);
+            btnAll?.addEventListener('click', async () => {
+                if (autoState.running)
+                    return;
+                disableControls(true);
+                try {
+                    await autoLoader.start('all');
+                }
+                finally {
+                    disableControls(false);
+                }
+            });
+            btnTurns?.addEventListener('click', async () => {
+                if (autoState.running)
+                    return;
+                const rawVal = inputTurns?.value?.trim();
+                const target = Number.parseInt(rawVal || '0', 10);
+                if (!Number.isFinite(target) || target <= 0) {
+                    setPanelStatus?.('유저 메시지 수를 입력해주세요.', 'error');
+                    return;
+                }
+                disableControls(true);
+                try {
+                    await autoLoader.start('turns', target);
+                }
+                finally {
+                    disableControls(false);
+                }
+            });
+            btnStop?.addEventListener('click', () => {
+                if (!autoState.running) {
+                    setPanelStatus?.('자동 로딩이 실행 중이 아닙니다.', 'muted');
+                    return;
+                }
+                autoLoader.stop();
+            });
+            if (meter instanceof HTMLElement) {
+                startTurnMeter(meter);
+            }
         };
-
-        btnAll.onclick = async () => {
-          if (autoState.running) return;
-          toggleControls(true);
-          try {
-            await autoLoader.start('all');
-          } finally {
-            toggleControls(false);
-          }
-        };
-
-        btnTurns.onclick = async () => {
-          if (autoState.running) return;
-          const rawVal = inputTurns?.value?.trim();
-          const target = Number.parseInt(rawVal || '0', 10);
-          if (!Number.isFinite(target) || target <= 0) {
-            setPanelStatus?.('유저 메시지 수를 입력해주세요.', 'error');
-            return;
-          }
-          toggleControls(true);
-          try {
-            await autoLoader.start('turns', target);
-          } finally {
-            toggleControls(false);
-          }
-        };
-
-        btnStop.onclick = () => {
-          if (!autoState.running) {
-            setPanelStatus?.('자동 로딩이 실행 중이 아닙니다.', 'muted');
-            return;
-          }
-          autoLoader.stop();
-        };
-
-        startTurnMeter(meter);
-      };
-
-      /**
-       * Ensures the legacy auto-loader controls markup exists within the panel.
-       * @param {Element | null} panel
-       * @returns {void}
-       */
-      const ensureAutoLoadControlsLegacy = (panel) => {
-        if (!panel || panel.querySelector('#gmh-autoload-controls')) return;
-
-        const wrap = doc.createElement('div');
-        wrap.id = 'gmh-autoload-controls';
-        wrap.style.cssText = 'display:grid; gap:6px; border-top:1px solid #1f2937; padding-top:6px;';
-        wrap.innerHTML = `
+        const ensureAutoLoadControlsLegacy = (panel) => {
+            if (!panel || panel.querySelector('#gmh-autoload-controls'))
+                return;
+            const wrap = doc.createElement('div');
+            wrap.id = 'gmh-autoload-controls';
+            wrap.style.cssText = 'display:grid; gap:6px; border-top:1px solid #1f2937; padding-top:6px;';
+            wrap.innerHTML = `
       <div style="display:flex; gap:8px;">
         <button id="gmh-autoload-all" style="flex:1; background:#38bdf8; border:0; color:#041; border-radius:8px; padding:6px; cursor:pointer;">위로 끝까지 로딩</button>
         <button id="gmh-autoload-stop" style="width:88px; background:#ef4444; border:0; color:#fff; border-radius:8px; padding:6px; cursor:pointer;">정지</button>
@@ -5038,71 +4985,66 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       </div>
       <div id="gmh-turn-meter" style="opacity:.7; font-size:11px;"></div>
     `;
-
-        panel.appendChild(wrap);
-
-        const btnAll = wrap.querySelector('#gmh-autoload-all');
-        const btnStop = wrap.querySelector('#gmh-autoload-stop');
-        const btnTurns = wrap.querySelector('#gmh-autoload-turns-btn');
-        const inputTurns = wrap.querySelector('#gmh-autoload-turns');
-        const meter = wrap.querySelector('#gmh-turn-meter');
-
-        const toggleControls = (disabled) => {
-          btnAll.disabled = disabled;
-          btnTurns.disabled = disabled;
-          btnAll.style.opacity = disabled ? '0.6' : '1';
-          btnTurns.style.opacity = disabled ? '0.6' : '1';
-        };
-
-        btnAll.onclick = async () => {
-          if (autoState.running) return;
-          toggleControls(true);
-          try {
-            await autoLoader.start('all');
-          } finally {
-            toggleControls(false);
-          }
-        };
-
-        btnTurns.onclick = async () => {
-          if (autoState.running) return;
-          const rawVal = inputTurns?.value?.trim();
-          const target = Number.parseInt(rawVal || '0', 10);
-          if (!Number.isFinite(target) || target <= 0) {
-            setPanelStatus?.('유저 메시지 수를 입력해주세요.', 'error');
-            return;
-          }
-          toggleControls(true);
-          try {
-            const stats = await autoLoader.start('turns', target);
-            if (stats && !stats.error) {
-              setPanelStatus?.(`현재 유저 메시지 ${stats.userMessages}개 확보.`, 'success');
+            panel.appendChild(wrap);
+            const btnAll = wrap.querySelector('#gmh-autoload-all');
+            const btnStop = wrap.querySelector('#gmh-autoload-stop');
+            const btnTurns = wrap.querySelector('#gmh-autoload-turns-btn');
+            const inputTurns = wrap.querySelector('#gmh-autoload-turns');
+            const meter = wrap.querySelector('#gmh-turn-meter');
+            const disableControls = (disabled) => {
+                [btnAll, btnTurns].forEach((btn) => {
+                    if (!btn)
+                        return;
+                    btn.disabled = disabled;
+                    btn.style.opacity = disabled ? '0.6' : '1';
+                });
+            };
+            btnAll?.addEventListener('click', async () => {
+                if (autoState.running)
+                    return;
+                disableControls(true);
+                try {
+                    await autoLoader.start('all');
+                }
+                finally {
+                    disableControls(false);
+                }
+            });
+            btnTurns?.addEventListener('click', async () => {
+                if (autoState.running)
+                    return;
+                const rawVal = inputTurns?.value?.trim();
+                const target = Number.parseInt(rawVal || '0', 10);
+                if (!Number.isFinite(target) || target <= 0) {
+                    setPanelStatus?.('유저 메시지 수를 입력해주세요.', 'error');
+                    return;
+                }
+                disableControls(true);
+                try {
+                    const stats = await autoLoader.start('turns', target);
+                    if (stats && !stats.error) {
+                        setPanelStatus?.(`현재 유저 메시지 ${stats.userMessages}개 확보.`, 'success');
+                    }
+                }
+                finally {
+                    disableControls(false);
+                }
+            });
+            btnStop?.addEventListener('click', () => {
+                if (!autoState.running) {
+                    setPanelStatus?.('자동 로딩이 실행 중이 아닙니다.', 'muted');
+                    return;
+                }
+                autoLoader.stop();
+                setPanelStatus?.('자동 로딩 중지를 요청했습니다.', 'warning');
+            });
+            if (meter instanceof HTMLElement) {
+                startTurnMeter(meter);
             }
-          } finally {
-            toggleControls(false);
-          }
         };
-
-        btnStop.onclick = () => {
-          if (!autoState.running) {
-            setPanelStatus?.('자동 로딩이 실행 중이 아닙니다.', 'muted');
-            return;
-          }
-          autoLoader.stop();
-          setPanelStatus?.('자동 로딩 중지를 요청했습니다.', 'warning');
-        };
-
-        startTurnMeter(meter);
-      };
-
-      /**
-       * Builds markup for the status action buttons for modern/legacy panels.
-       * @param {boolean} [modern=false]
-       * @returns {string}
-       */
-      const createStatusActionsMarkup = (modern = false) => {
-        if (modern) {
-          return `
+        const createStatusActionsMarkup = (modern = false) => {
+            if (modern) {
+                return `
       <div class="gmh-field-row">
         <label for="gmh-profile-select" class="gmh-subtext gmh-field-label--inline">프로파일</label>
         <select id="gmh-profile-select" class="gmh-select">
@@ -5116,8 +5058,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         <button id="gmh-btn-retry-stable" class="gmh-small-btn gmh-small-btn--muted">안정 모드</button>
         <button id="gmh-btn-snapshot" class="gmh-small-btn gmh-small-btn--muted">DOM 스냅샷</button>
       </div>`;
-        }
-        return `
+            }
+            return `
       <div style="display:flex; gap:6px; align-items:center;">
         <label for="gmh-profile-select" style="font-size:11px; color:#94a3b8;">프로파일</label>
         <select id="gmh-profile-select" style="flex:1; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:6px; padding:6px;">
@@ -5131,558 +5073,433 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         <button id="gmh-btn-retry-stable" style="flex:1; background:#e0e7ff; color:#1e1b4b; border:0; border-radius:6px; padding:6px; cursor:pointer;">안정 모드 재시도</button>
         <button id="gmh-btn-snapshot" style="flex:1; background:#ffe4e6; color:#881337; border:0; border-radius:6px; padding:6px; cursor:pointer;">DOM 스냅샷</button>
       </div>`;
-      };
-
-      /**
-       * Binds retry/download handlers within the status actions container.
-       * @param {HTMLElement} actions
-       * @param {boolean} modern
-       * @returns {void}
-       */
-      const bindStatusActions = (actions, modern) => {
-        const select = actions.querySelector('#gmh-profile-select');
-        if (select) registerProfileSelect(select);
-
-        const retryBtn = actions.querySelector('#gmh-btn-retry');
-        if (retryBtn) {
-          retryBtn.onclick = async () => {
-            if (autoState.running) {
-              setPanelStatus?.('이미 자동 로딩이 진행 중입니다.', 'muted');
-              return;
+        };
+        const bindStatusActions = (actions) => {
+            const select = actions.querySelector('#gmh-profile-select');
+            if (select)
+                registerProfileSelect(select);
+            const retryBtn = actions.querySelector('#gmh-btn-retry');
+            retryBtn?.addEventListener('click', async () => {
+                if (autoState.running) {
+                    setPanelStatus?.('이미 자동 로딩이 진행 중입니다.', 'muted');
+                    return;
+                }
+                await autoLoader.startCurrent();
+            });
+            const retryStableBtn = actions.querySelector('#gmh-btn-retry-stable');
+            retryStableBtn?.addEventListener('click', async () => {
+                if (autoState.running) {
+                    setPanelStatus?.('이미 자동 로딩이 진행 중입니다.', 'muted');
+                    return;
+                }
+                await autoLoader.startCurrent('stability');
+            });
+            const snapshotBtn = actions.querySelector('#gmh-btn-snapshot');
+            snapshotBtn?.addEventListener('click', () => {
+                void downloadDomSnapshot?.();
+            });
+        };
+        const mountStatusActionsModern = (panel) => {
+            if (!panel)
+                return;
+            let actions = panel.querySelector('#gmh-status-actions');
+            if (!actions) {
+                actions = doc.createElement('div');
+                actions.id = 'gmh-status-actions';
+                panel.appendChild(actions);
             }
-            await autoLoader.startCurrent();
-          };
-        }
-
-        const retryStableBtn = actions.querySelector('#gmh-btn-retry-stable');
-        if (retryStableBtn) {
-          retryStableBtn.onclick = async () => {
-            if (autoState.running) {
-              setPanelStatus?.('이미 자동 로딩이 진행 중입니다.', 'muted');
-              return;
-            }
-            await autoLoader.startCurrent('stability');
-          };
-        }
-
-        const snapshotBtn = actions.querySelector('#gmh-btn-snapshot');
-        if (snapshotBtn) {
-          snapshotBtn.onclick = () => downloadDomSnapshot?.();
-        }
-      };
-
-      /**
-       * Mounts the modern status actions block into the panel.
-       * @param {Element | null} panel
-       * @returns {void}
-       */
-      const mountStatusActionsModern = (panel) => {
-        if (!panel) return;
-        let actions = panel.querySelector('#gmh-status-actions');
-        if (!actions) {
-          actions = doc.createElement('div');
-          actions.id = 'gmh-status-actions';
-          panel.appendChild(actions);
-        }
-        if (actions.dataset.ready === 'true') return;
-        actions.dataset.ready = 'true';
-        actions.innerHTML = createStatusActionsMarkup(true);
-        bindStatusActions(actions);
-      };
-
-      /**
-       * Mounts the legacy status actions block into the panel.
-       * @param {Element | null} panel
-       * @returns {void}
-       */
-      const mountStatusActionsLegacy = (panel) => {
-        if (!panel || panel.querySelector('#gmh-status-actions')) return;
-        const actions = doc.createElement('div');
-        actions.id = 'gmh-status-actions';
-        actions.style.cssText =
-          'display:grid; gap:6px; border-top:1px solid rgba(148,163,184,0.25); padding-top:6px;';
-        actions.innerHTML = createStatusActionsMarkup(false);
-        bindStatusActions(actions);
-        panel.appendChild(actions);
-      };
-
-      return {
-        ensureAutoLoadControlsModern,
-        ensureAutoLoadControlsLegacy,
-        mountStatusActionsModern,
-        mountStatusActionsLegacy,
-      };
+            if (actions.dataset.ready === 'true')
+                return;
+            actions.dataset.ready = 'true';
+            actions.innerHTML = createStatusActionsMarkup(true);
+            bindStatusActions(actions);
+        };
+        const mountStatusActionsLegacy = (panel) => {
+            if (!panel || panel.querySelector('#gmh-status-actions'))
+                return;
+            const actions = doc.createElement('div');
+            actions.id = 'gmh-status-actions';
+            actions.style.cssText =
+                'display:grid; gap:6px; border-top:1px solid rgba(148,163,184,0.25); padding-top:6px;';
+            actions.innerHTML = createStatusActionsMarkup(false);
+            bindStatusActions(actions);
+            panel.appendChild(actions);
+        };
+        return {
+            ensureAutoLoadControlsModern,
+            ensureAutoLoadControlsLegacy,
+            mountStatusActionsModern,
+            mountStatusActionsLegacy,
+        };
     }
 
-    /**
-     * @typedef {import('../types').ExportRangeController} ExportRangeController
-     * @typedef {import('../types').TurnBookmarks} TurnBookmarks
-     * @typedef {import('../types').TurnBookmarkEntry} TurnBookmarkEntry
-     * @typedef {import('../types').MessageIndexer} MessageIndexer
-     */
-
-    /**
-     * @typedef {object} RangeControlsOptions
-     * @property {Document | null} [documentRef]
-     * @property {Window | null} [windowRef]
-     * @property {ExportRangeController} exportRange
-     * @property {TurnBookmarks} turnBookmarks
-     * @property {MessageIndexer} messageIndexer
-     * @property {(message: string, tone?: string | null) => void} [setPanelStatus]
-     */
-
-    /**
-     * @typedef {object} RangeControls
-     * @property {(panel: Element | null) => void} bindRangeControls
-     */
-
-    /**
-     * Creates DOM bindings for export range selectors and bookmark integration.
-     *
-     * @param {RangeControlsOptions} options
-     * @returns {RangeControls}
-     */
-    function createRangeControls({
-      documentRef = typeof document !== 'undefined' ? document : null,
-      windowRef = typeof window !== 'undefined' ? window : null,
-      exportRange,
-      turnBookmarks,
-      messageIndexer,
-      setPanelStatus,
-    }) {
-      if (!documentRef) throw new Error('createRangeControls requires document reference');
-      if (!exportRange) throw new Error('createRangeControls requires exportRange');
-      if (!turnBookmarks) throw new Error('createRangeControls requires turnBookmarks');
-      if (!messageIndexer) throw new Error('createRangeControls requires messageIndexer');
-
-      const doc = documentRef;
-      const win = windowRef;
-      const cssEscape = () => doc?.defaultView?.CSS?.escape || win?.CSS?.escape;
-
-      let rangeUnsubscribe = null;
-      let selectedBookmarkKey = '';
-      let bookmarkSelectionPinned = false;
-
-      /**
-       * @param {unknown} value
-       * @returns {number | null}
-       */
-      const toNumber = (value) => {
+    const toNumber = (value) => {
         const num = Number(value);
         return Number.isFinite(num) ? num : null;
-      };
-
-      /**
-       * Subscribes to export range changes.
-       * @param {(snapshot: unknown) => void} handler
-       * @returns {void}
-       */
-      const subscribeRange = (handler) => {
-        if (typeof exportRange?.subscribe !== 'function') return;
-        if (typeof rangeUnsubscribe === 'function') rangeUnsubscribe();
-        rangeUnsubscribe = exportRange.subscribe(handler);
-      };
-
-      /**
-       * Invokes the handler once with the current export range snapshot.
-       * @param {(snapshot: any) => void} handler
-       * @returns {void}
-       */
-      const updateRangeSnapshot = (handler) => {
-        if (typeof handler !== 'function') return;
-        if (typeof exportRange?.snapshot === 'function') {
-          handler(exportRange.snapshot());
-          return;
+    };
+    const listMessageIdElements = (doc, messageId, cssEscape) => {
+        if (!messageId)
+            return [];
+        try {
+            const escaped = typeof cssEscape === 'function' ? cssEscape(messageId) : messageId.replace(/"/g, '\\"');
+            const selector = `[data-gmh-message-id="${escaped}"]`;
+            return Array.from(doc.querySelectorAll(selector));
         }
-        if (typeof exportRange?.describe === 'function') {
-          const bounds = exportRange.describe();
-          const totals = typeof exportRange?.getTotals === 'function' ? exportRange.getTotals() : {};
-          const range = typeof exportRange?.getRange === 'function'
-            ? exportRange.getRange()
-            : { start: null, end: null };
-          handler({ bounds, totals, range });
+        catch {
+            return [];
         }
-      };
-
-      /**
-        * Updates the bookmark dropdown with the latest entries.
-        * @param {HTMLSelectElement | null} select
-        * @param {TurnBookmarkEntry[]} [entries=[]]
-        * @returns {void}
-        */
-      const syncBookmarkSelect = (select, entries = []) => {
-        if (!select) return;
-        const previous = selectedBookmarkKey || select.value || '';
-        select.innerHTML = '';
-        const placeholder = doc.createElement('option');
-        placeholder.value = '';
-        placeholder.textContent = entries.length
-          ? '최근 클릭한 메시지를 선택하세요'
-          : '최근 클릭한 메시지가 없습니다';
-        select.appendChild(placeholder);
-        entries.forEach((entry) => {
-          const option = doc.createElement('option');
-          option.value = entry.key;
-          const axisLabel = '메시지';
-          const ordinalText = Number.isFinite(entry.ordinal)
-            ? `${axisLabel} ${entry.ordinal}`
-            : `${axisLabel} ?`;
-          const idText = entry.messageId ? entry.messageId : `index ${entry.index}`;
-          option.textContent = `${ordinalText} · ${idText}`;
-          option.dataset.index = String(entry.index);
-          select.appendChild(option);
-        });
-        let nextValue = '';
-        if (bookmarkSelectionPinned && entries.some((entry) => entry.key === previous)) {
-          nextValue = previous;
-        } else if (entries.length) {
-          nextValue = entries[0].key;
-          bookmarkSelectionPinned = false;
-        }
-        select.value = nextValue;
-        selectedBookmarkKey = nextValue || '';
-        if (!nextValue && !entries.length) {
-          select.selectedIndex = 0;
-        }
-      };
-
-      /**
-       * Prepares the bookmark select element for range shortcuts.
-       * @param {HTMLSelectElement | null} select
-       * @returns {void}
-       */
-      const registerBookmarkSelect = (select) => {
-        if (!select) return;
-        if (select.dataset.gmhBookmarksReady === 'true') return;
-        select.dataset.gmhBookmarksReady = 'true';
-        select.addEventListener('change', () => {
-          selectedBookmarkKey = select.value || '';
-          bookmarkSelectionPinned = Boolean(selectedBookmarkKey);
-        });
-        if (typeof turnBookmarks?.subscribe === 'function') {
-          turnBookmarks.subscribe((entries) => syncBookmarkSelect(select, entries));
-        }
-        if (typeof turnBookmarks?.list === 'function') {
-          syncBookmarkSelect(select, turnBookmarks.list());
-        }
-      };
-
-      /**
-       * Attaches event listeners and range bindings to the provided panel node.
-       * @param {Element | null} panel
-       * @returns {void}
-       */
-      const bindRangeControls = (panel) => {
-        if (!panel) return;
-        const rangeStartInput = panel.querySelector('#gmh-range-start');
-        const rangeEndInput = panel.querySelector('#gmh-range-end');
-        const rangeClearBtn = panel.querySelector('#gmh-range-clear');
-        const rangeMarkStartBtn = panel.querySelector('#gmh-range-mark-start');
-        const rangeMarkEndBtn = panel.querySelector('#gmh-range-mark-end');
-        const rangeSummary = panel.querySelector('#gmh-range-summary');
-        const rangeBookmarkSelect = panel.querySelector('#gmh-range-bookmark-select');
-
-        registerBookmarkSelect(rangeBookmarkSelect);
-
-        const syncRangeControls = (snapshot) => {
-          if (!snapshot) return;
-          const { bounds, totals, range } = snapshot;
-          const messageTotal = totals?.message ?? bounds.messageTotal ?? 0;
-          const userTotal = totals?.user ?? bounds.userTotal ?? 0;
-          const llmTotal = totals?.llm ?? bounds.llmTotal ?? 0;
-          const resolvedStart = bounds.active ? bounds.start : null;
-          const resolvedEnd = bounds.active ? bounds.end : null;
-
-          if (rangeStartInput) {
-            if (messageTotal) rangeStartInput.max = String(messageTotal);
-            else rangeStartInput.removeAttribute('max');
-            rangeStartInput.dataset.gmhAxis = 'message';
-            rangeStartInput.value = resolvedStart ? String(resolvedStart) : '';
-            rangeStartInput.dataset.gmhRequested = range.start ? String(range.start) : '';
-          }
-          if (rangeEndInput) {
-            if (messageTotal) rangeEndInput.max = String(messageTotal);
-            else rangeEndInput.removeAttribute('max');
-            rangeEndInput.dataset.gmhAxis = 'message';
-            rangeEndInput.value = resolvedEnd ? String(resolvedEnd) : '';
-            rangeEndInput.dataset.gmhRequested = range.end ? String(range.end) : '';
-          }
-          if (rangeMarkStartBtn) {
-            if (messageTotal) rangeMarkStartBtn.removeAttribute('disabled');
-            else rangeMarkStartBtn.setAttribute('disabled', 'true');
-          }
-          if (rangeMarkEndBtn) {
-            if (messageTotal) rangeMarkEndBtn.removeAttribute('disabled');
-            else rangeMarkEndBtn.setAttribute('disabled', 'true');
-          }
-          if (rangeSummary) {
-            if (!messageTotal) {
-              rangeSummary.textContent = '로드된 메시지가 없습니다.';
-              rangeSummary.title = '';
-            } else if (!bounds.active) {
-              let textLabel = `최근 메시지 ${messageTotal}개 전체`;
-              if (userTotal) textLabel += ` · 유저 ${userTotal}개`;
-              if (llmTotal) textLabel += ` · LLM ${llmTotal}개`;
-              rangeSummary.textContent = textLabel;
-              rangeSummary.title = '';
-            } else {
-              let textLabel = `최근 메시지 ${bounds.start}-${bounds.end} · ${bounds.count}개 / 전체 ${bounds.total}개`;
-              if (userTotal) textLabel += ` · 유저 ${userTotal}개`;
-              if (llmTotal) textLabel += ` · LLM ${llmTotal}개`;
-              rangeSummary.textContent = textLabel;
-              rangeSummary.title = '';
-            }
-          }
+    };
+    function createRangeControls({ documentRef = typeof document !== 'undefined' ? document : null, windowRef = typeof window !== 'undefined' ? window : null, exportRange, turnBookmarks, messageIndexer, setPanelStatus, }) {
+        if (!documentRef)
+            throw new Error('createRangeControls requires document reference');
+        if (!exportRange)
+            throw new Error('createRangeControls requires exportRange');
+        if (!turnBookmarks)
+            throw new Error('createRangeControls requires turnBookmarks');
+        if (!messageIndexer)
+            throw new Error('createRangeControls requires messageIndexer');
+        const doc = documentRef;
+        const win = windowRef;
+        const cssEscape = doc?.defaultView?.CSS?.escape ?? win?.CSS?.escape;
+        let rangeUnsubscribe = null;
+        let selectedBookmarkKey = '';
+        let bookmarkSelectionPinned = false;
+        const subscribeRange = (handler) => {
+            if (typeof exportRange?.subscribe !== 'function')
+                return;
+            if (typeof rangeUnsubscribe === 'function')
+                rangeUnsubscribe();
+            rangeUnsubscribe = exportRange.subscribe((snapshot) => handler(snapshot));
         };
-
-        if (rangeStartInput || rangeEndInput || rangeSummary || rangeMarkStartBtn || rangeMarkEndBtn) {
-          subscribeRange(syncRangeControls);
-          updateRangeSnapshot(syncRangeControls);
-
-          const handleStartChange = () => {
-            if (!rangeStartInput) return;
-            const value = toNumber(rangeStartInput.value);
-            if (value && value > 0) {
-              exportRange?.setStart?.(value);
-            } else {
-              exportRange?.setStart?.(null);
-              rangeStartInput.value = '';
+        const updateRangeSnapshot = (handler) => {
+            if (typeof handler !== 'function')
+                return;
+            if (typeof exportRange?.snapshot === 'function') {
+                handler(exportRange.snapshot());
+                return;
             }
-          };
-
-          const handleEndChange = () => {
-            if (!rangeEndInput) return;
-            const value = toNumber(rangeEndInput.value);
-            if (value && value > 0) {
-              exportRange?.setEnd?.(value);
-            } else {
-              exportRange?.setEnd?.(null);
-              rangeEndInput.value = '';
+            if (typeof exportRange?.describe === 'function') {
+                const bounds = exportRange.describe();
+                const totals = typeof exportRange?.getTotals === 'function'
+                    ? exportRange.getTotals()
+                    : { message: 0, user: 0, llm: 0, entry: 0 };
+                const range = typeof exportRange?.getRange === 'function'
+                    ? exportRange.getRange()
+                    : { start: null, end: null };
+                handler({ bounds, totals, range });
             }
-          };
-
-          if (rangeStartInput && rangeStartInput.dataset.gmhRangeReady !== 'true') {
-            rangeStartInput.dataset.gmhRangeReady = 'true';
-            rangeStartInput.addEventListener('change', handleStartChange);
-            rangeStartInput.addEventListener('blur', handleStartChange);
-          }
-          if (rangeEndInput && rangeEndInput.dataset.gmhRangeReady !== 'true') {
-            rangeEndInput.dataset.gmhRangeReady = 'true';
-            rangeEndInput.addEventListener('change', handleEndChange);
-            rangeEndInput.addEventListener('blur', handleEndChange);
-          }
-          if (rangeClearBtn && rangeClearBtn.dataset.gmhRangeReady !== 'true') {
-            rangeClearBtn.dataset.gmhRangeReady = 'true';
-            rangeClearBtn.addEventListener('click', () => {
-              exportRange?.clear?.();
-              turnBookmarks?.clear?.();
-              selectedBookmarkKey = '';
-              bookmarkSelectionPinned = false;
-              if (rangeBookmarkSelect) rangeBookmarkSelect.value = '';
+        };
+        const syncBookmarkSelect = (select, entries = []) => {
+            if (!select)
+                return;
+            const previous = selectedBookmarkKey || select.value || '';
+            select.innerHTML = '';
+            const placeholder = doc.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = entries.length
+                ? '최근 클릭한 메시지를 선택하세요'
+                : '최근 클릭한 메시지가 없습니다';
+            select.appendChild(placeholder);
+            entries.forEach((entry) => {
+                const option = doc.createElement('option');
+                option.value = entry.key;
+                const axisLabel = '메시지';
+                const ordinalText = Number.isFinite(entry.ordinal)
+                    ? `${axisLabel} ${entry.ordinal}`
+                    : `${axisLabel} ?`;
+                const idText = entry.messageId ? entry.messageId : `index ${entry.index}`;
+                option.textContent = `${ordinalText} · ${idText}`;
+                option.dataset.index = String(entry.index);
+                select.appendChild(option);
             });
-          }
-
-          const getActiveBookmark = () => {
-            if (rangeBookmarkSelect) {
-              const key = rangeBookmarkSelect.value || selectedBookmarkKey || '';
-              if (key) {
-                const picked = turnBookmarks?.pick?.(key);
-                if (picked) return picked;
-              }
+            let nextValue = '';
+            if (bookmarkSelectionPinned && entries.some((entry) => entry.key === previous)) {
+                nextValue = previous;
             }
-            return turnBookmarks?.latest?.();
-          };
-
-          /**
-           * Records the current message context as a range start/end.
-           * @param {'start' | 'end'} mode
-           * @returns {void}
-           */
-          const doBookmark = (mode) => {
-            const lookupOrdinalByIndex = messageIndexer?.lookupOrdinalByIndex;
-            const lookupOrdinalByMessageId = messageIndexer?.lookupOrdinalByMessageId;
-
-            const buildContextFromElement = (element) => {
-              if (!(element instanceof Element)) return null;
-              const messageEl = element.closest('[data-gmh-message-index]');
-              if (!messageEl) return null;
-              const indexAttr = messageEl.getAttribute('data-gmh-message-index');
-              const messageIdAttr =
-                messageEl.getAttribute('data-gmh-message-id') ||
-                messageEl.getAttribute('data-message-id');
-              const index = toNumber(indexAttr);
-
-              const resolvedOrdinal = [
-                Number.isFinite(index) && typeof lookupOrdinalByIndex === 'function'
-                  ? lookupOrdinalByIndex(index)
-                  : null,
-                messageIdAttr && typeof lookupOrdinalByMessageId === 'function'
-                  ? lookupOrdinalByMessageId(messageIdAttr)
-                  : null,
-                toNumber(messageEl.getAttribute('data-gmh-message-ordinal')),
-              ].find((value) => Number.isFinite(value) && value > 0);
-
-              return {
-                element: messageEl,
-                index: Number.isFinite(index) ? index : null,
-                ordinal: Number.isFinite(resolvedOrdinal) ? resolvedOrdinal : null,
-                messageId: messageIdAttr || null,
-              };
-            };
-
-            const resolveFromElement = (element) => buildContextFromElement(element);
-
-            const escapeForAttr = (value) => {
-              if (typeof value !== 'string') return '';
-              const esc = cssEscape();
-              return typeof esc === 'function' ? esc(value) : value.replace(/"/g, '\\"');
-            };
-
-            const listByMessageId = (messageId) => {
-              if (!messageId) return [];
-              try {
-                const selector = `[data-gmh-message-id="${escapeForAttr(messageId)}"]`;
-                return Array.from(doc.querySelectorAll(selector));
-              } catch (err) {
-                return [];
-              }
-            };
-
-            const selectBestCandidate = (candidates, preferredIndex = null) => {
-              const elements = Array.from(new Set(candidates.filter((el) => el instanceof Element)));
-              if (!elements.length) return null;
-              if (Number.isFinite(preferredIndex)) {
-                const exact = elements.find(
-                  (el) => Number(el.getAttribute('data-gmh-message-index')) === preferredIndex,
-                );
-                if (exact) return exact;
-              }
-              const withOrdinal = elements
-                .map((el) => ({
-                  el,
-                  ord: toNumber(el.getAttribute('data-gmh-message-ordinal')),
-                  idx: toNumber(el.getAttribute('data-gmh-message-index')),
-                }))
-                .sort((a, b) => {
-                  if (Number.isFinite(a.ord) && Number.isFinite(b.ord)) return a.ord - b.ord;
-                  if (Number.isFinite(a.idx) && Number.isFinite(b.idx)) return b.idx - a.idx;
-                  return 0;
-                });
-              return withOrdinal[0]?.el || elements[elements.length - 1];
-            };
-
-            const safeQueryById = (messageId, preferredIndex = null) => {
-              const candidates = listByMessageId(messageId);
-              return selectBestCandidate(candidates, preferredIndex);
-            };
-
-            const getCandidateContext = () => {
-              const bookmark = getActiveBookmark();
-              if (bookmark) {
-                const fromBookmark =
-                  safeQueryById(bookmark.messageId, bookmark.index) ||
-                  (Number.isFinite(bookmark.index)
-                    ? selectBestCandidate(
-                        Array.from(doc.querySelectorAll(`[data-gmh-message-index="${bookmark.index}"]`)),
-                        bookmark.index,
-                      )
-                    : null);
-                const resolvedBookmark = resolveFromElement(fromBookmark);
-                if (resolvedBookmark) return resolvedBookmark;
-              }
-              const active = doc.activeElement;
-              const resolvedActive = resolveFromElement(active);
-              if (resolvedActive) return resolvedActive;
-              const latest = doc.querySelector('[data-gmh-message-ordinal="1"]');
-              return resolveFromElement(latest);
-            };
-
-            const context = getCandidateContext();
-            if (!context) {
-              setPanelStatus?.('메시지를 찾을 수 없습니다.', 'warning');
-              return;
+            else if (entries.length) {
+                nextValue = entries[0].key;
+                bookmarkSelectionPinned = false;
             }
-
-            try {
-              messageIndexer?.refresh?.({ immediate: true });
-            } catch (err) {
-              win?.console?.warn?.('[GMH] ordinal refresh failed', err);
+            select.value = nextValue;
+            selectedBookmarkKey = nextValue || '';
+            if (!nextValue && !entries.length) {
+                select.selectedIndex = 0;
             }
-
-            const reselectElement = () => {
-              if (context.element instanceof Element && context.element.isConnected) {
-                const current = buildContextFromElement(context.element);
-                if (current) return current;
-              }
-
-              const candidates = [];
-              if (context.messageId) candidates.push(...listByMessageId(context.messageId));
-              if (Number.isFinite(context.index)) {
-                candidates.push(...doc.querySelectorAll(`[data-gmh-message-index="${context.index}"]`));
-              }
-
-              const chosen = selectBestCandidate(candidates, context.index);
-              return chosen ? buildContextFromElement(chosen) : null;
+        };
+        const registerBookmarkSelect = (select) => {
+            if (!select)
+                return;
+            if (select.dataset.gmhBookmarksReady === 'true')
+                return;
+            select.dataset.gmhBookmarksReady = 'true';
+            select.addEventListener('change', () => {
+                selectedBookmarkKey = select.value || '';
+                bookmarkSelectionPinned = Boolean(selectedBookmarkKey);
+            });
+            if (typeof turnBookmarks?.subscribe === 'function') {
+                turnBookmarks.subscribe((entries) => syncBookmarkSelect(select, entries));
+            }
+            if (typeof turnBookmarks?.list === 'function') {
+                syncBookmarkSelect(select, turnBookmarks.list());
+            }
+        };
+        const bindRangeControls = (panel) => {
+            if (!panel)
+                return;
+            const rangeStartInput = panel.querySelector('#gmh-range-start');
+            const rangeEndInput = panel.querySelector('#gmh-range-end');
+            const rangeClearBtn = panel.querySelector('#gmh-range-clear');
+            const rangeMarkStartBtn = panel.querySelector('#gmh-range-mark-start');
+            const rangeMarkEndBtn = panel.querySelector('#gmh-range-mark-end');
+            const rangeSummary = panel.querySelector('#gmh-range-summary');
+            const rangeBookmarkSelect = panel.querySelector('#gmh-range-bookmark-select');
+            registerBookmarkSelect(rangeBookmarkSelect);
+            const syncRangeControls = (snapshot) => {
+                if (!snapshot)
+                    return;
+                const { bounds, totals, range } = snapshot;
+                const messageTotal = totals.message ?? bounds.messageTotal ?? bounds.total ?? 0;
+                const userTotal = totals.user ?? bounds.userTotal ?? 0;
+                const llmTotal = totals.llm ?? bounds.llmTotal ?? 0;
+                const resolvedStart = bounds.active ? bounds.start : null;
+                const resolvedEnd = bounds.active ? bounds.end : null;
+                if (rangeStartInput) {
+                    if (messageTotal)
+                        rangeStartInput.max = String(messageTotal);
+                    else
+                        rangeStartInput.removeAttribute('max');
+                    rangeStartInput.dataset.gmhAxis = 'message';
+                    rangeStartInput.value = resolvedStart ? String(resolvedStart) : '';
+                    rangeStartInput.dataset.gmhRequested = range.start ? String(range.start) : '';
+                }
+                if (rangeEndInput) {
+                    if (messageTotal)
+                        rangeEndInput.max = String(messageTotal);
+                    else
+                        rangeEndInput.removeAttribute('max');
+                    rangeEndInput.dataset.gmhAxis = 'message';
+                    rangeEndInput.value = resolvedEnd ? String(resolvedEnd) : '';
+                    rangeEndInput.dataset.gmhRequested = range.end ? String(range.end) : '';
+                }
+                if (rangeMarkStartBtn) {
+                    if (messageTotal)
+                        rangeMarkStartBtn.removeAttribute('disabled');
+                    else
+                        rangeMarkStartBtn.setAttribute('disabled', 'true');
+                }
+                if (rangeMarkEndBtn) {
+                    if (messageTotal)
+                        rangeMarkEndBtn.removeAttribute('disabled');
+                    else
+                        rangeMarkEndBtn.setAttribute('disabled', 'true');
+                }
+                if (rangeSummary) {
+                    if (!messageTotal) {
+                        rangeSummary.textContent = '로드된 메시지가 없습니다.';
+                        rangeSummary.title = '';
+                    }
+                    else if (!bounds.active) {
+                        let textLabel = `최근 메시지 ${messageTotal}개 전체`;
+                        if (userTotal)
+                            textLabel += ` · 유저 ${userTotal}개`;
+                        if (llmTotal)
+                            textLabel += ` · LLM ${llmTotal}개`;
+                        rangeSummary.textContent = textLabel;
+                        rangeSummary.title = '';
+                    }
+                    else {
+                        let textLabel = `최근 메시지 ${bounds.start}-${bounds.end} · ${bounds.count}개 / 전체 ${bounds.total}개`;
+                        if (userTotal)
+                            textLabel += ` · 유저 ${userTotal}개`;
+                        if (llmTotal)
+                            textLabel += ` · LLM ${llmTotal}개`;
+                        rangeSummary.textContent = textLabel;
+                        rangeSummary.title = '';
+                    }
+                }
             };
-
-            const refreshedContext = reselectElement() || context;
-
-            const ordinalFromIndex =
-              Number.isFinite(refreshedContext.index) && typeof messageIndexer?.lookupOrdinalByIndex === 'function'
-                ? messageIndexer.lookupOrdinalByIndex(refreshedContext.index)
-                : null;
-            const ordinalFromId =
-              refreshedContext.messageId && typeof messageIndexer?.lookupOrdinalByMessageId === 'function'
-                ? messageIndexer.lookupOrdinalByMessageId(refreshedContext.messageId)
-                : null;
-            const ordinalFromAttr = toNumber(
-              refreshedContext.element?.getAttribute?.('data-gmh-message-ordinal') ?? refreshedContext.ordinal,
-            );
-            const resolvedOrdinal = [ordinalFromIndex, ordinalFromId, ordinalFromAttr].find(
-              (value) => Number.isFinite(value) && value > 0,
-            );
-            if (!Number.isFinite(resolvedOrdinal) || resolvedOrdinal <= 0) {
-              setPanelStatus?.('메시지 순서를 찾을 수 없습니다. 화면을 새로고침해 주세요.', 'warning');
-              return;
+            if (rangeStartInput || rangeEndInput || rangeSummary || rangeMarkStartBtn || rangeMarkEndBtn) {
+                subscribeRange(syncRangeControls);
+                updateRangeSnapshot(syncRangeControls);
+                const handleStartChange = () => {
+                    if (!rangeStartInput)
+                        return;
+                    const value = toNumber(rangeStartInput.value);
+                    if (value && value > 0) {
+                        exportRange?.setStart?.(value);
+                    }
+                    else {
+                        exportRange?.setStart?.(null);
+                        rangeStartInput.value = '';
+                    }
+                };
+                const handleEndChange = () => {
+                    if (!rangeEndInput)
+                        return;
+                    const value = toNumber(rangeEndInput.value);
+                    if (value && value > 0) {
+                        exportRange?.setEnd?.(value);
+                    }
+                    else {
+                        exportRange?.setEnd?.(null);
+                        rangeEndInput.value = '';
+                    }
+                };
+                if (rangeStartInput && rangeStartInput.dataset.gmhRangeReady !== 'true') {
+                    rangeStartInput.dataset.gmhRangeReady = 'true';
+                    rangeStartInput.addEventListener('change', handleStartChange);
+                    rangeStartInput.addEventListener('blur', handleStartChange);
+                }
+                if (rangeEndInput && rangeEndInput.dataset.gmhRangeReady !== 'true') {
+                    rangeEndInput.dataset.gmhRangeReady = 'true';
+                    rangeEndInput.addEventListener('change', handleEndChange);
+                    rangeEndInput.addEventListener('blur', handleEndChange);
+                }
+                if (rangeClearBtn && rangeClearBtn.dataset.gmhRangeReady !== 'true') {
+                    rangeClearBtn.dataset.gmhRangeReady = 'true';
+                    rangeClearBtn.addEventListener('click', () => {
+                        exportRange?.clear?.();
+                        turnBookmarks?.clear?.();
+                        selectedBookmarkKey = '';
+                        bookmarkSelectionPinned = false;
+                        if (rangeBookmarkSelect)
+                            rangeBookmarkSelect.value = '';
+                    });
+                }
+                const getActiveBookmark = () => {
+                    if (rangeBookmarkSelect) {
+                        const key = rangeBookmarkSelect.value || selectedBookmarkKey || '';
+                        if (key && typeof turnBookmarks?.pick === 'function') {
+                            const picked = turnBookmarks.pick(key);
+                            if (picked)
+                                return picked;
+                        }
+                    }
+                    return typeof turnBookmarks?.latest === 'function' ? turnBookmarks.latest() : null;
+                };
+                const buildContextFromElement = (element) => {
+                    if (!(element instanceof Element))
+                        return null;
+                    const messageEl = element.closest('[data-gmh-message-index]');
+                    if (!messageEl)
+                        return null;
+                    const indexAttr = messageEl.getAttribute('data-gmh-message-index');
+                    const messageIdAttr = messageEl.getAttribute('data-gmh-message-id') || messageEl.getAttribute('data-message-id');
+                    const index = toNumber(indexAttr);
+                    const lookupOrdinalByIndex = messageIndexer?.lookupOrdinalByIndex;
+                    const lookupOrdinalByMessageId = messageIndexer?.lookupOrdinalByMessageId;
+                    const resolvedOrdinal = [
+                        Number.isFinite(index) && typeof lookupOrdinalByIndex === 'function'
+                            ? lookupOrdinalByIndex(index)
+                            : null,
+                        messageIdAttr && typeof lookupOrdinalByMessageId === 'function'
+                            ? lookupOrdinalByMessageId(messageIdAttr)
+                            : null,
+                        toNumber(messageEl.getAttribute('data-gmh-message-ordinal')),
+                    ].find((value) => Number.isFinite(value) && value > 0);
+                    return {
+                        element: messageEl,
+                        index: Number.isFinite(index) ? index : null,
+                        ordinal: Number.isFinite(resolvedOrdinal) && resolvedOrdinal !== null
+                            ? resolvedOrdinal
+                            : null,
+                        messageId: messageIdAttr || null,
+                    };
+                };
+                const selectBestCandidate = (candidates, preferredIndex = null) => {
+                    const elements = Array.from(new Set(candidates.filter((el) => el instanceof Element)));
+                    if (!elements.length)
+                        return null;
+                    if (Number.isFinite(preferredIndex)) {
+                        const exact = elements.find((el) => Number(el.getAttribute('data-gmh-message-index')) === preferredIndex);
+                        if (exact)
+                            return exact;
+                    }
+                    const withOrdinal = elements
+                        .map((el) => ({
+                        el,
+                        ord: toNumber(el.getAttribute('data-gmh-message-ordinal')),
+                        idx: toNumber(el.getAttribute('data-gmh-message-index')),
+                    }))
+                        .sort((a, b) => {
+                        if (Number.isFinite(a.ord) && Number.isFinite(b.ord))
+                            return a.ord - b.ord;
+                        if (Number.isFinite(a.idx) && Number.isFinite(b.idx))
+                            return b.idx - a.idx;
+                        return 0;
+                    });
+                    return withOrdinal[0]?.el || elements[elements.length - 1];
+                };
+                const safeQueryById = (messageId, preferredIndex = null) => {
+                    if (!messageId)
+                        return null;
+                    const candidates = listMessageIdElements(doc, messageId, cssEscape);
+                    return selectBestCandidate(candidates, preferredIndex);
+                };
+                const getCandidateContext = () => {
+                    const bookmark = getActiveBookmark();
+                    if (bookmark) {
+                        const fromBookmark = safeQueryById(bookmark.messageId, bookmark.index) ||
+                            (Number.isFinite(bookmark.index)
+                                ? selectBestCandidate(Array.from(doc.querySelectorAll(`[data-gmh-message-index="${bookmark.index}"]`)), bookmark.index)
+                                : null);
+                        const resolvedBookmark = buildContextFromElement(fromBookmark);
+                        if (resolvedBookmark)
+                            return resolvedBookmark;
+                    }
+                    const active = doc.activeElement;
+                    const resolvedActive = buildContextFromElement(active instanceof Element ? active : null);
+                    if (resolvedActive)
+                        return resolvedActive;
+                    const latest = doc.querySelector('[data-gmh-message-ordinal="1"]');
+                    return buildContextFromElement(latest);
+                };
+                const doBookmark = (mode) => {
+                    const context = getCandidateContext();
+                    if (!context) {
+                        setPanelStatus?.('메시지를 찾을 수 없습니다.', 'warning');
+                        return;
+                    }
+                    try {
+                        messageIndexer?.refresh?.({ immediate: true });
+                    }
+                    catch (error) {
+                        win?.console?.warn?.('[GMH] ordinal refresh failed', error);
+                    }
+                    const reselectElement = () => {
+                        if (context.element instanceof Element && context.element.isConnected) {
+                            return context.element;
+                        }
+                        return (safeQueryById(context.messageId, context.index) ||
+                            selectBestCandidate(Array.from(doc.querySelectorAll(`[data-gmh-message-index="${context.index ?? ''}"]`)), context.index));
+                    };
+                    const updatedContext = buildContextFromElement(reselectElement());
+                    if (!updatedContext) {
+                        setPanelStatus?.('메시지를 찾을 수 없습니다.', 'warning');
+                        return;
+                    }
+                    if (mode === 'start') {
+                        if (Number.isFinite(updatedContext.ordinal)) {
+                            exportRange?.setStart?.(updatedContext.ordinal ?? null);
+                        }
+                    }
+                    else if (mode === 'end') {
+                        if (Number.isFinite(updatedContext.ordinal)) {
+                            exportRange?.setEnd?.(updatedContext.ordinal ?? null);
+                        }
+                    }
+                };
+                if (rangeMarkStartBtn && rangeMarkStartBtn.dataset.gmhRangeReady !== 'true') {
+                    rangeMarkStartBtn.dataset.gmhRangeReady = 'true';
+                    rangeMarkStartBtn.addEventListener('click', () => doBookmark('start'));
+                }
+                if (rangeMarkEndBtn && rangeMarkEndBtn.dataset.gmhRangeReady !== 'true') {
+                    rangeMarkEndBtn.dataset.gmhRangeReady = 'true';
+                    rangeMarkEndBtn.addEventListener('click', () => doBookmark('end'));
+                }
             }
-
-            if (mode === 'start') {
-              exportRange?.setStart?.(resolvedOrdinal);
-              if (rangeStartInput) rangeStartInput.value = String(resolvedOrdinal);
-              setPanelStatus?.(`메시지 ${resolvedOrdinal}을 시작으로 지정했습니다.`, 'info');
-            } else {
-              exportRange?.setEnd?.(resolvedOrdinal);
-              if (rangeEndInput) rangeEndInput.value = String(resolvedOrdinal);
-              setPanelStatus?.(`메시지 ${resolvedOrdinal}을 끝으로 지정했습니다.`, 'info');
-            }
-
-            const recorded = turnBookmarks?.record?.(
-              refreshedContext.index,
-              resolvedOrdinal,
-              refreshedContext.messageId,
-              'message',
-            );
-            if (recorded?.key) {
-              selectedBookmarkKey = recorded.key;
-              bookmarkSelectionPinned = false;
-              if (rangeBookmarkSelect) rangeBookmarkSelect.value = recorded.key;
-            }
-          };
-
-          if (rangeMarkStartBtn && rangeMarkStartBtn.dataset.gmhRangeReady !== 'true') {
-            rangeMarkStartBtn.dataset.gmhRangeReady = 'true';
-            rangeMarkStartBtn.addEventListener('click', () => doBookmark('start'));
-          }
-          if (rangeMarkEndBtn && rangeMarkEndBtn.dataset.gmhRangeReady !== 'true') {
-            rangeMarkEndBtn.dataset.gmhRangeReady = 'true';
-            rangeMarkEndBtn.addEventListener('click', () => doBookmark('end'));
-          }
-        }
-      };
-
-      return {
-        bindRangeControls,
-      };
+        };
+        return { bindRangeControls };
     }
 
     /**
@@ -7256,65 +7073,33 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         };
     }
 
-    /**
-     * @typedef {object} GuideControlsOptions
-     * @property {() => void} [reparse]
-     * @property {() => Promise<void> | void} copySummaryGuide
-     * @property {() => Promise<void> | void} copyResummaryGuide
-     * @property {Console | { warn?: (...args: unknown[]) => void } | null} [logger]
-     */
-
-    /**
-     * @typedef {object} GuideControls
-     * @property {(panel: Element | null) => void} bindGuideControls
-     */
-
-    /**
-     * Wires panel guide buttons to share workflow helpers.
-     *
-     * @param {GuideControlsOptions} [options]
-     * @returns {GuideControls}
-     */
-    function createGuideControls({
-      reparse,
-      copySummaryGuide,
-      copyResummaryGuide,
-      logger = typeof console !== 'undefined' ? console : null,
-    } = {}) {
-      if (typeof copySummaryGuide !== 'function' || typeof copyResummaryGuide !== 'function') {
-        throw new Error('createGuideControls requires summary and resummary copy functions');
-      }
-
-      /**
-       * Registers click handlers on the guide controls rendered in the panel.
-       * @param {Element | null} panel
-       * @returns {void}
-       */
-      const bindGuideControls = (panel) => {
-        if (!panel || typeof panel.querySelector !== 'function') {
-          if (logger?.warn) {
-            logger.warn('[GMH] guide controls: panel missing querySelector');
-          }
-          return;
+    function createGuideControls({ reparse, copySummaryGuide, copyResummaryGuide, logger = typeof console !== 'undefined' ? console : null, }) {
+        if (typeof copySummaryGuide !== 'function' || typeof copyResummaryGuide !== 'function') {
+            throw new Error('createGuideControls requires summary and resummary copy functions');
         }
-
-        const reparseBtn = panel.querySelector('#gmh-reparse');
-        if (reparseBtn && typeof reparse === 'function') {
-          reparseBtn.onclick = () => reparse();
-        }
-
-        const guideBtn = panel.querySelector('#gmh-guide');
-        if (guideBtn) {
-          guideBtn.onclick = () => copySummaryGuide();
-        }
-
-        const reguideBtn = panel.querySelector('#gmh-reguide');
-        if (reguideBtn) {
-          reguideBtn.onclick = () => copyResummaryGuide();
-        }
-      };
-
-      return { bindGuideControls };
+        const bindGuideControls = (panel) => {
+            if (!panel || typeof panel.querySelector !== 'function') {
+                logger?.warn?.('[GMH] guide controls: panel missing querySelector');
+                return;
+            }
+            const reparseBtn = panel.querySelector('#gmh-reparse');
+            if (reparseBtn && typeof reparse === 'function') {
+                reparseBtn.addEventListener('click', () => reparse());
+            }
+            const guideBtn = panel.querySelector('#gmh-guide');
+            if (guideBtn) {
+                guideBtn.addEventListener('click', () => {
+                    void copySummaryGuide();
+                });
+            }
+            const reguideBtn = panel.querySelector('#gmh-reguide');
+            if (reguideBtn) {
+                reguideBtn.addEventListener('click', () => {
+                    void copyResummaryGuide();
+                });
+            }
+        };
+        return { bindGuideControls };
     }
 
     function registerGenitConfig(registerAdapterConfig) {

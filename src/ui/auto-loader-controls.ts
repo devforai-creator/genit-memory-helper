@@ -1,34 +1,25 @@
-/**
- * @typedef {import('../types').AutoLoaderController} AutoLoaderController
- * @typedef {import('../types').AutoLoaderExports} AutoLoaderExports
- */
+import type { AutoLoaderController, AutoLoaderExports } from '../types';
 
-/**
- * @typedef {object} AutoLoaderControlsOptions
- * @property {Document | null} [documentRef]
- * @property {AutoLoaderController} autoLoader
- * @property {AutoLoaderExports['autoState']} autoState
- * @property {(message: string, tone?: string | null) => void} [setPanelStatus]
- * @property {(meter: HTMLElement | null) => void} startTurnMeter
- * @property {() => string} getAutoProfile
- * @property {(listener: () => void) => void} subscribeProfileChange
- * @property {() => Promise<void> | void} [downloadDomSnapshot]
- */
+interface AutoLoaderControlsOptions {
+  documentRef?: Document | null;
+  autoLoader: AutoLoaderController;
+  autoState: AutoLoaderExports['autoState'];
+  setPanelStatus?: (message: string, tone?: string | null) => void;
+  startTurnMeter: (meter: HTMLElement) => void;
+  getAutoProfile: () => string;
+  subscribeProfileChange: (listener: () => void) => void | (() => void);
+  downloadDomSnapshot?: () => Promise<void> | void;
+}
 
-/**
- * @typedef {object} AutoLoaderControls
- * @property {(panel: Element | null) => void} ensureAutoLoadControlsModern
- * @property {(panel: Element | null) => void} ensureAutoLoadControlsLegacy
- * @property {(panel: Element | null) => void} mountStatusActionsModern
- * @property {(panel: Element | null) => void} mountStatusActionsLegacy
- */
+interface AutoLoaderControls {
+  ensureAutoLoadControlsModern(panel: Element | null): void;
+  ensureAutoLoadControlsLegacy(panel: Element | null): void;
+  mountStatusActionsModern(panel: Element | null): void;
+  mountStatusActionsLegacy(panel: Element | null): void;
+}
 
-/**
- * Generates UI hooks for controlling the auto-loader and download status buttons.
- *
- * @param {AutoLoaderControlsOptions} [options]
- * @returns {AutoLoaderControls}
- */
+type AutoLoaderMode = 'all' | 'turns';
+
 export function createAutoLoaderControls({
   documentRef = typeof document !== 'undefined' ? document : null,
   autoLoader,
@@ -38,7 +29,7 @@ export function createAutoLoaderControls({
   getAutoProfile,
   subscribeProfileChange,
   downloadDomSnapshot,
-} = {}) {
+}: AutoLoaderControlsOptions): AutoLoaderControls {
   if (!documentRef) throw new Error('createAutoLoaderControls requires document reference');
   if (!autoLoader) throw new Error('createAutoLoaderControls requires autoLoader');
   if (!autoState) throw new Error('createAutoLoaderControls requires autoState');
@@ -49,13 +40,9 @@ export function createAutoLoaderControls({
   }
 
   const doc = documentRef;
-  const profileSelectElements = new Set();
+  const profileSelectElements = new Set<HTMLSelectElement>();
 
-  /**
-   * Synchronizes the profile dropdowns with the latest active profile.
-   * @returns {void}
-   */
-  const syncProfileSelects = () => {
+  const syncProfileSelects = (): void => {
     const profile = getAutoProfile();
     for (const el of Array.from(profileSelectElements)) {
       if (!el || !el.isConnected) {
@@ -68,28 +55,27 @@ export function createAutoLoaderControls({
 
   subscribeProfileChange(syncProfileSelects);
 
-  /**
-   * Adds profile select elements to the synchronization set.
-   * @param {HTMLSelectElement | null} select
-   * @returns {void}
-   */
-  const registerProfileSelect = (select) => {
+  const registerProfileSelect = (select: HTMLSelectElement | null): void => {
     if (!select) return;
     profileSelectElements.add(select);
     syncProfileSelects();
-    select.onchange = (event) => {
-      autoLoader.setProfile(event.target.value);
-    };
+    select.addEventListener('change', (event) => {
+      const target = event.target as HTMLSelectElement;
+      autoLoader.setProfile(target.value);
+    });
   };
 
-  /**
-   * Ensures the modern auto-loader controls markup exists within the panel.
-   * @param {Element | null} panel
-   * @returns {void}
-   */
-  const ensureAutoLoadControlsModern = (panel) => {
+  const toggleControls = (disabled: boolean, buttons: (HTMLButtonElement | null)[]): void => {
+    buttons.forEach((btn) => {
+      if (!btn) return;
+      btn.disabled = disabled;
+      btn.classList.toggle('gmh-disabled', disabled);
+    });
+  };
+
+  const ensureAutoLoadControlsModern = (panel: Element | null): void => {
     if (!panel) return;
-    let wrap = panel.querySelector('#gmh-autoload-controls');
+    let wrap = panel.querySelector<HTMLDivElement>('#gmh-autoload-controls');
     if (!wrap) {
       wrap = doc.createElement('div');
       wrap.id = 'gmh-autoload-controls';
@@ -109,30 +95,26 @@ export function createAutoLoaderControls({
       <div id="gmh-turn-meter" class="gmh-subtext"></div>
     `;
 
-    const btnAll = wrap.querySelector('#gmh-autoload-all');
-    const btnStop = wrap.querySelector('#gmh-autoload-stop');
-    const btnTurns = wrap.querySelector('#gmh-autoload-turns-btn');
-    const inputTurns = wrap.querySelector('#gmh-autoload-turns');
-    const meter = wrap.querySelector('#gmh-turn-meter');
+    const btnAll = wrap.querySelector<HTMLButtonElement>('#gmh-autoload-all');
+    const btnStop = wrap.querySelector<HTMLButtonElement>('#gmh-autoload-stop');
+    const btnTurns = wrap.querySelector<HTMLButtonElement>('#gmh-autoload-turns-btn');
+    const inputTurns = wrap.querySelector<HTMLInputElement>('#gmh-autoload-turns');
+    const meter = wrap.querySelector<HTMLElement>('#gmh-turn-meter');
 
-    const toggleControls = (disabled) => {
-      btnAll.disabled = disabled;
-      btnTurns.disabled = disabled;
-      btnAll.classList.toggle('gmh-disabled', disabled);
-      btnTurns.classList.toggle('gmh-disabled', disabled);
-    };
+    const disableControls = (disabled: boolean) =>
+      toggleControls(disabled, [btnAll, btnTurns]);
 
-    btnAll.onclick = async () => {
+    btnAll?.addEventListener('click', async () => {
       if (autoState.running) return;
-      toggleControls(true);
+      disableControls(true);
       try {
         await autoLoader.start('all');
       } finally {
-        toggleControls(false);
+        disableControls(false);
       }
-    };
+    });
 
-    btnTurns.onclick = async () => {
+    btnTurns?.addEventListener('click', async () => {
       if (autoState.running) return;
       const rawVal = inputTurns?.value?.trim();
       const target = Number.parseInt(rawVal || '0', 10);
@@ -140,31 +122,28 @@ export function createAutoLoaderControls({
         setPanelStatus?.('유저 메시지 수를 입력해주세요.', 'error');
         return;
       }
-      toggleControls(true);
+      disableControls(true);
       try {
         await autoLoader.start('turns', target);
       } finally {
-        toggleControls(false);
+        disableControls(false);
       }
-    };
+    });
 
-    btnStop.onclick = () => {
+    btnStop?.addEventListener('click', () => {
       if (!autoState.running) {
         setPanelStatus?.('자동 로딩이 실행 중이 아닙니다.', 'muted');
         return;
       }
       autoLoader.stop();
-    };
+    });
 
-    startTurnMeter(meter);
+    if (meter instanceof HTMLElement) {
+      startTurnMeter(meter);
+    }
   };
 
-  /**
-   * Ensures the legacy auto-loader controls markup exists within the panel.
-   * @param {Element | null} panel
-   * @returns {void}
-   */
-  const ensureAutoLoadControlsLegacy = (panel) => {
+  const ensureAutoLoadControlsLegacy = (panel: Element | null): void => {
     if (!panel || panel.querySelector('#gmh-autoload-controls')) return;
 
     const wrap = doc.createElement('div');
@@ -184,30 +163,31 @@ export function createAutoLoaderControls({
 
     panel.appendChild(wrap);
 
-    const btnAll = wrap.querySelector('#gmh-autoload-all');
-    const btnStop = wrap.querySelector('#gmh-autoload-stop');
-    const btnTurns = wrap.querySelector('#gmh-autoload-turns-btn');
-    const inputTurns = wrap.querySelector('#gmh-autoload-turns');
-    const meter = wrap.querySelector('#gmh-turn-meter');
+    const btnAll = wrap.querySelector<HTMLButtonElement>('#gmh-autoload-all');
+    const btnStop = wrap.querySelector<HTMLButtonElement>('#gmh-autoload-stop');
+    const btnTurns = wrap.querySelector<HTMLButtonElement>('#gmh-autoload-turns-btn');
+    const inputTurns = wrap.querySelector<HTMLInputElement>('#gmh-autoload-turns');
+    const meter = wrap.querySelector<HTMLElement>('#gmh-turn-meter');
 
-    const toggleControls = (disabled) => {
-      btnAll.disabled = disabled;
-      btnTurns.disabled = disabled;
-      btnAll.style.opacity = disabled ? '0.6' : '1';
-      btnTurns.style.opacity = disabled ? '0.6' : '1';
+    const disableControls = (disabled: boolean) => {
+      [btnAll, btnTurns].forEach((btn) => {
+        if (!btn) return;
+        btn.disabled = disabled;
+        btn.style.opacity = disabled ? '0.6' : '1';
+      });
     };
 
-    btnAll.onclick = async () => {
+    btnAll?.addEventListener('click', async () => {
       if (autoState.running) return;
-      toggleControls(true);
+      disableControls(true);
       try {
         await autoLoader.start('all');
       } finally {
-        toggleControls(false);
+        disableControls(false);
       }
-    };
+    });
 
-    btnTurns.onclick = async () => {
+    btnTurns?.addEventListener('click', async () => {
       if (autoState.running) return;
       const rawVal = inputTurns?.value?.trim();
       const target = Number.parseInt(rawVal || '0', 10);
@@ -215,35 +195,32 @@ export function createAutoLoaderControls({
         setPanelStatus?.('유저 메시지 수를 입력해주세요.', 'error');
         return;
       }
-      toggleControls(true);
+      disableControls(true);
       try {
         const stats = await autoLoader.start('turns', target);
         if (stats && !stats.error) {
           setPanelStatus?.(`현재 유저 메시지 ${stats.userMessages}개 확보.`, 'success');
         }
       } finally {
-        toggleControls(false);
+        disableControls(false);
       }
-    };
+    });
 
-    btnStop.onclick = () => {
+    btnStop?.addEventListener('click', () => {
       if (!autoState.running) {
         setPanelStatus?.('자동 로딩이 실행 중이 아닙니다.', 'muted');
         return;
       }
       autoLoader.stop();
       setPanelStatus?.('자동 로딩 중지를 요청했습니다.', 'warning');
-    };
+    });
 
-    startTurnMeter(meter);
+    if (meter instanceof HTMLElement) {
+      startTurnMeter(meter);
+    }
   };
 
-  /**
-   * Builds markup for the status action buttons for modern/legacy panels.
-   * @param {boolean} [modern=false]
-   * @returns {string}
-   */
-  const createStatusActionsMarkup = (modern = false) => {
+  const createStatusActionsMarkup = (modern = false): string => {
     if (modern) {
       return `
       <div class="gmh-field-row">
@@ -276,52 +253,37 @@ export function createAutoLoaderControls({
       </div>`;
   };
 
-  /**
-   * Binds retry/download handlers within the status actions container.
-   * @param {HTMLElement} actions
-   * @param {boolean} modern
-   * @returns {void}
-   */
-  const bindStatusActions = (actions, modern) => {
-    const select = actions.querySelector('#gmh-profile-select');
+  const bindStatusActions = (actions: HTMLElement): void => {
+    const select = actions.querySelector<HTMLSelectElement>('#gmh-profile-select');
     if (select) registerProfileSelect(select);
 
-    const retryBtn = actions.querySelector('#gmh-btn-retry');
-    if (retryBtn) {
-      retryBtn.onclick = async () => {
-        if (autoState.running) {
-          setPanelStatus?.('이미 자동 로딩이 진행 중입니다.', 'muted');
-          return;
-        }
-        await autoLoader.startCurrent();
-      };
-    }
+    const retryBtn = actions.querySelector<HTMLButtonElement>('#gmh-btn-retry');
+    retryBtn?.addEventListener('click', async () => {
+      if (autoState.running) {
+        setPanelStatus?.('이미 자동 로딩이 진행 중입니다.', 'muted');
+        return;
+      }
+      await autoLoader.startCurrent();
+    });
 
-    const retryStableBtn = actions.querySelector('#gmh-btn-retry-stable');
-    if (retryStableBtn) {
-      retryStableBtn.onclick = async () => {
-        if (autoState.running) {
-          setPanelStatus?.('이미 자동 로딩이 진행 중입니다.', 'muted');
-          return;
-        }
-        await autoLoader.startCurrent('stability');
-      };
-    }
+    const retryStableBtn = actions.querySelector<HTMLButtonElement>('#gmh-btn-retry-stable');
+    retryStableBtn?.addEventListener('click', async () => {
+      if (autoState.running) {
+        setPanelStatus?.('이미 자동 로딩이 진행 중입니다.', 'muted');
+        return;
+      }
+      await autoLoader.startCurrent('stability');
+    });
 
-    const snapshotBtn = actions.querySelector('#gmh-btn-snapshot');
-    if (snapshotBtn) {
-      snapshotBtn.onclick = () => downloadDomSnapshot?.();
-    }
+    const snapshotBtn = actions.querySelector<HTMLButtonElement>('#gmh-btn-snapshot');
+    snapshotBtn?.addEventListener('click', () => {
+      void downloadDomSnapshot?.();
+    });
   };
 
-  /**
-   * Mounts the modern status actions block into the panel.
-   * @param {Element | null} panel
-   * @returns {void}
-   */
-  const mountStatusActionsModern = (panel) => {
+  const mountStatusActionsModern = (panel: Element | null): void => {
     if (!panel) return;
-    let actions = panel.querySelector('#gmh-status-actions');
+    let actions = panel.querySelector<HTMLDivElement>('#gmh-status-actions');
     if (!actions) {
       actions = doc.createElement('div');
       actions.id = 'gmh-status-actions';
@@ -330,22 +292,17 @@ export function createAutoLoaderControls({
     if (actions.dataset.ready === 'true') return;
     actions.dataset.ready = 'true';
     actions.innerHTML = createStatusActionsMarkup(true);
-    bindStatusActions(actions, true);
+    bindStatusActions(actions);
   };
 
-  /**
-   * Mounts the legacy status actions block into the panel.
-   * @param {Element | null} panel
-   * @returns {void}
-   */
-  const mountStatusActionsLegacy = (panel) => {
+  const mountStatusActionsLegacy = (panel: Element | null): void => {
     if (!panel || panel.querySelector('#gmh-status-actions')) return;
     const actions = doc.createElement('div');
     actions.id = 'gmh-status-actions';
     actions.style.cssText =
       'display:grid; gap:6px; border-top:1px solid rgba(148,163,184,0.25); padding-top:6px;';
     actions.innerHTML = createStatusActionsMarkup(false);
-    bindStatusActions(actions, false);
+    bindStatusActions(actions);
     panel.appendChild(actions);
   };
 
