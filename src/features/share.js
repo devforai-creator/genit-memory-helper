@@ -1,4 +1,4 @@
-import { requireDeps } from '../utils/validation.js';
+import { requireDeps } from '../utils/validation.ts';
 
 /**
  * @typedef {import('../types').ShareWorkflowOptions} ShareWorkflowOptions
@@ -13,36 +13,41 @@ import { requireDeps } from '../utils/validation.js';
  * @param {ShareWorkflowOptions} options
  * @returns {ShareWorkflowApi}
  */
-export function createShareWorkflow({
-  captureStructuredSnapshot,
-  normalizeTranscript,
-  buildSession,
-  exportRange,
-  projectStructuredMessages,
-  cloneSession,
-  applyPrivacyPipeline,
-  privacyConfig,
-  privacyProfiles,
-  formatRedactionCounts,
-  setPanelStatus,
-  toMarkdownExport,
-  toJSONExport,
-  toTXTExport,
-  toStructuredMarkdown,
-  toStructuredJSON,
-  toStructuredTXT,
-  buildExportBundle,
-  buildExportManifest,
-  triggerDownload,
-  clipboard,
-  stateApi,
-  stateEnum,
-  confirmPrivacyGate,
-  getEntryOrigin,
-  collectSessionStats,
-  alert: alertFn = (msg) => globalThis.alert?.(msg),
-  logger = typeof console !== 'undefined' ? console : null,
-}) {
+export function createShareWorkflow(options) {
+  const typedOptions = /** @type {ShareWorkflowOptions} */ (options);
+  const {
+    captureStructuredSnapshot,
+    normalizeTranscript,
+    buildSession,
+    exportRange: exportRangeOption,
+    projectStructuredMessages,
+    cloneSession,
+    applyPrivacyPipeline,
+    privacyConfig,
+    privacyProfiles,
+    formatRedactionCounts,
+    setPanelStatus,
+    toMarkdownExport,
+    toJSONExport,
+    toTXTExport,
+    toStructuredMarkdown,
+    toStructuredJSON,
+    toStructuredTXT,
+    buildExportBundle,
+    buildExportManifest,
+    triggerDownload,
+    clipboard,
+    stateApi: stateApiOption,
+    stateEnum,
+    confirmPrivacyGate,
+    getEntryOrigin,
+    collectSessionStats,
+    alert: alertFn = (msg) => globalThis.alert?.(msg),
+    logger = typeof console !== 'undefined' ? console : null,
+  } = typedOptions;
+  const exportRange =
+    /** @type {import('../types').ExportRangeController | null | undefined} */ (exportRangeOption);
+  const stateApi = /** @type {import('../types').PanelStateApi} */ (stateApiOption);
   requireDeps(
     {
       captureStructuredSnapshot,
@@ -76,7 +81,6 @@ export function createShareWorkflow({
       captureStructuredSnapshot: (fn) => typeof fn === 'function',
       normalizeTranscript: (fn) => typeof fn === 'function',
       buildSession: (fn) => typeof fn === 'function',
-      exportRange: (value) => Boolean(value?.setTotals),
       projectStructuredMessages: (fn) => typeof fn === 'function',
       cloneSession: (fn) => typeof fn === 'function',
       applyPrivacyPipeline: (fn) => typeof fn === 'function',
@@ -93,8 +97,15 @@ export function createShareWorkflow({
       buildExportBundle: (fn) => typeof fn === 'function',
       buildExportManifest: (fn) => typeof fn === 'function',
       triggerDownload: (fn) => typeof fn === 'function',
+      exportRange: (
+        /** @type {import('../types').ExportRangeController | null | undefined} */
+        value,
+      ) => Boolean(value?.setTotals),
       'clipboard.set': (fn) => typeof fn === 'function',
-      stateApi: (value) => Boolean(value?.setState),
+      stateApi: (
+        /** @type {import('../types').PanelStateApi | null | undefined} */
+        value,
+      ) => Boolean(value?.setState),
       stateEnum: (value) => Boolean(value),
       confirmPrivacyGate: (fn) => typeof fn === 'function',
       getEntryOrigin: (fn) => typeof fn === 'function',

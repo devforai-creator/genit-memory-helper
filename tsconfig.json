@@ -10,7 +10,8 @@
     "strict": false,
     "skipLibCheck": true,
     "types": ["node"],
-    "typeRoots": ["./types", "./node_modules/@types"]
+    "typeRoots": ["./types", "./node_modules/@types"],
+    "allowImportingTsExtensions": true
   },
   "include": [
     "src/**/*.ts",

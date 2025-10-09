@@ -1,5 +1,5 @@
 import { PRIVACY_PROFILES, DEFAULT_PRIVACY_PROFILE } from './constants.js';
-import { luhnValid } from '../utils/validation.js';
+import { luhnValid } from '../utils/validation.ts';
 
 export const REDACTION_PATTERNS = {
   email: /\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/gi,

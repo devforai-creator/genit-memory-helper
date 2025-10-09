@@ -5,8 +5,8 @@ import {
   stripQuotes,
   stripBrackets,
   sanitizeText,
-} from '../utils/text.js';
-import { looksLikeName } from '../utils/validation.js';
+} from '../utils/text.ts';
+import { looksLikeName } from '../utils/validation.ts';
 
 export const PLAYER_NAME_FALLBACKS = ['플레이어', '소중한코알라5299'];
 export const PLAYER_MARK = '⟦PLAYER⟧ ';

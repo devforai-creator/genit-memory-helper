@@ -8,9 +8,9 @@ import {
   stripBrackets,
   sanitizeText,
   parseListInput,
-} from '../utils/text.js';
-import { isScrollable } from '../utils/dom.js';
-import { looksLikeName } from '../utils/validation.js';
+} from '../utils/text.ts';
+import { isScrollable } from '../utils/dom.ts';
+import { looksLikeName } from '../utils/validation.ts';
 
 const DEFAULT_PLAYER_MARK = '⟦PLAYER⟧ ';
 

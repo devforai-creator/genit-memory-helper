@@ -35,7 +35,7 @@ export default {
   plugins: [
     resolve(),
     typescript({
-      tsconfig: './tsconfig.json',
+      tsconfig: './tsconfig.build.json',
       include: ['src/**/*.ts'],
     }),
   ],

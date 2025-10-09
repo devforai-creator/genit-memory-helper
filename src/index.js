@@ -52,9 +52,9 @@ import {
   stripBrackets,
   sanitizeText,
   parseListInput,
-} from './utils/text.js';
-import { sleep, triggerDownload, isScrollable } from './utils/dom.js';
-import { luhnValid } from './utils/validation.js';
+} from './utils/text.ts';
+import { sleep, triggerDownload, isScrollable } from './utils/dom.ts';
+import { luhnValid } from './utils/validation.ts';
 import { withPlayerNames } from './utils/factories.js';
 import { ensureLegacyPreviewStyles, ensureDesignSystemStyles } from './ui/styles.js';
 import { createPanelSettings } from './ui/panel-settings.js';

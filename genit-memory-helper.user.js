@@ -1605,105 +1605,105 @@ var GMHBundle = (function (exports) {
   };
 
   const normNL = (value) => String(value ?? '').replace(/\r\n?|\u2028|\u2029/g, '\n');
-
   const stripTicks = (value) => String(value ?? '').replace(/```+/g, '');
-
-  const collapseSpaces = (value) =>
-    String(value ?? '')
+  const collapseSpaces = (value) => String(value ?? '')
       .replace(/\s+/g, ' ')
       .replace(/\s{2,}/g, ' ')
       .trim();
-
-  const stripQuotes = (value) =>
-    String(value ?? '')
+  const stripQuotes = (value) => String(value ?? '')
       .replace(/^['"“”『「《【]+/, '')
       .replace(/['"“”』」》】]+$/, '')
       .trim();
-
   const stripBrackets = (value) => String(value ?? '').replace(/^\[|\]$/g, '').trim();
-
-  const sanitizeText = (value) =>
-    collapseSpaces(normNL(value).replace(/[\t\v\f\u00a0\u200b]/g, ' '));
-
+  const sanitizeText = (value) => collapseSpaces(normNL(value).replace(/[\t\v\f\u00a0\u200b]/g, ' '));
   const parseListInput = (raw) => {
-    if (!raw) return [];
-    return normNL(raw)
-      .split(/[,\n]/)
-      .map((item) => collapseSpaces(item))
-      .filter(Boolean);
+      if (!raw)
+          return [];
+      return normNL(raw)
+          .split(/[,\n]/)
+          .map((item) => collapseSpaces(item))
+          .filter(Boolean);
   };
 
-  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
+  const sleep = (ms) => new Promise((resolve) => {
+      setTimeout(resolve, ms);
+  });
   const triggerDownload = (blob, filename) => {
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(link.href);
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(link.href);
   };
-
   const isScrollable = (element) => {
-    if (!element) return false;
-    if (element === document.body || element === document.documentElement) {
-      const target = element === document.body ? document.documentElement : element;
-      return target.scrollHeight > target.clientHeight + 4;
-    }
-    if (!(element instanceof Element)) return false;
-    const styles = getComputedStyle(element);
-    const overflowY = styles.overflowY;
-    const scrollableStyle = overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay';
-    return scrollableStyle && element.scrollHeight > element.clientHeight + 4;
+      if (!element)
+          return false;
+      if (element === document.body || element === document.documentElement) {
+          const target = element === document.body ? document.documentElement : element;
+          return target.scrollHeight > target.clientHeight + 4;
+      }
+      if (!(element instanceof Element))
+          return false;
+      const styles = getComputedStyle(element);
+      const overflowY = styles.overflowY;
+      const scrollableStyle = overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay';
+      return scrollableStyle && element.scrollHeight > element.clientHeight + 4;
   };
 
   const looksLikeName = (raw) => {
-    const value = String(raw ?? '')
-      .replace(/^[\-•\s]+/, '')
-      .trim();
-    if (!value) return false;
-    if (/^(INFO|메시지 이미지)$/i.test(value)) return false;
-    return /^[가-힣A-Za-z][\w가-힣 .,'’]{0,24}$/.test(value);
+      const value = String(raw ?? '')
+          .replace(/^[\-•\s]+/, '')
+          .trim();
+      if (!value)
+          return false;
+      if (/^(INFO|메시지 이미지)$/i.test(value))
+          return false;
+      return /^[가-힣A-Za-z][\w가-힣 .,'’]{0,24}$/.test(value);
   };
-
   const luhnValid = (value) => {
-    const digits = String(value || '').replace(/[^\d]/g, '');
-    if (digits.length < 13 || digits.length > 19) return false;
-    let sum = 0;
-    let shouldDouble = false;
-    for (let i = digits.length - 1; i >= 0; i -= 1) {
-      let digit = parseInt(digits[i], 10);
-      if (Number.isNaN(digit)) return false;
-      if (shouldDouble) {
-        digit *= 2;
-        if (digit > 9) digit -= 9;
+      const digits = String(value ?? '').replace(/[^\d]/g, '');
+      if (digits.length < 13 || digits.length > 19)
+          return false;
+      let sum = 0;
+      let shouldDouble = false;
+      for (let i = digits.length - 1; i >= 0; i -= 1) {
+          const digit = parseInt(digits[i] ?? '', 10);
+          if (Number.isNaN(digit))
+              return false;
+          let nextDigit = digit;
+          if (shouldDouble) {
+              nextDigit *= 2;
+              if (nextDigit > 9)
+                  nextDigit -= 9;
+          }
+          sum += nextDigit;
+          shouldDouble = !shouldDouble;
       }
-      sum += digit;
-      shouldDouble = !shouldDouble;
-    }
-    return sum % 10 === 0;
+      return sum % 10 === 0;
   };
-
+  const isIndexable = (value) => typeof value === 'object' && value !== null;
   const resolvePath = (object, path) => {
-    if (!path) return object;
-    const segments = path.split('.');
-    let cursor = object;
-    for (const segment of segments) {
-      if (cursor == null) return undefined;
-      cursor = cursor[segment];
-    }
-    return cursor;
-  };
-
-  const requireDeps = (deps = {}, requirements = {}) => {
-    const entries = Object.entries(requirements);
-    entries.forEach(([path, validator]) => {
-      const check = typeof validator === 'function' ? validator : () => true;
-      const value = resolvePath(deps, path);
-      if (!check(value)) {
-        throw new Error(`[GMH] Missing or invalid dependency: ${path}`);
+      if (!path)
+          return object;
+      const segments = path.split('.');
+      let cursor = object;
+      for (const segment of segments) {
+          if (!isIndexable(cursor))
+              return undefined;
+          cursor = cursor[segment];
       }
-    });
-    return deps;
+      return cursor;
+  };
+  const requireDeps = (deps, requirements = {}) => {
+      const entries = Object.entries(requirements);
+      entries.forEach(([path, validator]) => {
+          const check = typeof validator === 'function' ? validator : () => true;
+          const value = resolvePath(deps, path);
+          if (!check(value)) {
+              throw new Error(`[GMH] Missing or invalid dependency: ${path}`);
+          }
+      });
+      return deps;
   };
 
   const DEFAULT_PLAYER_MARK$2 = '⟦PLAYER⟧ ';
@@ -6113,36 +6113,41 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
    * @param {ShareWorkflowOptions} options
    * @returns {ShareWorkflowApi}
    */
-  function createShareWorkflow({
-    captureStructuredSnapshot,
-    normalizeTranscript,
-    buildSession,
-    exportRange,
-    projectStructuredMessages,
-    cloneSession,
-    applyPrivacyPipeline,
-    privacyConfig,
-    privacyProfiles,
-    formatRedactionCounts,
-    setPanelStatus,
-    toMarkdownExport,
-    toJSONExport,
-    toTXTExport,
-    toStructuredMarkdown,
-    toStructuredJSON,
-    toStructuredTXT,
-    buildExportBundle,
-    buildExportManifest,
-    triggerDownload,
-    clipboard,
-    stateApi,
-    stateEnum,
-    confirmPrivacyGate,
-    getEntryOrigin,
-    collectSessionStats,
-    alert: alertFn = (msg) => globalThis.alert?.(msg),
-    logger = typeof console !== 'undefined' ? console : null,
-  }) {
+  function createShareWorkflow(options) {
+    const typedOptions = /** @type {ShareWorkflowOptions} */ (options);
+    const {
+      captureStructuredSnapshot,
+      normalizeTranscript,
+      buildSession,
+      exportRange: exportRangeOption,
+      projectStructuredMessages,
+      cloneSession,
+      applyPrivacyPipeline,
+      privacyConfig,
+      privacyProfiles,
+      formatRedactionCounts,
+      setPanelStatus,
+      toMarkdownExport,
+      toJSONExport,
+      toTXTExport,
+      toStructuredMarkdown,
+      toStructuredJSON,
+      toStructuredTXT,
+      buildExportBundle,
+      buildExportManifest,
+      triggerDownload,
+      clipboard,
+      stateApi: stateApiOption,
+      stateEnum,
+      confirmPrivacyGate,
+      getEntryOrigin,
+      collectSessionStats,
+      alert: alertFn = (msg) => globalThis.alert?.(msg),
+      logger = typeof console !== 'undefined' ? console : null,
+    } = typedOptions;
+    const exportRange =
+      /** @type {import('../types').ExportRangeController | null | undefined} */ (exportRangeOption);
+    const stateApi = /** @type {import('../types').PanelStateApi} */ (stateApiOption);
     requireDeps(
       {
         captureStructuredSnapshot,
@@ -6176,7 +6181,6 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         captureStructuredSnapshot: (fn) => typeof fn === 'function',
         normalizeTranscript: (fn) => typeof fn === 'function',
         buildSession: (fn) => typeof fn === 'function',
-        exportRange: (value) => Boolean(value?.setTotals),
         projectStructuredMessages: (fn) => typeof fn === 'function',
         cloneSession: (fn) => typeof fn === 'function',
         applyPrivacyPipeline: (fn) => typeof fn === 'function',
@@ -6193,8 +6197,15 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         buildExportBundle: (fn) => typeof fn === 'function',
         buildExportManifest: (fn) => typeof fn === 'function',
         triggerDownload: (fn) => typeof fn === 'function',
+        exportRange: (
+          /** @type {import('../types').ExportRangeController | null | undefined} */
+          value,
+        ) => Boolean(value?.setTotals),
         'clipboard.set': (fn) => typeof fn === 'function',
-        stateApi: (value) => Boolean(value?.setState),
+        stateApi: (
+          /** @type {import('../types').PanelStateApi | null | undefined} */
+          value,
+        ) => Boolean(value?.setState),
         stateEnum: (value) => Boolean(value),
         confirmPrivacyGate: (fn) => typeof fn === 'function',
         getEntryOrigin: (fn) => typeof fn === 'function',

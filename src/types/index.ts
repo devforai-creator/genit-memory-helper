@@ -264,7 +264,7 @@ export interface AutoLoaderOptions {
     listMessageBlocks?(doc: Document): Element[] | NodeListOf<Element> | null;
   } | null;
   sleep(ms: number): Promise<void>;
-  isScrollable(element: Element): boolean;
+  isScrollable(element: Element | null | undefined): boolean;
   documentRef?: Document | null;
   windowRef?: (Window & typeof globalThis) | null;
   normalizeTranscript(raw: string): string;
