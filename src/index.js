@@ -3,7 +3,7 @@ import { clone, deepMerge } from './core/utils.ts';
 import { ENV } from './env.js';
 import { GMH_STATE, createStateManager } from './core/state.ts';
 import { createErrorHandler } from './core/error-handler.ts';
-import { createExportRange } from './core/export-range.js';
+import { createExportRange } from './core/export-range.ts';
 import { createTurnBookmarks } from './core/turn-bookmarks.js';
 import { createMessageIndexer } from './core/message-indexer.js';
 import { createBookmarkListener } from './core/bookmark-listener.js';
