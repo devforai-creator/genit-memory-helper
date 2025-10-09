@@ -4,41 +4,23 @@ import {
   toStructuredJSON,
   toStructuredTXT,
 } from './writers-structured.js';
+import type {
+  TranscriptSession,
+  ExportBundleOptions,
+  ExportBundleResult,
+  ExportManifestOptions,
+  ExportManifest,
+} from '../types';
 
-/**
- * @typedef {import('../types').TranscriptSession} TranscriptSession
- * @typedef {import('../types').StructuredSnapshot} StructuredSnapshot
- * @typedef {import('../types').ExportBundleOptions} ExportBundleOptions
- * @typedef {import('../types').ExportBundleResult} ExportBundleResult
- * @typedef {import('../types').ExportManifestOptions} ExportManifestOptions
- * @typedef {import('../types').ExportManifest} ExportManifest
- * @typedef {import('../types').ExportRangeInfo} ExportRangeInfo
- */
+const defaultStamp = (): string => new Date().toISOString().replace(/[:.]/g, '-');
 
-/**
- * Generates a sanitized timestamp token for export file naming.
- *
- * @returns {string}
- */
-const defaultStamp = () => new Date().toISOString().replace(/[:.]/g, '-');
-
-/**
- * Builds an export payload from available exporters and structured data.
- *
- * @param {TranscriptSession} session
- * @param {string} normalizedRaw
- * @param {string} format
- * @param {string | null | undefined} stamp
- * @param {ExportBundleOptions} [options]
- * @returns {ExportBundleResult}
- */
 export const buildExportBundle = (
-  session,
-  normalizedRaw,
-  format,
-  stamp,
-  options = {},
-) => {
+  session: TranscriptSession,
+  normalizedRaw: string,
+  format: string,
+  stamp: string | null | undefined,
+  options: ExportBundleOptions = {},
+): ExportBundleResult => {
   const stampToken = stamp || defaultStamp();
   const {
     structuredSelection,
@@ -48,12 +30,13 @@ export const buildExportBundle = (
     rangeInfo,
     playerMark,
   } = options;
+  const selectionMessages = structuredSelection?.messages ?? [];
 
   const base = `genit_turns_${stampToken}`;
 
   if (format === 'structured-md') {
     const markdown = toStructuredMarkdown({
-      messages: structuredSelection?.messages || [],
+      messages: selectionMessages,
       session,
       profile,
       playerNames,
@@ -72,7 +55,7 @@ export const buildExportBundle = (
   if (format === 'structured-json') {
     const jsonPayload = toStructuredJSON({
       session,
-      structuredSelection,
+      structuredSelection: structuredSelection ?? undefined,
       structuredSnapshot,
       profile,
       playerNames,
@@ -90,7 +73,7 @@ export const buildExportBundle = (
 
   if (format === 'structured-txt') {
     const txtPayload = toStructuredTXT({
-      messages: structuredSelection?.messages || [],
+      messages: selectionMessages,
       session,
       profile,
       rangeInfo,
@@ -134,12 +117,6 @@ export const buildExportBundle = (
   };
 };
 
-/**
- * Constructs a manifest entry describing the generated export bundle.
- *
- * @param {ExportManifestOptions} params
- * @returns {ExportManifest}
- */
 export const buildExportManifest = ({
   profile,
   counts,
@@ -150,7 +127,7 @@ export const buildExportManifest = ({
   source,
   range,
   version,
-}) => ({
+}: ExportManifestOptions): ExportManifest => ({
   tool: 'Genit Memory Helper',
   version,
   generated_at: new Date().toISOString(),

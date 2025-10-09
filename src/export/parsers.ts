@@ -5,61 +5,42 @@ import {
   stripQuotes,
   stripBrackets,
   sanitizeText,
-} from '../utils/text.ts';
-import { looksLikeName } from '../utils/validation.ts';
+} from '../utils/text';
+import { looksLikeName } from '../utils/validation';
+import type {
+  TranscriptTurn,
+  TranscriptMetaHints,
+  TranscriptMeta,
+  TranscriptParseResult,
+  TranscriptSession,
+  EntryOriginProvider,
+} from '../types';
 
-/**
- * @typedef {import('../types').TranscriptTurn} TranscriptTurn
- * @typedef {import('../types').TranscriptMetaHints} TranscriptMetaHints
- * @typedef {import('../types').TranscriptMeta} TranscriptMeta
- * @typedef {import('../types').TranscriptParseResult} TranscriptParseResult
- * @typedef {import('../types').TranscriptSession} TranscriptSession
- * @typedef {import('../types').EntryOriginProvider} EntryOriginProvider
- */
+type TranscriptRole = 'player' | 'npc' | 'narration';
 
-/** @type {readonly string[]} */
-export const PLAYER_NAME_FALLBACKS = ['플레이어', '소중한코알라5299'];
+export const PLAYER_NAME_FALLBACKS = ['플레이어', '소중한코알라5299'] as const;
 
-/** @type {string} */
 export const PLAYER_MARK = '⟦PLAYER⟧ ';
 
-/** @type {RegExp} */
 const HEADER_RE =
   /^(\d+월\s*\d+일.*?\d{1,2}:\d{2})\s*\|\s*([^|]+?)\s*\|\s*📍\s*([^|]+)\s*\|?(.*)$/;
 
-/** @type {RegExp} */
 const CODE_RE = /^([A-J])\/(\d+)\/(\d+)\/(\d+)\/(\d+)$/i;
 
-/** @type {readonly string[]} */
-const META_KEYWORDS = ['지도', '등장', 'Actors', '배우', '기록코드', 'Codes', 'SCENE'];
+const META_KEYWORDS = ['지도', '등장', 'Actors', '배우', '기록코드', 'Codes', 'SCENE'] as const;
 
-/** @type {readonly string[]} */
-const SYSTEM_ALIASES = ['player', '플레이어', '유저', '나'];
+const SYSTEM_ALIASES = ['player', '플레이어', '유저', '나'] as const;
 
-/**
- * Builds a lowercase alias set for player comparison.
- *
- * @param {string[]} names
- * @returns {Set<string>}
- */
-const buildAliasSet = (names) => new Set(names.map((n) => n.toLowerCase()).concat(SYSTEM_ALIASES));
+const buildAliasSet = (names: readonly string[]): Set<string> =>
+  new Set(names.map((n) => n.toLowerCase()).concat(SYSTEM_ALIASES));
 
-/** @type {string[]} */
-let playerNames = [...PLAYER_NAME_FALLBACKS];
+let playerNames: string[] = [...PLAYER_NAME_FALLBACKS];
 
-/** @type {Set<string>} */
-let playerAliases = buildAliasSet(playerNames);
+let playerAliases: Set<string> = buildAliasSet(playerNames);
 
-/** @type {EntryOriginProvider} */
-let entryOriginProvider = () => [];
+let entryOriginProvider: EntryOriginProvider = () => [];
 
-/**
- * Overrides the dynamic player name list while preserving fallbacks.
- *
- * @param {string[]} [names]
- * @returns {void}
- */
-export const setPlayerNames = (names = []) => {
+export const setPlayerNames = (names: string[] = []): void => {
   const next = Array.from(
     new Set(
       [...PLAYER_NAME_FALLBACKS, ...names]
@@ -71,48 +52,21 @@ export const setPlayerNames = (names = []) => {
   playerAliases = buildAliasSet(playerNames);
 };
 
-/**
- * Returns a copy of the currently active player names for downstream logic.
- *
- * @returns {string[]}
- */
-export const getPlayerNames = () => playerNames.slice();
+export const getPlayerNames = (): string[] => playerNames.slice();
 
-/**
- * Registers a function that supplies transcript line origins for range lookup.
- *
- * @param {EntryOriginProvider | null | undefined} provider
- * @returns {void}
- */
-export const setEntryOriginProvider = (provider) => {
+export const setEntryOriginProvider = (provider: EntryOriginProvider | null | undefined): void => {
   entryOriginProvider = typeof provider === 'function' ? provider : () => [];
 };
 
-/**
- * Resolves origin indices for normalized transcript lines.
- *
- * @returns {number[]}
- */
-const getEntryOrigin = () => {
+const getEntryOrigin = (): number[] => {
   const origin = entryOriginProvider();
   return Array.isArray(origin) ? origin.slice() : [];
 };
 
-/**
- * Picks the primary (first) player label for role matching.
- *
- * @returns {string}
- */
-const primaryPlayerName = () => getPlayerNames()[0] || PLAYER_NAME_FALLBACKS[0];
+const primaryPlayerName = (): string => getPlayerNames()[0] || PLAYER_NAME_FALLBACKS[0];
 
-/**
- * Cleans a raw line label into a normalized speaker name.
- *
- * @param {string} [name]
- * @returns {string}
- */
-const normalizeSpeakerName = (name) => {
-  const stripped = collapseSpaces(String(name || '')).replace(/[\[\]{}()]+/g, '').replace(/^[-•]+/, '').trim();
+const normalizeSpeakerName = (name?: string | null): string => {
+  const stripped = collapseSpaces(String(name ?? '')).replace(/[\[\]{}()]+/g, '').replace(/^[-•]+/, '').trim();
   if (!stripped) return '내레이션';
   const lower = stripped.toLowerCase();
   if (playerAliases.has(lower)) return primaryPlayerName();
@@ -120,34 +74,15 @@ const normalizeSpeakerName = (name) => {
   return stripped;
 };
 
-/**
- * Maps a speaker label to a canonical conversation role.
- *
- * @param {string} name
- * @returns {'player' | 'npc' | 'narration'}
- */
-const roleForSpeaker = (name) => {
+const roleForSpeaker = (name: string): TranscriptRole => {
   if (name === '내레이션') return 'narration';
   if (getPlayerNames().includes(name)) return 'player';
   return 'npc';
 };
-
-/**
- * Standardizes raw transcript text for downstream parsing routines.
- *
- * @param {string} raw
- * @returns {string}
- */
-export const normalizeTranscript = (raw) =>
+export const normalizeTranscript = (raw: string | null | undefined): string =>
   stripTicks(normNL(String(raw ?? ''))).replace(/[\t\u00a0\u200b]/g, ' ');
 
-/**
- * Heuristically determines if a line should be treated as narration.
- *
- * @param {string} line
- * @returns {boolean}
- */
-const looksNarrative = (line) => {
+const looksNarrative = (line: string): boolean => {
   const s = line.trim();
   if (!s) return false;
   if (/^[\[\(].*[\]\)]$/.test(s)) return true;
@@ -162,21 +97,9 @@ const looksNarrative = (line) => {
   return false;
 };
 
-/**
- * Detects actor stats/metadata rows that should be skipped during parsing.
- *
- * @param {string} line
- * @returns {boolean}
- */
-const isActorStatsLine = (line) => /\|/.test(line) && /❤️|💗|💦|🪣/.test(line);
+const isActorStatsLine = (line: string): boolean => /\|/.test(line) && /❤️|💗|💦|🪣/.test(line);
 
-/**
- * Determines whether a normalized line qualifies as metadata.
- *
- * @param {string} line
- * @returns {boolean}
- */
-const isMetaLine = (line) => {
+const isMetaLine = (line: string): boolean => {
   const stripped = stripBrackets(line);
   if (!stripped) return true;
   if (/^INFO$/i.test(stripped)) return true;
@@ -190,33 +113,17 @@ const isMetaLine = (line) => {
   return false;
 };
 
-/**
- * Parses a normalized transcript into structured turns and metadata hints.
- *
- * @param {string} raw
- * @returns {TranscriptParseResult}
- */
-export const parseTurns = (raw) => {
+export const parseTurns = (raw: string): TranscriptParseResult => {
   const lines = normalizeTranscript(raw).split('\n');
   const originLines = getEntryOrigin();
-  /** @type {TranscriptTurn[]} */
-  const turns = [];
-  /** @type {string[]} */
-  const warnings = [];
-  /** @type {TranscriptMetaHints} */
-  const metaHints = { header: null, codes: [], titles: [] };
+  const turns: TranscriptTurn[] = [];
+  const warnings: string[] = [];
+  const metaHints: TranscriptMetaHints = { header: null, codes: [], titles: [] };
 
   let currentSceneId = 1;
-  let pendingSpeaker = null;
+  let pendingSpeaker: string | null = null;
 
-  /**
-   * Appends normalized line indexes to a transcript turn.
-   *
-   * @param {TranscriptTurn | undefined} turn
-   * @param {number[]} [lineIndexes]
-   * @returns {void}
-   */
-  const addEntriesToTurn = (turn, lineIndexes = []) => {
+  const addEntriesToTurn = (turn: TranscriptTurn | undefined, lineIndexes: number[] = []): void => {
     if (!turn) return;
     const normalized = Array.from(
       new Set(
@@ -226,8 +133,10 @@ export const parseTurns = (raw) => {
       ),
     );
     if (!normalized.length) return;
-    const existing = Array.isArray(turn.__gmhEntries) ? turn.__gmhEntries.slice() : [];
-    const merged = Array.from(new Set(existing.concat(normalized))).sort((a, b) => a - b);
+    const existing = Array.isArray(turn.__gmhEntries)
+      ? (turn.__gmhEntries.filter((value) => Number.isInteger(value)) as number[])
+      : [];
+    const merged = Array.from(new Set([...existing, ...normalized])).sort((a, b) => a - b);
     Object.defineProperty(turn, '__gmhEntries', {
       value: merged,
       enumerable: false,
@@ -236,7 +145,7 @@ export const parseTurns = (raw) => {
     });
     const sourceBlocks = merged
       .map((lineIdx) => originLines[lineIdx])
-      .filter((idx) => Number.isInteger(idx));
+      .filter((idx): idx is number => Number.isInteger(idx));
     if (sourceBlocks.length) {
       Object.defineProperty(turn, '__gmhSourceBlocks', {
         value: Array.from(new Set(sourceBlocks)).sort((a, b) => a - b),
@@ -247,20 +156,16 @@ export const parseTurns = (raw) => {
     }
   };
 
-  /**
-   * Registers a turn with inferred channels and scene grouping.
-   *
-   * @param {string | null | undefined} speaker
-   * @param {string} text
-   * @param {'player' | 'npc' | 'narration' | null | undefined} roleOverride
-   * @param {number[]} [lineIndexes]
-   * @returns {void}
-   */
-  const pushTurn = (speaker, text, roleOverride, lineIndexes = []) => {
+  const pushTurn = (
+    speaker: string | null | undefined,
+    text: string,
+    roleOverride?: TranscriptRole | null,
+    lineIndexes: number[] = [],
+  ): void => {
     const textClean = sanitizeText(text);
     if (!textClean) return;
-    const speakerName = normalizeSpeakerName(speaker || '내레이션');
-    const role = roleOverride || roleForSpeaker(speakerName);
+    const speakerName = normalizeSpeakerName(speaker ?? '내레이션');
+    const role: TranscriptRole = roleOverride ?? roleForSpeaker(speakerName);
     if (role === 'player' && turns.length) {
       currentSceneId += 1;
     }
@@ -270,7 +175,7 @@ export const parseTurns = (raw) => {
       addEntriesToTurn(last, lineIndexes);
       return;
     }
-    const nextTurn = {
+    const nextTurn: TranscriptTurn = {
       speaker: speakerName,
       role,
       text: textClean,
@@ -282,7 +187,7 @@ export const parseTurns = (raw) => {
   };
 
   for (let i = 0; i < lines.length; i += 1) {
-    let original = lines[i] ?? '';
+    const original = lines[i] ?? '';
     if (!original) continue;
     let line = original.trim();
     if (!line) continue;
@@ -325,7 +230,7 @@ export const parseTurns = (raw) => {
       continue;
     }
 
-    let match = line.match(/^@([^@]{1,40})@\s*["“]?([\s\S]+?)["”]?\s*$/);
+    let match: RegExpMatchArray | null = line.match(/^@([^@]{1,40})@\s*["“]?([\s\S]+?)["”]?\s*$/);
     if (match) {
       const speaker = normalizeSpeakerName(match[1]);
       pushTurn(speaker, match[2], roleForSpeaker(speaker), [i]);
@@ -356,11 +261,11 @@ export const parseTurns = (raw) => {
 
     if (looksLikeName(line)) {
       const speaker = normalizeSpeakerName(line);
-      const textBuf = [];
-      const bufLines = [i];
+      const textBuf: string[] = [];
+      const bufLines: number[] = [i];
       let j = i + 1;
       while (j < lines.length) {
-        let peek = (lines[j] || '').trim();
+        let peek = (lines[j] ?? '').trim();
         if (!peek) {
           j += 1;
           break;
@@ -419,9 +324,8 @@ export const parseTurns = (raw) => {
  * @param {TranscriptTurn[]} turns
  * @returns {TranscriptMeta}
  */
-export const deriveMeta = (metaHints, turns) => {
-  /** @type {TranscriptMeta} */
-  const meta = {};
+export const deriveMeta = (metaHints: TranscriptMetaHints, turns: TranscriptTurn[]): TranscriptMeta => {
+  const meta: TranscriptMeta = {};
   if (metaHints.header) {
     const [, time, modeRaw, placeRaw] = metaHints.header;
     if (time) meta.date = time.trim();
@@ -431,7 +335,7 @@ export const deriveMeta = (metaHints, turns) => {
   const title = metaHints.titles.find(Boolean);
   if (title) meta.title = title;
 
-  const actorSet = new Set();
+  const actorSet = new Set<string>();
   let userCount = 0;
   let llmCount = 0;
   for (const turn of turns) {
@@ -448,13 +352,7 @@ export const deriveMeta = (metaHints, turns) => {
   return meta;
 };
 
-/**
- * Generates a structured transcript session payload from raw text.
- *
- * @param {string} raw
- * @returns {TranscriptSession}
- */
-export const buildSession = (raw) => {
+export const buildSession = (raw: string): TranscriptSession => {
   const { turns, warnings, metaHints } = parseTurns(raw);
   const meta = deriveMeta(metaHints, turns);
   return {
