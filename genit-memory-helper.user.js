@@ -3698,6 +3698,10 @@ var GMHBundle = (function (exports) {
           ...options,
         });
 
+    /**
+     * CSS used for the legacy preview privacy overlay.
+     * @type {string}
+     */
     const LEGACY_PREVIEW_CSS = `
 .gmh-preview-overlay{position:fixed;inset:0;background:rgba(15,23,42,0.72);z-index:9999999;display:flex;align-items:center;justify-content:center;padding:24px;}
 .gmh-preview-card{background:#0f172a;color:#e2e8f0;border-radius:14px;box-shadow:0 18px 48px rgba(8,15,30,0.55);width:min(520px,94vw);max-height:94vh;display:flex;flex-direction:column;overflow:hidden;font:13px/1.5 'Inter',system-ui,sans-serif;}
@@ -3724,6 +3728,10 @@ var GMHBundle = (function (exports) {
 @media (max-width:480px){.gmh-preview-card{width:100%;border-radius:12px;}}
 `;
 
+    /**
+     * CSS bundle for the modern design-system panel.
+     * @type {string}
+     */
     const DESIGN_SYSTEM_CSS = `
 :root{--gmh-bg:#0b1020;--gmh-surface:#0f172a;--gmh-surface-alt:rgba(30,41,59,0.65);--gmh-fg:#e2e8f0;--gmh-muted:#94a3b8;--gmh-accent:#38bdf8;--gmh-accent-soft:#c4b5fd;--gmh-success:#34d399;--gmh-warning:#fbbf24;--gmh-danger:#f87171;--gmh-border:rgba(148,163,184,0.25);--gmh-radius:14px;--gmh-radius-sm:10px;--gmh-panel-shadow:0 18px 48px rgba(8,15,30,0.55);--gmh-font:13px/1.5 'Inter',system-ui,-apple-system,BlinkMacSystemFont,sans-serif;}
 .gmh-modal-overlay{position:fixed;inset:0;background:rgba(8,11,20,0.72);z-index:9999999;display:flex;align-items:center;justify-content:center;padding:24px;}
@@ -3832,6 +3840,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 @media (prefers-reduced-motion:reduce){.gmh-panel,.gmh-modal,.gmh-progress__fill,#gmh-fab{transition:none !important;animation-duration:0.001s !important;}}
 `;
 
+    /**
+     * Injects the legacy preview stylesheet into the provided document once.
+     *
+     * @param {Document | null} [doc]
+     * @returns {void}
+     */
     function ensureLegacyPreviewStyles(doc = typeof document !== 'undefined' ? document : null) {
       if (!doc) return;
       if (doc.getElementById('gmh-preview-style')) return;
@@ -3841,6 +3855,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       doc.head.appendChild(style);
     }
 
+    /**
+     * Injects the design-system stylesheet into the provided document once.
+     *
+     * @param {Document | null} [doc]
+     * @returns {void}
+     */
     function ensureDesignSystemStyles(doc = typeof document !== 'undefined' ? document : null) {
       if (!doc) return;
       if (doc.getElementById('gmh-design-system-style')) return;
@@ -3853,7 +3873,25 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     const PANEL_SETTINGS_STORAGE_KEY = 'gmh_panel_settings_v1';
 
     /**
+     * @typedef {import('../types').PanelSettingsController} PanelSettingsController
+     * @typedef {import('../types').PanelSettingsValue} PanelSettingsValue
+     * @typedef {import('../types').PanelSettingsLayout} PanelSettingsLayout
+     * @typedef {import('../types').PanelSettingsBehavior} PanelSettingsBehavior
+     */
+
+    /**
+     * @typedef {object} PanelSettingsOptions
+     * @property {<T>(value: T) => T} clone
+     * @property {(target: PanelSettingsValue, patch: unknown) => PanelSettingsValue} deepMerge
+     * @property {Pick<Storage, 'getItem' | 'setItem'> | null} [storage]
+     * @property {Console | { warn?: (...args: unknown[]) => void } | null} [logger]
+     */
+
+    /**
      * Creates the panel settings store with persistence, change notifications, and defaults.
+     *
+     * @param {PanelSettingsOptions} [options]
+     * @returns {PanelSettingsController}
      */
     function createPanelSettings({
       clone,
@@ -3865,6 +3903,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         throw new Error('createPanelSettings requires clone and deepMerge helpers');
       }
 
+      /** @type {PanelSettingsValue} */
       const DEFAULTS = {
         layout: {
           anchor: 'right',
@@ -3901,8 +3940,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         }
       }
 
+      /** @type {Set<(value: PanelSettingsValue) => void>} */
       const listeners = new Set();
 
+      /**
+       * @returns {void}
+       */
       const persist = () => {
         if (!settingsStore) return;
         try {
@@ -3912,6 +3955,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         }
       };
 
+      /**
+       * @returns {void}
+       */
       const notify = () => {
         const snapshot = clone(settings);
         listeners.forEach((listener) => {
@@ -3926,9 +3972,16 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       return {
         STORAGE_KEY: PANEL_SETTINGS_STORAGE_KEY,
         defaults: clone(DEFAULTS),
+        /**
+         * @returns {PanelSettingsValue}
+         */
         get() {
           return clone(settings);
         },
+        /**
+         * @param {Partial<PanelSettingsValue>} patch
+         * @returns {PanelSettingsValue}
+         */
         update(patch) {
           if (!patch || typeof patch !== 'object') return clone(settings);
           const nextSettings = deepMerge(settings, patch);
@@ -3940,6 +3993,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           notify();
           return clone(settings);
         },
+        /**
+         * @returns {PanelSettingsValue}
+         */
         reset() {
           const before = JSON.stringify(settings);
           const defaultsString = JSON.stringify(DEFAULTS);
@@ -3952,6 +4008,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           notify();
           return clone(settings);
         },
+        /**
+         * @param {(value: PanelSettingsValue) => void} listener
+         * @returns {() => void}
+         */
         onChange(listener) {
           if (typeof listener !== 'function') return () => {};
           listeners.add(listener);
@@ -4849,7 +4909,35 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     }
 
     /**
+     * @typedef {import('../types').AutoLoaderController} AutoLoaderController
+     * @typedef {import('../types').AutoLoaderExports} AutoLoaderExports
+     */
+
+    /**
+     * @typedef {object} AutoLoaderControlsOptions
+     * @property {Document | null} [documentRef]
+     * @property {AutoLoaderController} autoLoader
+     * @property {AutoLoaderExports['autoState']} autoState
+     * @property {(message: string, tone?: string | null) => void} [setPanelStatus]
+     * @property {(meter: HTMLElement | null) => void} startTurnMeter
+     * @property {() => string} getAutoProfile
+     * @property {(listener: () => void) => void} subscribeProfileChange
+     * @property {() => Promise<void> | void} [downloadDomSnapshot]
+     */
+
+    /**
+     * @typedef {object} AutoLoaderControls
+     * @property {(panel: Element | null) => void} ensureAutoLoadControlsModern
+     * @property {(panel: Element | null) => void} ensureAutoLoadControlsLegacy
+     * @property {(panel: Element | null) => void} mountStatusActionsModern
+     * @property {(panel: Element | null) => void} mountStatusActionsLegacy
+     */
+
+    /**
      * Generates UI hooks for controlling the auto-loader and download status buttons.
+     *
+     * @param {AutoLoaderControlsOptions} [options]
+     * @returns {AutoLoaderControls}
      */
     function createAutoLoaderControls({
       documentRef = typeof document !== 'undefined' ? document : null,
@@ -4873,6 +4961,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       const doc = documentRef;
       const profileSelectElements = new Set();
 
+      /**
+       * Synchronizes the profile dropdowns with the latest active profile.
+       * @returns {void}
+       */
       const syncProfileSelects = () => {
         const profile = getAutoProfile();
         for (const el of Array.from(profileSelectElements)) {
@@ -4886,6 +4978,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 
       subscribeProfileChange(syncProfileSelects);
 
+      /**
+       * Adds profile select elements to the synchronization set.
+       * @param {HTMLSelectElement | null} select
+       * @returns {void}
+       */
       const registerProfileSelect = (select) => {
         if (!select) return;
         profileSelectElements.add(select);
@@ -4895,6 +4992,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         };
       };
 
+      /**
+       * Ensures the modern auto-loader controls markup exists within the panel.
+       * @param {Element | null} panel
+       * @returns {void}
+       */
       const ensureAutoLoadControlsModern = (panel) => {
         if (!panel) return;
         let wrap = panel.querySelector('#gmh-autoload-controls');
@@ -4967,6 +5069,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         startTurnMeter(meter);
       };
 
+      /**
+       * Ensures the legacy auto-loader controls markup exists within the panel.
+       * @param {Element | null} panel
+       * @returns {void}
+       */
       const ensureAutoLoadControlsLegacy = (panel) => {
         if (!panel || panel.querySelector('#gmh-autoload-controls')) return;
 
@@ -5041,6 +5148,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         startTurnMeter(meter);
       };
 
+      /**
+       * Builds markup for the status action buttons for modern/legacy panels.
+       * @param {boolean} [modern=false]
+       * @returns {string}
+       */
       const createStatusActionsMarkup = (modern = false) => {
         if (modern) {
           return `
@@ -5074,6 +5186,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       </div>`;
       };
 
+      /**
+       * Binds retry/download handlers within the status actions container.
+       * @param {HTMLElement} actions
+       * @param {boolean} modern
+       * @returns {void}
+       */
       const bindStatusActions = (actions, modern) => {
         const select = actions.querySelector('#gmh-profile-select');
         if (select) registerProfileSelect(select);
@@ -5106,6 +5224,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         }
       };
 
+      /**
+       * Mounts the modern status actions block into the panel.
+       * @param {Element | null} panel
+       * @returns {void}
+       */
       const mountStatusActionsModern = (panel) => {
         if (!panel) return;
         let actions = panel.querySelector('#gmh-status-actions');
@@ -5120,6 +5243,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         bindStatusActions(actions);
       };
 
+      /**
+       * Mounts the legacy status actions block into the panel.
+       * @param {Element | null} panel
+       * @returns {void}
+       */
       const mountStatusActionsLegacy = (panel) => {
         if (!panel || panel.querySelector('#gmh-status-actions')) return;
         const actions = doc.createElement('div');
@@ -5140,7 +5268,32 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
     }
 
     /**
+     * @typedef {import('../types').ExportRangeController} ExportRangeController
+     * @typedef {import('../types').TurnBookmarks} TurnBookmarks
+     * @typedef {import('../types').TurnBookmarkEntry} TurnBookmarkEntry
+     * @typedef {import('../types').MessageIndexer} MessageIndexer
+     */
+
+    /**
+     * @typedef {object} RangeControlsOptions
+     * @property {Document | null} [documentRef]
+     * @property {Window | null} [windowRef]
+     * @property {ExportRangeController} exportRange
+     * @property {TurnBookmarks} turnBookmarks
+     * @property {MessageIndexer} messageIndexer
+     * @property {(message: string, tone?: string | null) => void} [setPanelStatus]
+     */
+
+    /**
+     * @typedef {object} RangeControls
+     * @property {(panel: Element | null) => void} bindRangeControls
+     */
+
+    /**
      * Creates DOM bindings for export range selectors and bookmark integration.
+     *
+     * @param {RangeControlsOptions} options
+     * @returns {RangeControls}
      */
     function createRangeControls({
       documentRef = typeof document !== 'undefined' ? document : null,
@@ -5163,17 +5316,31 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
       let selectedBookmarkKey = '';
       let bookmarkSelectionPinned = false;
 
+      /**
+       * @param {unknown} value
+       * @returns {number | null}
+       */
       const toNumber = (value) => {
         const num = Number(value);
         return Number.isFinite(num) ? num : null;
       };
 
+      /**
+       * Subscribes to export range changes.
+       * @param {(snapshot: unknown) => void} handler
+       * @returns {void}
+       */
       const subscribeRange = (handler) => {
         if (typeof exportRange?.subscribe !== 'function') return;
         if (typeof rangeUnsubscribe === 'function') rangeUnsubscribe();
         rangeUnsubscribe = exportRange.subscribe(handler);
       };
 
+      /**
+       * Invokes the handler once with the current export range snapshot.
+       * @param {(snapshot: any) => void} handler
+       * @returns {void}
+       */
       const updateRangeSnapshot = (handler) => {
         if (typeof handler !== 'function') return;
         if (typeof exportRange?.snapshot === 'function') {
@@ -5190,6 +5357,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         }
       };
 
+      /**
+        * Updates the bookmark dropdown with the latest entries.
+        * @param {HTMLSelectElement | null} select
+        * @param {TurnBookmarkEntry[]} [entries=[]]
+        * @returns {void}
+        */
       const syncBookmarkSelect = (select, entries = []) => {
         if (!select) return;
         const previous = selectedBookmarkKey || select.value || '';
@@ -5226,6 +5399,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         }
       };
 
+      /**
+       * Prepares the bookmark select element for range shortcuts.
+       * @param {HTMLSelectElement | null} select
+       * @returns {void}
+       */
       const registerBookmarkSelect = (select) => {
         if (!select) return;
         if (select.dataset.gmhBookmarksReady === 'true') return;
@@ -5242,6 +5420,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         }
       };
 
+      /**
+       * Attaches event listeners and range bindings to the provided panel node.
+       * @param {Element | null} panel
+       * @returns {void}
+       */
       const bindRangeControls = (panel) => {
         if (!panel) return;
         const rangeStartInput = panel.querySelector('#gmh-range-start');
@@ -5363,6 +5546,11 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             return turnBookmarks?.latest?.();
           };
 
+          /**
+           * Records the current message context as a range start/end.
+           * @param {'start' | 'end'} mode
+           * @returns {void}
+           */
           const doBookmark = (mode) => {
             const lookupOrdinalByIndex = messageIndexer?.lookupOrdinalByIndex;
             const lookupOrdinalByMessageId = messageIndexer?.lookupOrdinalByMessageId;
@@ -6361,7 +6549,32 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     }
 
     /**
+     * @typedef {import('../types').GenitAdapter} GenitAdapter
+     */
+
+    /**
+     * @typedef {object} StateViewApi
+     * @property {(bindings?: { progressFill?: HTMLElement | null; progressLabel?: HTMLElement | null }) => void} bind
+     */
+
+    /**
+     * @typedef {object} ModernPanelOptions
+     * @property {Document | null} [documentRef]
+     * @property {() => void} ensureStyles
+     * @property {string} [version]
+     * @property {() => GenitAdapter | null | undefined} getActiveAdapter
+     * @property {(element: HTMLElement | null) => void} attachStatusElement
+     * @property {StateViewApi} stateView
+     * @property {(panel: Element, options?: { modern?: boolean }) => void} bindPanelInteractions
+     * @property {string} [panelId]
+     * @property {Console | { warn?: (...args: unknown[]) => void } | null} [logger]
+     */
+
+    /**
      * Mounts the modern (React-inspired) panel layout.
+     *
+     * @param {ModernPanelOptions} [options]
+     * @returns {{ mount: () => Element | null }}
      */
     function createModernPanel({
       documentRef = typeof document !== 'undefined' ? document : null,
@@ -6387,6 +6600,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
       const log = logger || { warn: () => {} };
 
+      /**
+       * Ensures the modern panel is attached to the DOM.
+       * @returns {Element | null}
+       */
       const mount = () => {
         ensureStyles();
         const existing = doc.querySelector(`#${panelId}`);
@@ -6543,7 +6760,30 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     }
 
     /**
+     * @typedef {import('../types').GenitAdapter} GenitAdapter
+     */
+
+    /**
+     * @typedef {object} LegacyStateViewApi
+     * @property {() => void} bind
+     */
+
+    /**
+     * @typedef {object} LegacyPanelOptions
+     * @property {Document | null} [documentRef]
+     * @property {() => GenitAdapter | null | undefined} getActiveAdapter
+     * @property {(element: HTMLElement | null) => void} attachStatusElement
+     * @property {(message: string, tone?: string | null) => void} setPanelStatus
+     * @property {LegacyStateViewApi} stateView
+     * @property {(panel: Element, options?: { modern?: boolean }) => void} bindPanelInteractions
+     * @property {string} [panelId]
+     */
+
+    /**
      * Mounts the legacy panel layout for older styling.
+     *
+     * @param {LegacyPanelOptions} [options]
+     * @returns {{ mount: () => Element | null }}
      */
     function createLegacyPanel({
       documentRef = typeof document !== 'undefined' ? document : null,
@@ -6572,6 +6812,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         throw new Error('createLegacyPanel requires bindPanelInteractions');
       }
 
+      /**
+       * Creates the legacy panel markup if necessary and returns it.
+       * @returns {Element | null}
+       */
       const mount = () => {
         const existing = doc.querySelector(`#${panelId}`);
         if (existing) return existing;
@@ -6661,6 +6905,82 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
     const DEFAULT_PREVIEW_LIMIT = 5;
 
+    /**
+     * @typedef {import('../types').StructuredSnapshotMessage} StructuredSnapshotMessage
+     * @typedef {import('../types').StructuredSelectionRangeInfo} StructuredSelectionRangeInfo
+     * @typedef {import('../types').ExportRangeInfo} ExportRangeInfo
+     * @typedef {import('../types').ModalController} ModalController
+     */
+
+    /**
+     * @typedef {object} PrivacyGateStats
+     * @property {number} userMessages
+     * @property {number} llmMessages
+     * @property {number} [totalMessages]
+     * @property {number} [entryCount]
+     * @property {Record<string, unknown>} [metadata]
+     */
+
+    /**
+     * @typedef {object} PrivacyGateCounts
+     * @property {Record<string, number>} [redactions]
+     * @property {Record<string, number>} [details]
+     * @property {number} [total]
+     * @property {Record<string, unknown>} [metadata]
+     */
+
+    /**
+     * @typedef {object} PrivacyPreviewTurn
+     * @property {string} [role]
+     * @property {string} [speaker]
+     * @property {string} [text]
+     * @property {number} [__gmhIndex]
+     * @property {number} [__gmhOrdinal]
+     * @property {StructuredSnapshotMessage['parts']} [parts]
+     */
+
+    /**
+     * @typedef {object} PrivacyGateConfirmOptions
+     * @property {string} profile
+     * @property {PrivacyGateCounts | Record<string, number>} counts
+     * @property {PrivacyGateStats} stats
+     * @property {PrivacyGateStats | null} [overallStats]
+     * @property {StructuredSelectionRangeInfo | ExportRangeInfo | null} [rangeInfo]
+     * @property {number[]} [selectedIndices]
+     * @property {number[]} [selectedOrdinals]
+     * @property {PrivacyPreviewTurn[]} [previewTurns]
+     * @property {string} [actionLabel]
+     * @property {string} [heading]
+     * @property {string} [subheading]
+     */
+
+    /**
+     * @typedef {object} PrivacyGateOptions
+     * @property {Document | null} [documentRef]
+     * @property {(counts: Record<string, number>) => string} [formatRedactionCounts]
+     * @property {Record<string, { label?: string }>} [privacyProfiles]
+     * @property {number} [previewLimit]
+     * @property {(value: string) => string} [truncateText]
+     */
+
+    /**
+     * @typedef {PrivacyGateOptions & {
+     *   ensureLegacyPreviewStyles?: () => void;
+     * }} LegacyPrivacyGateOptions
+     */
+
+    /**
+     * @typedef {PrivacyGateOptions & {
+     *   ensureDesignSystemStyles?: () => void;
+     *   modal?: ModalController | null;
+     * }} ModernPrivacyGateOptions
+     */
+
+    /**
+     * Validates that a document reference is available.
+     * @param {Document | null | undefined} documentRef
+     * @returns {Document}
+     */
     const ensureDocument = (documentRef) => {
       if (!documentRef || typeof documentRef.createElement !== 'function') {
         throw new Error('privacy gate requires a document reference');
@@ -6668,12 +6988,31 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       return documentRef;
     };
 
+    /**
+     * Truncates preview text to a configurable length.
+     * @param {unknown} value
+     * @param {number} [max=220]
+     * @returns {string}
+     */
     const defaultTruncate = (value, max = 220) => {
       const text = String(value || '').trim();
       if (text.length <= max) return text;
       return `${text.slice(0, max - 1)}…`;
     };
 
+    /**
+     * Renders preview turn items for the privacy gate.
+     * @param {object} params
+     * @param {Document | null | undefined} params.documentRef
+     * @param {PrivacyPreviewTurn[] | StructuredSnapshotMessage[] | null | undefined} params.previewTurns
+     * @param {number} params.previewLimit
+     * @param {StructuredSelectionRangeInfo | ExportRangeInfo | null | undefined} params.rangeInfo
+     * @param {number[]} params.selectedIndices
+     * @param {number[]} params.selectedOrdinals
+     * @param {(value: unknown, max?: number) => string} [params.truncateText]
+     * @param {boolean} params.modern
+     * @returns {HTMLElement}
+     */
     const buildTurns = ({
       documentRef,
       previewTurns,
@@ -6762,6 +7101,20 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       return list;
     };
 
+    /**
+     * Builds the summary box summarizing counts and stats for the dialog.
+     * @param {object} params
+     * @param {Document | null | undefined} params.documentRef
+     * @param {(counts: Record<string, number>) => string} [params.formatRedactionCounts]
+     * @param {Record<string, { label?: string }>} [params.privacyProfiles]
+     * @param {string} params.profile
+     * @param {Record<string, number>} params.counts
+     * @param {PrivacyGateStats} params.stats
+     * @param {PrivacyGateStats | null} [params.overallStats]
+     * @param {StructuredSelectionRangeInfo | ExportRangeInfo | null | undefined} [params.rangeInfo]
+     * @param {boolean} params.modern
+     * @returns {HTMLElement}
+     */
     const buildSummaryBox = ({
       documentRef,
       formatRedactionCounts,
@@ -6830,6 +7183,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
     /**
      * Builds the classic privacy confirmation dialog rendered inside the legacy panel.
+     *
+     * @param {LegacyPrivacyGateOptions} [options]
+     * @returns {{ confirm: (confirmOptions?: PrivacyGateConfirmOptions) => Promise<boolean> }}
      */
     function createLegacyPrivacyGate({
       documentRef = typeof document !== 'undefined' ? document : null,
@@ -6844,6 +7200,11 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         throw new Error('legacy privacy gate requires ensureLegacyPreviewStyles');
       }
 
+      /**
+       * Opens the legacy overlay preview and resolves with the user choice.
+       * @param {PrivacyGateConfirmOptions} [params]
+       * @returns {Promise<boolean>}
+       */
       const confirm = ({
         profile,
         counts,
@@ -6967,6 +7328,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
     /**
      * Builds the modern privacy confirmation modal using design-system styles.
+     *
+     * @param {ModernPrivacyGateOptions} [options]
+     * @returns {{ confirm: (confirmOptions?: PrivacyGateConfirmOptions) => Promise<boolean> }}
      */
     function createModernPrivacyGate({
       documentRef = typeof document !== 'undefined' ? document : null,
@@ -6985,6 +7349,11 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         throw new Error('modern privacy gate requires modal.open');
       }
 
+      /**
+       * Opens the design-system modal and resolves with the user's decision.
+       * @param {PrivacyGateConfirmOptions} [params]
+       * @returns {Promise<boolean>}
+       */
       const confirm = ({
         profile,
         counts,
@@ -7133,7 +7502,23 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     }
 
     /**
+     * @typedef {object} GuideControlsOptions
+     * @property {() => void} [reparse]
+     * @property {() => Promise<void> | void} copySummaryGuide
+     * @property {() => Promise<void> | void} copyResummaryGuide
+     * @property {Console | { warn?: (...args: unknown[]) => void } | null} [logger]
+     */
+
+    /**
+     * @typedef {object} GuideControls
+     * @property {(panel: Element | null) => void} bindGuideControls
+     */
+
+    /**
      * Wires panel guide buttons to share workflow helpers.
+     *
+     * @param {GuideControlsOptions} [options]
+     * @returns {GuideControls}
      */
     function createGuideControls({
       reparse,
@@ -7145,6 +7530,11 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         throw new Error('createGuideControls requires summary and resummary copy functions');
       }
 
+      /**
+       * Registers click handlers on the guide controls rendered in the panel.
+       * @param {Element | null} panel
+       * @returns {void}
+       */
       const bindGuideControls = (panel) => {
         if (!panel || typeof panel.querySelector !== 'function') {
           if (logger?.warn) {
@@ -8768,6 +9158,29 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       };
     }
 
+    /**
+     * @typedef {import('../types').PanelVisibilityController} PanelVisibilityController
+     */
+
+    /**
+     * @typedef {object} StatusTone
+     * @property {string} color
+     * @property {string} icon
+     */
+
+    /**
+     * @typedef {object} StatusManagerOptions
+     * @property {PanelVisibilityController | null | undefined} [panelVisibility]
+     */
+
+    /**
+     * @typedef {object} StatusManager
+     * @property {Record<string, StatusTone>} STATUS_TONES
+     * @property {(element: HTMLElement | null) => void} attachStatusElement
+     * @property {(message: string, toneOrColor?: string) => void} setStatus
+     */
+
+    /** @type {Record<string, StatusTone>} */
     const STATUS_TONES = {
       success: { color: '#34d399', icon: '✅' },
       info: { color: '#93c5fd', icon: 'ℹ️' },
@@ -8779,14 +9192,29 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
     /**
      * Creates a minimal status manager that updates panel status text and notifies listeners.
+     *
+     * @param {StatusManagerOptions} [options]
+     * @returns {StatusManager}
      */
     function createStatusManager({ panelVisibility } = {}) {
+      /** @type {HTMLElement | null} */
       let statusElement = null;
 
+      /**
+       * Sets the DOM element where panel status text renders.
+       * @param {HTMLElement | null} element
+       * @returns {void}
+       */
       const attachStatusElement = (element) => {
         statusElement = element || null;
       };
 
+      /**
+       * Updates the status element text and tone styling.
+       * @param {unknown} message
+       * @param {string} [toneOrColor='info']
+       * @returns {void}
+       */
       const setStatus = (message, toneOrColor = 'info') => {
         if (!statusElement) return;
         const text = String(message || '');
@@ -8967,6 +9395,33 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       return { bind };
     }
 
+    /**
+     * @typedef {import('../types').ModalController} ModalController
+     */
+
+    /**
+     * @typedef {object} PrivacyConfiguratorOptions
+     * @property {{ blacklist?: string[]; whitelist?: string[] }} privacyConfig
+     * @property {(type: string, values: string[]) => void} setCustomList
+     * @property {(value: string) => string[]} parseListInput
+     * @property {(message: string, tone?: string | null) => void} setPanelStatus
+     * @property {ModalController} modal
+     * @property {(() => boolean) | boolean} [isModernUIActive]
+     * @property {Document | null} [documentRef]
+     * @property {Window | null} [windowRef]
+     */
+
+    /**
+     * @typedef {object} PrivacyConfigurator
+     * @property {() => Promise<void> | void} configurePrivacyLists
+     */
+
+    /**
+     * Creates privacy list configuration helpers for modal or legacy prompts.
+     *
+     * @param {PrivacyConfiguratorOptions} [options]
+     * @returns {PrivacyConfigurator}
+     */
     function createPrivacyConfigurator({
       privacyConfig,
       setCustomList,
@@ -8987,9 +9442,16 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       const doc = documentRef;
       const win = windowRef;
 
+      /**
+       * @returns {boolean}
+       */
       const resolveModernActive = () =>
         typeof isModernUIActive === 'function' ? isModernUIActive() : Boolean(isModernUIActive);
 
+      /**
+       * Launches the design-system modal for editing privacy lists.
+       * @returns {Promise<void>}
+       */
       const configurePrivacyListsModern = async () => {
         ensureDesignSystemStyles(doc);
 
@@ -9062,6 +9524,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         setPanelStatus('프라이버시 사용자 목록을 저장했습니다.', 'success');
       };
 
+      /**
+       * Prompts using classic dialogs to update privacy lists.
+       * @returns {void}
+       */
       const configurePrivacyListsLegacy = () => {
         const currentBlack = privacyConfig.blacklist?.join('\n') || '';
         const nextBlack = win?.prompt
@@ -9087,18 +9553,44 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         setPanelStatus('프라이버시 사용자 목록을 저장했습니다.', 'info');
       };
 
+      /**
+       * Opens either the modern modal or legacy prompt workflow.
+       * @returns {Promise<void> | void}
+       */
       const configurePrivacyLists = async () => {
         if (resolveModernActive()) return configurePrivacyListsModern();
         return configurePrivacyListsLegacy();
       };
 
       return {
+        /**
+         * Opens the privacy configuration workflow using the active UI mode.
+         * @returns {Promise<void> | void}
+         */
         configurePrivacyLists,
       };
     }
 
     /**
+     * @typedef {import('../types').PanelSettingsController} PanelSettingsController
+     * @typedef {import('../types').PanelSettingsValue} PanelSettingsValue
+     * @typedef {import('../types').ModalController} ModalController
+     */
+
+    /**
+     * @typedef {object} PanelSettingsModalOptions
+     * @property {PanelSettingsController} panelSettings
+     * @property {ModalController} modal
+     * @property {(message: string, tone?: string | null) => void} setPanelStatus
+     * @property {() => Promise<void> | void} configurePrivacyLists
+     * @property {Document | null} [documentRef]
+     */
+
+    /**
      * Provides the modal workflow for editing panel settings and privacy lists.
+     *
+     * @param {PanelSettingsModalOptions} [options]
+     * @returns {{ openPanelSettings: () => Promise<void> }}
      */
     function createPanelSettingsController({
       panelSettings,
@@ -9117,6 +9609,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
       const doc = documentRef;
 
+      /**
+       * Opens the settings modal and applies user selections.
+       * @returns {Promise<void>}
+       */
       const openPanelSettings = async () => {
         ensureDesignSystemStyles(doc);
         let keepOpen = true;
@@ -9138,6 +9634,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
           const grid = doc.createElement('div');
           grid.className = 'gmh-settings-grid';
 
+          /**
+           * @param {{ id: string; label: string; description?: string; control: HTMLElement }} config
+           * @returns {{ row: HTMLElement; control: HTMLElement; controls: HTMLElement }}
+           */
           const buildRow = ({ id, label, description, control }) => {
             const row = doc.createElement('div');
             row.className = 'gmh-settings-row';

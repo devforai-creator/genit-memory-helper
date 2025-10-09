@@ -1,5 +1,30 @@
 /**
+ * @typedef {import('../types').ExportRangeController} ExportRangeController
+ * @typedef {import('../types').TurnBookmarks} TurnBookmarks
+ * @typedef {import('../types').TurnBookmarkEntry} TurnBookmarkEntry
+ * @typedef {import('../types').MessageIndexer} MessageIndexer
+ */
+
+/**
+ * @typedef {object} RangeControlsOptions
+ * @property {Document | null} [documentRef]
+ * @property {Window | null} [windowRef]
+ * @property {ExportRangeController} exportRange
+ * @property {TurnBookmarks} turnBookmarks
+ * @property {MessageIndexer} messageIndexer
+ * @property {(message: string, tone?: string | null) => void} [setPanelStatus]
+ */
+
+/**
+ * @typedef {object} RangeControls
+ * @property {(panel: Element | null) => void} bindRangeControls
+ */
+
+/**
  * Creates DOM bindings for export range selectors and bookmark integration.
+ *
+ * @param {RangeControlsOptions} options
+ * @returns {RangeControls}
  */
 export function createRangeControls({
   documentRef = typeof document !== 'undefined' ? document : null,
@@ -22,17 +47,31 @@ export function createRangeControls({
   let selectedBookmarkKey = '';
   let bookmarkSelectionPinned = false;
 
+  /**
+   * @param {unknown} value
+   * @returns {number | null}
+   */
   const toNumber = (value) => {
     const num = Number(value);
     return Number.isFinite(num) ? num : null;
   };
 
+  /**
+   * Subscribes to export range changes.
+   * @param {(snapshot: unknown) => void} handler
+   * @returns {void}
+   */
   const subscribeRange = (handler) => {
     if (typeof exportRange?.subscribe !== 'function') return;
     if (typeof rangeUnsubscribe === 'function') rangeUnsubscribe();
     rangeUnsubscribe = exportRange.subscribe(handler);
   };
 
+  /**
+   * Invokes the handler once with the current export range snapshot.
+   * @param {(snapshot: any) => void} handler
+   * @returns {void}
+   */
   const updateRangeSnapshot = (handler) => {
     if (typeof handler !== 'function') return;
     if (typeof exportRange?.snapshot === 'function') {
@@ -49,6 +88,12 @@ export function createRangeControls({
     }
   };
 
+  /**
+    * Updates the bookmark dropdown with the latest entries.
+    * @param {HTMLSelectElement | null} select
+    * @param {TurnBookmarkEntry[]} [entries=[]]
+    * @returns {void}
+    */
   const syncBookmarkSelect = (select, entries = []) => {
     if (!select) return;
     const previous = selectedBookmarkKey || select.value || '';
@@ -85,6 +130,11 @@ export function createRangeControls({
     }
   };
 
+  /**
+   * Prepares the bookmark select element for range shortcuts.
+   * @param {HTMLSelectElement | null} select
+   * @returns {void}
+   */
   const registerBookmarkSelect = (select) => {
     if (!select) return;
     if (select.dataset.gmhBookmarksReady === 'true') return;
@@ -101,6 +151,11 @@ export function createRangeControls({
     }
   };
 
+  /**
+   * Attaches event listeners and range bindings to the provided panel node.
+   * @param {Element | null} panel
+   * @returns {void}
+   */
   const bindRangeControls = (panel) => {
     if (!panel) return;
     const rangeStartInput = panel.querySelector('#gmh-range-start');
@@ -222,6 +277,11 @@ export function createRangeControls({
         return turnBookmarks?.latest?.();
       };
 
+      /**
+       * Records the current message context as a range start/end.
+       * @param {'start' | 'end'} mode
+       * @returns {void}
+       */
       const doBookmark = (mode) => {
         const lookupOrdinalByIndex = messageIndexer?.lookupOrdinalByIndex;
         const lookupOrdinalByMessageId = messageIndexer?.lookupOrdinalByMessageId;

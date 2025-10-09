@@ -1,5 +1,30 @@
 /**
+ * @typedef {import('../types').GenitAdapter} GenitAdapter
+ */
+
+/**
+ * @typedef {object} StateViewApi
+ * @property {(bindings?: { progressFill?: HTMLElement | null; progressLabel?: HTMLElement | null }) => void} bind
+ */
+
+/**
+ * @typedef {object} ModernPanelOptions
+ * @property {Document | null} [documentRef]
+ * @property {() => void} ensureStyles
+ * @property {string} [version]
+ * @property {() => GenitAdapter | null | undefined} getActiveAdapter
+ * @property {(element: HTMLElement | null) => void} attachStatusElement
+ * @property {StateViewApi} stateView
+ * @property {(panel: Element, options?: { modern?: boolean }) => void} bindPanelInteractions
+ * @property {string} [panelId]
+ * @property {Console | { warn?: (...args: unknown[]) => void } | null} [logger]
+ */
+
+/**
  * Mounts the modern (React-inspired) panel layout.
+ *
+ * @param {ModernPanelOptions} [options]
+ * @returns {{ mount: () => Element | null }}
  */
 export function createModernPanel({
   documentRef = typeof document !== 'undefined' ? document : null,
@@ -25,6 +50,10 @@ export function createModernPanel({
 
   const log = logger || { warn: () => {} };
 
+  /**
+   * Ensures the modern panel is attached to the DOM.
+   * @returns {Element | null}
+   */
   const mount = () => {
     ensureStyles();
     const existing = doc.querySelector(`#${panelId}`);

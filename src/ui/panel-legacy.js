@@ -1,5 +1,28 @@
 /**
+ * @typedef {import('../types').GenitAdapter} GenitAdapter
+ */
+
+/**
+ * @typedef {object} LegacyStateViewApi
+ * @property {() => void} bind
+ */
+
+/**
+ * @typedef {object} LegacyPanelOptions
+ * @property {Document | null} [documentRef]
+ * @property {() => GenitAdapter | null | undefined} getActiveAdapter
+ * @property {(element: HTMLElement | null) => void} attachStatusElement
+ * @property {(message: string, tone?: string | null) => void} setPanelStatus
+ * @property {LegacyStateViewApi} stateView
+ * @property {(panel: Element, options?: { modern?: boolean }) => void} bindPanelInteractions
+ * @property {string} [panelId]
+ */
+
+/**
  * Mounts the legacy panel layout for older styling.
+ *
+ * @param {LegacyPanelOptions} [options]
+ * @returns {{ mount: () => Element | null }}
  */
 export function createLegacyPanel({
   documentRef = typeof document !== 'undefined' ? document : null,
@@ -28,6 +51,10 @@ export function createLegacyPanel({
     throw new Error('createLegacyPanel requires bindPanelInteractions');
   }
 
+  /**
+   * Creates the legacy panel markup if necessary and returns it.
+   * @returns {Element | null}
+   */
   const mount = () => {
     const existing = doc.querySelector(`#${panelId}`);
     if (existing) return existing;

@@ -1,3 +1,7 @@
+/**
+ * CSS used for the legacy preview privacy overlay.
+ * @type {string}
+ */
 export const LEGACY_PREVIEW_CSS = `
 .gmh-preview-overlay{position:fixed;inset:0;background:rgba(15,23,42,0.72);z-index:9999999;display:flex;align-items:center;justify-content:center;padding:24px;}
 .gmh-preview-card{background:#0f172a;color:#e2e8f0;border-radius:14px;box-shadow:0 18px 48px rgba(8,15,30,0.55);width:min(520px,94vw);max-height:94vh;display:flex;flex-direction:column;overflow:hidden;font:13px/1.5 'Inter',system-ui,sans-serif;}
@@ -24,6 +28,10 @@ export const LEGACY_PREVIEW_CSS = `
 @media (max-width:480px){.gmh-preview-card{width:100%;border-radius:12px;}}
 `;
 
+/**
+ * CSS bundle for the modern design-system panel.
+ * @type {string}
+ */
 export const DESIGN_SYSTEM_CSS = `
 :root{--gmh-bg:#0b1020;--gmh-surface:#0f172a;--gmh-surface-alt:rgba(30,41,59,0.65);--gmh-fg:#e2e8f0;--gmh-muted:#94a3b8;--gmh-accent:#38bdf8;--gmh-accent-soft:#c4b5fd;--gmh-success:#34d399;--gmh-warning:#fbbf24;--gmh-danger:#f87171;--gmh-border:rgba(148,163,184,0.25);--gmh-radius:14px;--gmh-radius-sm:10px;--gmh-panel-shadow:0 18px 48px rgba(8,15,30,0.55);--gmh-font:13px/1.5 'Inter',system-ui,-apple-system,BlinkMacSystemFont,sans-serif;}
 .gmh-modal-overlay{position:fixed;inset:0;background:rgba(8,11,20,0.72);z-index:9999999;display:flex;align-items:center;justify-content:center;padding:24px;}
@@ -132,6 +140,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 @media (prefers-reduced-motion:reduce){.gmh-panel,.gmh-modal,.gmh-progress__fill,#gmh-fab{transition:none !important;animation-duration:0.001s !important;}}
 `;
 
+/**
+ * Injects the legacy preview stylesheet into the provided document once.
+ *
+ * @param {Document | null} [doc]
+ * @returns {void}
+ */
 export function ensureLegacyPreviewStyles(doc = typeof document !== 'undefined' ? document : null) {
   if (!doc) return;
   if (doc.getElementById('gmh-preview-style')) return;
@@ -141,6 +155,12 @@ export function ensureLegacyPreviewStyles(doc = typeof document !== 'undefined' 
   doc.head.appendChild(style);
 }
 
+/**
+ * Injects the design-system stylesheet into the provided document once.
+ *
+ * @param {Document | null} [doc]
+ * @returns {void}
+ */
 export function ensureDesignSystemStyles(doc = typeof document !== 'undefined' ? document : null) {
   if (!doc) return;
   if (doc.getElementById('gmh-design-system-style')) return;

@@ -1,7 +1,25 @@
 import { ensureDesignSystemStyles } from './styles.js';
 
 /**
+ * @typedef {import('../types').PanelSettingsController} PanelSettingsController
+ * @typedef {import('../types').PanelSettingsValue} PanelSettingsValue
+ * @typedef {import('../types').ModalController} ModalController
+ */
+
+/**
+ * @typedef {object} PanelSettingsModalOptions
+ * @property {PanelSettingsController} panelSettings
+ * @property {ModalController} modal
+ * @property {(message: string, tone?: string | null) => void} setPanelStatus
+ * @property {() => Promise<void> | void} configurePrivacyLists
+ * @property {Document | null} [documentRef]
+ */
+
+/**
  * Provides the modal workflow for editing panel settings and privacy lists.
+ *
+ * @param {PanelSettingsModalOptions} [options]
+ * @returns {{ openPanelSettings: () => Promise<void> }}
  */
 export function createPanelSettingsController({
   panelSettings,
@@ -20,6 +38,10 @@ export function createPanelSettingsController({
 
   const doc = documentRef;
 
+  /**
+   * Opens the settings modal and applies user selections.
+   * @returns {Promise<void>}
+   */
   const openPanelSettings = async () => {
     ensureDesignSystemStyles(doc);
     let keepOpen = true;
@@ -41,6 +63,10 @@ export function createPanelSettingsController({
       const grid = doc.createElement('div');
       grid.className = 'gmh-settings-grid';
 
+      /**
+       * @param {{ id: string; label: string; description?: string; control: HTMLElement }} config
+       * @returns {{ row: HTMLElement; control: HTMLElement; controls: HTMLElement }}
+       */
       const buildRow = ({ id, label, description, control }) => {
         const row = doc.createElement('div');
         row.className = 'gmh-settings-row';

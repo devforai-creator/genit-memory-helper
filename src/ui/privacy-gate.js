@@ -1,5 +1,81 @@
 const DEFAULT_PREVIEW_LIMIT = 5;
 
+/**
+ * @typedef {import('../types').StructuredSnapshotMessage} StructuredSnapshotMessage
+ * @typedef {import('../types').StructuredSelectionRangeInfo} StructuredSelectionRangeInfo
+ * @typedef {import('../types').ExportRangeInfo} ExportRangeInfo
+ * @typedef {import('../types').ModalController} ModalController
+ */
+
+/**
+ * @typedef {object} PrivacyGateStats
+ * @property {number} userMessages
+ * @property {number} llmMessages
+ * @property {number} [totalMessages]
+ * @property {number} [entryCount]
+ * @property {Record<string, unknown>} [metadata]
+ */
+
+/**
+ * @typedef {object} PrivacyGateCounts
+ * @property {Record<string, number>} [redactions]
+ * @property {Record<string, number>} [details]
+ * @property {number} [total]
+ * @property {Record<string, unknown>} [metadata]
+ */
+
+/**
+ * @typedef {object} PrivacyPreviewTurn
+ * @property {string} [role]
+ * @property {string} [speaker]
+ * @property {string} [text]
+ * @property {number} [__gmhIndex]
+ * @property {number} [__gmhOrdinal]
+ * @property {StructuredSnapshotMessage['parts']} [parts]
+ */
+
+/**
+ * @typedef {object} PrivacyGateConfirmOptions
+ * @property {string} profile
+ * @property {PrivacyGateCounts | Record<string, number>} counts
+ * @property {PrivacyGateStats} stats
+ * @property {PrivacyGateStats | null} [overallStats]
+ * @property {StructuredSelectionRangeInfo | ExportRangeInfo | null} [rangeInfo]
+ * @property {number[]} [selectedIndices]
+ * @property {number[]} [selectedOrdinals]
+ * @property {PrivacyPreviewTurn[]} [previewTurns]
+ * @property {string} [actionLabel]
+ * @property {string} [heading]
+ * @property {string} [subheading]
+ */
+
+/**
+ * @typedef {object} PrivacyGateOptions
+ * @property {Document | null} [documentRef]
+ * @property {(counts: Record<string, number>) => string} [formatRedactionCounts]
+ * @property {Record<string, { label?: string }>} [privacyProfiles]
+ * @property {number} [previewLimit]
+ * @property {(value: string) => string} [truncateText]
+ */
+
+/**
+ * @typedef {PrivacyGateOptions & {
+ *   ensureLegacyPreviewStyles?: () => void;
+ * }} LegacyPrivacyGateOptions
+ */
+
+/**
+ * @typedef {PrivacyGateOptions & {
+ *   ensureDesignSystemStyles?: () => void;
+ *   modal?: ModalController | null;
+ * }} ModernPrivacyGateOptions
+ */
+
+/**
+ * Validates that a document reference is available.
+ * @param {Document | null | undefined} documentRef
+ * @returns {Document}
+ */
 const ensureDocument = (documentRef) => {
   if (!documentRef || typeof documentRef.createElement !== 'function') {
     throw new Error('privacy gate requires a document reference');
@@ -7,12 +83,31 @@ const ensureDocument = (documentRef) => {
   return documentRef;
 };
 
+/**
+ * Truncates preview text to a configurable length.
+ * @param {unknown} value
+ * @param {number} [max=220]
+ * @returns {string}
+ */
 const defaultTruncate = (value, max = 220) => {
   const text = String(value || '').trim();
   if (text.length <= max) return text;
   return `${text.slice(0, max - 1)}…`;
 };
 
+/**
+ * Renders preview turn items for the privacy gate.
+ * @param {object} params
+ * @param {Document | null | undefined} params.documentRef
+ * @param {PrivacyPreviewTurn[] | StructuredSnapshotMessage[] | null | undefined} params.previewTurns
+ * @param {number} params.previewLimit
+ * @param {StructuredSelectionRangeInfo | ExportRangeInfo | null | undefined} params.rangeInfo
+ * @param {number[]} params.selectedIndices
+ * @param {number[]} params.selectedOrdinals
+ * @param {(value: unknown, max?: number) => string} [params.truncateText]
+ * @param {boolean} params.modern
+ * @returns {HTMLElement}
+ */
 const buildTurns = ({
   documentRef,
   previewTurns,
@@ -101,6 +196,20 @@ const buildTurns = ({
   return list;
 };
 
+/**
+ * Builds the summary box summarizing counts and stats for the dialog.
+ * @param {object} params
+ * @param {Document | null | undefined} params.documentRef
+ * @param {(counts: Record<string, number>) => string} [params.formatRedactionCounts]
+ * @param {Record<string, { label?: string }>} [params.privacyProfiles]
+ * @param {string} params.profile
+ * @param {Record<string, number>} params.counts
+ * @param {PrivacyGateStats} params.stats
+ * @param {PrivacyGateStats | null} [params.overallStats]
+ * @param {StructuredSelectionRangeInfo | ExportRangeInfo | null | undefined} [params.rangeInfo]
+ * @param {boolean} params.modern
+ * @returns {HTMLElement}
+ */
 const buildSummaryBox = ({
   documentRef,
   formatRedactionCounts,
@@ -169,6 +278,9 @@ const buildSummaryBox = ({
 
 /**
  * Builds the classic privacy confirmation dialog rendered inside the legacy panel.
+ *
+ * @param {LegacyPrivacyGateOptions} [options]
+ * @returns {{ confirm: (confirmOptions?: PrivacyGateConfirmOptions) => Promise<boolean> }}
  */
 export function createLegacyPrivacyGate({
   documentRef = typeof document !== 'undefined' ? document : null,
@@ -183,6 +295,11 @@ export function createLegacyPrivacyGate({
     throw new Error('legacy privacy gate requires ensureLegacyPreviewStyles');
   }
 
+  /**
+   * Opens the legacy overlay preview and resolves with the user choice.
+   * @param {PrivacyGateConfirmOptions} [params]
+   * @returns {Promise<boolean>}
+   */
   const confirm = ({
     profile,
     counts,
@@ -306,6 +423,9 @@ export function createLegacyPrivacyGate({
 
 /**
  * Builds the modern privacy confirmation modal using design-system styles.
+ *
+ * @param {ModernPrivacyGateOptions} [options]
+ * @returns {{ confirm: (confirmOptions?: PrivacyGateConfirmOptions) => Promise<boolean> }}
  */
 export function createModernPrivacyGate({
   documentRef = typeof document !== 'undefined' ? document : null,
@@ -324,6 +444,11 @@ export function createModernPrivacyGate({
     throw new Error('modern privacy gate requires modal.open');
   }
 
+  /**
+   * Opens the design-system modal and resolves with the user's decision.
+   * @param {PrivacyGateConfirmOptions} [params]
+   * @returns {Promise<boolean>}
+   */
   const confirm = ({
     profile,
     counts,

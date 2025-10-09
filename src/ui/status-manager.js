@@ -1,3 +1,26 @@
+/**
+ * @typedef {import('../types').PanelVisibilityController} PanelVisibilityController
+ */
+
+/**
+ * @typedef {object} StatusTone
+ * @property {string} color
+ * @property {string} icon
+ */
+
+/**
+ * @typedef {object} StatusManagerOptions
+ * @property {PanelVisibilityController | null | undefined} [panelVisibility]
+ */
+
+/**
+ * @typedef {object} StatusManager
+ * @property {Record<string, StatusTone>} STATUS_TONES
+ * @property {(element: HTMLElement | null) => void} attachStatusElement
+ * @property {(message: string, toneOrColor?: string) => void} setStatus
+ */
+
+/** @type {Record<string, StatusTone>} */
 const STATUS_TONES = {
   success: { color: '#34d399', icon: '✅' },
   info: { color: '#93c5fd', icon: 'ℹ️' },
@@ -9,14 +32,29 @@ const STATUS_TONES = {
 
 /**
  * Creates a minimal status manager that updates panel status text and notifies listeners.
+ *
+ * @param {StatusManagerOptions} [options]
+ * @returns {StatusManager}
  */
 export function createStatusManager({ panelVisibility } = {}) {
+  /** @type {HTMLElement | null} */
   let statusElement = null;
 
+  /**
+   * Sets the DOM element where panel status text renders.
+   * @param {HTMLElement | null} element
+   * @returns {void}
+   */
   const attachStatusElement = (element) => {
     statusElement = element || null;
   };
 
+  /**
+   * Updates the status element text and tone styling.
+   * @param {unknown} message
+   * @param {string} [toneOrColor='info']
+   * @returns {void}
+   */
   const setStatus = (message, toneOrColor = 'info') => {
     if (!statusElement) return;
     const text = String(message || '');

@@ -1,5 +1,33 @@
 /**
+ * @typedef {import('../types').AutoLoaderController} AutoLoaderController
+ * @typedef {import('../types').AutoLoaderExports} AutoLoaderExports
+ */
+
+/**
+ * @typedef {object} AutoLoaderControlsOptions
+ * @property {Document | null} [documentRef]
+ * @property {AutoLoaderController} autoLoader
+ * @property {AutoLoaderExports['autoState']} autoState
+ * @property {(message: string, tone?: string | null) => void} [setPanelStatus]
+ * @property {(meter: HTMLElement | null) => void} startTurnMeter
+ * @property {() => string} getAutoProfile
+ * @property {(listener: () => void) => void} subscribeProfileChange
+ * @property {() => Promise<void> | void} [downloadDomSnapshot]
+ */
+
+/**
+ * @typedef {object} AutoLoaderControls
+ * @property {(panel: Element | null) => void} ensureAutoLoadControlsModern
+ * @property {(panel: Element | null) => void} ensureAutoLoadControlsLegacy
+ * @property {(panel: Element | null) => void} mountStatusActionsModern
+ * @property {(panel: Element | null) => void} mountStatusActionsLegacy
+ */
+
+/**
  * Generates UI hooks for controlling the auto-loader and download status buttons.
+ *
+ * @param {AutoLoaderControlsOptions} [options]
+ * @returns {AutoLoaderControls}
  */
 export function createAutoLoaderControls({
   documentRef = typeof document !== 'undefined' ? document : null,
@@ -23,6 +51,10 @@ export function createAutoLoaderControls({
   const doc = documentRef;
   const profileSelectElements = new Set();
 
+  /**
+   * Synchronizes the profile dropdowns with the latest active profile.
+   * @returns {void}
+   */
   const syncProfileSelects = () => {
     const profile = getAutoProfile();
     for (const el of Array.from(profileSelectElements)) {
@@ -36,6 +68,11 @@ export function createAutoLoaderControls({
 
   subscribeProfileChange(syncProfileSelects);
 
+  /**
+   * Adds profile select elements to the synchronization set.
+   * @param {HTMLSelectElement | null} select
+   * @returns {void}
+   */
   const registerProfileSelect = (select) => {
     if (!select) return;
     profileSelectElements.add(select);
@@ -45,6 +82,11 @@ export function createAutoLoaderControls({
     };
   };
 
+  /**
+   * Ensures the modern auto-loader controls markup exists within the panel.
+   * @param {Element | null} panel
+   * @returns {void}
+   */
   const ensureAutoLoadControlsModern = (panel) => {
     if (!panel) return;
     let wrap = panel.querySelector('#gmh-autoload-controls');
@@ -117,6 +159,11 @@ export function createAutoLoaderControls({
     startTurnMeter(meter);
   };
 
+  /**
+   * Ensures the legacy auto-loader controls markup exists within the panel.
+   * @param {Element | null} panel
+   * @returns {void}
+   */
   const ensureAutoLoadControlsLegacy = (panel) => {
     if (!panel || panel.querySelector('#gmh-autoload-controls')) return;
 
@@ -191,6 +238,11 @@ export function createAutoLoaderControls({
     startTurnMeter(meter);
   };
 
+  /**
+   * Builds markup for the status action buttons for modern/legacy panels.
+   * @param {boolean} [modern=false]
+   * @returns {string}
+   */
   const createStatusActionsMarkup = (modern = false) => {
     if (modern) {
       return `
@@ -224,6 +276,12 @@ export function createAutoLoaderControls({
       </div>`;
   };
 
+  /**
+   * Binds retry/download handlers within the status actions container.
+   * @param {HTMLElement} actions
+   * @param {boolean} modern
+   * @returns {void}
+   */
   const bindStatusActions = (actions, modern) => {
     const select = actions.querySelector('#gmh-profile-select');
     if (select) registerProfileSelect(select);
@@ -256,6 +314,11 @@ export function createAutoLoaderControls({
     }
   };
 
+  /**
+   * Mounts the modern status actions block into the panel.
+   * @param {Element | null} panel
+   * @returns {void}
+   */
   const mountStatusActionsModern = (panel) => {
     if (!panel) return;
     let actions = panel.querySelector('#gmh-status-actions');
@@ -270,6 +333,11 @@ export function createAutoLoaderControls({
     bindStatusActions(actions, true);
   };
 
+  /**
+   * Mounts the legacy status actions block into the panel.
+   * @param {Element | null} panel
+   * @returns {void}
+   */
   const mountStatusActionsLegacy = (panel) => {
     if (!panel || panel.querySelector('#gmh-status-actions')) return;
     const actions = doc.createElement('div');

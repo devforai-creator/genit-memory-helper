@@ -1,7 +1,25 @@
 const PANEL_SETTINGS_STORAGE_KEY = 'gmh_panel_settings_v1';
 
 /**
+ * @typedef {import('../types').PanelSettingsController} PanelSettingsController
+ * @typedef {import('../types').PanelSettingsValue} PanelSettingsValue
+ * @typedef {import('../types').PanelSettingsLayout} PanelSettingsLayout
+ * @typedef {import('../types').PanelSettingsBehavior} PanelSettingsBehavior
+ */
+
+/**
+ * @typedef {object} PanelSettingsOptions
+ * @property {<T>(value: T) => T} clone
+ * @property {(target: PanelSettingsValue, patch: unknown) => PanelSettingsValue} deepMerge
+ * @property {Pick<Storage, 'getItem' | 'setItem'> | null} [storage]
+ * @property {Console | { warn?: (...args: unknown[]) => void } | null} [logger]
+ */
+
+/**
  * Creates the panel settings store with persistence, change notifications, and defaults.
+ *
+ * @param {PanelSettingsOptions} [options]
+ * @returns {PanelSettingsController}
  */
 export function createPanelSettings({
   clone,
@@ -13,6 +31,7 @@ export function createPanelSettings({
     throw new Error('createPanelSettings requires clone and deepMerge helpers');
   }
 
+  /** @type {PanelSettingsValue} */
   const DEFAULTS = {
     layout: {
       anchor: 'right',
@@ -49,8 +68,12 @@ export function createPanelSettings({
     }
   }
 
+  /** @type {Set<(value: PanelSettingsValue) => void>} */
   const listeners = new Set();
 
+  /**
+   * @returns {void}
+   */
   const persist = () => {
     if (!settingsStore) return;
     try {
@@ -60,6 +83,9 @@ export function createPanelSettings({
     }
   };
 
+  /**
+   * @returns {void}
+   */
   const notify = () => {
     const snapshot = clone(settings);
     listeners.forEach((listener) => {
@@ -74,9 +100,16 @@ export function createPanelSettings({
   return {
     STORAGE_KEY: PANEL_SETTINGS_STORAGE_KEY,
     defaults: clone(DEFAULTS),
+    /**
+     * @returns {PanelSettingsValue}
+     */
     get() {
       return clone(settings);
     },
+    /**
+     * @param {Partial<PanelSettingsValue>} patch
+     * @returns {PanelSettingsValue}
+     */
     update(patch) {
       if (!patch || typeof patch !== 'object') return clone(settings);
       const nextSettings = deepMerge(settings, patch);
@@ -88,6 +121,9 @@ export function createPanelSettings({
       notify();
       return clone(settings);
     },
+    /**
+     * @returns {PanelSettingsValue}
+     */
     reset() {
       const before = JSON.stringify(settings);
       const defaultsString = JSON.stringify(DEFAULTS);
@@ -100,6 +136,10 @@ export function createPanelSettings({
       notify();
       return clone(settings);
     },
+    /**
+     * @param {(value: PanelSettingsValue) => void} listener
+     * @returns {() => void}
+     */
     onChange(listener) {
       if (typeof listener !== 'function') return () => {};
       listeners.add(listener);

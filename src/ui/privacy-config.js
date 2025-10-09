@@ -1,5 +1,32 @@
 import { ensureDesignSystemStyles } from './styles.js';
 
+/**
+ * @typedef {import('../types').ModalController} ModalController
+ */
+
+/**
+ * @typedef {object} PrivacyConfiguratorOptions
+ * @property {{ blacklist?: string[]; whitelist?: string[] }} privacyConfig
+ * @property {(type: string, values: string[]) => void} setCustomList
+ * @property {(value: string) => string[]} parseListInput
+ * @property {(message: string, tone?: string | null) => void} setPanelStatus
+ * @property {ModalController} modal
+ * @property {(() => boolean) | boolean} [isModernUIActive]
+ * @property {Document | null} [documentRef]
+ * @property {Window | null} [windowRef]
+ */
+
+/**
+ * @typedef {object} PrivacyConfigurator
+ * @property {() => Promise<void> | void} configurePrivacyLists
+ */
+
+/**
+ * Creates privacy list configuration helpers for modal or legacy prompts.
+ *
+ * @param {PrivacyConfiguratorOptions} [options]
+ * @returns {PrivacyConfigurator}
+ */
 export function createPrivacyConfigurator({
   privacyConfig,
   setCustomList,
@@ -20,9 +47,16 @@ export function createPrivacyConfigurator({
   const doc = documentRef;
   const win = windowRef;
 
+  /**
+   * @returns {boolean}
+   */
   const resolveModernActive = () =>
     typeof isModernUIActive === 'function' ? isModernUIActive() : Boolean(isModernUIActive);
 
+  /**
+   * Launches the design-system modal for editing privacy lists.
+   * @returns {Promise<void>}
+   */
   const configurePrivacyListsModern = async () => {
     ensureDesignSystemStyles(doc);
 
@@ -95,6 +129,10 @@ export function createPrivacyConfigurator({
     setPanelStatus('프라이버시 사용자 목록을 저장했습니다.', 'success');
   };
 
+  /**
+   * Prompts using classic dialogs to update privacy lists.
+   * @returns {void}
+   */
   const configurePrivacyListsLegacy = () => {
     const currentBlack = privacyConfig.blacklist?.join('\n') || '';
     const nextBlack = win?.prompt
@@ -120,12 +158,20 @@ export function createPrivacyConfigurator({
     setPanelStatus('프라이버시 사용자 목록을 저장했습니다.', 'info');
   };
 
+  /**
+   * Opens either the modern modal or legacy prompt workflow.
+   * @returns {Promise<void> | void}
+   */
   const configurePrivacyLists = async () => {
     if (resolveModernActive()) return configurePrivacyListsModern();
     return configurePrivacyListsLegacy();
   };
 
   return {
+    /**
+     * Opens the privacy configuration workflow using the active UI mode.
+     * @returns {Promise<void> | void}
+     */
     configurePrivacyLists,
   };
 }

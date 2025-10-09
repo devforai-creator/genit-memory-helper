@@ -1,5 +1,21 @@
 /**
+ * @typedef {object} GuideControlsOptions
+ * @property {() => void} [reparse]
+ * @property {() => Promise<void> | void} copySummaryGuide
+ * @property {() => Promise<void> | void} copyResummaryGuide
+ * @property {Console | { warn?: (...args: unknown[]) => void } | null} [logger]
+ */
+
+/**
+ * @typedef {object} GuideControls
+ * @property {(panel: Element | null) => void} bindGuideControls
+ */
+
+/**
  * Wires panel guide buttons to share workflow helpers.
+ *
+ * @param {GuideControlsOptions} [options]
+ * @returns {GuideControls}
  */
 export function createGuideControls({
   reparse,
@@ -11,6 +27,11 @@ export function createGuideControls({
     throw new Error('createGuideControls requires summary and resummary copy functions');
   }
 
+  /**
+   * Registers click handlers on the guide controls rendered in the panel.
+   * @param {Element | null} panel
+   * @returns {void}
+   */
   const bindGuideControls = (panel) => {
     if (!panel || typeof panel.querySelector !== 'function') {
       if (logger?.warn) {
