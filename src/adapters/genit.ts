@@ -1,5 +1,5 @@
-import { adapterRegistry, getAdapterConfig } from './registry.js';
-import { clone } from '../core/utils.ts';
+import { adapterRegistry, getAdapterConfig } from './registry';
+import { clone } from '../core/utils';
 import {
   normNL,
   stripTicks,
@@ -8,53 +8,75 @@ import {
   stripBrackets,
   sanitizeText,
   parseListInput,
-} from '../utils/text.ts';
-import { isScrollable } from '../utils/dom.ts';
-import { looksLikeName } from '../utils/validation.ts';
+} from '../utils/text';
+import { isScrollable } from '../utils/dom';
+import { looksLikeName } from '../utils/validation';
 
-/**
- * @typedef {import('../types').AdapterConfig} AdapterConfig
- * @typedef {import('../types').AdapterRegistry} AdapterRegistry
- * @typedef {import('../types').AdapterSelectors} AdapterSelectors
- * @typedef {import('../types').GenitAdapter} GenitAdapter
- * @typedef {import('../types').GenitAdapterOptions} GenitAdapterOptions
- * @typedef {import('../types').StructuredSnapshotMessage} StructuredSnapshotMessage
- * @typedef {import('../types').StructuredSnapshotMessagePart} StructuredSnapshotMessagePart
- * @typedef {import('../types').StructuredCollector} StructuredCollector
- * @typedef {import('../types').StructuredCollectorMeta} StructuredCollectorMeta
- * @typedef {import('../types').ErrorHandler} ErrorHandler
- */
+import type {
+  AdapterConfig,
+  AdapterRegistry,
+  AdapterSelectors,
+  GenitAdapter,
+  GenitAdapterOptions,
+  StructuredSnapshotMessage,
+  StructuredSnapshotMessagePart,
+  StructuredCollector,
+  StructuredCollectorMeta,
+  ErrorHandler,
+  AdapterMatchLocation,
+} from '../types';
 
-/** @typedef {string[] | null | undefined} SelectorList */
-/** @typedef {{ role?: string; content?: string }} AdapterReactMessage */
-/** @typedef {'player' | 'npc' | 'narration' | 'unknown'} GenitRole */
+type SelectorList = string[] | null | undefined;
+
+interface AdapterReactMessage {
+  role?: string;
+  content?: string;
+}
+
+type GenitRole = 'player' | 'npc' | 'narration' | 'unknown';
+
+interface CollectorEntry {
+  part: StructuredSnapshotMessagePart;
+  orderPath: number[];
+  fallback: number;
+}
+
+interface NarrationTarget {
+  node: Element;
+  loose: boolean;
+}
+
+interface StructuredContext {
+  flavor?: string;
+  role?: string;
+  speaker?: string;
+  legacyFormat?: string;
+  [key: string]: unknown;
+}
+
+interface StructuredPartOptions {
+  type?: string;
+  flavor?: string;
+  role?: string;
+  speaker?: string;
+  lines?: string[];
+  legacyLines?: string[];
+  legacyFormat?: string;
+}
 
 const DEFAULT_PLAYER_MARK = '⟦PLAYER⟧ ';
 
-/**
- * Builds the primary adapter used to interpret genit.ai DOM transcripts.
- * @param {GenitAdapterOptions} [options] - Optional adapter overrides.
- * @returns {GenitAdapter}
- */
 export const createGenitAdapter = ({
   registry = adapterRegistry,
   playerMark = DEFAULT_PLAYER_MARK,
   getPlayerNames = () => [],
   isPrologueBlock = () => false,
   errorHandler,
-} = {}) => {
-  /** @type {WeakSet<Node>} */
-  let infoNodeRegistry = new WeakSet();
-  /** @type {() => string[]} */
-  let playerNameAccessor = typeof getPlayerNames === 'function' ? getPlayerNames : () => [];
+}: GenitAdapterOptions = {}): GenitAdapter => {
+  let infoNodeRegistry = new WeakSet<Node>();
+  let playerNameAccessor: () => unknown = typeof getPlayerNames === 'function' ? getPlayerNames : () => [];
 
-  /**
-   * Emits adapter warnings through the shared error handler.
-   * @param {unknown} err - Error or payload to log.
-   * @param {string} context - Context label for the error handler.
-   * @param {string} fallbackMessage - Console message when no handler exists.
-   */
-  const warnWithHandler = (err, context, fallbackMessage) => {
+  const warnWithHandler = (err: unknown, context: string, fallbackMessage: string): void => {
     if (errorHandler?.handle) {
       const level = errorHandler.LEVELS?.WARN || 'warn';
       errorHandler.handle(err, context, level);
@@ -63,40 +85,30 @@ export const createGenitAdapter = ({
     }
   };
 
-  /**
-   * Resolves player names from the injected accessor.
-   * @returns {string[]}
-   */
-  const resolvePlayerNames = () => {
+  const resolvePlayerNames = (): string[] => {
     const names = playerNameAccessor();
-    return Array.isArray(names) ? names : [];
+    if (Array.isArray(names)) {
+      return names.filter((name): name is string => typeof name === 'string');
+    }
+    return [];
   };
 
-  /**
-   * Retrieves the primary (first) player name.
-   * @returns {string}
-   */
-  const primaryPlayerName = () => resolvePlayerNames()[0] || '플레이어';
+  const primaryPlayerName = (): string => resolvePlayerNames()[0] || '플레이어';
 
-  /** @type {(name: string) => AdapterConfig} */
-  const registryGet = registry?.get ? registry.get.bind(registry) : getAdapterConfig;
+  const registryGet: (name: string) => AdapterConfig =
+    registry && typeof registry.get === 'function'
+      ? (name: string) => registry.get(name)
+      : getAdapterConfig;
   const adapterConfig = registryGet('genit');
-  /** @type {AdapterSelectors} */
-  const selectors = adapterConfig.selectors || {};
+  const selectors: AdapterSelectors = adapterConfig.selectors || {};
 
   const playerScopeSelector = (selectors.playerScopes || []).filter(Boolean).join(',');
   const npcScopeSelector = (selectors.npcGroups || []).filter(Boolean).join(',');
   const isPrologueBlockFn = typeof isPrologueBlock === 'function' ? isPrologueBlock : () => false;
 
-  /**
-   * Collects DOM nodes that match any selector in the provided list.
-   * @param {SelectorList} selList - Selector tokens from adapter config.
-   * @param {Document | Element} [root=document] - Search root.
-   * @returns {Element[]}
-   */
-  const collectAll = (selList, root = document) => {
-    const out = [];
-    const seen = new Set();
+  const collectAll = (selList: SelectorList, root: Document | Element = document): Element[] => {
+    const out: Element[] = [];
+    const seen = new Set<Element>();
     if (!selList?.length) return out;
     for (const sel of selList) {
       if (!sel) continue;
@@ -104,7 +116,7 @@ export const createGenitAdapter = ({
         seen.add(root);
         out.push(root);
       }
-      let nodes;
+      let nodes: NodeListOf<Element> | undefined;
       try {
         nodes = root.querySelectorAll(sel);
       } catch (e) {
@@ -119,13 +131,7 @@ export const createGenitAdapter = ({
     return out;
   };
 
-  /**
-   * Finds the first DOM node matching the provided selectors.
-   * @param {SelectorList} selList - Selector tokens.
-   * @param {Document | Element} [root=document] - Search root.
-   * @returns {Element | null}
-   */
-  const firstMatch = (selList, root = document) => {
+  const firstMatch = (selList: SelectorList, root: Document | Element = document): Element | null => {
     if (!selList?.length) return null;
     for (const sel of selList) {
       if (!sel) continue;
@@ -139,13 +145,7 @@ export const createGenitAdapter = ({
     return null;
   };
 
-  /**
-   * Checks if a node matches at least one selector.
-   * @param {Element | null} node - Target element.
-   * @param {SelectorList} selList - Selector tokens.
-   * @returns {boolean}
-   */
-  const matchesSelectorList = (node, selList) => {
+  const matchesSelectorList = (node: Element | null | undefined, selList: SelectorList): boolean => {
     if (!(node instanceof Element)) return false;
     if (!selList?.length) return false;
     return selList.some((sel) => {
@@ -158,13 +158,7 @@ export const createGenitAdapter = ({
     });
   };
 
-  /**
-   * Resolves the nearest ancestor matching one of the selectors.
-   * @param {Element | null} node - Starting element.
-   * @param {SelectorList} selList - Selector tokens.
-   * @returns {Element | null}
-   */
-  const closestMatchInList = (node, selList) => {
+  const closestMatchInList = (node: Element | null | undefined, selList: SelectorList): Element | null => {
     if (!(node instanceof Element)) return null;
     if (!selList?.length) return null;
     for (const sel of selList) {
@@ -179,13 +173,7 @@ export const createGenitAdapter = ({
     return null;
   };
 
-  /**
-   * Determines whether the root contains any match for provided selectors.
-   * @param {Element | null} root - Root element.
-   * @param {SelectorList} selList - Selector tokens.
-   * @returns {boolean}
-   */
-  const containsSelector = (root, selList) => {
+  const containsSelector = (root: Element | null | undefined, selList: SelectorList): boolean => {
     if (!(root instanceof Element)) return false;
     if (!selList?.length) return false;
     return selList.some((sel) => {
@@ -198,14 +186,14 @@ export const createGenitAdapter = ({
     });
   };
 
-  /**
-   * Normalizes a node's textual content into trimmed segments.
-   * @param {Element | Node | null} node - DOM node to normalize.
-   * @returns {string[]}
-   */
-  const textSegmentsFromNode = (node) => {
+  const textSegmentsFromNode = (node: Element | Node | null | undefined): string[] => {
     if (!node) return [];
-    const text = node.innerText ?? node.textContent ?? '';
+    let text = '';
+    if (node instanceof HTMLElement) {
+      text = node.innerText ?? node.textContent ?? '';
+    } else if (node instanceof Element || node instanceof Node) {
+      text = node.textContent ?? '';
+    }
     if (!text) return [];
     return text
       .split(/\r?\n+/)
@@ -213,12 +201,7 @@ export const createGenitAdapter = ({
       .filter(Boolean);
   };
 
-  /**
-   * Locates the first scrollable ancestor near the provided node.
-   * @param {Element | null | undefined} node - Starting element.
-   * @returns {Element | null}
-   */
-  const findScrollableAncestor = (node) => {
+  const findScrollableAncestor = (node: Element | null | undefined): Element | null => {
     let current = node instanceof Element ? node : null;
     for (let depth = 0; depth < 6 && current; depth += 1) {
       if (isScrollable(current)) return current;
@@ -227,12 +210,7 @@ export const createGenitAdapter = ({
     return null;
   };
 
-  /**
-   * Attempts to locate a chat container using ARIA role attributes.
-   * @param {Document | Element} [root=document] - Search root.
-   * @returns {Element | null}
-   */
-  const findByRole = (root = document) => {
+  const findByRole = (root: Document | Element = document): Element | null => {
     const roleNodes = collectAll(['[role]'], root);
     return roleNodes.find((node) => {
       const role = node.getAttribute('role') || '';
@@ -240,12 +218,7 @@ export const createGenitAdapter = ({
     });
   };
 
-  /**
-   * Finds containers whose text content hints at a chat transcript.
-   * @param {Document | Element} [root=document] - Root to search.
-   * @returns {Element | null}
-   */
-  const findByTextHint = (root = document) => {
+  const findByTextHint = (root: Document | Element = document): Element | null => {
     const hints = selectors.textHints || [];
     if (!hints.length) return null;
     const nodes = collectAll(['main', 'section', 'article'], root).filter((node) => {
@@ -257,12 +230,7 @@ export const createGenitAdapter = ({
     return nodes.find((node) => isScrollable(node));
   };
 
-  /**
-   * Returns the primary scrollable chat container element.
-   * @param {Document} [doc=document] - Document context.
-   * @returns {Element | null}
-   */
-  const getChatContainer = (doc = document) => {
+  const getChatContainer = (doc: Document = document): Element | null => {
     const direct = firstMatch(selectors.chatContainers, doc);
     if (direct && isScrollable(direct)) return direct;
 
@@ -281,12 +249,7 @@ export const createGenitAdapter = ({
     return null;
   };
 
-  /**
-   * Collects message block elements from the specified container.
-   * @param {Document | Element | null | undefined} root - Root node to search.
-   * @returns {Element[]}
-   */
-  const getMessageBlocks = (root) => {
+  const getMessageBlocks = (root: Document | Element | null | undefined): Element[] => {
     const targetRoot = root || document;
     const blocks = collectAll(selectors.messageRoot, targetRoot);
     if (blocks.length) return blocks;
@@ -297,23 +260,17 @@ export const createGenitAdapter = ({
     return [];
   };
 
-  /**
-   * Extracts React message props from a DOM element via Fiber traversal.
-   * @param {Element} block - The message block element.
-   * @returns {AdapterReactMessage | null} Message object with role/content metadata.
-   */
-  const getReactMessage = (block) => {
+  const getReactMessage = (block: Element | null | undefined): AdapterReactMessage | null => {
     if (!block || typeof block !== 'object') return null;
 
-    // Try common React Fiber property patterns
-    // Use getOwnPropertyNames to catch non-enumerable properties (React Fiber is enumerable: false)
     try {
       const allKeys = Object.getOwnPropertyNames(block);
-      const fiberKeys = allKeys.filter(k => k.startsWith('__reactFiber'));
+      const fiberKeys = allKeys.filter((k) => k.startsWith('__reactFiber'));
       if (!fiberKeys.length) return null;
 
-      let fiber = block[fiberKeys[0]];
-      // Traverse up to 10 levels to find message props
+      const fiberKey = fiberKeys[0];
+      const fiberHost = block as unknown as Record<string, unknown>;
+      let fiber: any = fiberHost[fiberKey];
       for (let depth = 0; depth < 10 && fiber; depth++) {
         const props = fiber.memoizedProps;
         if (props && props.message && typeof props.message === 'object') {
@@ -327,12 +284,7 @@ export const createGenitAdapter = ({
     return null;
   };
 
-  /**
-   * Determines the conversational role for the supplied block node.
-   * @param {Element | null | undefined} block - Message container under test.
-   * @returns {GenitRole}
-   */
-  const detectRole = (block) => {
+  const detectRole = (block: Element | null | undefined): GenitRole => {
     if (!block) return 'unknown';
 
     // Phase 1: Most reliable CSS check - justify-end indicates normal player dialogue
@@ -384,7 +336,7 @@ export const createGenitAdapter = ({
    * @param {Element | null} node - Node under evaluation.
    * @returns {string}
    */
-  const resolvePartType = (node) => {
+  const resolvePartType = (node: Element | null): string => {
     if (!(node instanceof Element)) return 'paragraph';
     const tag = node.tagName?.toLowerCase?.() || '';
     if (!tag) return 'paragraph';
@@ -399,16 +351,12 @@ export const createGenitAdapter = ({
     return 'paragraph';
   };
 
-  /**
-   * Attempts to infer the programming language from code block metadata.
-   * @param {Element | null} node - Code element.
-   * @returns {string | null}
-   */
-  const detectCodeLanguage = (node) => {
+  const detectCodeLanguage = (node: Element | null): string | null => {
     if (!(node instanceof Element)) return null;
     const target =
       node.matches?.('code') && !node.matches('pre code') ? node : node.querySelector?.('code');
-    const classList = (target || node).classList || [];
+    const classSource = target instanceof Element ? target : node;
+    const classList = classSource instanceof Element ? Array.from(classSource.classList) : [];
     for (const cls of classList) {
       if (cls.startsWith('language-')) return cls.slice('language-'.length) || null;
     }
@@ -417,25 +365,14 @@ export const createGenitAdapter = ({
     return null;
   };
 
-  /**
-   * Converts a DOM node into a structured snapshot message part summary.
-   * @param {Element | Node | null} node - DOM segment to normalize.
-   * @param {Record<string, unknown>} [context={}] - Rendering context.
-   * @param {{
-   *   type?: string;
-   *   flavor?: string;
-   *   role?: string;
-   *   speaker?: string;
-   *   lines?: string[];
-   *   legacyLines?: string[];
-   *   legacyFormat?: string;
-   * }} [options={}] - Overrides for the generated part.
-   * @returns {StructuredSnapshotMessagePart}
-   */
-  const buildStructuredPart = (node, context = {}, options = {}) => {
+  const buildStructuredPart = (
+    node: Element | Node | null,
+    context: StructuredContext = {},
+    options: StructuredPartOptions = {},
+  ): StructuredSnapshotMessagePart => {
     const baseLines = Array.isArray(options.lines) ? options.lines.slice() : [];
-    const partType = options.type || resolvePartType(node);
-    const part = {
+    const partType = options.type || resolvePartType(node as Element | null);
+    const part: StructuredSnapshotMessagePart = {
       type: partType,
       flavor: context.flavor || 'speech',
       role: context.role || null,
@@ -447,11 +384,14 @@ export const createGenitAdapter = ({
       part.legacyLines = options.legacyLines.slice();
     }
     if (partType === 'code') {
-      const codeNode =
-        node instanceof Element && node.matches('pre') ? node.querySelector('code') || node : node;
-      const raw = (codeNode?.textContent ?? node?.textContent ?? '').replace(/\r\n/g, '\n');
+      const elementNode = node instanceof Element ? node : null;
+      const codeCandidate =
+        elementNode && elementNode.matches('pre') ? elementNode.querySelector('code') : null;
+      const codeTarget = codeCandidate instanceof Element ? codeCandidate : elementNode;
+      const rawSource = (codeCandidate ?? node) as Node | null;
+      const raw = (rawSource?.textContent ?? '').replace(/\r\n/g, '\n');
       part.text = raw;
-      part.language = detectCodeLanguage(codeNode || node);
+      part.language = detectCodeLanguage(codeTarget ?? null);
       if (!part.lines.length) {
         part.lines = raw
           .split(/\n/)
@@ -468,7 +408,7 @@ export const createGenitAdapter = ({
       if (!part.lines.length) {
         part.lines = items.slice();
       }
-    } else if (partType === 'image') {
+    } else if (partType === 'image' && node instanceof Element) {
       const imgEl =
         node instanceof HTMLImageElement ? node : node.querySelector?.('img') || null;
       if (imgEl) {
@@ -496,15 +436,9 @@ export const createGenitAdapter = ({
     return part;
   };
 
-  /**
-   * Produces a positional path array for a node for ordering heuristics.
-   * @param {Node | null} node - Target node.
-   * @param {Node | null} root - Root boundary for traversal.
-   * @returns {number[] | null}
-   */
-  const getOrderPath = (node, root) => {
+  const getOrderPath = (node: Node | null, root: Node | null): number[] | null => {
     if (!(node instanceof Node) || !(root instanceof Node)) return null;
-    const path = [];
+    const path: number[] = [];
     let current = node;
     let guard = 0;
     while (current && current !== root && guard < 200) {
@@ -526,7 +460,7 @@ export const createGenitAdapter = ({
    * @param {number[]} b
    * @returns {number}
    */
-  const compareOrderPaths = (a, b) => {
+  const compareOrderPaths = (a: number[], b: number[]): number => {
     const len = Math.max(a.length, b.length);
     for (let i = 0; i < len; i += 1) {
       const valA = Number.isFinite(a[i]) ? a[i] : -1;
@@ -542,14 +476,18 @@ export const createGenitAdapter = ({
    * @param {{ rootNode?: Node | null }} [context={}] - Context for ordering.
    * @returns {StructuredCollector}
    */
-  const createStructuredCollector = (defaults = {}, context = {}) => {
-    const parts = [];
+  const createStructuredCollector = (
+    defaults: { playerName?: string } = {},
+    context: { rootNode?: Node | null } = {},
+  ): StructuredCollector => {
+    const parts: CollectorEntry[] = [];
     const snapshotDefaults = {
       playerName: defaults.playerName || '플레이어',
     };
-    const infoLineSet = new Set();
-    const normalizeLine = (line) => (typeof line === 'string' ? line.trim() : '');
-    const filterInfoLines = (lines = []) =>
+    const infoLineSet = new Set<string>();
+    const normalizeLine = (line: unknown): string =>
+      typeof line === 'string' ? line.trim() : '';
+    const filterInfoLines = (lines: string[] = []) =>
       lines
         .map((line) => normalizeLine(line))
         .filter((line) => line.length)
@@ -557,9 +495,9 @@ export const createGenitAdapter = ({
     const rootNode = context?.rootNode instanceof Node ? context.rootNode : null;
     let fallbackCounter = 0;
     return {
-      push(part, meta = {}) {
+      push(part, meta: StructuredCollectorMeta = {}) {
         if (!part) return;
-        const next = { ...part };
+        const next: StructuredSnapshotMessagePart = { ...part };
         if (!Array.isArray(next.lines)) next.lines = [];
         if (!next.role && next.flavor === 'speech') next.role = 'unknown';
         if (!next.speaker && next.role === 'player') next.speaker = snapshotDefaults.playerName;
@@ -610,10 +548,10 @@ export const createGenitAdapter = ({
    * Memoizes info nodes to prevent duplicate narration emission.
    * @param {Node | null | undefined} node - Entry node for the info subtree.
    */
-  const markInfoNodeTree = (node) => {
+  const markInfoNodeTree = (node: Node | null | undefined): void => {
     if (!node) return;
     try {
-      const markSubtree = (element) => {
+      const markSubtree = (element: Node | null | undefined) => {
         if (!element) return;
         infoNodeRegistry.add(element);
         if (element instanceof Element) {
@@ -638,25 +576,23 @@ export const createGenitAdapter = ({
    * @param {Node | null | undefined} node - Node to test.
    * @returns {boolean}
    */
-  const isInfoRelatedNode = (node) => {
+  const isInfoRelatedNode = (node: Node | null | undefined): boolean => {
     if (!node) return false;
     if (infoNodeRegistry.has(node)) return true;
-    if (closestMatchInList(node, selectors.infoCode)) return true;
+    if (node instanceof Element && closestMatchInList(node, selectors.infoCode)) return true;
     return false;
   };
 
-  /**
-   * Emits special INFO lines from the current block.
-   * @param {Element} block - Message block wrapper.
-   * @param {(line: string) => void} pushLine - Accumulator for transcript text.
-   * @param {StructuredCollector | null} [collector=null] - Structured collector sink.
-   */
-  const emitInfo = (block, pushLine, collector = null) => {
+  const emitInfo = (
+    block: Element,
+    pushLine: (line: string) => void,
+    collector: StructuredCollector | null = null,
+  ): void => {
     const infoNode = firstMatch(selectors.infoCode, block);
     if (!infoNode) return;
 
-    const infoLinesOut = [];
-    const infoSeen = new Set();
+    const infoLinesOut: string[] = [];
+    const infoSeen = new Set<string>();
 
     pushLine('INFO');
 
@@ -673,30 +609,29 @@ export const createGenitAdapter = ({
     markInfoNodeTree(infoNode);
     if (collector) {
       const infoCardWrapper =
-        infoNode instanceof Element
-          ? infoNode.closest('.bg-card, .info-card, .info-block') ||
-            infoNode.closest('pre') ||
-            infoNode
-          : infoNode.parentElement || block;
-      collector.push({
-        type: 'info',
-        flavor: 'meta',
-        role: 'system',
-        speaker: 'INFO',
-        lines: infoLinesOut,
-        legacyLines: ['INFO', ...infoLinesOut],
-        legacyFormat: 'meta',
-      }, { node: infoCardWrapper });
+        infoNode.closest('.bg-card, .info-card, .info-block') ||
+        infoNode.closest('pre') ||
+        infoNode;
+      collector.push(
+        {
+          type: 'info',
+          flavor: 'meta',
+          role: 'system',
+          speaker: 'INFO',
+          lines: infoLinesOut,
+          legacyLines: ['INFO', ...infoLinesOut],
+          legacyFormat: 'meta',
+        },
+        { node: infoCardWrapper },
+      );
     }
   };
 
-  /**
-   * Emits transcript and structured parts for detected player turns.
-   * @param {Element} block - Message block wrapper.
-   * @param {(line: string) => void} pushLine - Transcript accumulator callback.
-   * @param {StructuredCollector | null} [collector=null] - Structured collector sink.
-   */
-  const emitPlayerLines = (block, pushLine, collector = null) => {
+  const emitPlayerLines = (
+    block: Element,
+    pushLine: (line: string) => void,
+    collector: StructuredCollector | null = null,
+  ): void => {
     const blockRole = block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
     if (blockRole !== 'player') return;
     const scopes = collectAll(selectors.playerScopes, block);
@@ -710,8 +645,8 @@ export const createGenitAdapter = ({
       const rootIndex = scopeList.indexOf(block);
       if (rootIndex >= 0) scopeList.splice(rootIndex, 1);
     }
-    const textNodes = [];
-    const nodeSeen = new Set();
+    const textNodes: Element[] = [];
+    const nodeSeen = new Set<Element>();
     for (const scope of scopeList) {
       collectAll(selectors.playerText, scope).forEach((node) => {
         if (!nodeSeen.has(node)) {
@@ -741,10 +676,10 @@ export const createGenitAdapter = ({
       return true;
     });
     const effectiveTargets = filteredTargets.length ? filteredTargets : targets;
-    const seenSegments = new Set();
+    const seenSegments = new Set<string>();
     effectiveTargets.forEach((node) => {
       if (isInfoRelatedNode(node)) return;
-      const partLines = [];
+      const partLines: string[] = [];
       textSegmentsFromNode(node).forEach((seg) => {
         if (!seg) return;
         if (seenSegments.has(seg)) return;
@@ -754,15 +689,19 @@ export const createGenitAdapter = ({
       });
       if (collector && partLines.length) {
         const playerName = collector.defaults?.playerName || '플레이어';
-        const part = buildStructuredPart(node, {
-          flavor: 'speech',
-          role: 'player',
-          speaker: playerName,
-          legacyFormat: 'player',
-        }, {
-          lines: partLines,
-          legacyFormat: 'player',
-        });
+        const part = buildStructuredPart(
+          node,
+          {
+            flavor: 'speech',
+            role: 'player',
+            speaker: playerName,
+            legacyFormat: 'player',
+          },
+          {
+            lines: partLines,
+            legacyFormat: 'player',
+          },
+        );
         collector.push(part, { node });
       }
     });
@@ -780,13 +719,11 @@ export const createGenitAdapter = ({
     return stripQuotes(collapseSpaces(name || '')).slice(0, 40);
   };
 
-  /**
-   * Emits transcript lines for NPC/dialogue bubbles.
-   * @param {Element} block - Message block wrapper.
-   * @param {(line: string) => void} pushLine - Transcript accumulator callback.
-   * @param {StructuredCollector | null} [collector=null] - Structured collector sink.
-   */
-  const emitNpcLines = (block, pushLine, collector = null) => {
+  const emitNpcLines = (
+    block: Element,
+    pushLine: (line: string) => void,
+    collector: StructuredCollector | null = null,
+  ): void => {
     const blockRole = block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
     if (blockRole !== 'npc') return;
     const groups = collectAll(selectors.npcGroups, block);
@@ -799,7 +736,7 @@ export const createGenitAdapter = ({
       const targets = bubbleNodes.length ? bubbleNodes : [group];
       targets.forEach((node) => {
         if (isInfoRelatedNode(node)) return;
-        const partLines = [];
+        const partLines: string[] = [];
         textSegmentsFromNode(node).forEach((seg) => {
           if (!seg) return;
           if (seg && seg === name) return;
@@ -807,44 +744,46 @@ export const createGenitAdapter = ({
           partLines.push(seg);
         });
         if (collector && partLines.length) {
-          const part = buildStructuredPart(node, {
-            flavor: 'speech',
-            role: 'npc',
-            speaker: name,
-            legacyFormat: 'npc',
-          }, {
-            lines: partLines,
-            legacyFormat: 'npc',
-          });
+          const part = buildStructuredPart(
+            node,
+            {
+              flavor: 'speech',
+              role: 'npc',
+              speaker: name,
+              legacyFormat: 'npc',
+            },
+            {
+              lines: partLines,
+              legacyFormat: 'npc',
+            },
+          );
           collector.push(part, { node });
         }
       });
     });
   };
 
-  /**
-   * Emits narration/description transcript lines from a block.
-   * @param {Element} block - Message block wrapper.
-   * @param {(line: string) => void} pushLine - Transcript accumulator callback.
-   * @param {StructuredCollector | null} [collector=null] - Structured collector sink.
-   */
-  const emitNarrationLines = (block, pushLine, collector = null) => {
+  const emitNarrationLines = (
+    block: Element,
+    pushLine: (line: string) => void,
+    collector: StructuredCollector | null = null,
+  ): void => {
     const blockRole = block?.getAttribute?.('data-gmh-message-role') || detectRole(block);
 
     if (blockRole === 'player') {
       return;
     }
 
-    const targets = [];
-    const seenNodes = new Set();
-    const queueNode = (node, loose = false) => {
-      if (!node || seenNodes.has(node)) return;
+    const targets: NarrationTarget[] = [];
+    const seenNodes = new Set<Element>();
+    const queueNode = (node: Element | null | undefined, loose = false) => {
+      if (!(node instanceof Element) || seenNodes.has(node)) return;
       seenNodes.add(node);
       targets.push({ node, loose });
     };
 
     const collected = collectAll(selectors.narrationBlocks, block);
-    collected.forEach((node, i) => {
+    collected.forEach((node) => {
       queueNode(node, false);
     });
 
@@ -855,7 +794,7 @@ export const createGenitAdapter = ({
         .filter(Boolean)
         .map((name) => name.trim()),
     );
-    const shouldSkipNarrationLine = (text, element) => {
+    const shouldSkipNarrationLine = (text: string, element?: Element | null) => {
       const clean = text.trim();
       if (!clean) return true;
       if (/^INFO$/i.test(clean)) return true;
@@ -927,10 +866,7 @@ export const createGenitAdapter = ({
       return;
     }
 
-
     targets.forEach(({ node, loose }) => {
-      const nodePreview = node.textContent?.substring(0, 30);
-
       if (npcScopeSelector) {
         const npcContainer = node.closest(npcScopeSelector);
         if (npcContainer) {
@@ -951,63 +887,54 @@ export const createGenitAdapter = ({
       if (isInfoRelatedNode(node)) {
         return;
       }
-        const partLines = [];
-        const segments = textSegmentsFromNode(node);
-        segments.forEach((seg) => {
-          if (!seg) return;
-          const clean = seg.trim();
-          if (!clean) return;
-          if (!loose && shouldSkipNarrationLine(clean, node)) {
-            return;
-          }
-          pushLine(clean);
-          partLines.push(clean);
-        });
+      const partLines: string[] = [];
+      const segments = textSegmentsFromNode(node);
+      segments.forEach((seg) => {
+        if (!seg) return;
+        const clean = seg.trim();
+        if (!clean) return;
+        if (!loose && shouldSkipNarrationLine(clean, node)) {
+          return;
+        }
+        pushLine(clean);
+        partLines.push(clean);
+      });
       if (collector && partLines.length) {
-        const part = buildStructuredPart(node, {
-          flavor: 'narration',
-          role: 'narration',
-          speaker: '내레이션',
-          legacyFormat: 'plain',
-        }, {
-          lines: partLines,
-          legacyFormat: 'plain',
-        });
+        const part = buildStructuredPart(
+          node,
+          {
+            flavor: 'narration',
+            role: 'narration',
+            speaker: '내레이션',
+            legacyFormat: 'plain',
+          },
+          {
+            lines: partLines,
+            legacyFormat: 'plain',
+          },
+        );
         collector.push(part, { node });
       }
     });
   };
 
-  /**
-   * Emits all transcript flavors (info, player, npc, narration) for a block.
-   * @param {Element} block - Message block wrapper.
-   * @param {(line: string) => void} pushLine - Transcript accumulator callback.
-   * @param {StructuredCollector | null} [collector=null] - Structured collector sink.
-   */
-  const emitTranscriptLines = (block, pushLine, collector = null) => {
+  const emitTranscriptLines = (
+    block: Element,
+    pushLine: (line: string) => void,
+    collector: StructuredCollector | null = null,
+  ): void => {
     emitInfo(block, pushLine, collector);
     emitPlayerLines(block, pushLine, collector);
     emitNpcLines(block, pushLine, collector);
     emitNarrationLines(block, pushLine, collector);
   };
 
-  /**
-   * Generates a structured snapshot entry for a message block.
-   * @param {Element} block - Message block wrapper.
-   * @returns {StructuredSnapshotMessage | null}
-   */
-  const collectStructuredMessage = (block) => {
+  const collectStructuredMessage = (block: Element): StructuredSnapshotMessage | null => {
     if (!block) return null;
     const playerGuess = guessPlayerNames()[0] || '플레이어';
-    /** @type {StructuredCollector} */
     const collector = createStructuredCollector({ playerName: playerGuess }, { rootNode: block });
-    /** @type {string[]} */
-    const localLines = [];
-    /**
-     * Adds a normalized transcript line to the local cache.
-     * @param {string} line
-     */
-    const pushLine = (line) => {
+    const localLines: string[] = [];
+    const pushLine = (line: string) => {
       const trimmed = (line || '').trim();
       if (!trimmed) return;
       localLines.push(trimmed);
@@ -1039,8 +966,7 @@ export const createGenitAdapter = ({
         : role === 'npc'
         ? 'NPC'
         : null);
-    /** @type {StructuredSnapshotMessage} */
-    const message = {
+    const message: StructuredSnapshotMessage = {
       id: idAttr,
       index: Number.isFinite(indexAttr) ? indexAttr : null,
       ordinal: Number.isFinite(ordinalAttr) ? ordinalAttr : null,
@@ -1062,12 +988,8 @@ export const createGenitAdapter = ({
     return message;
   };
 
-  /**
-   * Attempts to detect player display names from DOM hints.
-   * @returns {string[]}
-   */
-  const guessPlayerNames = () => {
-    const results = new Set();
+  const guessPlayerNames = (): string[] => {
+    const results = new Set<string>();
     collectAll(selectors.playerNameHints).forEach((node) => {
       const text = node?.textContent?.trim();
       if (text) results.add(stripQuotes(text));
@@ -1089,25 +1011,14 @@ export const createGenitAdapter = ({
       .filter((name) => name && /^[\w가-힣][\w가-힣 _.-]{1,20}$/.test(name));
   };
 
-  /**
-   * Resolves the anchor element used to mount the GMH panel.
-   * @param {Document} [doc=document] - Document context.
-   * @returns {Element | null}
-   */
-  const getPanelAnchor = (doc = document) => {
+  const getPanelAnchor = (doc: Document = document): Element | null => {
     const anchor = firstMatch(selectors.panelAnchor, doc);
     return anchor || doc.body;
   };
 
-  /**
-   * Tests whether the adapter applies to the provided location.
-   * @param {Location | import('../types').AdapterMatchLocation} loc - Page location metadata.
-   * @returns {boolean}
-   */
-  const match = (loc) => /genit\.ai/i.test(loc.hostname);
+  const match = (loc: Location | AdapterMatchLocation): boolean => /genit\.ai/i.test(loc.hostname ?? '');
 
-  /** @type {GenitAdapter} */
-  const genitAdapter = {
+  const genitAdapter: GenitAdapter = {
     id: 'genit',
     label: 'Genit',
     match,

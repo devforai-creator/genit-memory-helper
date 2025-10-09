@@ -14,7 +14,7 @@ import {
   getAdapterMetadata,
   listAdapterNames,
   createGenitAdapter,
-} from './adapters/index.js';
+} from './adapters/index.ts';
 import {
   PRIVACY_PROFILES,
   DEFAULT_PRIVACY_PROFILE,
