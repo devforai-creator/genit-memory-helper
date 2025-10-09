@@ -24,7 +24,7 @@ import {
   hasMinorSexualContext,
   formatRedactionCounts,
   createPrivacyPipeline,
-} from './privacy/index.js';
+} from './privacy/index.ts';
 import {
   toJSONExport,
   toTXTExport,

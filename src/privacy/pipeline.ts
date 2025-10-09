@@ -1,15 +1,29 @@
-import { DEFAULT_PRIVACY_PROFILE, PRIVACY_PROFILES } from './constants.ts';
+import { DEFAULT_PRIVACY_PROFILE, PRIVACY_PROFILES } from './constants';
+import type {
+  PrivacyPipelineApi,
+  PrivacyPipelineDependencies,
+  PrivacyPipelineResult,
+  StructuredSnapshot,
+  StructuredSnapshotMessage,
+  StructuredSnapshotMessagePart,
+  TranscriptSession,
+  TranscriptTurn,
+} from '../types';
 
-/**
- * @typedef {import('../types').PrivacyPipelineDependencies} PrivacyPipelineDependencies
- * @typedef {import('../types').PrivacyPipelineApi} PrivacyPipelineApi
- * @typedef {import('../types').PrivacyPipelineResult} PrivacyPipelineResult
- */
+type RedactFn = (
+  value: string,
+  profile: string,
+  counts: Record<string, number>,
+  config?: unknown,
+  profiles?: unknown,
+) => string;
 
-const cloneTurns = (turns = []) =>
+type SanitizeCounts = Record<string, number>;
+
+const cloneTurns = (turns: TranscriptTurn[] = []): TranscriptTurn[] =>
   Array.isArray(turns)
     ? turns.map((turn) => {
-        const clone = { ...turn };
+        const clone: TranscriptTurn = { ...turn };
         if (Array.isArray(turn.__gmhEntries)) {
           Object.defineProperty(clone, '__gmhEntries', {
             value: turn.__gmhEntries.slice(),
@@ -30,7 +44,7 @@ const cloneTurns = (turns = []) =>
       })
     : [];
 
-const cloneSession = (session) => {
+const cloneSession = (session?: TranscriptSession | null): TranscriptSession => {
   if (!session) {
     return {
       meta: {},
@@ -48,36 +62,49 @@ const cloneSession = (session) => {
   };
 };
 
-const sanitizeStructuredPart = (part, profileKey, counts, redactText) => {
+const sanitizeStructuredPart = (
+  part: StructuredSnapshotMessagePart | null | undefined,
+  profileKey: string,
+  counts: SanitizeCounts,
+  redactText: RedactFn,
+): StructuredSnapshotMessagePart | null => {
   if (!part || typeof part !== 'object') return null;
-  const sanitized = { ...part };
-  const maybeRedact = (value) =>
+  const sanitized: StructuredSnapshotMessagePart = { ...part };
+  const maybeRedact = (value: unknown): unknown =>
     typeof value === 'string' ? redactText(value, profileKey, counts) : value;
 
-  sanitized.speaker = maybeRedact(sanitized.speaker);
-  if (Array.isArray(part.lines)) sanitized.lines = part.lines.map((line) => maybeRedact(line));
+  sanitized.speaker = maybeRedact(sanitized.speaker) as string | undefined;
+  if (Array.isArray(part.lines)) sanitized.lines = part.lines.map((line) => maybeRedact(line) as string);
   if (Array.isArray(part.legacyLines))
-    sanitized.legacyLines = part.legacyLines.map((line) => maybeRedact(line));
-  if (Array.isArray(part.items)) sanitized.items = part.items.map((item) => maybeRedact(item));
-  sanitized.text = maybeRedact(part.text);
-  sanitized.alt = maybeRedact(part.alt);
-  sanitized.title = maybeRedact(part.title);
+    sanitized.legacyLines = part.legacyLines.map((line) => maybeRedact(line) as string);
+  if (Array.isArray(part.items))
+    sanitized.items = part.items.map((item) => maybeRedact(item)) as StructuredSnapshotMessagePart['items'];
+  sanitized.text = maybeRedact(part.text) as string | undefined;
+  sanitized.alt = maybeRedact(part.alt) as string | undefined;
+  sanitized.title = maybeRedact(part.title) as string | undefined;
 
   return sanitized;
 };
 
-const sanitizeStructuredSnapshot = (snapshot, profileKey, counts, redactText) => {
+const sanitizeStructuredSnapshot = (
+  snapshot: StructuredSnapshot | null | undefined,
+  profileKey: string,
+  counts: SanitizeCounts,
+  redactText: RedactFn,
+): StructuredSnapshot | null => {
   if (!snapshot) return null;
 
   const messages = Array.isArray(snapshot.messages)
     ? snapshot.messages.map((message) => {
-        const sanitizedMessage = { ...message };
+        const sanitizedMessage: StructuredSnapshotMessage = { ...message };
         sanitizedMessage.speaker =
-          typeof message.speaker === 'string' ? redactText(message.speaker, profileKey, counts) : message.speaker;
+          typeof message.speaker === 'string'
+            ? redactText(message.speaker, profileKey, counts)
+            : message.speaker;
         sanitizedMessage.parts = Array.isArray(message.parts)
           ? message.parts
               .map((part) => sanitizeStructuredPart(part, profileKey, counts, redactText))
-              .filter(Boolean)
+              .filter((part): part is StructuredSnapshotMessagePart => Boolean(part))
           : [];
         if (Array.isArray(message.legacyLines) && message.legacyLines.length) {
           Object.defineProperty(sanitizedMessage, 'legacyLines', {
@@ -106,12 +133,6 @@ const sanitizeStructuredSnapshot = (snapshot, profileKey, counts, redactText) =>
   };
 };
 
-/**
- * Builds the privacy pipeline that redacts content according to active profile policies.
- *
- * @param {PrivacyPipelineDependencies} [options]
- * @returns {PrivacyPipelineApi}
- */
 export const createPrivacyPipeline = ({
   profiles = PRIVACY_PROFILES,
   getConfig,
@@ -120,33 +141,30 @@ export const createPrivacyPipeline = ({
   getPlayerNames = () => [],
   logger = null,
   storage = null,
-} = /** @type {PrivacyPipelineDependencies} */ ({})) => {
+}: PrivacyPipelineDependencies): PrivacyPipelineApi => {
   if (typeof redactText !== 'function') {
     throw new Error('createPrivacyPipeline: redactText function is required');
   }
 
-  const getProfileKey = (profileKey) => (profiles[profileKey] ? profileKey : DEFAULT_PRIVACY_PROFILE);
+  const getProfileKey = (profileKey: string): string =>
+    profiles && profiles[profileKey] ? profileKey : DEFAULT_PRIVACY_PROFILE;
 
-  /**
-   * Applies sanitization to both raw strings and structured snapshots.
-   *
-   * @param {import('../types').TranscriptSession} session
-   * @param {string} rawText
-   * @param {string} profileKey
-   * @param {import('../types').StructuredSnapshot | null} [structuredSnapshot]
-   * @returns {PrivacyPipelineResult}
-   */
-  const applyPrivacyPipeline = (session, rawText, profileKey, structuredSnapshot = null) => {
+  const applyPrivacyPipeline = (
+    session: TranscriptSession,
+    rawText: string,
+    profileKey: string,
+    structuredSnapshot: StructuredSnapshot | null = null,
+  ): PrivacyPipelineResult => {
     const activeProfile = getProfileKey(profileKey);
-    const counts = /** @type {Record<string, number>} */ ({});
+    const counts: SanitizeCounts = {};
     const config = typeof getConfig === 'function' ? getConfig() : undefined;
 
-    const boundRedact = (value, targetProfile, targetCounts) =>
+    const boundRedact: RedactFn = (value, targetProfile, targetCounts) =>
       redactText(value, targetProfile, targetCounts, config, profiles);
 
     const sanitizedSession = cloneSession(session);
     sanitizedSession.turns = sanitizedSession.turns.map((turn) => {
-      const next = { ...turn };
+      const next: TranscriptTurn = { ...turn };
       next.text = boundRedact(turn.text, activeProfile, counts);
       if (next.speaker) next.speaker = boundRedact(next.speaker, activeProfile, counts);
       if (Array.isArray(turn.__gmhEntries)) {
@@ -168,7 +186,7 @@ export const createPrivacyPipeline = ({
       return next;
     });
 
-    const sanitizedMeta = {};
+    const sanitizedMeta: Record<string, unknown> = {};
     Object.entries(sanitizedSession.meta || {}).forEach(([key, value]) => {
       if (typeof value === 'string') {
         sanitizedMeta[key] = boundRedact(value, activeProfile, counts);
@@ -198,10 +216,15 @@ export const createPrivacyPipeline = ({
       boundRedact,
     );
 
-    const totalRedactions = Object.values(counts).reduce((sum, value) => sum + (value || 0), 0);
-    const blocked = typeof hasMinorSexualContext === 'function' ? hasMinorSexualContext(rawText) : false;
+    const totalRedactions = Object.values(counts).reduce(
+      (sum, value) => sum + (value || 0),
+      0,
+    );
+    const blocked =
+      typeof hasMinorSexualContext === 'function' ? hasMinorSexualContext(rawText) : false;
 
-    const debugEnabled = typeof storage?.getItem === 'function' && storage.getItem('gmh_debug_blocking');
+    const debugEnabled =
+      typeof storage?.getItem === 'function' && storage.getItem('gmh_debug_blocking');
     if (logger?.log && (blocked || debugEnabled)) {
       const textLength = typeof rawText === 'string' ? rawText.length : String(rawText ?? '').length;
       logger.log('[GMH Privacy] Blocking decision:', {

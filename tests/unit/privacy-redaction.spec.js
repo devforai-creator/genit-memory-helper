@@ -4,7 +4,7 @@ import {
   hasMinorSexualContext,
   formatRedactionCounts,
   PRIVACY_PROFILES,
-} from '../../src/privacy/index.js';
+} from '../../src/privacy/index.ts';
 
 const createConfig = (overrides = {}) => ({
   blacklist: [],

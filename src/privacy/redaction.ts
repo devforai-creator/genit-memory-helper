@@ -1,5 +1,32 @@
-import { PRIVACY_PROFILES, DEFAULT_PRIVACY_PROFILE } from './constants.ts';
-import { luhnValid } from '../utils/validation.ts';
+import { PRIVACY_PROFILES, DEFAULT_PRIVACY_PROFILE } from './constants';
+import { luhnValid } from '../utils/validation';
+
+type PrivacyProfile = {
+  key: string;
+  maskAddressHints?: boolean;
+  maskNarrativeSensitive?: boolean;
+  [key: string]: unknown;
+};
+
+type PrivacyProfiles = Record<string, PrivacyProfile>;
+
+type RedactionMask = string | ((match: string) => string);
+
+export type RedactionRule = {
+  name: string;
+  rx: RegExp;
+  mask: RedactionMask;
+  validator?: (value: string) => boolean;
+};
+
+type WhitelistToken = { token: string; value: string };
+
+type RedactionCounts = Record<string, number>;
+
+type PrivacyConfig = {
+  whitelist?: string[];
+  blacklist?: string[];
+};
 
 export const REDACTION_PATTERNS = {
   email: /\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/gi,
@@ -10,51 +37,57 @@ export const REDACTION_PATTERNS = {
   ip: /\b\d{1,3}(\.\d{1,3}){3}\b/g,
   handle: /@[A-Za-z0-9_]{2,30}\b/g,
   addressHint: /(\d+호|\d+동|[가-힣]{2,}(로|길)\s?\d+(-\d+)?)/g,
-};
+} as const;
 
-export const escapeForRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+export const escapeForRegex = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-export const createRedactionRules = (profileKey, profiles = PRIVACY_PROFILES) => {
-  const profile = profiles[profileKey] || profiles[DEFAULT_PRIVACY_PROFILE];
-  const rules = [
-    {
-      name: 'EMAIL',
-      rx: REDACTION_PATTERNS.email,
-      mask: () => '[REDACTED:EMAIL]',
-    },
-    {
-      name: 'PHONE',
-      rx: REDACTION_PATTERNS.krPhone,
-      mask: () => '[REDACTED:PHONE]',
-    },
-    {
-      name: 'PHONE',
-      rx: REDACTION_PATTERNS.intlPhone,
-      mask: () => '[REDACTED:PHONE]',
-    },
-    {
-      name: 'RRN',
-      rx: REDACTION_PATTERNS.rrn,
-      mask: () => '[REDACTED:RRN]',
-    },
-    {
-      name: 'CARD',
-      rx: REDACTION_PATTERNS.card,
-      validator: luhnValid,
-      mask: () => '[REDACTED:CARD]',
-    },
-    {
-      name: 'IP',
-      rx: REDACTION_PATTERNS.ip,
-      mask: () => '[REDACTED:IP]',
-    },
-    {
-      name: 'HANDLE',
-      rx: REDACTION_PATTERNS.handle,
-      mask: () => '[REDACTED:HANDLE]',
-    },
-  ];
+const buildStandardRules = (): RedactionRule[] => [
+  {
+    name: 'EMAIL',
+    rx: REDACTION_PATTERNS.email,
+    mask: () => '[REDACTED:EMAIL]',
+  },
+  {
+    name: 'PHONE',
+    rx: REDACTION_PATTERNS.krPhone,
+    mask: () => '[REDACTED:PHONE]',
+  },
+  {
+    name: 'PHONE',
+    rx: REDACTION_PATTERNS.intlPhone,
+    mask: () => '[REDACTED:PHONE]',
+  },
+  {
+    name: 'RRN',
+    rx: REDACTION_PATTERNS.rrn,
+    mask: () => '[REDACTED:RRN]',
+  },
+  {
+    name: 'CARD',
+    rx: REDACTION_PATTERNS.card,
+    validator: luhnValid,
+    mask: () => '[REDACTED:CARD]',
+  },
+  {
+    name: 'IP',
+    rx: REDACTION_PATTERNS.ip,
+    mask: () => '[REDACTED:IP]',
+  },
+  {
+    name: 'HANDLE',
+    rx: REDACTION_PATTERNS.handle,
+    mask: () => '[REDACTED:HANDLE]',
+  },
+];
 
+export const createRedactionRules = (
+  profileKey: string,
+  profiles: PrivacyProfiles = PRIVACY_PROFILES,
+): RedactionRule[] => {
+  const profile =
+    profiles[profileKey] ?? profiles[DEFAULT_PRIVACY_PROFILE];
+  const rules = buildStandardRules();
   if (profile?.maskAddressHints) {
     rules.push({
       name: 'ADDR',
@@ -62,14 +95,20 @@ export const createRedactionRules = (profileKey, profiles = PRIVACY_PROFILES) =>
       mask: () => '[REDACTED:ADDR]',
     });
   }
-
   return rules;
 };
 
-const protectWhitelist = (text, whitelist) => {
-  if (!Array.isArray(whitelist) || !whitelist.length) return { text, tokens: [] };
+const protectWhitelist = (
+  text: string,
+  whitelist: string[],
+): { text: string; tokens: WhitelistToken[] } => {
+  if (!Array.isArray(whitelist) || !whitelist.length) {
+    return { text, tokens: [] };
+  }
+
   let output = text;
-  const tokens = [];
+  const tokens: WhitelistToken[] = [];
+
   whitelist.forEach((term, index) => {
     if (!term) return;
     const token = `§WL${index}_${term.length}§`;
@@ -81,16 +120,20 @@ const protectWhitelist = (text, whitelist) => {
     });
     if (replaced) tokens.push({ token, value: term });
   });
+
   return { text: output, tokens };
 };
 
-const restoreWhitelist = (text, tokens) => {
+const restoreWhitelist = (text: string, tokens: WhitelistToken[]): string => {
   if (!tokens?.length) return text;
-  return tokens.reduce((acc, { token, value }) => acc.replace(new RegExp(escapeForRegex(token), 'g'), value), text);
+  return tokens.reduce(
+    (acc, { token, value }) => acc.replace(new RegExp(escapeForRegex(token), 'g'), value),
+    text,
+  );
 };
 
-const applyRules = (text, rules, counts) => {
-  return rules.reduce((acc, rule) => {
+const applyRules = (text: string, rules: RedactionRule[], counts: RedactionCounts): string =>
+  rules.reduce((acc, rule) => {
     if (!rule?.rx) return acc;
     return acc.replace(rule.rx, (match) => {
       if (rule.validator && !rule.validator(match)) return match;
@@ -98,9 +141,12 @@ const applyRules = (text, rules, counts) => {
       return typeof rule.mask === 'function' ? rule.mask(match) : rule.mask;
     });
   }, text);
-};
 
-const applyCustomBlacklist = (text, blacklist, counts) => {
+const applyCustomBlacklist = (
+  text: string,
+  blacklist: string[],
+  counts: RedactionCounts,
+): string => {
   if (!Array.isArray(blacklist) || !blacklist.length) return text;
   let output = text;
   blacklist.forEach((term) => {
@@ -123,23 +169,26 @@ const SEXUAL_KEYWORDS_MATCH = /(성관계|성적|섹스|sex|음란|선정|야한
 const ACADEMIC_PATTERN = /성적\s*(향상|저하|관리|평가|우수|부진|분석|상승|하락)/i;
 const SEX_ED_PATTERN = /성\s*(교육|상담|발달|정체성|소수자|평등|인지|지식)/i;
 const ORIENTATION_PATTERN = /성적\s*(지향|취향|매력|선호)/i;
-const PROTECTIVE_FORWARD = /(교육|예방|캠페인|세미나|강연|워크샵|보호|지원|상담|치료|개입|법률)\s*.*\s*(미성년|청소년)/i;
-const PROTECTIVE_REVERSE = /(미성년|청소년)\s*.*\s*(교육|예방|캠페인|세미나|강연|워크샵|보호|지원|상담|치료|개입|법률)/i;
+const PROTECTIVE_FORWARD =
+  /(교육|예방|캠페인|세미나|강연|워크샵|보호|지원|상담|치료|개입|법률)\s*.*\s*(미성년|청소년)/i;
+const PROTECTIVE_REVERSE =
+  /(미성년|청소년)\s*.*\s*(교육|예방|캠페인|세미나|강연|워크샵|보호|지원|상담|치료|개입|법률)/i;
 const RIGHTS_PATTERN = /성적\s*(자기결정권|권리|자율성|주체성|건강|동의)/i;
 const EXPLICIT_MEDIA = /(야한|음란|에로)\s*(사진|영상|동영상|이미지|pic|video|gif)/i;
 const EXPLICIT_CRIME = /(강간|성폭행|몰카|아청법)/i;
 const PROXIMITY_WINDOW = 100;
 
-const calculateProximityScore = (text) => {
+const calculateProximityScore = (text: string): number => {
   if (!text) return 0;
-  const minorMatches = [...String(text).matchAll(MINOR_KEYWORDS_MATCH)];
-  const sexualMatches = [...String(text).matchAll(SEXUAL_KEYWORDS_MATCH)];
+  const source = String(text);
+  const minorMatches = [...source.matchAll(MINOR_KEYWORDS_MATCH)];
+  const sexualMatches = [...source.matchAll(SEXUAL_KEYWORDS_MATCH)];
   if (!minorMatches.length || !sexualMatches.length) return 0;
 
   let maxScore = 0;
   minorMatches.forEach((minor) => {
     sexualMatches.forEach((sexual) => {
-      const distance = Math.abs(minor.index - sexual.index);
+      const distance = Math.abs((minor.index ?? 0) - (sexual.index ?? 0));
       if (distance > PROXIMITY_WINDOW) return;
       const score = 100 - distance;
       if (score > maxScore) {
@@ -150,7 +199,7 @@ const calculateProximityScore = (text) => {
   return maxScore;
 };
 
-export const hasMinorSexualContext = (text) => {
+export const hasMinorSexualContext = (text: string | null | undefined): boolean => {
   if (!text) return false;
 
   const safeText = String(text);
@@ -176,15 +225,16 @@ export const hasMinorSexualContext = (text) => {
 };
 
 export const redactText = (
-  text,
-  profileKey,
-  counts,
-  config,
-  profiles = PRIVACY_PROFILES,
-) => {
-  const whitelist = config?.whitelist || [];
-  const blacklist = config?.blacklist || [];
-  const profile = profiles[profileKey] || profiles[DEFAULT_PRIVACY_PROFILE];
+  text: unknown,
+  profileKey: string,
+  counts: RedactionCounts,
+  config?: PrivacyConfig | null,
+  profiles: PrivacyProfiles = PRIVACY_PROFILES,
+): string => {
+  const whitelist = Array.isArray(config?.whitelist) ? config?.whitelist : [];
+  const blacklist = Array.isArray(config?.blacklist) ? config?.blacklist : [];
+  const profile =
+    profiles[profileKey] ?? profiles[DEFAULT_PRIVACY_PROFILE];
   const rules = createRedactionRules(profile.key, profiles);
   const safeText = String(text ?? '');
   const { text: protectedText, tokens } = protectWhitelist(safeText, whitelist);
@@ -202,8 +252,9 @@ export const redactText = (
   return result;
 };
 
-export const formatRedactionCounts = (counts) => {
-  const entries = Object.entries(counts || {}).filter(([, value]) => value > 0);
+export const formatRedactionCounts = (counts: RedactionCounts | null | undefined): string => {
+  if (!counts) return '레다크션 없음';
+  const entries = Object.entries(counts).filter(([, value]) => value > 0);
   if (!entries.length) return '레다크션 없음';
   return entries.map(([key, value]) => `${key}:${value}`).join(', ');
 };

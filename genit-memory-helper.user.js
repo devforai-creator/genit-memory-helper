@@ -2471,123 +2471,120 @@ var GMHBundle = (function (exports) {
     };
 
     const REDACTION_PATTERNS = {
-      email: /\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/gi,
-      krPhone: /\b01[016789]-?\d{3,4}-?\d{4}\b/g,
-      intlPhone: /\+\d{1,3}\s?\d{1,4}[\s-]?\d{3,4}[\s-]?\d{4}\b/g,
-      rrn: /\b\d{6}-?\d{7}\b/g,
-      card: /\b(?:\d[ -]?){13,19}\b/g,
-      ip: /\b\d{1,3}(\.\d{1,3}){3}\b/g,
-      handle: /@[A-Za-z0-9_]{2,30}\b/g,
-      addressHint: /(\d+호|\d+동|[가-힣]{2,}(로|길)\s?\d+(-\d+)?)/g,
+        email: /\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/gi,
+        krPhone: /\b01[016789]-?\d{3,4}-?\d{4}\b/g,
+        intlPhone: /\+\d{1,3}\s?\d{1,4}[\s-]?\d{3,4}[\s-]?\d{4}\b/g,
+        rrn: /\b\d{6}-?\d{7}\b/g,
+        card: /\b(?:\d[ -]?){13,19}\b/g,
+        ip: /\b\d{1,3}(\.\d{1,3}){3}\b/g,
+        handle: /@[A-Za-z0-9_]{2,30}\b/g,
+        addressHint: /(\d+호|\d+동|[가-힣]{2,}(로|길)\s?\d+(-\d+)?)/g,
     };
-
     const escapeForRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
+    const buildStandardRules = () => [
+        {
+            name: 'EMAIL',
+            rx: REDACTION_PATTERNS.email,
+            mask: () => '[REDACTED:EMAIL]',
+        },
+        {
+            name: 'PHONE',
+            rx: REDACTION_PATTERNS.krPhone,
+            mask: () => '[REDACTED:PHONE]',
+        },
+        {
+            name: 'PHONE',
+            rx: REDACTION_PATTERNS.intlPhone,
+            mask: () => '[REDACTED:PHONE]',
+        },
+        {
+            name: 'RRN',
+            rx: REDACTION_PATTERNS.rrn,
+            mask: () => '[REDACTED:RRN]',
+        },
+        {
+            name: 'CARD',
+            rx: REDACTION_PATTERNS.card,
+            validator: luhnValid,
+            mask: () => '[REDACTED:CARD]',
+        },
+        {
+            name: 'IP',
+            rx: REDACTION_PATTERNS.ip,
+            mask: () => '[REDACTED:IP]',
+        },
+        {
+            name: 'HANDLE',
+            rx: REDACTION_PATTERNS.handle,
+            mask: () => '[REDACTED:HANDLE]',
+        },
+    ];
     const createRedactionRules = (profileKey, profiles = PRIVACY_PROFILES) => {
-      const profile = profiles[profileKey] || profiles[DEFAULT_PRIVACY_PROFILE];
-      const rules = [
-        {
-          name: 'EMAIL',
-          rx: REDACTION_PATTERNS.email,
-          mask: () => '[REDACTED:EMAIL]',
-        },
-        {
-          name: 'PHONE',
-          rx: REDACTION_PATTERNS.krPhone,
-          mask: () => '[REDACTED:PHONE]',
-        },
-        {
-          name: 'PHONE',
-          rx: REDACTION_PATTERNS.intlPhone,
-          mask: () => '[REDACTED:PHONE]',
-        },
-        {
-          name: 'RRN',
-          rx: REDACTION_PATTERNS.rrn,
-          mask: () => '[REDACTED:RRN]',
-        },
-        {
-          name: 'CARD',
-          rx: REDACTION_PATTERNS.card,
-          validator: luhnValid,
-          mask: () => '[REDACTED:CARD]',
-        },
-        {
-          name: 'IP',
-          rx: REDACTION_PATTERNS.ip,
-          mask: () => '[REDACTED:IP]',
-        },
-        {
-          name: 'HANDLE',
-          rx: REDACTION_PATTERNS.handle,
-          mask: () => '[REDACTED:HANDLE]',
-        },
-      ];
-
-      if (profile?.maskAddressHints) {
-        rules.push({
-          name: 'ADDR',
-          rx: REDACTION_PATTERNS.addressHint,
-          mask: () => '[REDACTED:ADDR]',
-        });
-      }
-
-      return rules;
+        const profile = profiles[profileKey] ?? profiles[DEFAULT_PRIVACY_PROFILE];
+        const rules = buildStandardRules();
+        if (profile?.maskAddressHints) {
+            rules.push({
+                name: 'ADDR',
+                rx: REDACTION_PATTERNS.addressHint,
+                mask: () => '[REDACTED:ADDR]',
+            });
+        }
+        return rules;
     };
-
     const protectWhitelist = (text, whitelist) => {
-      if (!Array.isArray(whitelist) || !whitelist.length) return { text, tokens: [] };
-      let output = text;
-      const tokens = [];
-      whitelist.forEach((term, index) => {
-        if (!term) return;
-        const token = `§WL${index}_${term.length}§`;
-        const rx = new RegExp(escapeForRegex(term), 'gi');
-        let replaced = false;
-        output = output.replace(rx, () => {
-          replaced = true;
-          return token;
+        if (!Array.isArray(whitelist) || !whitelist.length) {
+            return { text, tokens: [] };
+        }
+        let output = text;
+        const tokens = [];
+        whitelist.forEach((term, index) => {
+            if (!term)
+                return;
+            const token = `§WL${index}_${term.length}§`;
+            const rx = new RegExp(escapeForRegex(term), 'gi');
+            let replaced = false;
+            output = output.replace(rx, () => {
+                replaced = true;
+                return token;
+            });
+            if (replaced)
+                tokens.push({ token, value: term });
         });
-        if (replaced) tokens.push({ token, value: term });
-      });
-      return { text: output, tokens };
+        return { text: output, tokens };
     };
-
     const restoreWhitelist = (text, tokens) => {
-      if (!tokens?.length) return text;
-      return tokens.reduce((acc, { token, value }) => acc.replace(new RegExp(escapeForRegex(token), 'g'), value), text);
+        if (!tokens?.length)
+            return text;
+        return tokens.reduce((acc, { token, value }) => acc.replace(new RegExp(escapeForRegex(token), 'g'), value), text);
     };
-
-    const applyRules = (text, rules, counts) => {
-      return rules.reduce((acc, rule) => {
-        if (!rule?.rx) return acc;
+    const applyRules = (text, rules, counts) => rules.reduce((acc, rule) => {
+        if (!rule?.rx)
+            return acc;
         return acc.replace(rule.rx, (match) => {
-          if (rule.validator && !rule.validator(match)) return match;
-          counts[rule.name] = (counts[rule.name] || 0) + 1;
-          return typeof rule.mask === 'function' ? rule.mask(match) : rule.mask;
+            if (rule.validator && !rule.validator(match))
+                return match;
+            counts[rule.name] = (counts[rule.name] || 0) + 1;
+            return typeof rule.mask === 'function' ? rule.mask(match) : rule.mask;
         });
-      }, text);
-    };
-
+    }, text);
     const applyCustomBlacklist = (text, blacklist, counts) => {
-      if (!Array.isArray(blacklist) || !blacklist.length) return text;
-      let output = text;
-      blacklist.forEach((term) => {
-        if (!term) return;
-        const rx = new RegExp(escapeForRegex(term), 'gi');
-        output = output.replace(rx, () => {
-          counts.CUSTOM = (counts.CUSTOM || 0) + 1;
-          return '[REDACTED:CUSTOM]';
+        if (!Array.isArray(blacklist) || !blacklist.length)
+            return text;
+        let output = text;
+        blacklist.forEach((term) => {
+            if (!term)
+                return;
+            const rx = new RegExp(escapeForRegex(term), 'gi');
+            output = output.replace(rx, () => {
+                counts.CUSTOM = (counts.CUSTOM || 0) + 1;
+                return '[REDACTED:CUSTOM]';
+            });
         });
-      });
-      return output;
+        return output;
     };
-
-    const MINOR_KEYWORDS =
-      /(미성년|중학생|고등학생|나이\s*1[0-7]|소년|소녀|minor|under\s*18|중딩|고딩|중[1-3]|고[1-3]|(?:13|14|15|16|17)\s*살|teen(?:ager)?|underage)/i;
+    const MINOR_KEYWORDS = /(미성년|중학생|고등학생|나이\s*1[0-7]|소년|소녀|minor|under\s*18|중딩|고딩|중[1-3]|고[1-3]|(?:13|14|15|16|17)\s*살|teen(?:ager)?|underage)/i;
     const SEXUAL_KEYWORDS = /(성관계|성적|섹스|sex|음란|선정|야한|야스|삽입|자위|강간|에로)/i;
-    const MINOR_KEYWORDS_MATCH =
-      /(미성년|중학생|고등학생|나이\s*1[0-7]|소년|소녀|minor|under\s*18|중딩|고딩|중[1-3]|고[1-3]|(?:13|14|15|16|17)\s*살|teen(?:ager)?|underage)/gi;
+    const MINOR_KEYWORDS_MATCH = /(미성년|중학생|고등학생|나이\s*1[0-7]|소년|소녀|minor|under\s*18|중딩|고딩|중[1-3]|고[1-3]|(?:13|14|15|16|17)\s*살|teen(?:ager)?|underage)/gi;
     const SEXUAL_KEYWORDS_MATCH = /(성관계|성적|섹스|sex|음란|선정|야한|야스|삽입|자위|강간|에로)/gi;
     const ACADEMIC_PATTERN = /성적\s*(향상|저하|관리|평가|우수|부진|분석|상승|하락)/i;
     const SEX_ED_PATTERN = /성\s*(교육|상담|발달|정체성|소수자|평등|인지|지식)/i;
@@ -2598,311 +2595,249 @@ var GMHBundle = (function (exports) {
     const EXPLICIT_MEDIA = /(야한|음란|에로)\s*(사진|영상|동영상|이미지|pic|video|gif)/i;
     const EXPLICIT_CRIME = /(강간|성폭행|몰카|아청법)/i;
     const PROXIMITY_WINDOW = 100;
-
     const calculateProximityScore = (text) => {
-      if (!text) return 0;
-      const minorMatches = [...String(text).matchAll(MINOR_KEYWORDS_MATCH)];
-      const sexualMatches = [...String(text).matchAll(SEXUAL_KEYWORDS_MATCH)];
-      if (!minorMatches.length || !sexualMatches.length) return 0;
-
-      let maxScore = 0;
-      minorMatches.forEach((minor) => {
-        sexualMatches.forEach((sexual) => {
-          const distance = Math.abs(minor.index - sexual.index);
-          if (distance > PROXIMITY_WINDOW) return;
-          const score = 100 - distance;
-          if (score > maxScore) {
-            maxScore = score;
-          }
+        if (!text)
+            return 0;
+        const source = String(text);
+        const minorMatches = [...source.matchAll(MINOR_KEYWORDS_MATCH)];
+        const sexualMatches = [...source.matchAll(SEXUAL_KEYWORDS_MATCH)];
+        if (!minorMatches.length || !sexualMatches.length)
+            return 0;
+        let maxScore = 0;
+        minorMatches.forEach((minor) => {
+            sexualMatches.forEach((sexual) => {
+                const distance = Math.abs((minor.index ?? 0) - (sexual.index ?? 0));
+                if (distance > PROXIMITY_WINDOW)
+                    return;
+                const score = 100 - distance;
+                if (score > maxScore) {
+                    maxScore = score;
+                }
+            });
         });
-      });
-      return maxScore;
+        return maxScore;
     };
-
     const hasMinorSexualContext = (text) => {
-      if (!text) return false;
-
-      const safeText = String(text);
-      if (!MINOR_KEYWORDS.test(safeText)) return false;
-      if (!SEXUAL_KEYWORDS.test(safeText)) return false;
-
-      const hasLegitimateContext =
-        ACADEMIC_PATTERN.test(safeText) ||
-        SEX_ED_PATTERN.test(safeText) ||
-        ORIENTATION_PATTERN.test(safeText) ||
-        PROTECTIVE_FORWARD.test(safeText) ||
-        PROTECTIVE_REVERSE.test(safeText) ||
-        RIGHTS_PATTERN.test(safeText);
-
-      const hasExplicitDanger = EXPLICIT_CRIME.test(safeText) || EXPLICIT_MEDIA.test(safeText);
-
-      if (hasLegitimateContext && !hasExplicitDanger) {
-        return false;
-      }
-
-      const proximityScore = calculateProximityScore(safeText);
-      return proximityScore >= 70;
+        if (!text)
+            return false;
+        const safeText = String(text);
+        if (!MINOR_KEYWORDS.test(safeText))
+            return false;
+        if (!SEXUAL_KEYWORDS.test(safeText))
+            return false;
+        const hasLegitimateContext = ACADEMIC_PATTERN.test(safeText) ||
+            SEX_ED_PATTERN.test(safeText) ||
+            ORIENTATION_PATTERN.test(safeText) ||
+            PROTECTIVE_FORWARD.test(safeText) ||
+            PROTECTIVE_REVERSE.test(safeText) ||
+            RIGHTS_PATTERN.test(safeText);
+        const hasExplicitDanger = EXPLICIT_CRIME.test(safeText) || EXPLICIT_MEDIA.test(safeText);
+        if (hasLegitimateContext && !hasExplicitDanger) {
+            return false;
+        }
+        const proximityScore = calculateProximityScore(safeText);
+        return proximityScore >= 70;
     };
-
-    const redactText = (
-      text,
-      profileKey,
-      counts,
-      config,
-      profiles = PRIVACY_PROFILES,
-    ) => {
-      const whitelist = config?.whitelist || [];
-      const blacklist = config?.blacklist || [];
-      const profile = profiles[profileKey] || profiles[DEFAULT_PRIVACY_PROFILE];
-      const rules = createRedactionRules(profile.key, profiles);
-      const safeText = String(text ?? '');
-      const { text: protectedText, tokens } = protectWhitelist(safeText, whitelist);
-      let result = applyRules(protectedText, rules, counts);
-      result = applyCustomBlacklist(result, blacklist, counts);
-      result = restoreWhitelist(result, tokens);
-
-      if (profile.maskNarrativeSensitive) {
-        result = result.replace(/(자살|자해|강간|폭행|살해)/gi, () => {
-          counts.SENSITIVE = (counts.SENSITIVE || 0) + 1;
-          return '[REDACTED:SENSITIVE]';
-        });
-      }
-
-      return result;
+    const redactText = (text, profileKey, counts, config, profiles = PRIVACY_PROFILES) => {
+        const whitelist = Array.isArray(config?.whitelist) ? config?.whitelist : [];
+        const blacklist = Array.isArray(config?.blacklist) ? config?.blacklist : [];
+        const profile = profiles[profileKey] ?? profiles[DEFAULT_PRIVACY_PROFILE];
+        const rules = createRedactionRules(profile.key, profiles);
+        const safeText = String(text ?? '');
+        const { text: protectedText, tokens } = protectWhitelist(safeText, whitelist);
+        let result = applyRules(protectedText, rules, counts);
+        result = applyCustomBlacklist(result, blacklist, counts);
+        result = restoreWhitelist(result, tokens);
+        if (profile.maskNarrativeSensitive) {
+            result = result.replace(/(자살|자해|강간|폭행|살해)/gi, () => {
+                counts.SENSITIVE = (counts.SENSITIVE || 0) + 1;
+                return '[REDACTED:SENSITIVE]';
+            });
+        }
+        return result;
     };
-
     const formatRedactionCounts = (counts) => {
-      const entries = Object.entries(counts || {}).filter(([, value]) => value > 0);
-      if (!entries.length) return '레다크션 없음';
-      return entries.map(([key, value]) => `${key}:${value}`).join(', ');
+        if (!counts)
+            return '레다크션 없음';
+        const entries = Object.entries(counts).filter(([, value]) => value > 0);
+        if (!entries.length)
+            return '레다크션 없음';
+        return entries.map(([key, value]) => `${key}:${value}`).join(', ');
     };
 
-    /**
-     * @typedef {import('../types').PrivacyPipelineDependencies} PrivacyPipelineDependencies
-     * @typedef {import('../types').PrivacyPipelineApi} PrivacyPipelineApi
-     * @typedef {import('../types').PrivacyPipelineResult} PrivacyPipelineResult
-     */
-
-    const cloneTurns = (turns = []) =>
-      Array.isArray(turns)
+    const cloneTurns = (turns = []) => Array.isArray(turns)
         ? turns.map((turn) => {
             const clone = { ...turn };
             if (Array.isArray(turn.__gmhEntries)) {
-              Object.defineProperty(clone, '__gmhEntries', {
-                value: turn.__gmhEntries.slice(),
-                enumerable: false,
-                writable: true,
-                configurable: true,
-              });
+                Object.defineProperty(clone, '__gmhEntries', {
+                    value: turn.__gmhEntries.slice(),
+                    enumerable: false,
+                    writable: true,
+                    configurable: true,
+                });
             }
             if (Array.isArray(turn.__gmhSourceBlocks)) {
-              Object.defineProperty(clone, '__gmhSourceBlocks', {
-                value: turn.__gmhSourceBlocks.slice(),
-                enumerable: false,
-                writable: true,
-                configurable: true,
-              });
+                Object.defineProperty(clone, '__gmhSourceBlocks', {
+                    value: turn.__gmhSourceBlocks.slice(),
+                    enumerable: false,
+                    writable: true,
+                    configurable: true,
+                });
             }
             return clone;
-          })
+        })
         : [];
-
     const cloneSession$1 = (session) => {
-      if (!session) {
-        return {
-          meta: {},
-          turns: [],
-          warnings: [],
-          source: undefined,
-        };
-      }
-
-      return {
-        meta: { ...(session.meta || {}) },
-        turns: cloneTurns(session.turns),
-        warnings: Array.isArray(session.warnings) ? [...session.warnings] : [],
-        source: session.source,
-      };
-    };
-
-    const sanitizeStructuredPart = (part, profileKey, counts, redactText) => {
-      if (!part || typeof part !== 'object') return null;
-      const sanitized = { ...part };
-      const maybeRedact = (value) =>
-        typeof value === 'string' ? redactText(value, profileKey, counts) : value;
-
-      sanitized.speaker = maybeRedact(sanitized.speaker);
-      if (Array.isArray(part.lines)) sanitized.lines = part.lines.map((line) => maybeRedact(line));
-      if (Array.isArray(part.legacyLines))
-        sanitized.legacyLines = part.legacyLines.map((line) => maybeRedact(line));
-      if (Array.isArray(part.items)) sanitized.items = part.items.map((item) => maybeRedact(item));
-      sanitized.text = maybeRedact(part.text);
-      sanitized.alt = maybeRedact(part.alt);
-      sanitized.title = maybeRedact(part.title);
-
-      return sanitized;
-    };
-
-    const sanitizeStructuredSnapshot = (snapshot, profileKey, counts, redactText) => {
-      if (!snapshot) return null;
-
-      const messages = Array.isArray(snapshot.messages)
-        ? snapshot.messages.map((message) => {
-            const sanitizedMessage = { ...message };
-            sanitizedMessage.speaker =
-              typeof message.speaker === 'string' ? redactText(message.speaker, profileKey, counts) : message.speaker;
-            sanitizedMessage.parts = Array.isArray(message.parts)
-              ? message.parts
-                  .map((part) => sanitizeStructuredPart(part, profileKey, counts, redactText))
-                  .filter(Boolean)
-              : [];
-            if (Array.isArray(message.legacyLines) && message.legacyLines.length) {
-              Object.defineProperty(sanitizedMessage, 'legacyLines', {
-                value: message.legacyLines.map((line) => redactText(line, profileKey, counts)),
-                enumerable: false,
-                writable: true,
-                configurable: true,
-              });
-            } else {
-              delete sanitizedMessage.legacyLines;
-            }
-            return sanitizedMessage;
-          })
-        : [];
-
-      const legacyLines = Array.isArray(snapshot.legacyLines)
-        ? snapshot.legacyLines.map((line) => redactText(line, profileKey, counts))
-        : [];
-
-      return {
-        messages,
-        legacyLines,
-        entryOrigin: Array.isArray(snapshot.entryOrigin) ? snapshot.entryOrigin.slice() : [],
-        errors: Array.isArray(snapshot.errors) ? snapshot.errors.slice() : [],
-        generatedAt: snapshot.generatedAt || Date.now(),
-      };
-    };
-
-    /**
-     * Builds the privacy pipeline that redacts content according to active profile policies.
-     *
-     * @param {PrivacyPipelineDependencies} [options]
-     * @returns {PrivacyPipelineApi}
-     */
-    const createPrivacyPipeline = ({
-      profiles = PRIVACY_PROFILES,
-      getConfig,
-      redactText,
-      hasMinorSexualContext,
-      getPlayerNames = () => [],
-      logger = null,
-      storage = null,
-    } = /** @type {PrivacyPipelineDependencies} */ ({})) => {
-      if (typeof redactText !== 'function') {
-        throw new Error('createPrivacyPipeline: redactText function is required');
-      }
-
-      const getProfileKey = (profileKey) => (profiles[profileKey] ? profileKey : DEFAULT_PRIVACY_PROFILE);
-
-      /**
-       * Applies sanitization to both raw strings and structured snapshots.
-       *
-       * @param {import('../types').TranscriptSession} session
-       * @param {string} rawText
-       * @param {string} profileKey
-       * @param {import('../types').StructuredSnapshot | null} [structuredSnapshot]
-       * @returns {PrivacyPipelineResult}
-       */
-      const applyPrivacyPipeline = (session, rawText, profileKey, structuredSnapshot = null) => {
-        const activeProfile = getProfileKey(profileKey);
-        const counts = /** @type {Record<string, number>} */ ({});
-        const config = typeof getConfig === 'function' ? getConfig() : undefined;
-
-        const boundRedact = (value, targetProfile, targetCounts) =>
-          redactText(value, targetProfile, targetCounts, config, profiles);
-
-        const sanitizedSession = cloneSession$1(session);
-        sanitizedSession.turns = sanitizedSession.turns.map((turn) => {
-          const next = { ...turn };
-          next.text = boundRedact(turn.text, activeProfile, counts);
-          if (next.speaker) next.speaker = boundRedact(next.speaker, activeProfile, counts);
-          if (Array.isArray(turn.__gmhEntries)) {
-            Object.defineProperty(next, '__gmhEntries', {
-              value: turn.__gmhEntries.slice(),
-              enumerable: false,
-              writable: true,
-              configurable: true,
-            });
-          }
-          if (Array.isArray(turn.__gmhSourceBlocks)) {
-            Object.defineProperty(next, '__gmhSourceBlocks', {
-              value: turn.__gmhSourceBlocks.slice(),
-              enumerable: false,
-              writable: true,
-              configurable: true,
-            });
-          }
-          return next;
-        });
-
-        const sanitizedMeta = {};
-        Object.entries(sanitizedSession.meta || {}).forEach(([key, value]) => {
-          if (typeof value === 'string') {
-            sanitizedMeta[key] = boundRedact(value, activeProfile, counts);
-          } else if (Array.isArray(value)) {
-            sanitizedMeta[key] = value.map((item) =>
-              typeof item === 'string' ? boundRedact(item, activeProfile, counts) : item,
-            );
-          } else {
-            sanitizedMeta[key] = value;
-          }
-        });
-        sanitizedSession.meta = sanitizedMeta;
-
-        sanitizedSession.warnings = sanitizedSession.warnings.map((warning) =>
-          typeof warning === 'string' ? boundRedact(warning, activeProfile, counts) : warning,
-        );
-
-        const playerNames = getPlayerNames();
-        const sanitizedPlayers = playerNames.map((name) => boundRedact(name, activeProfile, counts));
-        sanitizedSession.player_names = sanitizedPlayers;
-
-        const sanitizedRaw = boundRedact(rawText, activeProfile, counts);
-        const sanitizedStructured = sanitizeStructuredSnapshot(
-          structuredSnapshot,
-          activeProfile,
-          counts,
-          boundRedact,
-        );
-
-        const totalRedactions = Object.values(counts).reduce((sum, value) => sum + (value || 0), 0);
-        const blocked = typeof hasMinorSexualContext === 'function' ? hasMinorSexualContext(rawText) : false;
-
-        const debugEnabled = typeof storage?.getItem === 'function' && storage.getItem('gmh_debug_blocking');
-        if (logger?.log && (blocked || debugEnabled)) {
-          const textLength = typeof rawText === 'string' ? rawText.length : String(rawText ?? '').length;
-          logger.log('[GMH Privacy] Blocking decision:', {
-            blocked,
-            textLength,
-            timestamp: new Date().toISOString(),
-          });
+        if (!session) {
+            return {
+                meta: {},
+                turns: [],
+                warnings: [],
+                source: undefined,
+            };
         }
-
         return {
-          profile: activeProfile,
-          sanitizedSession,
-          sanitizedRaw,
-          structured: sanitizedStructured,
-          playerNames: sanitizedPlayers,
-          counts,
-          totalRedactions,
-          blocked,
+            meta: { ...(session.meta || {}) },
+            turns: cloneTurns(session.turns),
+            warnings: Array.isArray(session.warnings) ? [...session.warnings] : [],
+            source: session.source,
         };
-      };
-
-      return {
-        applyPrivacyPipeline,
-      };
+    };
+    const sanitizeStructuredPart = (part, profileKey, counts, redactText) => {
+        if (!part || typeof part !== 'object')
+            return null;
+        const sanitized = { ...part };
+        const maybeRedact = (value) => typeof value === 'string' ? redactText(value, profileKey, counts) : value;
+        sanitized.speaker = maybeRedact(sanitized.speaker);
+        if (Array.isArray(part.lines))
+            sanitized.lines = part.lines.map((line) => maybeRedact(line));
+        if (Array.isArray(part.legacyLines))
+            sanitized.legacyLines = part.legacyLines.map((line) => maybeRedact(line));
+        if (Array.isArray(part.items))
+            sanitized.items = part.items.map((item) => maybeRedact(item));
+        sanitized.text = maybeRedact(part.text);
+        sanitized.alt = maybeRedact(part.alt);
+        sanitized.title = maybeRedact(part.title);
+        return sanitized;
+    };
+    const sanitizeStructuredSnapshot = (snapshot, profileKey, counts, redactText) => {
+        if (!snapshot)
+            return null;
+        const messages = Array.isArray(snapshot.messages)
+            ? snapshot.messages.map((message) => {
+                const sanitizedMessage = { ...message };
+                sanitizedMessage.speaker =
+                    typeof message.speaker === 'string'
+                        ? redactText(message.speaker, profileKey, counts)
+                        : message.speaker;
+                sanitizedMessage.parts = Array.isArray(message.parts)
+                    ? message.parts
+                        .map((part) => sanitizeStructuredPart(part, profileKey, counts, redactText))
+                        .filter((part) => Boolean(part))
+                    : [];
+                if (Array.isArray(message.legacyLines) && message.legacyLines.length) {
+                    Object.defineProperty(sanitizedMessage, 'legacyLines', {
+                        value: message.legacyLines.map((line) => redactText(line, profileKey, counts)),
+                        enumerable: false,
+                        writable: true,
+                        configurable: true,
+                    });
+                }
+                else {
+                    delete sanitizedMessage.legacyLines;
+                }
+                return sanitizedMessage;
+            })
+            : [];
+        const legacyLines = Array.isArray(snapshot.legacyLines)
+            ? snapshot.legacyLines.map((line) => redactText(line, profileKey, counts))
+            : [];
+        return {
+            messages,
+            legacyLines,
+            entryOrigin: Array.isArray(snapshot.entryOrigin) ? snapshot.entryOrigin.slice() : [],
+            errors: Array.isArray(snapshot.errors) ? snapshot.errors.slice() : [],
+            generatedAt: snapshot.generatedAt || Date.now(),
+        };
+    };
+    const createPrivacyPipeline = ({ profiles = PRIVACY_PROFILES, getConfig, redactText, hasMinorSexualContext, getPlayerNames = () => [], logger = null, storage = null, }) => {
+        if (typeof redactText !== 'function') {
+            throw new Error('createPrivacyPipeline: redactText function is required');
+        }
+        const getProfileKey = (profileKey) => profiles && profiles[profileKey] ? profileKey : DEFAULT_PRIVACY_PROFILE;
+        const applyPrivacyPipeline = (session, rawText, profileKey, structuredSnapshot = null) => {
+            const activeProfile = getProfileKey(profileKey);
+            const counts = {};
+            const config = typeof getConfig === 'function' ? getConfig() : undefined;
+            const boundRedact = (value, targetProfile, targetCounts) => redactText(value, targetProfile, targetCounts, config, profiles);
+            const sanitizedSession = cloneSession$1(session);
+            sanitizedSession.turns = sanitizedSession.turns.map((turn) => {
+                const next = { ...turn };
+                next.text = boundRedact(turn.text, activeProfile, counts);
+                if (next.speaker)
+                    next.speaker = boundRedact(next.speaker, activeProfile, counts);
+                if (Array.isArray(turn.__gmhEntries)) {
+                    Object.defineProperty(next, '__gmhEntries', {
+                        value: turn.__gmhEntries.slice(),
+                        enumerable: false,
+                        writable: true,
+                        configurable: true,
+                    });
+                }
+                if (Array.isArray(turn.__gmhSourceBlocks)) {
+                    Object.defineProperty(next, '__gmhSourceBlocks', {
+                        value: turn.__gmhSourceBlocks.slice(),
+                        enumerable: false,
+                        writable: true,
+                        configurable: true,
+                    });
+                }
+                return next;
+            });
+            const sanitizedMeta = {};
+            Object.entries(sanitizedSession.meta || {}).forEach(([key, value]) => {
+                if (typeof value === 'string') {
+                    sanitizedMeta[key] = boundRedact(value, activeProfile, counts);
+                }
+                else if (Array.isArray(value)) {
+                    sanitizedMeta[key] = value.map((item) => typeof item === 'string' ? boundRedact(item, activeProfile, counts) : item);
+                }
+                else {
+                    sanitizedMeta[key] = value;
+                }
+            });
+            sanitizedSession.meta = sanitizedMeta;
+            sanitizedSession.warnings = sanitizedSession.warnings.map((warning) => typeof warning === 'string' ? boundRedact(warning, activeProfile, counts) : warning);
+            const playerNames = getPlayerNames();
+            const sanitizedPlayers = playerNames.map((name) => boundRedact(name, activeProfile, counts));
+            sanitizedSession.player_names = sanitizedPlayers;
+            const sanitizedRaw = boundRedact(rawText, activeProfile, counts);
+            const sanitizedStructured = sanitizeStructuredSnapshot(structuredSnapshot, activeProfile, counts, boundRedact);
+            const totalRedactions = Object.values(counts).reduce((sum, value) => sum + (value || 0), 0);
+            const blocked = typeof hasMinorSexualContext === 'function' ? hasMinorSexualContext(rawText) : false;
+            const debugEnabled = typeof storage?.getItem === 'function' && storage.getItem('gmh_debug_blocking');
+            if (logger?.log && (blocked || debugEnabled)) {
+                const textLength = typeof rawText === 'string' ? rawText.length : String(rawText ?? '').length;
+                logger.log('[GMH Privacy] Blocking decision:', {
+                    blocked,
+                    textLength,
+                    timestamp: new Date().toISOString(),
+                });
+            }
+            return {
+                profile: activeProfile,
+                sanitizedSession,
+                sanitizedRaw,
+                structured: sanitizedStructured,
+                playerNames: sanitizedPlayers,
+                counts,
+                totalRedactions,
+                blocked,
+            };
+        };
+        return {
+            applyPrivacyPipeline,
+        };
     };
 
     const DEFAULT_PLAYER_MARK$1 = '⟦PLAYER⟧ ';
