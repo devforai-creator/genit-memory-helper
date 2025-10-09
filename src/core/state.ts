@@ -1,14 +1,7 @@
-/**
- * @typedef {import('../types').PanelStateManager} PanelStateManager
- * @typedef {import('../types').StateManagerOptions} StateManagerOptions
- */
+import type { PanelStateManager, StateManagerOptions } from '../types';
 
-/**
- * @returns {void}
- */
-const noop = () => {};
+const noop = (): void => {};
 
-/** @type {Record<string, string>} */
 export const GMH_STATE = {
   IDLE: 'idle',
   SCANNING: 'scanning',
@@ -17,10 +10,11 @@ export const GMH_STATE = {
   EXPORTING: 'exporting',
   DONE: 'done',
   ERROR: 'error',
-};
+} as const;
 
-/** @type {Record<string, string[]>} */
-export const STATE_TRANSITIONS = {
+type GMHStateValue = (typeof GMH_STATE)[keyof typeof GMH_STATE];
+
+export const STATE_TRANSITIONS: Record<GMHStateValue, GMHStateValue[]> = {
   idle: ['idle', 'scanning', 'redacting', 'error'],
   scanning: ['scanning', 'redacting', 'preview', 'done', 'error', 'idle'],
   redacting: ['redacting', 'preview', 'exporting', 'done', 'error', 'idle'],
@@ -30,69 +24,67 @@ export const STATE_TRANSITIONS = {
   error: ['error', 'idle', 'scanning', 'redacting'],
 };
 
-/**
- * @param {unknown} value
- * @returns {string | null}
- */
-const normalizeState = (value) => {
+const normalizeState = (value: unknown): GMHStateValue | null => {
   if (!value) return null;
   const next = String(value).toLowerCase();
-  return Object.values(GMH_STATE).includes(next) ? next : null;
+  return Object.values(GMH_STATE).includes(next as GMHStateValue) ? (next as GMHStateValue) : null;
 };
 
-/**
- * @param {StateManagerOptions} [options]
- * @returns {PanelStateManager}
- */
-export const createStateManager = ({ console: consoleLike, debug } = {}) => {
-  const logger = consoleLike || (typeof console !== 'undefined' ? console : { warn: noop, error: noop });
-  const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop;
-  const error = typeof logger.error === 'function' ? logger.error.bind(logger) : noop;
+type StateMeta = Record<string, unknown> & { previous: string | null; payload: unknown };
+
+type StateSubscriber = (state: GMHStateValue, meta?: StateMeta) => void;
+
+export const createStateManager = ({ console: consoleLike, debug }: StateManagerOptions = {}): PanelStateManager => {
+  const defaultConsole = typeof console !== 'undefined' ? console : null;
+  const logger = consoleLike ?? defaultConsole ?? { warn: noop, error: noop };
+  const warn: (...args: unknown[]) => void =
+    typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop;
+  const error: (...args: unknown[]) => void =
+    typeof logger.error === 'function' ? logger.error.bind(logger) : noop;
   const debugLog = typeof debug === 'function' ? debug : noop;
 
-  /** @type {Set<(state: string, meta: { previous: string | null; payload: unknown }) => void>} */
-  const subscribers = new Set();
+  const subscribers = new Set<StateSubscriber>();
 
-  /** @type {PanelStateManager} */
-  const state = {
+  const state: PanelStateManager = {
     current: GMH_STATE.IDLE,
     previous: null,
     payload: null,
     getState() {
       return this.current;
     },
-    subscribe(listener) {
+    subscribe(listener: StateSubscriber) {
       if (typeof listener !== 'function') return noop;
       subscribers.add(listener);
       return () => {
         subscribers.delete(listener);
       };
     },
-    setState(nextState, payload) {
+    setState(this: PanelStateManager, nextState: string, payload?: unknown) {
       const next = normalizeState(nextState);
       if (!next) {
         warn('[GMH] unknown state requested', nextState);
         return false;
       }
-      const allowed = STATE_TRANSITIONS[this.current]?.includes(next);
+      const allowed = STATE_TRANSITIONS[this.current as GMHStateValue]?.includes(next);
       if (!allowed) {
         warn('[GMH] invalid state transition', this.current, '→', next);
         return false;
       }
-      this.previous = this.current;
+      this.previous = this.current as GMHStateValue;
       this.current = next;
       this.payload = payload ?? null;
       try {
         debugLog('state →', this.current, this.payload);
-      } catch (err) {
+      } catch {
         // swallow debug errors
       }
       subscribers.forEach((listener) => {
         try {
-          listener(this.current, {
+          const meta: StateMeta = {
             previous: this.previous,
             payload: this.payload,
-          });
+          };
+          listener(this.current as GMHStateValue, meta);
         } catch (err) {
           error('[GMH] state listener failed', err);
         }

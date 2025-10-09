@@ -84,113 +84,92 @@ var GMHBundle = (function (exports) {
         typeof localStorage !== 'undefined' ? localStorage : undefined,
     };
 
-    /**
-     * @typedef {import('../types').PanelStateManager} PanelStateManager
-     * @typedef {import('../types').StateManagerOptions} StateManagerOptions
-     */
-
-    /**
-     * @returns {void}
-     */
-    const noop$5 = () => {};
-
-    /** @type {Record<string, string>} */
+    const noop$5 = () => { };
     const GMH_STATE = {
-      IDLE: 'idle',
-      SCANNING: 'scanning',
-      REDACTING: 'redacting',
-      PREVIEW: 'preview',
-      EXPORTING: 'exporting',
-      DONE: 'done',
-      ERROR: 'error',
+        IDLE: 'idle',
+        SCANNING: 'scanning',
+        REDACTING: 'redacting',
+        PREVIEW: 'preview',
+        EXPORTING: 'exporting',
+        DONE: 'done',
+        ERROR: 'error',
     };
-
-    /** @type {Record<string, string[]>} */
     const STATE_TRANSITIONS = {
-      idle: ['idle', 'scanning', 'redacting', 'error'],
-      scanning: ['scanning', 'redacting', 'preview', 'done', 'error', 'idle'],
-      redacting: ['redacting', 'preview', 'exporting', 'done', 'error', 'idle'],
-      preview: ['preview', 'exporting', 'idle', 'done', 'error'],
-      exporting: ['exporting', 'done', 'error', 'idle'],
-      done: ['done', 'idle', 'scanning', 'redacting'],
-      error: ['error', 'idle', 'scanning', 'redacting'],
+        idle: ['idle', 'scanning', 'redacting', 'error'],
+        scanning: ['scanning', 'redacting', 'preview', 'done', 'error', 'idle'],
+        redacting: ['redacting', 'preview', 'exporting', 'done', 'error', 'idle'],
+        preview: ['preview', 'exporting', 'idle', 'done', 'error'],
+        exporting: ['exporting', 'done', 'error', 'idle'],
+        done: ['done', 'idle', 'scanning', 'redacting'],
+        error: ['error', 'idle', 'scanning', 'redacting'],
     };
-
-    /**
-     * @param {unknown} value
-     * @returns {string | null}
-     */
     const normalizeState = (value) => {
-      if (!value) return null;
-      const next = String(value).toLowerCase();
-      return Object.values(GMH_STATE).includes(next) ? next : null;
+        if (!value)
+            return null;
+        const next = String(value).toLowerCase();
+        return Object.values(GMH_STATE).includes(next) ? next : null;
     };
-
-    /**
-     * @param {StateManagerOptions} [options]
-     * @returns {PanelStateManager}
-     */
     const createStateManager = ({ console: consoleLike, debug } = {}) => {
-      const logger = consoleLike || (typeof console !== 'undefined' ? console : { warn: noop$5, error: noop$5 });
-      const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$5;
-      const error = typeof logger.error === 'function' ? logger.error.bind(logger) : noop$5;
-      const debugLog = typeof debug === 'function' ? debug : noop$5;
-
-      /** @type {Set<(state: string, meta: { previous: string | null; payload: unknown }) => void>} */
-      const subscribers = new Set();
-
-      /** @type {PanelStateManager} */
-      const state = {
-        current: GMH_STATE.IDLE,
-        previous: null,
-        payload: null,
-        getState() {
-          return this.current;
-        },
-        subscribe(listener) {
-          if (typeof listener !== 'function') return noop$5;
-          subscribers.add(listener);
-          return () => {
-            subscribers.delete(listener);
-          };
-        },
-        setState(nextState, payload) {
-          const next = normalizeState(nextState);
-          if (!next) {
-            warn('[GMH] unknown state requested', nextState);
-            return false;
-          }
-          const allowed = STATE_TRANSITIONS[this.current]?.includes(next);
-          if (!allowed) {
-            warn('[GMH] invalid state transition', this.current, '→', next);
-            return false;
-          }
-          this.previous = this.current;
-          this.current = next;
-          this.payload = payload ?? null;
-          try {
-            debugLog('state →', this.current, this.payload);
-          } catch (err) {
-            // swallow debug errors
-          }
-          subscribers.forEach((listener) => {
-            try {
-              listener(this.current, {
-                previous: this.previous,
-                payload: this.payload,
-              });
-            } catch (err) {
-              error('[GMH] state listener failed', err);
-            }
-          });
-          return true;
-        },
-        reset() {
-          this.setState(GMH_STATE.IDLE, null);
-        },
-      };
-
-      return state;
+        const defaultConsole = typeof console !== 'undefined' ? console : null;
+        const logger = consoleLike ?? defaultConsole ?? { warn: noop$5, error: noop$5 };
+        const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$5;
+        const error = typeof logger.error === 'function' ? logger.error.bind(logger) : noop$5;
+        const debugLog = typeof debug === 'function' ? debug : noop$5;
+        const subscribers = new Set();
+        const state = {
+            current: GMH_STATE.IDLE,
+            previous: null,
+            payload: null,
+            getState() {
+                return this.current;
+            },
+            subscribe(listener) {
+                if (typeof listener !== 'function')
+                    return noop$5;
+                subscribers.add(listener);
+                return () => {
+                    subscribers.delete(listener);
+                };
+            },
+            setState(nextState, payload) {
+                const next = normalizeState(nextState);
+                if (!next) {
+                    warn('[GMH] unknown state requested', nextState);
+                    return false;
+                }
+                const allowed = STATE_TRANSITIONS[this.current]?.includes(next);
+                if (!allowed) {
+                    warn('[GMH] invalid state transition', this.current, '→', next);
+                    return false;
+                }
+                this.previous = this.current;
+                this.current = next;
+                this.payload = payload ?? null;
+                try {
+                    debugLog('state →', this.current, this.payload);
+                }
+                catch {
+                    // swallow debug errors
+                }
+                subscribers.forEach((listener) => {
+                    try {
+                        const meta = {
+                            previous: this.previous,
+                            payload: this.payload,
+                        };
+                        listener(this.current, meta);
+                    }
+                    catch (err) {
+                        error('[GMH] state listener failed', err);
+                    }
+                });
+                return true;
+            },
+            reset() {
+                this.setState(GMH_STATE.IDLE, null);
+            },
+        };
+        return state;
     };
 
     /**

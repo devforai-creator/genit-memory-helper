@@ -23,7 +23,7 @@
     "src/ui/panel-visibility.js",
     "src/ui/state-view.js",
     "src/ui/panel-shortcuts.js",
-    "src/core/state.js",
+    "src/core/state.ts",
     "src/core/error-handler.js",
     "src/core/export-range.js",
     "src/core/message-indexer.js",
