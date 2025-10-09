@@ -23,6 +23,7 @@ type ConsoleLike =
       log: (...args: unknown[]) => void;
       warn: (...args: unknown[]) => void;
       error: (...args: unknown[]) => void;
+      debug?: (...args: unknown[]) => void;
     };
 
 interface Environment {
@@ -74,6 +75,7 @@ const detectConsole = (): ConsoleLike => {
     log: noop,
     warn: noop,
     error: noop,
+    debug: noop,
   };
 };
 

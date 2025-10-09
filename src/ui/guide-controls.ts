@@ -1,7 +1,7 @@
 interface GuideControlsOptions {
   reparse?: () => void;
-  copySummaryGuide: () => Promise<void> | void;
-  copyResummaryGuide: () => Promise<void> | void;
+  copySummaryGuide: () => Promise<void> | void | string;
+  copyResummaryGuide: () => Promise<void> | void | string;
   logger?: Console | { warn?: (...args: unknown[]) => void } | null;
 }
 

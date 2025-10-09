@@ -1,12 +1,12 @@
-import { GMH } from './core/namespace.ts';
-import { clone, deepMerge } from './core/utils.ts';
-import { ENV } from './env.ts';
-import { GMH_STATE, createStateManager } from './core/state.ts';
-import { createErrorHandler } from './core/error-handler.ts';
-import { createExportRange } from './core/export-range.ts';
-import { createTurnBookmarks } from './core/turn-bookmarks.ts';
-import { createMessageIndexer } from './core/message-indexer.ts';
-import { createBookmarkListener } from './core/bookmark-listener.ts';
+import { GMH } from './core/namespace';
+import { clone, deepMerge } from './core/utils';
+import { ENV } from './env';
+import { GMH_STATE, createStateManager } from './core/state';
+import { createErrorHandler } from './core/error-handler';
+import { createExportRange } from './core/export-range';
+import { createTurnBookmarks } from './core/turn-bookmarks';
+import { createMessageIndexer } from './core/message-indexer';
+import { createBookmarkListener } from './core/bookmark-listener';
 import {
   adapterRegistry,
   registerAdapterConfig,
@@ -14,7 +14,7 @@ import {
   getAdapterMetadata,
   listAdapterNames,
   createGenitAdapter,
-} from './adapters/index.ts';
+} from './adapters/index';
 import {
   PRIVACY_PROFILES,
   DEFAULT_PRIVACY_PROFILE,
@@ -24,7 +24,7 @@ import {
   hasMinorSexualContext,
   formatRedactionCounts,
   createPrivacyPipeline,
-} from './privacy/index.ts';
+} from './privacy/index';
 import {
   toJSONExport,
   toTXTExport,
@@ -52,37 +52,76 @@ import {
   stripBrackets,
   sanitizeText,
   parseListInput,
-} from './utils/text.ts';
-import { sleep, triggerDownload, isScrollable } from './utils/dom.ts';
-import { luhnValid } from './utils/validation.ts';
-import { withPlayerNames } from './utils/factories.ts';
-import { ensureLegacyPreviewStyles, ensureDesignSystemStyles } from './ui/styles.ts';
-import { createPanelSettings } from './ui/panel-settings.ts';
-import { createSnapshotFeature, createStructuredSnapshotReader } from './features/snapshot.ts';
-import { createAutoLoader } from './features/auto-loader.ts';
-import { createAutoLoaderControls } from './ui/auto-loader-controls.ts';
-import { createRangeControls } from './ui/range-controls.ts';
-import { createPanelShortcuts } from './ui/panel-shortcuts.ts';
-import { createShareWorkflow } from './features/share.ts';
-import { createPanelInteractions } from './ui/panel-interactions.ts';
-import { createModernPanel } from './ui/panel-modern.ts';
-import { createLegacyPanel } from './ui/panel-legacy.ts';
-import { createLegacyPrivacyGate, createModernPrivacyGate } from './ui/privacy-gate.ts';
-import { createGuidePrompts } from './features/guides.ts';
-import { createGuideControls } from './ui/guide-controls.ts';
-import { composeAdapters } from './composition/adapter-composition.ts';
-import { composePrivacy } from './composition/privacy-composition.ts';
-import { composeShareWorkflow } from './composition/share-composition.ts';
-import { composeUI } from './composition/ui-composition.ts';
-import { setupBootstrap } from './composition/bootstrap.ts';
-import { CONFIG } from './config.ts';
+} from './utils/text';
+import { sleep, triggerDownload, isScrollable } from './utils/dom';
+import { luhnValid } from './utils/validation';
+import { withPlayerNames } from './utils/factories';
+import { ensureLegacyPreviewStyles, ensureDesignSystemStyles } from './ui/styles';
+import { createPanelSettings } from './ui/panel-settings';
+import { createSnapshotFeature, createStructuredSnapshotReader } from './features/snapshot';
+import { createAutoLoader } from './features/auto-loader';
+import { createAutoLoaderControls } from './ui/auto-loader-controls';
+import { createRangeControls } from './ui/range-controls';
+import { createPanelShortcuts } from './ui/panel-shortcuts';
+import { createShareWorkflow } from './features/share';
+import { createPanelInteractions } from './ui/panel-interactions';
+import { createModernPanel } from './ui/panel-modern';
+import { createLegacyPanel } from './ui/panel-legacy';
+import { createLegacyPrivacyGate, createModernPrivacyGate } from './ui/privacy-gate';
+import { createGuidePrompts } from './features/guides';
+import { createGuideControls } from './ui/guide-controls';
+import { composeAdapters } from './composition/adapter-composition';
+import { composePrivacy } from './composition/privacy-composition';
+import { composeShareWorkflow } from './composition/share-composition';
+import { composeUI } from './composition/ui-composition';
+import { setupBootstrap } from './composition/bootstrap';
+import { CONFIG } from './config';
+import type {
+  ClassicJSONExportOptions,
+  ErrorHandler,
+  ExportBundleOptions,
+  ExportBundleResult,
+  ExportManifest,
+  ExportManifestOptions,
+  ShareWorkflowOptions,
+  StructuredJSONOptions,
+  StructuredMarkdownOptions,
+  StructuredTXTOptions,
+  TranscriptSession,
+} from './types';
+
+type PageWindow = (Window & typeof globalThis) & {
+  __GMHBookmarkListener?: unknown;
+  __GMHTest?: {
+    runPrivacyCheck: (rawText: string, profileKey?: string) => unknown;
+    profiles: typeof PRIVACY_PROFILES;
+    formatCounts: typeof formatRedactionCounts;
+  };
+  GMH?: typeof GMH;
+  [key: string]: unknown;
+};
+
+interface GMHFlags {
+  newUI: boolean;
+  killSwitch: boolean;
+  betaQuery: boolean;
+  [key: string]: boolean;
+}
 
 (function () {
   'use strict';
 
-  const PAGE_WINDOW =
-    ENV.window || (typeof unsafeWindow !== 'undefined' ? unsafeWindow : window);
-  const detectScriptVersion = () => {
+  const { unsafeWindow: unsafeGlobalWindow } = globalThis as typeof globalThis & {
+    unsafeWindow?: Window & typeof globalThis;
+  };
+  const fallbackWindow =
+    typeof window !== 'undefined' ? (window as Window & typeof globalThis) : undefined;
+  const PAGE_WINDOW = (ENV.window ??
+    unsafeGlobalWindow ??
+    fallbackWindow ??
+    (globalThis as Window & typeof globalThis)) as PageWindow;
+
+  const detectScriptVersion = (): string => {
     const gmInfo = ENV.GM_info;
     const version = gmInfo?.script?.version;
     if (typeof version === 'string' && version.trim()) {
@@ -107,48 +146,65 @@ import { CONFIG } from './config.ts';
     getAdapterMetadata,
     listAdapterNames,
     createGenitAdapter,
-    errorHandler: GMH.Core?.ErrorHandler,
+    errorHandler: GMH.Core?.ErrorHandler as ErrorHandler | null | undefined,
     getPlayerNames,
     setPlayerNames,
-    PLAYER_NAME_FALLBACKS,
+    PLAYER_NAME_FALLBACKS: [...PLAYER_NAME_FALLBACKS],
   });
   updatePlayerNames();
   const buildExportBundle = (
-    session,
-    normalizedRaw,
-    format,
-    stamp,
-    options = {},
-  ) =>
+    session: TranscriptSession,
+    normalizedRaw: string,
+    format: string,
+    stamp: string,
+    options: ExportBundleOptions = {},
+  ): ExportBundleResult =>
     buildExportBundleStandalone(session, normalizedRaw, format, stamp, {
-      playerNames: getPlayerNames(),
-      playerMark: PLAYER_MARK,
       ...options,
+      playerNames: options.playerNames ? [...options.playerNames] : [...getPlayerNames()],
+      playerMark: options.playerMark ?? PLAYER_MARK,
     });
 
-  const buildExportManifest = (params) =>
+  const buildExportManifest = (params: ExportManifestOptions): ExportManifest =>
     buildExportManifestStandalone({ ...params, version: GMH.VERSION });
 
   const toJSONExportLegacy = withPlayerNames(getPlayerNames, toJSONExport);
 
-  const toStructuredMarkdownLegacy = (options = {}) =>
-    toStructuredMarkdown({
-      playerNames: getPlayerNames(),
-      playerMark: PLAYER_MARK,
+  const toJSONExportForShare: ShareWorkflowOptions['toJSONExport'] = (
+    session,
+    options: ClassicJSONExportOptions = {},
+  ): string =>
+    toJSONExport(session, '', {
       ...options,
+      playerNames: options.playerNames ? [...options.playerNames] : [...getPlayerNames()],
     });
 
-  const toStructuredJSONLegacy = (options = {}) =>
-    toStructuredJSON({
-      playerNames: getPlayerNames(),
-      ...options,
+  const toStructuredMarkdownLegacy = (options: StructuredMarkdownOptions = {}): string => {
+    const { playerNames, playerMark, ...rest } = options;
+    return toStructuredMarkdown({
+      ...rest,
+      playerNames: playerNames ? [...playerNames] : [...getPlayerNames()],
+      playerMark: playerMark ?? PLAYER_MARK,
     });
+  };
 
-  const toStructuredTXTLegacy = (options = {}) =>
-    toStructuredTXT({
-      playerNames: getPlayerNames(),
-      ...options,
+  const toStructuredJSONLegacy = (options: StructuredJSONOptions = {}): string => {
+    const { playerNames, playerMark, ...rest } = options;
+    return toStructuredJSON({
+      ...rest,
+      playerNames: playerNames ? [...playerNames] : [...getPlayerNames()],
+      playerMark: playerMark ?? PLAYER_MARK,
     });
+  };
+
+  const toStructuredTXTLegacy = (options: StructuredTXTOptions = {}): string => {
+    const { playerNames, playerMark, ...rest } = options;
+    return toStructuredTXT({
+      ...rest,
+      playerNames: playerNames ? [...playerNames] : [...getPlayerNames()],
+      playerMark: playerMark ?? PLAYER_MARK,
+    });
+  };
 
   const PanelSettings = createPanelSettings({
     clone,
@@ -178,6 +234,8 @@ import { CONFIG } from './config.ts';
   const turnBookmarks = createTurnBookmarks({ console: ENV.console });
   GMH.Core.TurnBookmarks = turnBookmarks;
 
+  let getSnapshotEntryOrigin: (() => number[]) | null = null;
+
   const messageIndexer = createMessageIndexer({
     console: ENV.console,
     document,
@@ -186,7 +244,7 @@ import { CONFIG } from './config.ts';
       typeof requestAnimationFrame === 'function' ? requestAnimationFrame : undefined,
     exportRange,
     getActiveAdapter: () => getActiveAdapter(),
-    getEntryOrigin: () => getSnapshotEntryOrigin(),
+    getEntryOrigin: () => (getSnapshotEntryOrigin ? getSnapshotEntryOrigin() : []),
   });
 
   GMH.Core.MessageIndexer = messageIndexer;
@@ -213,7 +271,7 @@ import { CONFIG } from './config.ts';
     }
   }
 
-  const Flags = (() => {
+  const Flags: GMHFlags = (() => {
     let betaQuery = false;
     try {
       const params = new URLSearchParams(location.search || '');
@@ -250,17 +308,18 @@ import { CONFIG } from './config.ts';
 
   const stateManager = createStateManager({
     console: ENV.console,
-    debug: (...args) => {
-      if (isModernUIActive && typeof ENV.console?.debug === 'function') {
-        ENV.console.debug('[GMH]', ...args);
+    debug: (...args: unknown[]) => {
+      if (isModernUIActive) {
+        ENV.console?.debug?.('[GMH]', ...args);
       }
     },
   });
 
-  const normalizeState = (value) => {
+  const normalizeState = (value: unknown): string | null => {
     if (!value) return null;
     const next = String(value).toLowerCase();
-    return Object.values(GMH_STATE).includes(next) ? next : null;
+    const states = Object.values(GMH_STATE) as string[];
+    return states.includes(next) ? next : null;
   };
 
   GMH.Core.STATE = GMH_STATE;
@@ -316,18 +375,19 @@ import { CONFIG } from './config.ts';
     errorHandler,
   });
 
-  let syncPrivacyProfileSelect = () => {};
+  let syncPrivacyProfileSelect: (profileKey: string) => void = () => {};
 
-  const setPrivacyProfile = (profileKey) => {
+  const setPrivacyProfile = (profileKey: string): void => {
     setPrivacyProfileInternal(profileKey);
     syncPrivacyProfileSelect(profileKey);
   };
 
-  const setCustomList = (type, items) => {
+  const setCustomList = (type: 'blacklist' | 'whitelist', items: unknown): void => {
     setCustomListInternal(type, items);
   };
 
   const {
+    modal,
     panelVisibility: PanelVisibility,
     statusManager,
     setPanelStatus,
@@ -356,7 +416,7 @@ import { CONFIG } from './config.ts';
     getActiveAdapter: () => getActiveAdapter(),
     triggerDownload,
     setPanelStatus,
-    errorHandler: GMH.Core.ErrorHandler,
+    errorHandler,
     documentRef: document,
     locationRef: location,
   });
@@ -366,14 +426,16 @@ import { CONFIG } from './config.ts';
     readTranscriptText,
     projectStructuredMessages,
     readStructuredMessages,
-    getEntryOrigin: getSnapshotEntryOrigin,
+    getEntryOrigin: structuredGetEntryOrigin,
   } = createStructuredSnapshotReader({
     getActiveAdapter,
     setEntryOriginProvider,
     documentRef: document,
   });
 
-  GMH.Core.getEntryOrigin = () => getSnapshotEntryOrigin();
+  getSnapshotEntryOrigin = structuredGetEntryOrigin;
+
+  GMH.Core.getEntryOrigin = () => (getSnapshotEntryOrigin ? getSnapshotEntryOrigin() : []);
 
   const {
     autoLoader,
@@ -384,7 +446,7 @@ import { CONFIG } from './config.ts';
   } = createAutoLoader({
     stateApi: stateManager,
     stateEnum: GMH_STATE,
-    errorHandler: GMH.Core.ErrorHandler,
+    errorHandler,
     messageIndexer,
     exportRange,
     setPanelStatus,
@@ -437,11 +499,12 @@ import { CONFIG } from './config.ts';
     formatRedactionCounts,
     privacyProfiles: PRIVACY_PROFILES,
     ensureDesignSystemStyles,
-    modal: GMH.UI.Modal,
+    modal,
     previewLimit: CONFIG.LIMITS.PREVIEW_TURN_LIMIT,
   });
 
-  const confirmPrivacyGate = (options) =>
+  type PrivacyGateConfirmOptions = Parameters<typeof confirmPrivacyGateModern>[0];
+  const confirmPrivacyGate = (options: PrivacyGateConfirmOptions) =>
     (isModernUIActive ? confirmPrivacyGateModern : confirmPrivacyGateLegacy)(options);
 
   const {
@@ -465,7 +528,7 @@ import { CONFIG } from './config.ts';
     formatRedactionCounts,
     setPanelStatus,
     toMarkdownExport,
-    toJSONExport: toJSONExportLegacy,
+    toJSONExport: toJSONExportForShare,
     toTXTExport,
     toStructuredMarkdown: toStructuredMarkdownLegacy,
     toStructuredJSON: toStructuredJSONLegacy,
@@ -473,17 +536,29 @@ import { CONFIG } from './config.ts';
     buildExportBundle,
     buildExportManifest,
     triggerDownload,
-    clipboard: { set: (value, options) => ENV.GM_setClipboard(value, options) },
-    stateApi: GMH.Core.State,
-    stateEnum: GMH.Core.STATE,
-    confirmPrivacyGate,
-    getEntryOrigin: () => getSnapshotEntryOrigin?.(),
+    clipboard: {
+      set: (value: string, options?: Record<string, unknown>) =>
+        ENV.GM_setClipboard(
+          value,
+          options as Parameters<typeof ENV.GM_setClipboard>[1],
+        ),
+    },
+    stateApi: stateManager,
+    stateEnum: GMH_STATE,
+    confirmPrivacyGate: confirmPrivacyGate as unknown as ShareWorkflowOptions['confirmPrivacyGate'],
+    getEntryOrigin: () => getSnapshotEntryOrigin?.() ?? [],
     logger: ENV.console,
   });
 
 
   const { copySummaryGuide, copyResummaryGuide } = createGuidePrompts({
-    clipboard: { set: (value, options) => ENV.GM_setClipboard(value, options) },
+    clipboard: {
+      set: (value: string, options?: Record<string, unknown>) =>
+        ENV.GM_setClipboard(
+          value,
+          options as Parameters<typeof ENV.GM_setClipboard>[1],
+        ),
+    },
     setPanelStatus,
   });
 
@@ -501,7 +576,7 @@ import { CONFIG } from './config.ts';
     autoLoader,
     autoState: AUTO_STATE,
     configurePrivacyLists,
-    modal: GMH.UI.Modal,
+    modal,
   });
 
 
@@ -529,13 +604,13 @@ import { CONFIG } from './config.ts';
     copyAllShare,
     autoLoader,
     autoState: AUTO_STATE,
-    stateApi: GMH.Core.State,
-    stateEnum: GMH.Core.STATE,
+    stateApi: stateManager,
+    stateEnum: GMH_STATE,
     alert: typeof alert === 'function' ? alert : undefined,
     logger: ENV.console,
   });
 
-  syncPrivacyProfileSelect = (profileKey) => {
+  syncPrivacyProfileSelect = (profileKey: string) => {
     syncPrivacyProfileSelectFromUI(profileKey);
   };
 
@@ -545,7 +620,7 @@ import { CONFIG } from './config.ts';
     version: GMH.VERSION,
     getActiveAdapter: () => getActiveAdapter(),
     attachStatusElement,
-    stateView: GMH.UI.StateView,
+    stateView,
     bindPanelInteractions,
     logger: ENV.console,
   });
@@ -555,7 +630,7 @@ import { CONFIG } from './config.ts';
     getActiveAdapter: () => getActiveAdapter(),
     attachStatusElement,
     setPanelStatus,
-    stateView: GMH.UI.StateView,
+    stateView,
     bindPanelInteractions,
   });
   const { boot, mountPanel } = setupBootstrap({

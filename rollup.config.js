@@ -25,7 +25,7 @@ const metaBanner = `// ==UserScript==\n`
   + `// ==/UserScript==\n`;
 
 export default {
-  input: 'src/index.js',
+  input: 'src/index.ts',
   output: {
     file: 'genit-memory-helper.user.js',
     format: 'iife',

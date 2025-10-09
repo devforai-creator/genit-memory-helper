@@ -10,6 +10,8 @@ export const GMH: GMHNamespace = {
   UI: createModuleBucket(),
   Core: createModuleBucket(),
   Adapters: createModuleBucket(),
+  Settings: createModuleBucket(),
+  Flags: createModuleBucket(),
 };
 
 export const setNamespaceVersion = (version: unknown): string => {

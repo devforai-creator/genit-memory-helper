@@ -20,6 +20,8 @@ export interface GMHNamespace {
   UI: Record<string, unknown>;
   Core: Record<string, unknown>;
   Adapters: Record<string, unknown>;
+  Settings: Record<string, unknown>;
+  Flags?: Record<string, unknown>;
 }
 
 export interface AdapterSelectors {
@@ -319,7 +321,11 @@ export interface AutoLoaderOptions {
   setPanelStatus?(message: string, tone?: string): void;
   getActiveAdapter(): {
     findContainer?(doc: Document): Element | null;
-    listMessageBlocks?(doc: Document): Element[] | NodeListOf<Element> | null;
+    listMessageBlocks?(doc: Document | Element):
+      | Iterable<Element>
+      | Element[]
+      | NodeListOf<Element>
+      | null;
   } | null;
   sleep(ms: number): Promise<void>;
   isScrollable(element: Element | null | undefined): boolean;

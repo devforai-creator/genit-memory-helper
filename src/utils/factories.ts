@@ -26,7 +26,7 @@ export const withPlayerNames = <
 ): ((session: Session, raw: Raw, options?: Options) => Result) => {
   return (session, raw, options) =>
     exportFn(session, raw, {
-      playerNames: getPlayerNames(),
+      playerNames: [...getPlayerNames()],
       ...(options ?? ({} as Options)),
     });
 };
