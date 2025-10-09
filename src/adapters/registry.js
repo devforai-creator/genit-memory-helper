@@ -1,4 +1,4 @@
-import { clone } from '../core/utils.js';
+import { clone } from '../core/utils.ts';
 
 const configs = new Map();
 

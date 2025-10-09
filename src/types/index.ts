@@ -12,6 +12,16 @@ export interface PanelStateManager extends PanelStateApi {
   reset(): void;
 }
 
+export interface GMHNamespace {
+  VERSION: string;
+  Util: Record<string, unknown>;
+  Privacy: Record<string, unknown>;
+  Export: Record<string, unknown>;
+  UI: Record<string, unknown>;
+  Core: Record<string, unknown>;
+  Adapters: Record<string, unknown>;
+}
+
 export interface StateManagerOptions {
   console?: Console | { warn?: (...args: unknown[]) => void; error?: (...args: unknown[]) => void } | null;
   debug?: (...args: unknown[]) => void;

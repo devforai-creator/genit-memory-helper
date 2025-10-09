@@ -1,5 +1,5 @@
 import { adapterRegistry, getAdapterConfig } from './registry.js';
-import { clone } from '../core/utils.js';
+import { clone } from '../core/utils.ts';
 import {
   normNL,
   stripTicks,

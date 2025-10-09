@@ -150,7 +150,7 @@ function createAdapterAPI({ GMH, errorHandler, PLAYER_NAME_FALLBACKS, setPlayerN
  * Registers available DOM adapters and exposes helper APIs for adapter selection.
  *
  * @param {object} options - Injection container.
- * @param {typeof import('../core/namespace.js').GMH} options.GMH - Global namespace handle.
+ * @param {typeof import('../core/namespace.ts').GMH} options.GMH - Global namespace handle.
  * @param {Map} options.adapterRegistry - Registry backing store.
  * @param {Function} options.registerAdapterConfig - Adapter registration helper.
  * @param {Function} options.getAdapterSelectors - Accessor for adapter selectors.

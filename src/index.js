@@ -1,5 +1,5 @@
-import { GMH } from './core/namespace.js';
-import { clone, deepMerge } from './core/utils.js';
+import { GMH } from './core/namespace.ts';
+import { clone, deepMerge } from './core/utils.ts';
 import { ENV } from './env.js';
 import { GMH_STATE, createStateManager } from './core/state.js';
 import { createErrorHandler } from './core/error-handler.js';

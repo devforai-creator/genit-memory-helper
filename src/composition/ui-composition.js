@@ -9,7 +9,7 @@ import { createPanelSettingsController } from '../ui/panel-settings-modal.js';
  * Composes core UI helpers (modal, panel visibility, status view, privacy controls).
  *
  * @param {object} options - Dependency container.
- * @param {typeof import('../core/namespace.js').GMH} options.GMH - Global namespace reference.
+ * @param {typeof import('../core/namespace.ts').GMH} options.GMH - Global namespace reference.
  * @param {Document} options.documentRef - Document handle.
  * @param {Window} options.windowRef - Window handle.
  * @param {object} options.PanelSettings - Panel settings API.
