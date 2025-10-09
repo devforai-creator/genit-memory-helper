@@ -618,49 +618,79 @@ const toJSONExportLegacy = withPlayerNames(toJSONExport);
 **기간**: 2-3개월 (60-80시간)
 **릴리스 조건**: 100% TS 전환 + strict mode
 
-### Phase 1: 타입 정의 (1-2주)
+### Phase 1: 타입 정의 (1-2주) ✅ **완료**
 
-- `src/types/index.ts` 생성
-- Rollup TypeScript 플러그인 설정
-- tsconfig.json 구성
-
-**예상 시간**: 6-8시간
-
----
-
-### Phase 2: Utils 모듈 전환 (2-3주)
-
-```
-src/utils/text.js      → .ts
-src/utils/dom.js       → .ts
-src/utils/validation.js → .ts
-```
+- ✅ `src/types/index.ts` 생성
+- ✅ Rollup TypeScript 플러그인 설정
+- ✅ tsconfig.json 구성
 
 **예상 시간**: 6-8시간
 
 ---
 
-### Phase 3: Core 모듈 전환 (3-4주)
+### Phase 2: Utils 모듈 전환 (2-3주) ✅ **완료**
+
+```
+✅ src/utils/text.js      → .ts
+✅ src/utils/dom.js       → .ts
+✅ src/utils/validation.js → .ts
+```
+
+**예상 시간**: 6-8시간
+
+---
+
+### Phase 3: Core 모듈 전환 (3-4주) ✅ **완료**
 
 의존성 순서:
-1. `src/core/namespace.ts`
-2. `src/core/utils.ts`
-3. `src/core/state.ts`
-4. `src/core/error-handler.ts`
-5. `src/core/export-range.ts`
-6. `src/core/message-indexer.ts`
+1. ✅ `src/core/namespace.ts`
+2. ✅ `src/core/utils.ts`
+3. ✅ `src/core/state.ts`
+4. ✅ `src/core/error-handler.ts`
+5. ✅ `src/core/export-range.ts`
+6. ✅ `src/core/message-indexer.ts`
+7. ✅ `src/core/turn-bookmarks.ts`
+8. ✅ `src/core/bookmark-listener.ts`
 
 **예상 시간**: 12-15시간
 
 ---
 
-### Phase 4: Features/Privacy/Export (4-6주)
+### Phase 4: Features/Privacy/Export (4-6주) ✅ **완료**
+
+**Privacy (5개):**
+- ✅ constants.ts, settings.ts, redaction.ts, pipeline.ts, index.ts
+
+**Export (5개):**
+- ✅ parsers.ts, manifest.ts, writers-classic.ts, writers-structured.ts, index.ts
+
+**Features (4개):**
+- ✅ guides.ts, snapshot.ts, auto-loader.ts, share.ts
 
 **예상 시간**: 20-25시간
 
 ---
 
-### Phase 5: Adapters/UI (4-6주)
+### Phase 5: Adapters/UI/Composition (4-6주) 🔄 **진행 중**
+
+**Phase 5-1: Adapters (3개)** ✅ **완료**
+- ✅ registry.ts, genit.ts, index.ts
+
+**Phase 5-2: UI JSDoc 추가 (11개)** ✅ **완료**
+- ✅ styles, privacy-config, status-manager, range-controls, privacy-gate
+- ✅ panel-settings, panel-settings-modal, panel-modern, panel-legacy
+- ✅ guide-controls, auto-loader-controls
+
+**Phase 5-3: UI TypeScript 전환 (16개)** ✅ **완료**
+- ✅ 5-3a: styles.ts, modal.ts, panel-visibility.ts
+- ✅ 5-3b: state-view.ts, status-manager.ts, privacy-config.ts
+- ✅ 5-3c: privacy-gate.ts, panel-settings.ts, panel-settings-modal.ts
+- ✅ 5-3d: range-controls.ts, auto-loader-controls.ts, guide-controls.ts
+- ✅ 5-3e: panel-modern.ts, panel-legacy.ts, panel-interactions.ts, panel-shortcuts.ts
+
+**Phase 5-4: Composition (5개)** 🔄 **진행 중**
+- 🔄 5-4a: adapter-composition.ts, privacy-composition.ts (진행 중)
+- ⏳ 5-4b: share-composition.ts, ui-composition.ts, bootstrap.ts (예정)
 
 - Tampermonkey 타입: `npm install -D @types/tampermonkey`
 
@@ -668,7 +698,18 @@ src/utils/validation.js → .ts
 
 ---
 
-### Phase 6: strict mode (1-2주)
+### Phase 6: 나머지 파일 + strict mode (1-2주) ⏳ **예정**
+
+**남은 파일 (4개):**
+- ⏳ src/utils/factories.js → .ts
+- ⏳ src/config.js → .ts
+- ⏳ src/env.js → .ts
+- ⏳ src/index.js → .ts (마지막 - 메인 엔트리)
+
+**strict mode 활성화:**
+- ⏳ tsconfig.json: `"strict": true`
+- ⏳ 모든 타입 에러 수정
+- ⏳ 최종 테스트 및 검증
 
 **예상 시간**: 8-10시간
 
