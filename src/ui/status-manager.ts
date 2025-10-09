@@ -1,27 +1,15 @@
-/**
- * @typedef {import('../types').PanelVisibilityController} PanelVisibilityController
- */
+import type { PanelVisibilityController } from '../types';
 
-/**
- * @typedef {object} StatusTone
- * @property {string} color
- * @property {string} icon
- */
+interface StatusTone {
+  color: string;
+  icon: string;
+}
 
-/**
- * @typedef {object} StatusManagerOptions
- * @property {PanelVisibilityController | null | undefined} [panelVisibility]
- */
+interface StatusManagerOptions {
+  panelVisibility?: PanelVisibilityController | null;
+}
 
-/**
- * @typedef {object} StatusManager
- * @property {Record<string, StatusTone>} STATUS_TONES
- * @property {(element: HTMLElement | null) => void} attachStatusElement
- * @property {(message: string, toneOrColor?: string) => void} setStatus
- */
-
-/** @type {Record<string, StatusTone>} */
-const STATUS_TONES = {
+export const STATUS_TONES: Record<string, StatusTone> = {
   success: { color: '#34d399', icon: '✅' },
   info: { color: '#93c5fd', icon: 'ℹ️' },
   progress: { color: '#facc15', icon: '⏳' },
@@ -30,37 +18,34 @@ const STATUS_TONES = {
   muted: { color: '#cbd5f5', icon: '' },
 };
 
+interface StatusManager {
+  STATUS_TONES: typeof STATUS_TONES;
+  attachStatusElement(element: HTMLElement | null): void;
+  setStatus(message: unknown, toneOrColor?: string | null): void;
+}
+
 /**
  * Creates a minimal status manager that updates panel status text and notifies listeners.
- *
- * @param {StatusManagerOptions} [options]
- * @returns {StatusManager}
  */
-export function createStatusManager({ panelVisibility } = {}) {
-  /** @type {HTMLElement | null} */
-  let statusElement = null;
+export function createStatusManager({ panelVisibility }: StatusManagerOptions = {}): StatusManager {
+  let statusElement: HTMLElement | null = null;
 
   /**
    * Sets the DOM element where panel status text renders.
-   * @param {HTMLElement | null} element
-   * @returns {void}
    */
-  const attachStatusElement = (element) => {
-    statusElement = element || null;
+  const attachStatusElement = (element: HTMLElement | null): void => {
+    statusElement = element ?? null;
   };
 
   /**
    * Updates the status element text and tone styling.
-   * @param {unknown} message
-   * @param {string} [toneOrColor='info']
-   * @returns {void}
    */
-  const setStatus = (message, toneOrColor = 'info') => {
+  const setStatus = (message: unknown, toneOrColor: string | null = 'info'): void => {
     if (!statusElement) return;
     const text = String(message || '');
     let icon = '';
     let color = '#9ca3af';
-    let tone = toneOrColor;
+    let tone: string | null | undefined = toneOrColor ?? undefined;
 
     if (typeof toneOrColor === 'string' && toneOrColor.startsWith('#')) {
       color = toneOrColor;
@@ -81,7 +66,7 @@ export function createStatusManager({ panelVisibility } = {}) {
     if (tone) statusElement.dataset.tone = tone;
     else delete statusElement.dataset.tone;
 
-    panelVisibility?.onStatusUpdate?.({ tone });
+    panelVisibility?.onStatusUpdate?.({ tone: tone ?? null });
   };
 
   return {
@@ -90,5 +75,3 @@ export function createStatusManager({ panelVisibility } = {}) {
     setStatus,
   };
 }
-
-export { STATUS_TONES };

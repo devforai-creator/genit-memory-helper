@@ -1,31 +1,28 @@
-import { ensureDesignSystemStyles } from './styles.ts';
+import { ensureDesignSystemStyles } from './styles';
+import type { ModalController } from '../types';
 
-/**
- * @typedef {import('../types').ModalController} ModalController
- */
+interface PrivacyConfig {
+  blacklist?: string[];
+  whitelist?: string[];
+}
 
-/**
- * @typedef {object} PrivacyConfiguratorOptions
- * @property {{ blacklist?: string[]; whitelist?: string[] }} privacyConfig
- * @property {(type: string, values: string[]) => void} setCustomList
- * @property {(value: string) => string[]} parseListInput
- * @property {(message: string, tone?: string | null) => void} setPanelStatus
- * @property {ModalController} modal
- * @property {(() => boolean) | boolean} [isModernUIActive]
- * @property {Document | null} [documentRef]
- * @property {Window | null} [windowRef]
- */
+interface PrivacyConfiguratorOptions {
+  privacyConfig: PrivacyConfig;
+  setCustomList(type: string, values: string[]): void;
+  parseListInput(value: string): string[];
+  setPanelStatus(message: string, tone?: string | null): void;
+  modal: ModalController;
+  isModernUIActive?: (() => boolean) | boolean;
+  documentRef?: Document | null;
+  windowRef?: (Window & typeof globalThis) | null;
+}
 
-/**
- * @typedef {object} PrivacyConfigurator
- * @property {() => Promise<void> | void} configurePrivacyLists
- */
+interface PrivacyConfigurator {
+  configurePrivacyLists(): Promise<void> | void;
+}
 
 /**
  * Creates privacy list configuration helpers for modal or legacy prompts.
- *
- * @param {PrivacyConfiguratorOptions} [options]
- * @returns {PrivacyConfigurator}
  */
 export function createPrivacyConfigurator({
   privacyConfig,
@@ -35,29 +32,20 @@ export function createPrivacyConfigurator({
   modal,
   isModernUIActive,
   documentRef = typeof document !== 'undefined' ? document : null,
-  windowRef = typeof window !== 'undefined' ? window : null,
-} = {}) {
-  if (!privacyConfig) throw new Error('createPrivacyConfigurator requires privacyConfig');
-  if (!setCustomList) throw new Error('createPrivacyConfigurator requires setCustomList');
-  if (!parseListInput) throw new Error('createPrivacyConfigurator requires parseListInput');
-  if (!setPanelStatus) throw new Error('createPrivacyConfigurator requires setPanelStatus');
-  if (!modal) throw new Error('createPrivacyConfigurator requires modal');
+  windowRef = typeof window !== 'undefined' ? (window as Window & typeof globalThis) : null,
+}: PrivacyConfiguratorOptions): PrivacyConfigurator {
   if (!documentRef) throw new Error('createPrivacyConfigurator requires document');
 
   const doc = documentRef;
   const win = windowRef;
 
-  /**
-   * @returns {boolean}
-   */
-  const resolveModernActive = () =>
+  const resolveModernActive = (): boolean =>
     typeof isModernUIActive === 'function' ? isModernUIActive() : Boolean(isModernUIActive);
 
   /**
    * Launches the design-system modal for editing privacy lists.
-   * @returns {Promise<void>}
    */
-  const configurePrivacyListsModern = async () => {
+  const configurePrivacyListsModern = async (): Promise<void> => {
     ensureDesignSystemStyles(doc);
 
     const stack = doc.createElement('div');
@@ -69,7 +57,7 @@ export function createPrivacyConfigurator({
       '쉼표 또는 줄바꿈으로 여러 항목을 구분하세요. 블랙리스트는 강제 마스킹, 화이트리스트는 예외 처리됩니다.';
     stack.appendChild(intro);
 
-    const makeLabel = (text) => {
+    const makeLabel = (text: string): HTMLDivElement => {
       const label = doc.createElement('div');
       label.className = 'gmh-field-label';
       label.textContent = text;
@@ -96,28 +84,30 @@ export function createPrivacyConfigurator({
     whiteTextarea.value = privacyConfig.whitelist?.join('\n') || '';
     stack.appendChild(whiteTextarea);
 
-    const confirmed = await modal.open({
-      title: '프라이버시 민감어 관리',
-      size: 'large',
-      content: stack,
-      actions: [
-        {
-          id: 'cancel',
-          label: '취소',
-          variant: 'secondary',
-          value: false,
-          attrs: { 'data-action': 'cancel' },
-        },
-        {
-          id: 'save',
-          label: '저장',
-          variant: 'primary',
-          value: true,
-          attrs: { 'data-action': 'save' },
-        },
-      ],
-      initialFocus: '#gmh-privacy-blacklist',
-    });
+    const confirmed = Boolean(
+      await modal.open({
+        title: '프라이버시 민감어 관리',
+        size: 'large',
+        content: stack,
+        actions: [
+          {
+            id: 'cancel',
+            label: '취소',
+            variant: 'secondary',
+            value: false,
+            attrs: { 'data-action': 'cancel' },
+          },
+          {
+            id: 'save',
+            label: '저장',
+            variant: 'primary',
+            value: true,
+            attrs: { 'data-action': 'save' },
+          },
+        ],
+        initialFocus: '#gmh-privacy-blacklist',
+      }),
+    );
 
     if (!confirmed) {
       setPanelStatus('프라이버시 설정 변경을 취소했습니다.', 'muted');
@@ -131,9 +121,8 @@ export function createPrivacyConfigurator({
 
   /**
    * Prompts using classic dialogs to update privacy lists.
-   * @returns {void}
    */
-  const configurePrivacyListsLegacy = () => {
+  const configurePrivacyListsLegacy = (): void => {
     const currentBlack = privacyConfig.blacklist?.join('\n') || '';
     const nextBlack = win?.prompt
       ? win.prompt(
@@ -160,18 +149,16 @@ export function createPrivacyConfigurator({
 
   /**
    * Opens either the modern modal or legacy prompt workflow.
-   * @returns {Promise<void> | void}
    */
-  const configurePrivacyLists = async () => {
-    if (resolveModernActive()) return configurePrivacyListsModern();
-    return configurePrivacyListsLegacy();
+  const configurePrivacyLists = async (): Promise<void> => {
+    if (resolveModernActive()) {
+      await configurePrivacyListsModern();
+      return;
+    }
+    configurePrivacyListsLegacy();
   };
 
   return {
-    /**
-     * Opens the privacy configuration workflow using the active UI mode.
-     * @returns {Promise<void> | void}
-     */
     configurePrivacyLists,
   };
 }

@@ -692,6 +692,7 @@ export interface PrivacyPipelineApi {
 }
 
 export interface ModalAction {
+  id?: string;
   label: string;
   value?: unknown;
   type?: string;
@@ -746,7 +747,7 @@ export interface PanelInteractionsOptions {
   setPrivacyProfile(profileKey: string): void;
   getPrivacyProfile?(): string | null | undefined;
   privacyProfiles?: Record<string, { label?: string; [key: string]: unknown }>;
-  configurePrivacyLists?(): void;
+  configurePrivacyLists?(): Promise<void> | void;
   openPanelSettings?(): void;
   ensureAutoLoadControlsModern?(panel: Element): void;
   ensureAutoLoadControlsLegacy?(panel: Element): void;
@@ -772,6 +773,6 @@ export interface PanelShortcutsOptions {
   panelVisibility: PanelVisibilityController;
   autoLoader: AutoLoaderController;
   autoState: AutoLoaderExports['autoState'];
-  configurePrivacyLists: () => void;
+  configurePrivacyLists: () => Promise<void> | void;
   modal?: ModalController | null;
 }

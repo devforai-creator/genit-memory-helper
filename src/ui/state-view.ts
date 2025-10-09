@@ -1,10 +1,27 @@
-/**
- * @typedef {import('../types').StateViewOptions} StateViewOptions
- * @typedef {import('../types').StateViewBindings} StateViewBindings
- */
+import type { StateViewBindings, StateViewOptions } from '../types';
 
-/** @type {Record<string, { label: string; message: string; tone: string; progress: { value?: number; indeterminate?: boolean } }>} */
-export const STATE_PRESETS = {
+type StateProgress = {
+  value?: number;
+  indeterminate?: boolean;
+};
+
+type StatePreset = {
+  label: string;
+  message: string;
+  tone: string;
+  progress?: StateProgress | null;
+};
+
+type StateMeta = {
+  payload?: {
+    label?: string;
+    message?: string;
+    tone?: string;
+    progress?: StateProgress | null;
+  };
+};
+
+const STATE_PRESET_MAP = {
   idle: {
     label: '대기 중',
     message: '준비 완료',
@@ -47,30 +64,26 @@ export const STATE_PRESETS = {
     tone: 'error',
     progress: { value: 1 },
   },
-};
+} satisfies Record<string, StatePreset>;
+
+export const STATE_PRESETS: Record<string, StatePreset> = STATE_PRESET_MAP;
 
 /**
  * Builds the state view binder so the panel shows current workflow progress.
- *
- * @param {StateViewOptions} options
- * @returns {{ bind: (bindings?: StateViewBindings) => void }}
  */
-export function createStateView({ stateApi, statusManager, stateEnum }) {
+export function createStateView({
+  stateApi,
+  statusManager,
+  stateEnum,
+}: StateViewOptions): { bind: (bindings?: StateViewBindings) => void } {
   if (!stateApi) throw new Error('createStateView requires stateApi');
   if (!statusManager) throw new Error('createStateView requires statusManager');
 
-  /** @type {HTMLElement | null} */
-  let progressFillEl = null;
-  /** @type {HTMLElement | null} */
-  let progressLabelEl = null;
-  /** @type {(() => void) | null} */
-  let unsubscribe = null;
+  let progressFillEl: HTMLElement | null = null;
+  let progressLabelEl: HTMLElement | null = null;
+  let unsubscribe: (() => void) | null = null;
 
-  /**
-   * @param {number} value
-   * @returns {number}
-   */
-  const clamp = (value) => {
+  const clamp = (value?: number | null): number => {
     if (!Number.isFinite(value)) return 0;
     if (value < 0) return 0;
     if (value > 1) return 1;
@@ -79,18 +92,13 @@ export function createStateView({ stateApi, statusManager, stateEnum }) {
 
   const setPanelStatus = statusManager.setStatus;
 
-  /**
-   * @param {string} stateKey
-   * @param {{ payload?: { label?: string; message?: string; tone?: string; progress?: { value?: number; indeterminate?: boolean } } }} [meta]
-   * @returns {void}
-   */
-  const applyState = (stateKey, meta = {}) => {
-    const payload = meta?.payload || {};
-    const preset = STATE_PRESETS[stateKey] || STATE_PRESETS.idle;
-    const label = payload.label || preset.label || '';
-    const tone = payload.tone || preset.tone || 'info';
-    const message = payload.message || preset.message || label || '';
-    const progress = payload.progress || preset.progress || null;
+  const applyState = (stateKey: string, meta: StateMeta = {}): void => {
+    const payload = meta?.payload ?? {};
+    const preset = STATE_PRESETS[stateKey] ?? STATE_PRESETS.idle;
+    const label = payload.label ?? preset.label ?? '';
+    const tone = payload.tone ?? preset.tone ?? 'info';
+    const message = payload.message ?? preset.message ?? label ?? '';
+    const progress = payload.progress ?? preset.progress ?? null;
 
     if (progressLabelEl) progressLabelEl.textContent = label || ' ';
 
@@ -101,7 +109,7 @@ export function createStateView({ stateApi, statusManager, stateEnum }) {
         progressFillEl.setAttribute('aria-valuenow', '0');
       } else {
         progressFillEl.dataset.indeterminate = 'false';
-        const value = clamp(progress?.value);
+        const value = clamp(progress?.value ?? null);
         progressFillEl.style.width = `${Math.round(value * 100)}%`;
         progressFillEl.setAttribute('aria-valuenow', String(value));
       }
@@ -112,13 +120,9 @@ export function createStateView({ stateApi, statusManager, stateEnum }) {
     if (message) setPanelStatus(message, tone);
   };
 
-  /**
-   * @param {StateViewBindings} [bindings]
-   * @returns {void}
-   */
-  const bind = ({ progressFill, progressLabel } = {}) => {
-    progressFillEl = progressFill || null;
-    progressLabelEl = progressLabel || null;
+  const bind = ({ progressFill, progressLabel }: StateViewBindings = {}): void => {
+    progressFillEl = progressFill ?? null;
+    progressLabelEl = progressLabel ?? null;
     if (typeof unsubscribe === 'function') unsubscribe();
     if (progressFillEl) {
       progressFillEl.setAttribute('role', 'progressbar');
@@ -130,10 +134,11 @@ export function createStateView({ stateApi, statusManager, stateEnum }) {
     if (progressLabelEl) {
       progressLabelEl.setAttribute('aria-live', 'polite');
     }
-    unsubscribe = stateApi.subscribe?.((state, meta) => {
-      const nextState = typeof state === 'string' ? state : stateEnum?.IDLE || 'idle';
-      applyState(nextState, meta);
-    });
+    unsubscribe =
+      stateApi.subscribe?.((state, meta) => {
+        const nextState = typeof state === 'string' ? state : stateEnum?.IDLE || 'idle';
+        applyState(nextState, meta as StateMeta);
+      }) ?? null;
     const currentRaw = stateApi.getState?.();
     const current = typeof currentRaw === 'string' ? currentRaw : stateEnum?.IDLE || 'idle';
     applyState(current, { payload: STATE_PRESETS[current] || {} });

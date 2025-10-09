@@ -9028,417 +9028,291 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         };
     }
 
-    /**
-     * @typedef {import('../types').PanelVisibilityController} PanelVisibilityController
-     */
-
-    /**
-     * @typedef {object} StatusTone
-     * @property {string} color
-     * @property {string} icon
-     */
-
-    /**
-     * @typedef {object} StatusManagerOptions
-     * @property {PanelVisibilityController | null | undefined} [panelVisibility]
-     */
-
-    /**
-     * @typedef {object} StatusManager
-     * @property {Record<string, StatusTone>} STATUS_TONES
-     * @property {(element: HTMLElement | null) => void} attachStatusElement
-     * @property {(message: string, toneOrColor?: string) => void} setStatus
-     */
-
-    /** @type {Record<string, StatusTone>} */
     const STATUS_TONES = {
-      success: { color: '#34d399', icon: '✅' },
-      info: { color: '#93c5fd', icon: 'ℹ️' },
-      progress: { color: '#facc15', icon: '⏳' },
-      warning: { color: '#f97316', icon: '⚠️' },
-      error: { color: '#f87171', icon: '❌' },
-      muted: { color: '#cbd5f5', icon: '' },
+        success: { color: '#34d399', icon: '✅' },
+        info: { color: '#93c5fd', icon: 'ℹ️' },
+        progress: { color: '#facc15', icon: '⏳' },
+        warning: { color: '#f97316', icon: '⚠️' },
+        error: { color: '#f87171', icon: '❌' },
+        muted: { color: '#cbd5f5', icon: '' },
     };
-
     /**
      * Creates a minimal status manager that updates panel status text and notifies listeners.
-     *
-     * @param {StatusManagerOptions} [options]
-     * @returns {StatusManager}
      */
     function createStatusManager({ panelVisibility } = {}) {
-      /** @type {HTMLElement | null} */
-      let statusElement = null;
-
-      /**
-       * Sets the DOM element where panel status text renders.
-       * @param {HTMLElement | null} element
-       * @returns {void}
-       */
-      const attachStatusElement = (element) => {
-        statusElement = element || null;
-      };
-
-      /**
-       * Updates the status element text and tone styling.
-       * @param {unknown} message
-       * @param {string} [toneOrColor='info']
-       * @returns {void}
-       */
-      const setStatus = (message, toneOrColor = 'info') => {
-        if (!statusElement) return;
-        const text = String(message || '');
-        let icon = '';
-        let color = '#9ca3af';
-        let tone = toneOrColor;
-
-        if (typeof toneOrColor === 'string' && toneOrColor.startsWith('#')) {
-          color = toneOrColor;
-          tone = null;
-        } else if (typeof toneOrColor === 'string' && STATUS_TONES[toneOrColor]) {
-          tone = toneOrColor;
-        } else if (!toneOrColor) {
-          tone = 'info';
-        }
-
-        if (tone && STATUS_TONES[tone]) {
-          color = STATUS_TONES[tone].color;
-          icon = STATUS_TONES[tone].icon || '';
-        }
-
-        statusElement.textContent = icon ? `${icon} ${text}` : text;
-        statusElement.style.color = color;
-        if (tone) statusElement.dataset.tone = tone;
-        else delete statusElement.dataset.tone;
-
-        panelVisibility?.onStatusUpdate?.({ tone });
-      };
-
-      return {
-        STATUS_TONES,
-        attachStatusElement,
-        setStatus,
-      };
+        let statusElement = null;
+        /**
+         * Sets the DOM element where panel status text renders.
+         */
+        const attachStatusElement = (element) => {
+            statusElement = element ?? null;
+        };
+        /**
+         * Updates the status element text and tone styling.
+         */
+        const setStatus = (message, toneOrColor = 'info') => {
+            if (!statusElement)
+                return;
+            const text = String(message || '');
+            let icon = '';
+            let color = '#9ca3af';
+            let tone = toneOrColor ?? undefined;
+            if (typeof toneOrColor === 'string' && toneOrColor.startsWith('#')) {
+                color = toneOrColor;
+                tone = null;
+            }
+            else if (typeof toneOrColor === 'string' && STATUS_TONES[toneOrColor]) {
+                tone = toneOrColor;
+            }
+            else if (!toneOrColor) {
+                tone = 'info';
+            }
+            if (tone && STATUS_TONES[tone]) {
+                color = STATUS_TONES[tone].color;
+                icon = STATUS_TONES[tone].icon || '';
+            }
+            statusElement.textContent = icon ? `${icon} ${text}` : text;
+            statusElement.style.color = color;
+            if (tone)
+                statusElement.dataset.tone = tone;
+            else
+                delete statusElement.dataset.tone;
+            panelVisibility?.onStatusUpdate?.({ tone: tone ?? null });
+        };
+        return {
+            STATUS_TONES,
+            attachStatusElement,
+            setStatus,
+        };
     }
 
-    /**
-     * @typedef {import('../types').StateViewOptions} StateViewOptions
-     * @typedef {import('../types').StateViewBindings} StateViewBindings
-     */
-
-    /** @type {Record<string, { label: string; message: string; tone: string; progress: { value?: number; indeterminate?: boolean } }>} */
-    const STATE_PRESETS = {
-      idle: {
-        label: '대기 중',
-        message: '준비 완료',
-        tone: 'info',
-        progress: { value: 0 },
-      },
-      scanning: {
-        label: '스크롤/수집 중',
-        message: '위로 불러오는 중...',
-        tone: 'progress',
-        progress: { indeterminate: true },
-      },
-      redacting: {
-        label: '민감정보 마스킹 중',
-        message: '레다크션 파이프라인 적용 중...',
-        tone: 'progress',
-        progress: { indeterminate: true },
-      },
-      preview: {
-        label: '미리보기 준비 완료',
-        message: '레다크션 결과를 검토하세요.',
-        tone: 'info',
-        progress: { value: 0.75 },
-      },
-      exporting: {
-        label: '내보내기 진행 중',
-        message: '파일을 준비하는 중입니다...',
-        tone: 'progress',
-        progress: { indeterminate: true },
-      },
-      done: {
-        label: '작업 완료',
-        message: '결과를 확인하세요.',
-        tone: 'success',
-        progress: { value: 1 },
-      },
-      error: {
-        label: '오류 발생',
-        message: '작업을 다시 시도해주세요.',
-        tone: 'error',
-        progress: { value: 1 },
-      },
+    const STATE_PRESET_MAP = {
+        idle: {
+            label: '대기 중',
+            message: '준비 완료',
+            tone: 'info',
+            progress: { value: 0 },
+        },
+        scanning: {
+            label: '스크롤/수집 중',
+            message: '위로 불러오는 중...',
+            tone: 'progress',
+            progress: { indeterminate: true },
+        },
+        redacting: {
+            label: '민감정보 마스킹 중',
+            message: '레다크션 파이프라인 적용 중...',
+            tone: 'progress',
+            progress: { indeterminate: true },
+        },
+        preview: {
+            label: '미리보기 준비 완료',
+            message: '레다크션 결과를 검토하세요.',
+            tone: 'info',
+            progress: { value: 0.75 },
+        },
+        exporting: {
+            label: '내보내기 진행 중',
+            message: '파일을 준비하는 중입니다...',
+            tone: 'progress',
+            progress: { indeterminate: true },
+        },
+        done: {
+            label: '작업 완료',
+            message: '결과를 확인하세요.',
+            tone: 'success',
+            progress: { value: 1 },
+        },
+        error: {
+            label: '오류 발생',
+            message: '작업을 다시 시도해주세요.',
+            tone: 'error',
+            progress: { value: 1 },
+        },
     };
-
+    const STATE_PRESETS = STATE_PRESET_MAP;
     /**
      * Builds the state view binder so the panel shows current workflow progress.
-     *
-     * @param {StateViewOptions} options
-     * @returns {{ bind: (bindings?: StateViewBindings) => void }}
      */
-    function createStateView({ stateApi, statusManager, stateEnum }) {
-      if (!stateApi) throw new Error('createStateView requires stateApi');
-      if (!statusManager) throw new Error('createStateView requires statusManager');
-
-      /** @type {HTMLElement | null} */
-      let progressFillEl = null;
-      /** @type {HTMLElement | null} */
-      let progressLabelEl = null;
-      /** @type {(() => void) | null} */
-      let unsubscribe = null;
-
-      /**
-       * @param {number} value
-       * @returns {number}
-       */
-      const clamp = (value) => {
-        if (!Number.isFinite(value)) return 0;
-        if (value < 0) return 0;
-        if (value > 1) return 1;
-        return value;
-      };
-
-      const setPanelStatus = statusManager.setStatus;
-
-      /**
-       * @param {string} stateKey
-       * @param {{ payload?: { label?: string; message?: string; tone?: string; progress?: { value?: number; indeterminate?: boolean } } }} [meta]
-       * @returns {void}
-       */
-      const applyState = (stateKey, meta = {}) => {
-        const payload = meta?.payload || {};
-        const preset = STATE_PRESETS[stateKey] || STATE_PRESETS.idle;
-        const label = payload.label || preset.label || '';
-        const tone = payload.tone || preset.tone || 'info';
-        const message = payload.message || preset.message || label || '';
-        const progress = payload.progress || preset.progress || null;
-
-        if (progressLabelEl) progressLabelEl.textContent = label || ' ';
-
-        if (progressFillEl) {
-          if (progress?.indeterminate) {
-            progressFillEl.dataset.indeterminate = 'true';
-            progressFillEl.style.width = '40%';
-            progressFillEl.setAttribute('aria-valuenow', '0');
-          } else {
-            progressFillEl.dataset.indeterminate = 'false';
-            const value = clamp(progress?.value);
-            progressFillEl.style.width = `${Math.round(value * 100)}%`;
-            progressFillEl.setAttribute('aria-valuenow', String(value));
-          }
-          progressFillEl.dataset.state = stateKey || 'idle';
-          if (label) progressFillEl.setAttribute('aria-valuetext', label);
-        }
-
-        if (message) setPanelStatus(message, tone);
-      };
-
-      /**
-       * @param {StateViewBindings} [bindings]
-       * @returns {void}
-       */
-      const bind = ({ progressFill, progressLabel } = {}) => {
-        progressFillEl = progressFill || null;
-        progressLabelEl = progressLabel || null;
-        if (typeof unsubscribe === 'function') unsubscribe();
-        if (progressFillEl) {
-          progressFillEl.setAttribute('role', 'progressbar');
-          progressFillEl.setAttribute('aria-valuemin', '0');
-          progressFillEl.setAttribute('aria-valuemax', '1');
-          progressFillEl.setAttribute('aria-valuenow', '0');
-          progressFillEl.setAttribute('aria-live', 'polite');
-        }
-        if (progressLabelEl) {
-          progressLabelEl.setAttribute('aria-live', 'polite');
-        }
-        unsubscribe = stateApi.subscribe?.((state, meta) => {
-          const nextState = typeof state === 'string' ? state : stateEnum?.IDLE || 'idle';
-          applyState(nextState, meta);
-        });
-        const currentRaw = stateApi.getState?.();
-        const current = typeof currentRaw === 'string' ? currentRaw : stateEnum?.IDLE || 'idle';
-        applyState(current, { payload: STATE_PRESETS[current] || {} });
-      };
-
-      return { bind };
+    function createStateView({ stateApi, statusManager, stateEnum, }) {
+        if (!stateApi)
+            throw new Error('createStateView requires stateApi');
+        if (!statusManager)
+            throw new Error('createStateView requires statusManager');
+        let progressFillEl = null;
+        let progressLabelEl = null;
+        let unsubscribe = null;
+        const clamp = (value) => {
+            if (!Number.isFinite(value))
+                return 0;
+            if (value < 0)
+                return 0;
+            if (value > 1)
+                return 1;
+            return value;
+        };
+        const setPanelStatus = statusManager.setStatus;
+        const applyState = (stateKey, meta = {}) => {
+            const payload = meta?.payload ?? {};
+            const preset = STATE_PRESETS[stateKey] ?? STATE_PRESETS.idle;
+            const label = payload.label ?? preset.label ?? '';
+            const tone = payload.tone ?? preset.tone ?? 'info';
+            const message = payload.message ?? preset.message ?? label ?? '';
+            const progress = payload.progress ?? preset.progress ?? null;
+            if (progressLabelEl)
+                progressLabelEl.textContent = label || ' ';
+            if (progressFillEl) {
+                if (progress?.indeterminate) {
+                    progressFillEl.dataset.indeterminate = 'true';
+                    progressFillEl.style.width = '40%';
+                    progressFillEl.setAttribute('aria-valuenow', '0');
+                }
+                else {
+                    progressFillEl.dataset.indeterminate = 'false';
+                    const value = clamp(progress?.value ?? null);
+                    progressFillEl.style.width = `${Math.round(value * 100)}%`;
+                    progressFillEl.setAttribute('aria-valuenow', String(value));
+                }
+                progressFillEl.dataset.state = stateKey || 'idle';
+                if (label)
+                    progressFillEl.setAttribute('aria-valuetext', label);
+            }
+            if (message)
+                setPanelStatus(message, tone);
+        };
+        const bind = ({ progressFill, progressLabel } = {}) => {
+            progressFillEl = progressFill ?? null;
+            progressLabelEl = progressLabel ?? null;
+            if (typeof unsubscribe === 'function')
+                unsubscribe();
+            if (progressFillEl) {
+                progressFillEl.setAttribute('role', 'progressbar');
+                progressFillEl.setAttribute('aria-valuemin', '0');
+                progressFillEl.setAttribute('aria-valuemax', '1');
+                progressFillEl.setAttribute('aria-valuenow', '0');
+                progressFillEl.setAttribute('aria-live', 'polite');
+            }
+            if (progressLabelEl) {
+                progressLabelEl.setAttribute('aria-live', 'polite');
+            }
+            unsubscribe =
+                stateApi.subscribe?.((state, meta) => {
+                    const nextState = typeof state === 'string' ? state : stateEnum?.IDLE || 'idle';
+                    applyState(nextState, meta);
+                }) ?? null;
+            const currentRaw = stateApi.getState?.();
+            const current = typeof currentRaw === 'string' ? currentRaw : stateEnum?.IDLE || 'idle';
+            applyState(current, { payload: STATE_PRESETS[current] || {} });
+        };
+        return { bind };
     }
-
-    /**
-     * @typedef {import('../types').ModalController} ModalController
-     */
-
-    /**
-     * @typedef {object} PrivacyConfiguratorOptions
-     * @property {{ blacklist?: string[]; whitelist?: string[] }} privacyConfig
-     * @property {(type: string, values: string[]) => void} setCustomList
-     * @property {(value: string) => string[]} parseListInput
-     * @property {(message: string, tone?: string | null) => void} setPanelStatus
-     * @property {ModalController} modal
-     * @property {(() => boolean) | boolean} [isModernUIActive]
-     * @property {Document | null} [documentRef]
-     * @property {Window | null} [windowRef]
-     */
-
-    /**
-     * @typedef {object} PrivacyConfigurator
-     * @property {() => Promise<void> | void} configurePrivacyLists
-     */
 
     /**
      * Creates privacy list configuration helpers for modal or legacy prompts.
-     *
-     * @param {PrivacyConfiguratorOptions} [options]
-     * @returns {PrivacyConfigurator}
      */
-    function createPrivacyConfigurator({
-      privacyConfig,
-      setCustomList,
-      parseListInput,
-      setPanelStatus,
-      modal,
-      isModernUIActive,
-      documentRef = typeof document !== 'undefined' ? document : null,
-      windowRef = typeof window !== 'undefined' ? window : null,
-    } = {}) {
-      if (!privacyConfig) throw new Error('createPrivacyConfigurator requires privacyConfig');
-      if (!setCustomList) throw new Error('createPrivacyConfigurator requires setCustomList');
-      if (!parseListInput) throw new Error('createPrivacyConfigurator requires parseListInput');
-      if (!setPanelStatus) throw new Error('createPrivacyConfigurator requires setPanelStatus');
-      if (!modal) throw new Error('createPrivacyConfigurator requires modal');
-      if (!documentRef) throw new Error('createPrivacyConfigurator requires document');
-
-      const doc = documentRef;
-      const win = windowRef;
-
-      /**
-       * @returns {boolean}
-       */
-      const resolveModernActive = () =>
-        typeof isModernUIActive === 'function' ? isModernUIActive() : Boolean(isModernUIActive);
-
-      /**
-       * Launches the design-system modal for editing privacy lists.
-       * @returns {Promise<void>}
-       */
-      const configurePrivacyListsModern = async () => {
-        ensureDesignSystemStyles(doc);
-
-        const stack = doc.createElement('div');
-        stack.className = 'gmh-modal-stack';
-
-        const intro = doc.createElement('p');
-        intro.className = 'gmh-subtext';
-        intro.textContent =
-          '쉼표 또는 줄바꿈으로 여러 항목을 구분하세요. 블랙리스트는 강제 마스킹, 화이트리스트는 예외 처리됩니다.';
-        stack.appendChild(intro);
-
-        const makeLabel = (text) => {
-          const label = doc.createElement('div');
-          label.className = 'gmh-field-label';
-          label.textContent = text;
-          return label;
-        };
-
-        const blackLabel = makeLabel(`블랙리스트 (${privacyConfig.blacklist?.length || 0})`);
-        stack.appendChild(blackLabel);
-
-        const blackTextarea = doc.createElement('textarea');
-        blackTextarea.id = 'gmh-privacy-blacklist';
-        blackTextarea.className = 'gmh-textarea';
-        blackTextarea.placeholder = '예: 서울시, 010-1234-5678';
-        blackTextarea.value = privacyConfig.blacklist?.join('\n') || '';
-        stack.appendChild(blackTextarea);
-
-        const whiteLabel = makeLabel(`화이트리스트 (${privacyConfig.whitelist?.length || 0})`);
-        stack.appendChild(whiteLabel);
-
-        const whiteTextarea = doc.createElement('textarea');
-        whiteTextarea.id = 'gmh-privacy-whitelist';
-        whiteTextarea.className = 'gmh-textarea';
-        whiteTextarea.placeholder = '예: 공식 길드명, 공개 닉네임';
-        whiteTextarea.value = privacyConfig.whitelist?.join('\n') || '';
-        stack.appendChild(whiteTextarea);
-
-        const confirmed = await modal.open({
-          title: '프라이버시 민감어 관리',
-          size: 'large',
-          content: stack,
-          actions: [
-            {
-              id: 'cancel',
-              label: '취소',
-              variant: 'secondary',
-              value: false,
-              attrs: { 'data-action': 'cancel' },
-            },
-            {
-              id: 'save',
-              label: '저장',
-              variant: 'primary',
-              value: true,
-              attrs: { 'data-action': 'save' },
-            },
-          ],
-          initialFocus: '#gmh-privacy-blacklist',
-        });
-
-        if (!confirmed) {
-          setPanelStatus('프라이버시 설정 변경을 취소했습니다.', 'muted');
-          return;
-        }
-
-        setCustomList('blacklist', parseListInput(blackTextarea.value));
-        setCustomList('whitelist', parseListInput(whiteTextarea.value));
-        setPanelStatus('프라이버시 사용자 목록을 저장했습니다.', 'success');
-      };
-
-      /**
-       * Prompts using classic dialogs to update privacy lists.
-       * @returns {void}
-       */
-      const configurePrivacyListsLegacy = () => {
-        const currentBlack = privacyConfig.blacklist?.join('\n') || '';
-        const nextBlack = win?.prompt
-          ? win.prompt(
-              '레다크션 강제 대상(블랙리스트)을 줄바꿈 또는 쉼표로 구분해 입력하세요.\n비워두면 목록을 초기화합니다.',
-              currentBlack,
-            )
-          : null;
-        if (nextBlack !== null) {
-          setCustomList('blacklist', parseListInput(nextBlack));
-        }
-
-        const currentWhite = privacyConfig.whitelist?.join('\n') || '';
-        const nextWhite = win?.prompt
-          ? win.prompt(
-              '레다크션 예외 대상(화이트리스트)을 줄바꿈 또는 쉼표로 구분해 입력하세요.\n비워두면 목록을 초기화합니다.',
-              currentWhite,
-            )
-          : null;
-        if (nextWhite !== null) {
-          setCustomList('whitelist', parseListInput(nextWhite));
-        }
-        setPanelStatus('프라이버시 사용자 목록을 저장했습니다.', 'info');
-      };
-
-      /**
-       * Opens either the modern modal or legacy prompt workflow.
-       * @returns {Promise<void> | void}
-       */
-      const configurePrivacyLists = async () => {
-        if (resolveModernActive()) return configurePrivacyListsModern();
-        return configurePrivacyListsLegacy();
-      };
-
-      return {
+    function createPrivacyConfigurator({ privacyConfig, setCustomList, parseListInput, setPanelStatus, modal, isModernUIActive, documentRef = typeof document !== 'undefined' ? document : null, windowRef = typeof window !== 'undefined' ? window : null, }) {
+        if (!documentRef)
+            throw new Error('createPrivacyConfigurator requires document');
+        const doc = documentRef;
+        const win = windowRef;
+        const resolveModernActive = () => typeof isModernUIActive === 'function' ? isModernUIActive() : Boolean(isModernUIActive);
         /**
-         * Opens the privacy configuration workflow using the active UI mode.
-         * @returns {Promise<void> | void}
+         * Launches the design-system modal for editing privacy lists.
          */
-        configurePrivacyLists,
-      };
+        const configurePrivacyListsModern = async () => {
+            ensureDesignSystemStyles(doc);
+            const stack = doc.createElement('div');
+            stack.className = 'gmh-modal-stack';
+            const intro = doc.createElement('p');
+            intro.className = 'gmh-subtext';
+            intro.textContent =
+                '쉼표 또는 줄바꿈으로 여러 항목을 구분하세요. 블랙리스트는 강제 마스킹, 화이트리스트는 예외 처리됩니다.';
+            stack.appendChild(intro);
+            const makeLabel = (text) => {
+                const label = doc.createElement('div');
+                label.className = 'gmh-field-label';
+                label.textContent = text;
+                return label;
+            };
+            const blackLabel = makeLabel(`블랙리스트 (${privacyConfig.blacklist?.length || 0})`);
+            stack.appendChild(blackLabel);
+            const blackTextarea = doc.createElement('textarea');
+            blackTextarea.id = 'gmh-privacy-blacklist';
+            blackTextarea.className = 'gmh-textarea';
+            blackTextarea.placeholder = '예: 서울시, 010-1234-5678';
+            blackTextarea.value = privacyConfig.blacklist?.join('\n') || '';
+            stack.appendChild(blackTextarea);
+            const whiteLabel = makeLabel(`화이트리스트 (${privacyConfig.whitelist?.length || 0})`);
+            stack.appendChild(whiteLabel);
+            const whiteTextarea = doc.createElement('textarea');
+            whiteTextarea.id = 'gmh-privacy-whitelist';
+            whiteTextarea.className = 'gmh-textarea';
+            whiteTextarea.placeholder = '예: 공식 길드명, 공개 닉네임';
+            whiteTextarea.value = privacyConfig.whitelist?.join('\n') || '';
+            stack.appendChild(whiteTextarea);
+            const confirmed = Boolean(await modal.open({
+                title: '프라이버시 민감어 관리',
+                size: 'large',
+                content: stack,
+                actions: [
+                    {
+                        id: 'cancel',
+                        label: '취소',
+                        variant: 'secondary',
+                        value: false,
+                        attrs: { 'data-action': 'cancel' },
+                    },
+                    {
+                        id: 'save',
+                        label: '저장',
+                        variant: 'primary',
+                        value: true,
+                        attrs: { 'data-action': 'save' },
+                    },
+                ],
+                initialFocus: '#gmh-privacy-blacklist',
+            }));
+            if (!confirmed) {
+                setPanelStatus('프라이버시 설정 변경을 취소했습니다.', 'muted');
+                return;
+            }
+            setCustomList('blacklist', parseListInput(blackTextarea.value));
+            setCustomList('whitelist', parseListInput(whiteTextarea.value));
+            setPanelStatus('프라이버시 사용자 목록을 저장했습니다.', 'success');
+        };
+        /**
+         * Prompts using classic dialogs to update privacy lists.
+         */
+        const configurePrivacyListsLegacy = () => {
+            const currentBlack = privacyConfig.blacklist?.join('\n') || '';
+            const nextBlack = win?.prompt
+                ? win.prompt('레다크션 강제 대상(블랙리스트)을 줄바꿈 또는 쉼표로 구분해 입력하세요.\n비워두면 목록을 초기화합니다.', currentBlack)
+                : null;
+            if (nextBlack !== null) {
+                setCustomList('blacklist', parseListInput(nextBlack));
+            }
+            const currentWhite = privacyConfig.whitelist?.join('\n') || '';
+            const nextWhite = win?.prompt
+                ? win.prompt('레다크션 예외 대상(화이트리스트)을 줄바꿈 또는 쉼표로 구분해 입력하세요.\n비워두면 목록을 초기화합니다.', currentWhite)
+                : null;
+            if (nextWhite !== null) {
+                setCustomList('whitelist', parseListInput(nextWhite));
+            }
+            setPanelStatus('프라이버시 사용자 목록을 저장했습니다.', 'info');
+        };
+        /**
+         * Opens either the modern modal or legacy prompt workflow.
+         */
+        const configurePrivacyLists = async () => {
+            if (resolveModernActive()) {
+                await configurePrivacyListsModern();
+                return;
+            }
+            configurePrivacyListsLegacy();
+        };
+        return {
+            configurePrivacyLists,
+        };
     }
 
     /**

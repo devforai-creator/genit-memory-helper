@@ -1,8 +1,8 @@
 import { createModal } from '../ui/modal.ts';
 import { createPanelVisibility } from '../ui/panel-visibility.ts';
-import { createStatusManager } from '../ui/status-manager.js';
-import { createStateView } from '../ui/state-view.js';
-import { createPrivacyConfigurator } from '../ui/privacy-config.js';
+import { createStatusManager } from '../ui/status-manager.ts';
+import { createStateView } from '../ui/state-view.ts';
+import { createPrivacyConfigurator } from '../ui/privacy-config.ts';
 import { createPanelSettingsController } from '../ui/panel-settings-modal.js';
 
 /**
