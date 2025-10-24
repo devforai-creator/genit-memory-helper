@@ -502,6 +502,37 @@ export interface BlockStorageOptions {
   console?: Pick<Console, 'warn' | 'log' | 'error'> | null;
 }
 
+export interface BlockBuilderOptions {
+  blockSize?: number;
+  overlap?: number;
+  removeNarration?: boolean;
+  sessionUrl?: string | null;
+  getSessionUrl?: () => string | null;
+  buildBlockId?: (context: { startOrdinal: number; endOrdinal: number; timestamp: number; counter: number }) => string;
+  clock?: () => number;
+  onBlockReady?: (block: MemoryBlockInit) => void;
+  console?: Pick<Console, 'warn' | 'error'> | null;
+}
+
+export interface BlockBuilderAppendOptions {
+  sessionUrl?: string | null;
+  timestamp?: number;
+}
+
+export interface BlockBuilderFlushOptions extends BlockBuilderAppendOptions {
+  includePartial?: boolean;
+}
+
+export interface BlockBuilderController {
+  append(message: StructuredSnapshotMessage, options?: BlockBuilderAppendOptions): MemoryBlockInit[];
+  appendMany(messages: StructuredSnapshotMessage[], options?: BlockBuilderAppendOptions): MemoryBlockInit[];
+  flush(options?: BlockBuilderFlushOptions): MemoryBlockInit[];
+  clear(): void;
+  getBuffer(): StructuredSnapshotMessage[];
+  getSessionUrl(): string | null;
+  setSessionUrl(next: string | null): void;
+}
+
 export interface StripLegacySpeechOptions {
   playerMark?: string;
 }
