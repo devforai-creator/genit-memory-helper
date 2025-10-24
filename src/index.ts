@@ -1,4 +1,5 @@
 import { GMH } from './core/namespace';
+import GMHExperimental from './experimental';
 import { clone, deepMerge } from './core/utils';
 import { ENV } from './env';
 import { GMH_STATE, createStateManager } from './core/state';
@@ -307,6 +308,7 @@ interface GMHFlags {
   })();
 
   GMH.Flags = Flags;
+  GMH.Experimental = GMHExperimental;
 
   const isModernUIActive = Flags.newUI && !Flags.killSwitch;
 

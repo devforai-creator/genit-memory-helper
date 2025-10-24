@@ -29,34 +29,6 @@ var GMHBundle = (function (exports) {
         Flags: createModuleBucket(),
     };
 
-    const isPlainObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
-    const clone = (value) => {
-        try {
-            return JSON.parse(JSON.stringify(value));
-        }
-        catch {
-            return value;
-        }
-    };
-    const deepMerge = (target, patch) => {
-        const base = Array.isArray(target)
-            ? [...target]
-            : { ...target };
-        if (!patch || typeof patch !== 'object')
-            return base;
-        Object.entries(patch).forEach(([key, value]) => {
-            if (isPlainObject(value)) {
-                const current = base[key];
-                const nextSource = isPlainObject(current) ? current : {};
-                base[key] = deepMerge(nextSource, value);
-            }
-            else {
-                base[key] = value;
-            }
-        });
-        return base;
-    };
-
     const noop$6 = () => { };
     const fallbackClipboard = (text) => {
         if (typeof navigator !== 'undefined' && navigator?.clipboard?.writeText) {
@@ -109,6 +81,113 @@ var GMHBundle = (function (exports) {
         GM_info: detectGMInfo(globals),
         console: detectConsole(),
         localStorage: detectStorage(),
+    };
+
+    const EXPERIMENTAL_STORAGE_PREFIX = 'gmh_experimental_';
+    const MEMORY_INDEX_STORAGE_KEY = `${EXPERIMENTAL_STORAGE_PREFIX}memory`;
+    const selectStorage = (storage) => {
+        if (storage)
+            return storage;
+        if (ENV.localStorage)
+            return ENV.localStorage;
+        if (typeof localStorage !== 'undefined')
+            return localStorage;
+        return null;
+    };
+    const selectConsole = (consoleRef) => {
+        if (consoleRef)
+            return consoleRef;
+        if (ENV.console)
+            return ENV.console;
+        if (typeof console !== 'undefined')
+            return console;
+        return null;
+    };
+    const createBooleanFlag = (key, label, storage, consoleRef) => {
+        const readEnabled = () => {
+            if (!storage)
+                return false;
+            try {
+                return storage.getItem(key) === '1';
+            }
+            catch (err) {
+                consoleRef?.warn?.(`[GMH] Failed to read ${label} flag`, err);
+                return false;
+            }
+        };
+        const write = (setter) => {
+            if (!storage) {
+                consoleRef?.warn?.(`[GMH] Experimental flag "${label}" requires localStorage support. Operation skipped.`);
+                return false;
+            }
+            try {
+                setter(storage);
+                return true;
+            }
+            catch (err) {
+                consoleRef?.warn?.(`[GMH] Failed to update ${label} flag`, err);
+                return false;
+            }
+        };
+        return {
+            get enabled() {
+                return readEnabled();
+            },
+            enable() {
+                const result = write((store) => {
+                    store.setItem(key, '1');
+                });
+                if (result) {
+                    consoleRef?.log?.(`[GMH] ${label} experimental flag enabled. Reload required.`);
+                }
+                return result;
+            },
+            disable() {
+                const result = write((store) => {
+                    store.removeItem(key);
+                });
+                if (result) {
+                    consoleRef?.log?.(`[GMH] ${label} experimental flag disabled. Reload recommended.`);
+                }
+                return result;
+            },
+        };
+    };
+    const createExperimentalNamespace = (options = {}) => {
+        const storage = selectStorage(options.storage ?? null);
+        const consoleRef = selectConsole(options.console ?? null);
+        return {
+            MemoryIndex: createBooleanFlag(MEMORY_INDEX_STORAGE_KEY, 'Memory Index', storage, consoleRef),
+        };
+    };
+    const GMHExperimental = createExperimentalNamespace();
+
+    const isPlainObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
+    const clone = (value) => {
+        try {
+            return JSON.parse(JSON.stringify(value));
+        }
+        catch {
+            return value;
+        }
+    };
+    const deepMerge = (target, patch) => {
+        const base = Array.isArray(target)
+            ? [...target]
+            : { ...target };
+        if (!patch || typeof patch !== 'object')
+            return base;
+        Object.entries(patch).forEach(([key, value]) => {
+            if (isPlainObject(value)) {
+                const current = base[key];
+                const nextSource = isPlainObject(current) ? current : {};
+                base[key] = deepMerge(nextSource, value);
+            }
+            else {
+                base[key] = value;
+            }
+        });
+        return base;
     };
 
     const noop$5 = () => { };
@@ -9147,6 +9226,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             };
         })();
         GMH.Flags = Flags;
+        GMH.Experimental = GMHExperimental;
         const isModernUIActive = Flags.newUI && !Flags.killSwitch;
         const stateManager = createStateManager({
             console: ENV.console,

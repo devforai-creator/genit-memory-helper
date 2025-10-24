@@ -12,6 +12,22 @@ export interface PanelStateManager extends PanelStateApi {
   reset(): void;
 }
 
+export interface ExperimentalFeatureFlag {
+  readonly enabled: boolean;
+  enable(): boolean;
+  disable(): boolean;
+}
+
+export interface ExperimentalNamespace {
+  [key: string]: ExperimentalFeatureFlag;
+  MemoryIndex: ExperimentalFeatureFlag;
+}
+
+export interface ExperimentalNamespaceOptions {
+  storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null;
+  console?: Pick<Console, 'log' | 'warn'> | null;
+}
+
 export interface GMHNamespace {
   VERSION: string;
   Util: Record<string, unknown>;
@@ -22,6 +38,7 @@ export interface GMHNamespace {
   Adapters: Record<string, unknown>;
   Settings: Record<string, unknown>;
   Flags?: Record<string, unknown>;
+  Experimental?: ExperimentalNamespace;
 }
 
 export interface AdapterSelectors {
