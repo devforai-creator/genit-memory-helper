@@ -83,7 +83,7 @@ describe('message stream integration', () => {
   });
 
   const settleMessages = async (): Promise<void> => {
-    await vi.advanceTimersByTimeAsync(4000);
+    await vi.advanceTimersByTimeAsync(8000);
   };
 
   const appendMessage = (id: string, text: string, role: string = 'npc'): void => {
@@ -259,10 +259,10 @@ describe('message stream integration', () => {
     };
     messageListener?.(event);
 
-    await vi.advanceTimersByTimeAsync(4000);
+    await vi.advanceTimersByTimeAsync(8000);
     expect(streamedMessages).toHaveLength(0);
 
-    await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync(3000);
     expect(streamedMessages).toHaveLength(1);
     expect(streamedMessages[0]?.parts?.some((part) => part?.type === 'narration')).toBe(true);
   });

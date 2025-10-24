@@ -19,9 +19,9 @@ type ConsoleLike = Pick<Console, 'log' | 'warn' | 'error'>;
 
 const noop = (): void => {};
 
-const MESSAGE_EVENT_SETTLE_DELAY_MS = 4000;
-const MESSAGE_EVENT_RETRY_INTERVAL_MS = 2000;
-const MESSAGE_EVENT_MAX_ATTEMPTS = 8;
+const MESSAGE_EVENT_SETTLE_DELAY_MS = 8000;
+const MESSAGE_EVENT_RETRY_INTERVAL_MS = 3000;
+const MESSAGE_EVENT_MAX_ATTEMPTS = 12;
 
 const selectConsole = (consoleRef?: ConsoleLike | null): ConsoleLike => {
   if (consoleRef) return consoleRef;
