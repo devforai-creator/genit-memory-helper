@@ -9,6 +9,7 @@ import type {
   MemoryBlockInit,
   StructuredSnapshotMessage,
 } from '../types';
+import { collectMessageIdsFromBlock, formatBlockPreview, formatTimestampLabel } from '../utils/block-debug';
 
 type ConsoleLike = Pick<Console, 'log' | 'warn' | 'error'>;
 
@@ -83,6 +84,7 @@ export const createMessageStream = (options: MessageStreamOptions): MessageStrea
 
   const blockListeners = new Set<(block: MemoryBlockInit) => void>();
   const structuredListeners = new Set<(message: StructuredSnapshotMessage) => void>();
+  const pendingMessageEvents: MessageIndexerEvent[] = [];
 
   let running = false;
   let unsubscribeMessages: (() => void) | null = null;
@@ -90,6 +92,11 @@ export const createMessageStream = (options: MessageStreamOptions): MessageStrea
   let storagePromise: Promise<BlockStorageController> | null = null;
   let storageInitError: unknown = null;
   let saveChain: Promise<void> = Promise.resolve();
+  let primed = false;
+  let primePromise: Promise<void> | null = null;
+  let currentPrimingSession: string | null = null;
+  let lastPrimedSession: string | null = null;
+  let primeGeneration = 0;
 
   if (options.blockStorage) {
     if (isPromiseLike<BlockStorageController>(options.blockStorage)) {
@@ -118,64 +125,6 @@ export const createMessageStream = (options: MessageStreamOptions): MessageStrea
     return null;
   };
 
-  const selectPreviewText = (message: StructuredSnapshotMessage | null | undefined): string => {
-    if (!message || typeof message !== 'object') return '';
-    const legacyLines = Reflect.get(message as Record<string, unknown>, 'legacyLines');
-    if (Array.isArray(legacyLines)) {
-      for (const rawLine of legacyLines) {
-        const line = typeof rawLine === 'string' ? rawLine.trim() : '';
-        if (line) return line;
-      }
-    }
-    if (Array.isArray(message.parts)) {
-      for (const part of message.parts) {
-        if (!part) continue;
-        const candidates: unknown[] = [];
-        if (typeof part.text === 'string') candidates.push(part.text);
-        if (Array.isArray(part.lines)) candidates.push(...part.lines);
-        if (Array.isArray(part.legacyLines)) candidates.push(...part.legacyLines);
-        if (Array.isArray(part.items)) candidates.push(...part.items);
-        for (const candidate of candidates) {
-          const text = typeof candidate === 'string' ? candidate.trim() : String(candidate ?? '').trim();
-          if (text) return text;
-        }
-      }
-    }
-    const fallbackSpeaker =
-      typeof message.speaker === 'string' && message.speaker.trim() ? message.speaker.trim() : '';
-    return fallbackSpeaker;
-  };
-
-  const formatBlockPreview = (block: MemoryBlockInit): string => {
-    const firstMessage = Array.isArray(block.messages) && block.messages.length ? block.messages[0] : null;
-    if (!firstMessage) return '(no preview)';
-    const speaker =
-      typeof firstMessage?.speaker === 'string' && firstMessage.speaker.trim()
-        ? `${firstMessage.speaker.trim()}: `
-        : '';
-    const text = selectPreviewText(firstMessage);
-    const preview = `${speaker}${text}`.trim();
-    if (!preview) return '(no preview)';
-    return preview.length > 80 ? `${preview.slice(0, 77)}...` : preview;
-  };
-
-  const collectMessageIds = (block: MemoryBlockInit): string[] => {
-    if (!Array.isArray(block.messages)) return [];
-    return block.messages.slice(0, 3).map((message) => {
-      const id = typeof message?.id === 'string' && message.id.trim() ? message.id.trim() : null;
-      return id ?? 'NO_ID';
-    });
-  };
-
-  const toTimestampLabel = (value: number): string => {
-    if (!Number.isFinite(value)) return '(invalid)';
-    try {
-      return new Date(value).toLocaleTimeString();
-    } catch {
-      return '(invalid)';
-    }
-  };
-
   const logBlockReady = (block: MemoryBlockInit): void => {
     const ordinalRange = Array.isArray(block.ordinalRange)
       ? block.ordinalRange
@@ -183,9 +132,9 @@ export const createMessageStream = (options: MessageStreamOptions): MessageStrea
     const [startOrdinal, endOrdinal] = ordinalRange;
     const messageCount = Array.isArray(block.messages) ? block.messages.length : 0;
     const preview = formatBlockPreview(block);
-    const messageIds = collectMessageIds(block);
+    const messageIds = collectMessageIdsFromBlock(block);
     const timestampValue = Number(block.timestamp);
-    const timestampLabel = toTimestampLabel(timestampValue);
+    const timestampLabel = formatTimestampLabel(timestampValue);
     logger.log?.('[GMH] block ready', {
       id: String(block.id ?? ''),
       ordinalRange: [startOrdinal, endOrdinal],
@@ -247,16 +196,27 @@ export const createMessageStream = (options: MessageStreamOptions): MessageStrea
     const current = blockBuilder.getSessionUrl();
     if (derived && derived !== current) {
       blockBuilder.setSessionUrl(derived);
-      return blockBuilder.getSessionUrl();
+      const updated = blockBuilder.getSessionUrl();
+      if (updated && updated !== lastPrimedSession && updated !== currentPrimingSession) {
+        schedulePrime(updated);
+      }
+      return updated;
     }
     if (!current && derived) {
       blockBuilder.setSessionUrl(derived);
-      return blockBuilder.getSessionUrl();
+      const updated = blockBuilder.getSessionUrl();
+      if (updated && updated !== lastPrimedSession && updated !== currentPrimingSession) {
+        schedulePrime(updated);
+      }
+      return updated;
+    }
+    if (current && current !== lastPrimedSession && current !== currentPrimingSession) {
+      schedulePrime(current);
     }
     return current ?? derived ?? null;
   };
 
-  const handleMessageEvent = (event: MessageIndexerEvent): void => {
+  const processMessageEvent = (event: MessageIndexerEvent): void => {
     if (!running) return;
     let structured: StructuredSnapshotMessage | null = null;
     try {
@@ -270,7 +230,11 @@ export const createMessageStream = (options: MessageStreamOptions): MessageStrea
     if (!structured.id && event.messageId) {
       structured.id = event.messageId;
     }
-    structured.ordinal = event.ordinal;
+    if (event.index >= 0) {
+      structured.ordinal = event.index + 1;
+    } else {
+      structured.ordinal = event.ordinal;
+    }
     if (!structured.channel && event.channel) {
       structured.channel = event.channel;
     }
@@ -288,6 +252,84 @@ export const createMessageStream = (options: MessageStreamOptions): MessageStrea
     if (blocks.length) {
       void persistBlocks(blocks);
     }
+  };
+
+  const flushPendingEvents = (): void => {
+    if (!primed || !pendingMessageEvents.length) return;
+    const queue = pendingMessageEvents.splice(0, pendingMessageEvents.length);
+    queue.forEach((event) => {
+      processMessageEvent(event);
+    });
+  };
+
+  const handleMessageEvent = (event: MessageIndexerEvent): void => {
+    if (!primed) {
+      pendingMessageEvents.push(event);
+      return;
+    }
+    processMessageEvent(event);
+  };
+
+  const awaitPriming = async (): Promise<void> => {
+    if (primePromise) {
+      try {
+        await primePromise;
+      } catch {
+        // errors already logged in schedulePrime
+      }
+    }
+    flushPendingEvents();
+  };
+
+  const primeFromStorage = async (sessionUrl: string | null): Promise<void> => {
+    if (!sessionUrl) return;
+    if (typeof blockBuilder.primeFromBlocks !== 'function') return;
+    const store = await ensureStorage();
+    if (!store) return;
+    try {
+      const existingBlocks = await store.getBySession(sessionUrl);
+      if (Array.isArray(existingBlocks) && existingBlocks.length) {
+        blockBuilder.primeFromBlocks(existingBlocks);
+      }
+    } catch (err) {
+      logger.warn?.('[GMH] failed to prime block builder from storage', err);
+    }
+  };
+
+  const schedulePrime = (sessionUrl: string | null): void => {
+    if (!sessionUrl) {
+      primed = true;
+      flushPendingEvents();
+      return;
+    }
+    if (sessionUrl === currentPrimingSession) {
+      return;
+    }
+    if (sessionUrl === lastPrimedSession) {
+      primed = true;
+      flushPendingEvents();
+      return;
+    }
+    currentPrimingSession = sessionUrl;
+    primed = false;
+    const generation = ++primeGeneration;
+    primePromise = (async () => {
+      await primeFromStorage(sessionUrl);
+    })();
+    primePromise
+      ?.catch((err) => {
+        logger.warn?.('[GMH] block priming failed', err);
+      })
+      .finally(() => {
+        if (generation !== primeGeneration) {
+          return;
+        }
+        primePromise = null;
+        lastPrimedSession = sessionUrl;
+        currentPrimingSession = null;
+        primed = true;
+        flushPendingEvents();
+      });
   };
 
   const start = (): void => {
@@ -310,6 +352,7 @@ export const createMessageStream = (options: MessageStreamOptions): MessageStrea
   };
 
   const flush = async (optionsArg?: BlockBuilderFlushOptions): Promise<number> => {
+    await awaitPriming();
     const sessionUrl = optionsArg?.sessionUrl ?? resolveSessionUrl();
     const timestamp = resolveTimestamp(optionsArg?.timestamp);
     const blocks = blockBuilder.flush({
@@ -338,6 +381,7 @@ export const createMessageStream = (options: MessageStreamOptions): MessageStrea
     },
     setSessionUrl(next) {
       blockBuilder.setSessionUrl(next);
+      schedulePrime(blockBuilder.getSessionUrl());
     },
     subscribeBlocks(listener) {
       if (typeof listener !== 'function') return () => {};

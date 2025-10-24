@@ -1,5 +1,6 @@
 import type {
   BlockStorageController,
+  BlockViewerController,
   MemoryBlockInit,
   MemoryStatusController,
   MemoryStatusOptions,
@@ -13,6 +14,7 @@ type RafHandle = number | null;
 const SECTION_ID = 'gmh-section-memory';
 const SECTION_CLASS = 'gmh-panel__section';
 const DEFAULT_STATUS_TEXT = '상태: ⛔ 비활성화됨';
+const VIEWER_BUTTON_SELECTOR = '[data-action="open-block-viewer"]';
 
 const noop = (): void => {};
 
@@ -102,6 +104,7 @@ export const createMemoryStatus = (options: MemoryStatusOptions = {}): MemorySta
   let totalsField: HTMLElement | null = null;
   let sessionField: HTMLElement | null = null;
   let lastField: HTMLElement | null = null;
+  let viewerButton: HTMLButtonElement | null = null;
 
   let rafHandle: RafHandle = null;
   let pendingRender = false;
@@ -112,6 +115,8 @@ export const createMemoryStatus = (options: MemoryStatusOptions = {}): MemorySta
   let storageResolved: BlockStorageController | null = null;
   let storagePromise: Promise<BlockStorageController | null> | null = null;
   let storageError: unknown = null;
+  let blockViewerResolver: (() => BlockViewerController | null) | null =
+    typeof options.getBlockViewer === 'function' ? options.getBlockViewer : null;
 
   const messageStream: MessageStreamController | null = options.messageStream ?? null;
 
@@ -186,6 +191,45 @@ export const createMemoryStatus = (options: MemoryStatusOptions = {}): MemorySta
     }
     storageResolved = source;
     return storageResolved;
+  };
+
+  const resolveBlockViewer = (): BlockViewerController | null => {
+    if (!blockViewerResolver) return null;
+    try {
+      const viewer = blockViewerResolver();
+      if (viewer && typeof viewer.open === 'function') {
+        return viewer;
+      }
+      return null;
+    } catch (err) {
+      logger?.warn?.('[GMH] block viewer resolver failed', err);
+      return null;
+    }
+  };
+
+  const setViewerButtonState = (): void => {
+    if (!viewerButton) return;
+    const viewer = resolveBlockViewer();
+    viewerButton.disabled = !viewer;
+  };
+
+  const handleOpenViewer = async (): Promise<void> => {
+    if (!enabled) return;
+    const viewer = resolveBlockViewer();
+    if (!viewer) {
+      logger?.warn?.('[GMH] block viewer unavailable');
+      return;
+    }
+    if (viewerButton) {
+      viewerButton.disabled = true;
+    }
+    try {
+      await viewer.open();
+    } catch (err) {
+      logger?.warn?.('[GMH] failed to open block viewer', err);
+    } finally {
+      setViewerButtonState();
+    }
   };
 
   const getCurrentSessionUrl = (): string | null => {
@@ -290,11 +334,15 @@ export const createMemoryStatus = (options: MemoryStatusOptions = {}): MemorySta
       totalsField.textContent = '저장된 블록: 0개 (0 메시지)';
       sessionField.textContent = '현재 세션: -';
       lastField.textContent = '마지막 저장: 기록 없음';
+      if (viewerButton) {
+        viewerButton.disabled = true;
+      }
       return;
     }
 
     section.hidden = false;
     stateField.textContent = '상태: ✅ 활성화됨';
+    setViewerButtonState();
 
     const currentSession = snapshot.sessionUrl;
     if (currentSession && !sessionTotals.has(currentSession)) {
@@ -342,6 +390,9 @@ export const createMemoryStatus = (options: MemoryStatusOptions = {}): MemorySta
           <p data-field="totals" class="gmh-memory-status__line">저장된 블록: 0개 (0 메시지)</p>
           <p data-field="session" class="gmh-memory-status__line">현재 세션: -</p>
           <p data-field="last" class="gmh-memory-status__line">마지막 저장: 기록 없음</p>
+          <div class="gmh-memory-status__actions">
+            <button type="button" class="gmh-memory-status__button" data-action="open-block-viewer">블록 상세 보기</button>
+          </div>
         </div>
       `;
     }
@@ -352,6 +403,15 @@ export const createMemoryStatus = (options: MemoryStatusOptions = {}): MemorySta
     totalsField = section.querySelector<HTMLElement>('[data-field="totals"]');
     sessionField = section.querySelector<HTMLElement>('[data-field="session"]');
     lastField = section.querySelector<HTMLElement>('[data-field="last"]');
+    const nextButton = section.querySelector<HTMLButtonElement>(VIEWER_BUTTON_SELECTOR);
+    if (viewerButton && viewerButton !== nextButton) {
+      viewerButton.removeEventListener('click', handleOpenViewer);
+    }
+    viewerButton = nextButton;
+    if (viewerButton) {
+      viewerButton.addEventListener('click', handleOpenViewer);
+      setViewerButtonState();
+    }
 
     if (!section.parentElement) {
       const exportSection = panel.querySelector(`#gmh-section-export`);
@@ -448,6 +508,10 @@ export const createMemoryStatus = (options: MemoryStatusOptions = {}): MemorySta
     totalsField = null;
     sessionField = null;
     lastField = null;
+    if (viewerButton) {
+      viewerButton.removeEventListener('click', handleOpenViewer);
+      viewerButton = null;
+    }
   };
 
   const forceRefresh = async (): Promise<void> => {
@@ -459,6 +523,10 @@ export const createMemoryStatus = (options: MemoryStatusOptions = {}): MemorySta
     setEnabled,
     destroy,
     forceRefresh,
+    setBlockViewerResolver(getter) {
+      blockViewerResolver = typeof getter === 'function' ? getter : null;
+      setViewerButtonState();
+    },
   };
 };
 

@@ -566,6 +566,7 @@ export interface BlockBuilderController {
   getBuffer(): StructuredSnapshotMessage[];
   getSessionUrl(): string | null;
   setSessionUrl(next: string | null): void;
+  primeFromBlocks(blocks: MemoryBlockInit[]): void;
 }
 
 export interface MessageStreamOptions {
@@ -607,6 +608,7 @@ export interface MemoryStatusOptions {
   getSessionUrl?: () => string | null;
   experimentalEnabled?: boolean;
   console?: Pick<Console, 'log' | 'warn' | 'error'> | null;
+  getBlockViewer?: () => BlockViewerController | null;
 }
 
 export interface MemoryStatusController {
@@ -614,6 +616,11 @@ export interface MemoryStatusController {
   setEnabled(enabled: boolean): void;
   destroy(): void;
   forceRefresh(): Promise<void>;
+  setBlockViewerResolver(getter: (() => BlockViewerController | null) | null): void;
+}
+
+export interface BlockViewerController {
+  open(): Promise<void>;
 }
 
 export interface StripLegacySpeechOptions {

@@ -3976,6 +3976,30 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 .gmh-progress__label{font-size:12px;color:var(--gmh-muted);}
 .gmh-status-line{font-size:12px;color:var(--gmh-muted);}
 .gmh-subtext{font-size:12px;color:var(--gmh-muted);line-height:1.5;}
+.gmh-memory-status__actions{display:flex;justify-content:flex-start;margin-top:10px;}
+.gmh-memory-status__button{padding:6px 10px;border-radius:var(--gmh-radius-sm);border:1px solid var(--gmh-border);background:rgba(15,23,42,0.7);color:var(--gmh-fg);font-size:12px;font-weight:600;cursor:pointer;transition:background 0.15s ease,color 0.15s ease;}
+.gmh-memory-status__button:hover{background:rgba(56,189,248,0.16);color:#e0f2fe;}
+.gmh-memory-status__button:disabled{cursor:not-allowed;opacity:0.5;background:rgba(148,163,184,0.12);color:var(--gmh-muted);}
+.gmh-block-viewer{display:grid;gap:16px;}
+.gmh-block-viewer__status{margin:0;font-size:13px;color:var(--gmh-muted);text-align:center;}
+.gmh-block-viewer__status--error{color:var(--gmh-danger);}
+.gmh-block-viewer__header{display:flex;align-items:center;justify-content:space-between;}
+.gmh-block-viewer__heading{margin:0;font-size:15px;font-weight:600;color:var(--gmh-fg);}
+.gmh-block-viewer__list{display:grid;gap:12px;}
+.gmh-block-viewer__item{border:1px solid var(--gmh-border);border-radius:var(--gmh-radius-sm);background:var(--gmh-surface-alt);padding:14px;display:grid;gap:10px;}
+.gmh-block-viewer__item-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
+.gmh-block-viewer__item-info{display:grid;gap:4px;}
+.gmh-block-viewer__item-title{margin:0;font-weight:600;font-size:13px;color:var(--gmh-fg);}
+.gmh-block-viewer__meta{margin:0;font-size:12px;color:var(--gmh-muted);}
+.gmh-block-viewer__overlap{margin:0;font-size:12px;color:var(--gmh-accent);background:rgba(56,189,248,0.18);padding:2px 8px;border-radius:999px;width:max-content;}
+.gmh-block-viewer__toggle{border:1px solid var(--gmh-border);background:rgba(15,23,42,0.72);color:var(--gmh-fg);border-radius:var(--gmh-radius-sm);padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;transition:background 0.15s ease,color 0.15s ease;}
+.gmh-block-viewer__toggle:hover{background:rgba(56,189,248,0.16);color:#e0f2fe;}
+.gmh-block-viewer__detail{margin-top:4px;padding-top:12px;border-top:1px dashed rgba(148,163,184,0.32);}
+.gmh-block-viewer__messages{display:grid;gap:10px;}
+.gmh-block-viewer__message{display:grid;gap:6px;padding:10px;border-radius:var(--gmh-radius-sm);background:rgba(15,23,42,0.6);border:1px solid rgba(148,163,184,0.2);}
+.gmh-block-viewer__message-title{font-weight:600;font-size:12px;color:var(--gmh-accent);}
+.gmh-block-viewer__message-body{font-size:13px;color:var(--gmh-fg);white-space:pre-wrap;word-break:break-word;}
+.gmh-block-viewer__message-id{font-size:11px;color:var(--gmh-muted);}
 @media (max-width:480px){.gmh-modal{width:100%;border-radius:12px;}.gmh-modal__actions{flex-direction:column;}.gmh-panel{right:12px;left:12px;bottom:12px;width:auto;max-height:76vh;}.gmh-panel::-webkit-scrollbar{width:6px;}.gmh-panel::-webkit-scrollbar-thumb{background:rgba(148,163,184,0.35);border-radius:999px;}#gmh-fab{width:48px;height:48px;right:12px;bottom:12px;font-size:12px;}}
 @media (prefers-reduced-motion:reduce){.gmh-panel,.gmh-modal,.gmh-progress__fill,#gmh-fab{transition:none !important;animation-duration:0.001s !important;}}
 `;
@@ -6132,9 +6156,34 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         };
     }
 
+    const isNarrationMessage = (message) => {
+        if (!message || typeof message !== 'object')
+            return false;
+        const role = typeof message.role === 'string' ? message.role.trim().toLowerCase() : '';
+        const channel = typeof message.channel === 'string' ? message.channel.trim().toLowerCase() : '';
+        if (role === 'narration' || channel === 'system') {
+            return true;
+        }
+        if (Array.isArray(message.parts) && message.parts.length) {
+            let narrationParts = 0;
+            message.parts.forEach((part) => {
+                if (!part)
+                    return;
+                const flavor = typeof part.flavor === 'string' ? part.flavor.trim().toLowerCase() : '';
+                const partRole = typeof part.role === 'string' ? part.role.trim().toLowerCase() : '';
+                if (flavor === 'narration' || partRole === 'narration') {
+                    narrationParts += 1;
+                }
+            });
+            if (narrationParts === message.parts.length) {
+                return true;
+            }
+        }
+        return false;
+    };
     const DEFAULT_BLOCK_SIZE = 5;
     const DEFAULT_BLOCK_OVERLAP = 2;
-    const DEFAULT_SESSION_FALLBACK = 'about:blank';
+    const DEFAULT_SESSION_FALLBACK$1 = 'about:blank';
     const noop$1 = () => { };
     const selectConsole$2 = (consoleRef) => {
         if (consoleRef)
@@ -6151,7 +6200,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             return clockRef;
         return () => Date.now();
     };
-    const cloneStructuredMessage$1 = (message) => {
+    const cloneStructuredMessage$2 = (message) => {
         if (!message || typeof message !== 'object') {
             return message;
         }
@@ -6319,7 +6368,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                     logger.warn?.('[GMH] block builder session resolver failed', err);
                 }
             }
-            return DEFAULT_SESSION_FALLBACK;
+            return DEFAULT_SESSION_FALLBACK$1;
         };
         const resolveTimestamp = (override) => {
             if (Number.isFinite(override)) {
@@ -6331,8 +6380,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             if (!slice.length) {
                 throw new Error('Cannot build block without messages.');
             }
-            const startOrdinal = slice[0]?.ordinal ?? 0;
-            const endOrdinal = slice[slice.length - 1]?.ordinal ?? startOrdinal;
+            const orderedSlice = slice.slice().sort((a, b) => a.ordinal - b.ordinal);
+            const startOrdinal = orderedSlice[0]?.ordinal ?? 0;
+            const endOrdinal = orderedSlice[orderedSlice.length - 1]?.ordinal ?? startOrdinal;
             blockCounter += 1;
             const blockId = buildBlockId({
                 startOrdinal,
@@ -6340,8 +6390,11 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 timestamp,
                 counter: blockCounter,
             });
-            const messages = slice.map((entry) => cloneStructuredMessage$1(entry.message));
-            const raw = buildRawText(slice, removeNarration);
+            const filteredEntries = removeNarration && orderedSlice.length
+                ? orderedSlice.filter((entry) => !isNarrationMessage(entry.message))
+                : orderedSlice.slice();
+            const messages = filteredEntries.map((entry) => cloneStructuredMessage$2(entry.message));
+            const raw = buildRawText(orderedSlice, removeNarration);
             const block = {
                 id: blockId,
                 sessionUrl,
@@ -6353,7 +6406,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                     blockSize: slice.length,
                     configuredBlockSize: blockSize,
                     overlap,
-                    sourceOrdinals: slice.map((entry) => entry.ordinal),
+                    sourceOrdinals: orderedSlice.map((entry) => entry.ordinal),
                 },
             };
             return block;
@@ -6387,7 +6440,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             }
             const ordinal = resolveOrdinal(message.ordinal, ordinalCursor + 1);
             ordinalCursor = Math.max(ordinalCursor + 1, ordinal);
-            const cloned = cloneStructuredMessage$1(message);
+            const cloned = cloneStructuredMessage$2(message);
             buffer.push({
                 message: cloned,
                 ordinal,
@@ -6412,6 +6465,38 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 }
             });
             return produced;
+        };
+        const primeFromBlocksInternal = (blocks) => {
+            if (!Array.isArray(blocks) || !blocks.length)
+                return;
+            let highestOrdinal = ordinalCursor;
+            blocks.forEach((block) => {
+                if (!block)
+                    return;
+                if (Array.isArray(block.messages)) {
+                    block.messages.forEach((message) => {
+                        const messageId = typeof message?.id === 'string' && message.id.trim().length ? message.id.trim() : null;
+                        if (messageId) {
+                            seenIds.add(messageId);
+                        }
+                    });
+                }
+                let blockEndOrdinal = Array.isArray(block.ordinalRange)
+                    ? Number(block.ordinalRange[1])
+                    : Number.NaN;
+                if (!Number.isFinite(blockEndOrdinal)) {
+                    const sourceOrdinals = Array.isArray(block.meta?.sourceOrdinals)
+                        ? block.meta.sourceOrdinals
+                        : [];
+                    if (sourceOrdinals.length) {
+                        blockEndOrdinal = Number(sourceOrdinals[sourceOrdinals.length - 1]);
+                    }
+                }
+                if (Number.isFinite(blockEndOrdinal)) {
+                    highestOrdinal = Math.max(highestOrdinal, Math.floor(blockEndOrdinal));
+                }
+            });
+            ordinalCursor = Math.max(ordinalCursor, highestOrdinal);
         };
         return {
             append(message, optionsArg) {
@@ -6438,7 +6523,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 resetState();
             },
             getBuffer() {
-                return buffer.map((entry) => cloneStructuredMessage$1(entry.message));
+                return buffer.map((entry) => cloneStructuredMessage$2(entry.message));
             },
             getSessionUrl() {
                 return sessionUrlRef ?? null;
@@ -6453,8 +6538,247 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 }
                 sessionUrlRef = normalized ?? null;
             },
+            primeFromBlocks(blocks) {
+                primeFromBlocksInternal(blocks);
+            },
         };
     };
+
+    const DEFAULT_SESSION_FALLBACK = 'about:blank';
+    const cloneValue$1 = (value) => {
+        if (value === null || value === undefined)
+            return value;
+        if (typeof structuredClone === 'function') {
+            try {
+                return structuredClone(value);
+            }
+            catch {
+                // fall through to JSON clone
+            }
+        }
+        try {
+            return JSON.parse(JSON.stringify(value));
+        }
+        catch {
+            return value;
+        }
+    };
+    const cloneArrayBuffer$1 = (buffer) => {
+        if (buffer instanceof ArrayBuffer && typeof buffer.slice === 'function') {
+            return buffer.slice(0);
+        }
+        const copy = new Uint8Array(buffer.byteLength);
+        copy.set(new Uint8Array(buffer));
+        return copy.buffer;
+    };
+    const cloneEmbedding = (value) => {
+        if (!value)
+            return null;
+        if (value instanceof ArrayBuffer) {
+            return cloneArrayBuffer$1(value);
+        }
+        if (typeof ArrayBuffer !== 'undefined' && ArrayBuffer.isView(value)) {
+            const view = value;
+            return cloneArrayBuffer$1(view.buffer);
+        }
+        return null;
+    };
+    const cloneStructuredMessage$1 = (message) => {
+        if (!message || typeof message !== 'object') {
+            return message;
+        }
+        if (typeof structuredClone === 'function') {
+            try {
+                const cloned = structuredClone(message);
+                const legacyLines = Reflect.get(message, 'legacyLines');
+                if (Array.isArray(legacyLines)) {
+                    Object.defineProperty(cloned, 'legacyLines', {
+                        value: legacyLines.slice(),
+                        enumerable: false,
+                        configurable: true,
+                        writable: true,
+                    });
+                }
+                return cloned;
+            }
+            catch {
+                // fall through to JSON clone
+            }
+        }
+        const jsonClone = JSON.parse(JSON.stringify(message ?? null));
+        if (!jsonClone)
+            return jsonClone;
+        const legacyLines = Reflect.get(message, 'legacyLines');
+        if (Array.isArray(legacyLines)) {
+            Object.defineProperty(jsonClone, 'legacyLines', {
+                value: legacyLines.slice(),
+                enumerable: false,
+                configurable: true,
+                writable: true,
+            });
+        }
+        return jsonClone;
+    };
+    const cloneStructuredMessages = (messages) => messages.map((message) => cloneStructuredMessage$1(message));
+    const collectMessageCandidates = (message) => {
+        if (!message || typeof message !== 'object')
+            return [];
+        const collected = [];
+        const legacyLines = Reflect.get(message, 'legacyLines');
+        if (Array.isArray(legacyLines)) {
+            legacyLines.forEach((line) => {
+                if (typeof line === 'string' && line.trim()) {
+                    collected.push(line.trim());
+                }
+            });
+        }
+        if (Array.isArray(message.parts)) {
+            message.parts.forEach((part) => {
+                if (!part)
+                    return;
+                if (typeof part.text === 'string' && part.text.trim()) {
+                    collected.push(part.text.trim());
+                }
+                if (Array.isArray(part.lines)) {
+                    part.lines.forEach((line) => {
+                        if (typeof line === 'string' && line.trim()) {
+                            collected.push(line.trim());
+                        }
+                    });
+                }
+                if (Array.isArray(part.legacyLines)) {
+                    part.legacyLines.forEach((line) => {
+                        if (typeof line === 'string' && line.trim()) {
+                            collected.push(line.trim());
+                        }
+                    });
+                }
+                if (Array.isArray(part.items)) {
+                    part.items.forEach((item) => {
+                        const text = typeof item === 'string' ? item : String(item ?? '');
+                        if (text.trim()) {
+                            collected.push(text.trim());
+                        }
+                    });
+                }
+            });
+        }
+        return collected;
+    };
+    const selectPreviewText = (message) => {
+        const candidates = collectMessageCandidates(message);
+        if (candidates.length) {
+            return candidates[0];
+        }
+        const fallbackSpeaker = message && typeof message.speaker === 'string' && message.speaker.trim()
+            ? message.speaker.trim()
+            : '';
+        return fallbackSpeaker;
+    };
+    const formatBlockPreviewFromMessages = (messages) => {
+        const firstMessage = messages.length ? messages[0] : null;
+        if (!firstMessage)
+            return '(no preview)';
+        const speaker = typeof firstMessage?.speaker === 'string' && firstMessage.speaker.trim()
+            ? `${firstMessage.speaker.trim()}: `
+            : '';
+        const text = selectPreviewText(firstMessage);
+        const preview = `${speaker}${text}`.trim();
+        if (!preview)
+            return '(no preview)';
+        return preview.length > 80 ? `${preview.slice(0, 77)}...` : preview;
+    };
+    const formatBlockPreview = (block) => {
+        const messages = Array.isArray(block.messages) ? block.messages : [];
+        return formatBlockPreviewFromMessages(messages);
+    };
+    const collectMessageIdsFromMessages = (messages, limit = 3) => messages.slice(0, Math.max(0, limit)).map((message) => {
+        const id = typeof message?.id === 'string' && message.id.trim() ? message.id.trim() : null;
+        return id ?? 'NO_ID';
+    });
+    const collectMessageIdsFromBlock = (block, limit = 3) => {
+        const messages = Array.isArray(block.messages) ? block.messages : [];
+        return collectMessageIdsFromMessages(messages, limit);
+    };
+    const normalizeOrdinalRange = (range) => {
+        const startCandidate = Array.isArray(range) ? Number(range[0]) : Number.NaN;
+        const endCandidate = Array.isArray(range) ? Number(range[1]) : Number.NaN;
+        const start = Number.isFinite(startCandidate) ? Math.floor(startCandidate) : 0;
+        const end = Number.isFinite(endCandidate) ? Math.floor(endCandidate) : start;
+        return [start, end];
+    };
+    const normalizeId = (value) => {
+        const text = typeof value === 'string' ? value : String(value ?? '');
+        return text.trim();
+    };
+    const normalizeSessionUrl = (value) => {
+        const text = typeof value === 'string' ? value : String(value ?? '');
+        const trimmed = text.trim();
+        return trimmed || DEFAULT_SESSION_FALLBACK;
+    };
+    const resolveTimestamp$1 = (value) => {
+        const numeric = Number(value);
+        if (Number.isFinite(numeric)) {
+            return Math.floor(numeric);
+        }
+        return Date.now();
+    };
+    const formatTimestampLabel = (value) => {
+        if (!Number.isFinite(value))
+            return '(invalid)';
+        try {
+            return new Date(value).toLocaleTimeString();
+        }
+        catch {
+            return '(invalid)';
+        }
+    };
+    const buildDebugBlockDetail = (block) => {
+        const messages = Array.isArray(block.messages) ? cloneStructuredMessages(block.messages) : [];
+        const ordinalRange = normalizeOrdinalRange(block.ordinalRange);
+        const timestamp = resolveTimestamp$1(block.timestamp);
+        const detail = {
+            id: normalizeId(block.id),
+            sessionUrl: normalizeSessionUrl(block.sessionUrl),
+            ordinalRange,
+            messageCount: messages.length,
+            messageIds: collectMessageIdsFromMessages(messages),
+            timestamp,
+            timestampLabel: formatTimestampLabel(timestamp),
+            preview: formatBlockPreviewFromMessages(messages),
+            raw: typeof block.raw === 'string'
+                ? block.raw
+                : String(block.raw ?? ''),
+            messages,
+            meta: block.meta ? cloneValue$1(block.meta) : undefined,
+            embedding: cloneEmbedding(block.embedding ?? null),
+        };
+        return detail;
+    };
+    const cloneDebugBlockDetail = (detail) => ({
+        id: detail.id,
+        sessionUrl: detail.sessionUrl,
+        ordinalRange: [detail.ordinalRange[0], detail.ordinalRange[1]],
+        messageCount: detail.messageCount,
+        messageIds: detail.messageIds.slice(),
+        timestamp: detail.timestamp,
+        timestampLabel: detail.timestampLabel,
+        preview: detail.preview,
+        raw: detail.raw,
+        messages: cloneStructuredMessages(detail.messages),
+        meta: detail.meta ? cloneValue$1(detail.meta) : undefined,
+        embedding: cloneEmbedding(detail.embedding ?? null),
+    });
+    const toDebugBlockSummary = (detail) => ({
+        id: detail.id,
+        sessionUrl: detail.sessionUrl,
+        ordinalRange: [detail.ordinalRange[0], detail.ordinalRange[1]],
+        messageCount: detail.messageCount,
+        messageIds: detail.messageIds.slice(),
+        timestamp: detail.timestamp,
+        timestampLabel: detail.timestampLabel,
+        preview: detail.preview,
+    });
 
     const noop = () => { };
     const selectConsole$1 = (consoleRef) => {
@@ -6468,7 +6792,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             error: noop,
         };
     };
-    const isPromiseLike$1 = (value) => {
+    const isPromiseLike$2 = (value) => {
         return typeof value === 'object' && value !== null && 'then' in value;
     };
     const cloneStructuredMessage = (message) => {
@@ -6524,14 +6848,20 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         }
         const blockListeners = new Set();
         const structuredListeners = new Set();
+        const pendingMessageEvents = [];
         let running = false;
         let unsubscribeMessages = null;
         let storage = null;
         let storagePromise = null;
         let storageInitError = null;
         let saveChain = Promise.resolve();
+        let primed = false;
+        let primePromise = null;
+        let currentPrimingSession = null;
+        let lastPrimedSession = null;
+        let primeGeneration = 0;
         if (options.blockStorage) {
-            if (isPromiseLike$1(options.blockStorage)) {
+            if (isPromiseLike$2(options.blockStorage)) {
                 storagePromise = options.blockStorage.then((store) => {
                     storage = store;
                     return store;
@@ -6559,71 +6889,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             }
             return null;
         };
-        const selectPreviewText = (message) => {
-            if (!message || typeof message !== 'object')
-                return '';
-            const legacyLines = Reflect.get(message, 'legacyLines');
-            if (Array.isArray(legacyLines)) {
-                for (const rawLine of legacyLines) {
-                    const line = typeof rawLine === 'string' ? rawLine.trim() : '';
-                    if (line)
-                        return line;
-                }
-            }
-            if (Array.isArray(message.parts)) {
-                for (const part of message.parts) {
-                    if (!part)
-                        continue;
-                    const candidates = [];
-                    if (typeof part.text === 'string')
-                        candidates.push(part.text);
-                    if (Array.isArray(part.lines))
-                        candidates.push(...part.lines);
-                    if (Array.isArray(part.legacyLines))
-                        candidates.push(...part.legacyLines);
-                    if (Array.isArray(part.items))
-                        candidates.push(...part.items);
-                    for (const candidate of candidates) {
-                        const text = typeof candidate === 'string' ? candidate.trim() : String(candidate ?? '').trim();
-                        if (text)
-                            return text;
-                    }
-                }
-            }
-            const fallbackSpeaker = typeof message.speaker === 'string' && message.speaker.trim() ? message.speaker.trim() : '';
-            return fallbackSpeaker;
-        };
-        const formatBlockPreview = (block) => {
-            const firstMessage = Array.isArray(block.messages) && block.messages.length ? block.messages[0] : null;
-            if (!firstMessage)
-                return '(no preview)';
-            const speaker = typeof firstMessage?.speaker === 'string' && firstMessage.speaker.trim()
-                ? `${firstMessage.speaker.trim()}: `
-                : '';
-            const text = selectPreviewText(firstMessage);
-            const preview = `${speaker}${text}`.trim();
-            if (!preview)
-                return '(no preview)';
-            return preview.length > 80 ? `${preview.slice(0, 77)}...` : preview;
-        };
-        const collectMessageIds = (block) => {
-            if (!Array.isArray(block.messages))
-                return [];
-            return block.messages.slice(0, 3).map((message) => {
-                const id = typeof message?.id === 'string' && message.id.trim() ? message.id.trim() : null;
-                return id ?? 'NO_ID';
-            });
-        };
-        const toTimestampLabel = (value) => {
-            if (!Number.isFinite(value))
-                return '(invalid)';
-            try {
-                return new Date(value).toLocaleTimeString();
-            }
-            catch {
-                return '(invalid)';
-            }
-        };
         const logBlockReady = (block) => {
             const ordinalRange = Array.isArray(block.ordinalRange)
                 ? block.ordinalRange
@@ -6631,9 +6896,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             const [startOrdinal, endOrdinal] = ordinalRange;
             const messageCount = Array.isArray(block.messages) ? block.messages.length : 0;
             const preview = formatBlockPreview(block);
-            const messageIds = collectMessageIds(block);
+            const messageIds = collectMessageIdsFromBlock(block);
             const timestampValue = Number(block.timestamp);
-            const timestampLabel = toTimestampLabel(timestampValue);
+            const timestampLabel = formatTimestampLabel(timestampValue);
             logger.log?.('[GMH] block ready', {
                 id: String(block.id ?? ''),
                 ordinalRange: [startOrdinal, endOrdinal],
@@ -6694,15 +6959,26 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             const current = blockBuilder.getSessionUrl();
             if (derived && derived !== current) {
                 blockBuilder.setSessionUrl(derived);
-                return blockBuilder.getSessionUrl();
+                const updated = blockBuilder.getSessionUrl();
+                if (updated && updated !== lastPrimedSession && updated !== currentPrimingSession) {
+                    schedulePrime(updated);
+                }
+                return updated;
             }
             if (!current && derived) {
                 blockBuilder.setSessionUrl(derived);
-                return blockBuilder.getSessionUrl();
+                const updated = blockBuilder.getSessionUrl();
+                if (updated && updated !== lastPrimedSession && updated !== currentPrimingSession) {
+                    schedulePrime(updated);
+                }
+                return updated;
+            }
+            if (current && current !== lastPrimedSession && current !== currentPrimingSession) {
+                schedulePrime(current);
             }
             return current ?? derived ?? null;
         };
-        const handleMessageEvent = (event) => {
+        const processMessageEvent = (event) => {
             if (!running)
                 return;
             let structured = null;
@@ -6718,7 +6994,12 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             if (!structured.id && event.messageId) {
                 structured.id = event.messageId;
             }
-            structured.ordinal = event.ordinal;
+            if (event.index >= 0) {
+                structured.ordinal = event.index + 1;
+            }
+            else {
+                structured.ordinal = event.ordinal;
+            }
             if (!structured.channel && event.channel) {
                 structured.channel = event.channel;
             }
@@ -6734,6 +7015,85 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             if (blocks.length) {
                 void persistBlocks(blocks);
             }
+        };
+        const flushPendingEvents = () => {
+            if (!primed || !pendingMessageEvents.length)
+                return;
+            const queue = pendingMessageEvents.splice(0, pendingMessageEvents.length);
+            queue.forEach((event) => {
+                processMessageEvent(event);
+            });
+        };
+        const handleMessageEvent = (event) => {
+            if (!primed) {
+                pendingMessageEvents.push(event);
+                return;
+            }
+            processMessageEvent(event);
+        };
+        const awaitPriming = async () => {
+            if (primePromise) {
+                try {
+                    await primePromise;
+                }
+                catch {
+                    // errors already logged in schedulePrime
+                }
+            }
+            flushPendingEvents();
+        };
+        const primeFromStorage = async (sessionUrl) => {
+            if (!sessionUrl)
+                return;
+            if (typeof blockBuilder.primeFromBlocks !== 'function')
+                return;
+            const store = await ensureStorage();
+            if (!store)
+                return;
+            try {
+                const existingBlocks = await store.getBySession(sessionUrl);
+                if (Array.isArray(existingBlocks) && existingBlocks.length) {
+                    blockBuilder.primeFromBlocks(existingBlocks);
+                }
+            }
+            catch (err) {
+                logger.warn?.('[GMH] failed to prime block builder from storage', err);
+            }
+        };
+        const schedulePrime = (sessionUrl) => {
+            if (!sessionUrl) {
+                primed = true;
+                flushPendingEvents();
+                return;
+            }
+            if (sessionUrl === currentPrimingSession) {
+                return;
+            }
+            if (sessionUrl === lastPrimedSession) {
+                primed = true;
+                flushPendingEvents();
+                return;
+            }
+            currentPrimingSession = sessionUrl;
+            primed = false;
+            const generation = ++primeGeneration;
+            primePromise = (async () => {
+                await primeFromStorage(sessionUrl);
+            })();
+            primePromise
+                ?.catch((err) => {
+                logger.warn?.('[GMH] block priming failed', err);
+            })
+                .finally(() => {
+                if (generation !== primeGeneration) {
+                    return;
+                }
+                primePromise = null;
+                lastPrimedSession = sessionUrl;
+                currentPrimingSession = null;
+                primed = true;
+                flushPendingEvents();
+            });
         };
         const start = () => {
             if (running)
@@ -6755,6 +7115,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             messageIndexer.stop();
         };
         const flush = async (optionsArg) => {
+            await awaitPriming();
             const sessionUrl = optionsArg?.sessionUrl ?? resolveSessionUrl();
             const timestamp = resolveTimestamp(optionsArg?.timestamp);
             const blocks = blockBuilder.flush({
@@ -6782,6 +7143,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             },
             setSessionUrl(next) {
                 blockBuilder.setSessionUrl(next);
+                schedulePrime(blockBuilder.getSessionUrl());
             },
             subscribeBlocks(listener) {
                 if (typeof listener !== 'function')
@@ -6802,7 +7164,8 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     const SECTION_ID = 'gmh-section-memory';
     const SECTION_CLASS = 'gmh-panel__section';
     const DEFAULT_STATUS_TEXT = '상태: ⛔ 비활성화됨';
-    const isPromiseLike = (value) => typeof value === 'object' && value !== null && 'then' in value;
+    const VIEWER_BUTTON_SELECTOR = '[data-action="open-block-viewer"]';
+    const isPromiseLike$1 = (value) => typeof value === 'object' && value !== null && 'then' in value;
     const cloneMessage = (value) => {
         if (!value || typeof value !== 'object')
             return value;
@@ -6884,6 +7247,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         let totalsField = null;
         let sessionField = null;
         let lastField = null;
+        let viewerButton = null;
         let rafHandle = null;
         let pendingRender = false;
         let relativeTimer = null;
@@ -6891,6 +7255,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         let storageResolved = null;
         let storagePromise = null;
         let storageError = null;
+        let blockViewerResolver = typeof options.getBlockViewer === 'function' ? options.getBlockViewer : null;
         const messageStream = options.messageStream ?? null;
         const requestFrame = (callback) => {
             if (win && typeof win.requestAnimationFrame === 'function') {
@@ -6955,7 +7320,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             const source = options.blockStorage;
             if (!source)
                 return null;
-            if (isPromiseLike(source)) {
+            if (isPromiseLike$1(source)) {
                 storagePromise = source
                     .then((store) => {
                     storageResolved = store;
@@ -6970,6 +7335,48 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             }
             storageResolved = source;
             return storageResolved;
+        };
+        const resolveBlockViewer = () => {
+            if (!blockViewerResolver)
+                return null;
+            try {
+                const viewer = blockViewerResolver();
+                if (viewer && typeof viewer.open === 'function') {
+                    return viewer;
+                }
+                return null;
+            }
+            catch (err) {
+                logger?.warn?.('[GMH] block viewer resolver failed', err);
+                return null;
+            }
+        };
+        const setViewerButtonState = () => {
+            if (!viewerButton)
+                return;
+            const viewer = resolveBlockViewer();
+            viewerButton.disabled = !viewer;
+        };
+        const handleOpenViewer = async () => {
+            if (!enabled)
+                return;
+            const viewer = resolveBlockViewer();
+            if (!viewer) {
+                logger?.warn?.('[GMH] block viewer unavailable');
+                return;
+            }
+            if (viewerButton) {
+                viewerButton.disabled = true;
+            }
+            try {
+                await viewer.open();
+            }
+            catch (err) {
+                logger?.warn?.('[GMH] failed to open block viewer', err);
+            }
+            finally {
+                setViewerButtonState();
+            }
         };
         const getCurrentSessionUrl = () => {
             if (options.getSessionUrl) {
@@ -7075,10 +7482,14 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 totalsField.textContent = '저장된 블록: 0개 (0 메시지)';
                 sessionField.textContent = '현재 세션: -';
                 lastField.textContent = '마지막 저장: 기록 없음';
+                if (viewerButton) {
+                    viewerButton.disabled = true;
+                }
                 return;
             }
             section.hidden = false;
             stateField.textContent = '상태: ✅ 활성화됨';
+            setViewerButtonState();
             const currentSession = snapshot.sessionUrl;
             if (currentSession && !sessionTotals.has(currentSession)) {
                 void ensureSessionStats(currentSession);
@@ -7121,6 +7532,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
           <p data-field="totals" class="gmh-memory-status__line">저장된 블록: 0개 (0 메시지)</p>
           <p data-field="session" class="gmh-memory-status__line">현재 세션: -</p>
           <p data-field="last" class="gmh-memory-status__line">마지막 저장: 기록 없음</p>
+          <div class="gmh-memory-status__actions">
+            <button type="button" class="gmh-memory-status__button" data-action="open-block-viewer">블록 상세 보기</button>
+          </div>
         </div>
       `;
             }
@@ -7130,6 +7544,15 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             totalsField = section.querySelector('[data-field="totals"]');
             sessionField = section.querySelector('[data-field="session"]');
             lastField = section.querySelector('[data-field="last"]');
+            const nextButton = section.querySelector(VIEWER_BUTTON_SELECTOR);
+            if (viewerButton && viewerButton !== nextButton) {
+                viewerButton.removeEventListener('click', handleOpenViewer);
+            }
+            viewerButton = nextButton;
+            if (viewerButton) {
+                viewerButton.addEventListener('click', handleOpenViewer);
+                setViewerButtonState();
+            }
             if (!section.parentElement) {
                 const exportSection = panel.querySelector(`#gmh-section-export`);
                 if (exportSection?.parentElement === panel) {
@@ -7227,6 +7650,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             totalsField = null;
             sessionField = null;
             lastField = null;
+            if (viewerButton) {
+                viewerButton.removeEventListener('click', handleOpenViewer);
+                viewerButton = null;
+            }
         };
         const forceRefresh = async () => {
             await refreshTotals();
@@ -7236,6 +7663,441 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             setEnabled,
             destroy,
             forceRefresh,
+            setBlockViewerResolver(getter) {
+                blockViewerResolver = typeof getter === 'function' ? getter : null;
+                setViewerButtonState();
+            },
+        };
+    };
+
+    const isPromiseLike = (value) => typeof value === 'object' && value !== null && 'then' in value;
+    const safeNumber = (value) => {
+        const numeric = Number(value);
+        if (Number.isFinite(numeric)) {
+            return Math.floor(numeric);
+        }
+        return 0;
+    };
+    const collectMessageLines = (message) => {
+        if (!message || typeof message !== 'object')
+            return [];
+        const lines = [];
+        const legacyLines = Reflect.get(message, 'legacyLines');
+        if (Array.isArray(legacyLines)) {
+            legacyLines.forEach((line) => {
+                if (typeof line === 'string' && line.trim()) {
+                    lines.push(line.trim());
+                }
+            });
+        }
+        if (Array.isArray(message.parts)) {
+            message.parts.forEach((part) => {
+                if (!part)
+                    return;
+                if (typeof part.text === 'string' && part.text.trim()) {
+                    lines.push(part.text.trim());
+                }
+                if (Array.isArray(part.lines)) {
+                    part.lines.forEach((line) => {
+                        if (typeof line === 'string' && line.trim()) {
+                            lines.push(line.trim());
+                        }
+                    });
+                }
+                if (Array.isArray(part.legacyLines)) {
+                    part.legacyLines.forEach((line) => {
+                        if (typeof line === 'string' && line.trim()) {
+                            lines.push(line.trim());
+                        }
+                    });
+                }
+                if (Array.isArray(part.items)) {
+                    part.items.forEach((item) => {
+                        const text = typeof item === 'string' ? item : String(item ?? '');
+                        if (text.trim()) {
+                            lines.push(text.trim());
+                        }
+                    });
+                }
+            });
+        }
+        return lines;
+    };
+    const formatMessageBody = (message) => {
+        const lines = collectMessageLines(message);
+        const text = lines.length ? lines.join('\n') : '';
+        if (!text.trim()) {
+            return '(내용 없음)';
+        }
+        if (text.length > 150) {
+            return `${text.slice(0, 147)}...더보기`;
+        }
+        return text;
+    };
+    const normalizeMessageId = (message) => {
+        if (typeof message?.id === 'string' && message.id.trim()) {
+            return message.id.trim();
+        }
+        return 'NO_ID';
+    };
+    const selectDebugApi = (resolver) => {
+        if (!resolver)
+            return null;
+        try {
+            const api = resolver();
+            if (api && typeof api.getSessionBlocks === 'function') {
+                return api;
+            }
+            return null;
+        }
+        catch {
+            return null;
+        }
+    };
+    const createEntry = (summary, loader, preloaded) => {
+        const entry = {
+            summary,
+            detail: preloaded ?? null,
+            detailLoaded: Boolean(preloaded),
+            detailLoading: false,
+            detailError: null,
+            overlap: null,
+            async ensureDetail() {
+                if (entry.detailLoaded && entry.detail) {
+                    return entry.detail;
+                }
+                if (entry.detailLoading) {
+                    return entry.detail;
+                }
+                entry.detailLoading = true;
+                try {
+                    const detail = await loader();
+                    if (detail) {
+                        entry.detail = detail;
+                        entry.detailLoaded = true;
+                        entry.detailError = null;
+                        return detail;
+                    }
+                    entry.detail = null;
+                    entry.detailLoaded = false;
+                    entry.detailError = '블록을 불러올 수 없습니다';
+                    return null;
+                }
+                catch (err) {
+                    entry.detail = null;
+                    entry.detailLoaded = false;
+                    entry.detailError =
+                        err instanceof Error && err.message ? err.message : '블록을 불러올 수 없습니다';
+                    return null;
+                }
+                finally {
+                    entry.detailLoading = false;
+                }
+            },
+        };
+        return entry;
+    };
+    const createBlockViewer = (options = {}) => {
+        const doc = options.documentRef ?? (typeof document !== 'undefined' ? document : null);
+        const modal = options.modal ?? null;
+        const logger = options.logger ?? (typeof console !== 'undefined' ? console : null);
+        if (!doc || !modal) {
+            return {
+                async open() {
+                    logger?.warn?.('[GMH] block viewer unavailable');
+                },
+            };
+        }
+        let storageResolved = null;
+        let storagePromise = null;
+        let storageError = null;
+        const ensureStorage = async () => {
+            if (storageResolved)
+                return storageResolved;
+            if (storageError)
+                return null;
+            if (storagePromise)
+                return storagePromise;
+            const source = options.blockStorage;
+            if (!source)
+                return null;
+            if (isPromiseLike(source)) {
+                storagePromise = source
+                    .then((store) => {
+                    storageResolved = store;
+                    return store;
+                })
+                    .catch((err) => {
+                    storageError = err;
+                    logger?.warn?.('[GMH] block viewer storage unavailable', err);
+                    return null;
+                });
+                return storagePromise;
+            }
+            storageResolved = source;
+            return storageResolved;
+        };
+        const resolveSessionUrl = () => {
+            if (typeof options.getSessionUrl === 'function') {
+                try {
+                    const candidate = options.getSessionUrl();
+                    return candidate ?? null;
+                }
+                catch (err) {
+                    logger?.warn?.('[GMH] block viewer session resolver failed', err);
+                }
+            }
+            return null;
+        };
+        const fetchEntries = async (sessionUrl) => {
+            if (!sessionUrl) {
+                return { entries: [], hadError: false };
+            }
+            const entries = new Map();
+            let storageAttempted = false;
+            let storageFailed = false;
+            const debugApi = selectDebugApi(options.getDebugApi);
+            if (debugApi) {
+                try {
+                    const summaries = debugApi.getSessionBlocks() ?? [];
+                    summaries.forEach((summary) => {
+                        if (!summary || typeof summary.id !== 'string')
+                            return;
+                        entries.set(summary.id, createEntry(summary, async () => debugApi.getBlockDetails(summary.id)));
+                    });
+                }
+                catch (err) {
+                    logger?.warn?.('[GMH] debug block fetch failed', err);
+                }
+            }
+            try {
+                storageAttempted = true;
+                const store = await ensureStorage();
+                if (!store) {
+                    storageFailed = true;
+                }
+                else {
+                    const records = await store.getBySession(sessionUrl);
+                    records.forEach((record) => {
+                        if (!record || typeof record.id !== 'string')
+                            return;
+                        if (entries.has(record.id))
+                            return;
+                        const detail = buildDebugBlockDetail(record);
+                        const summary = toDebugBlockSummary(detail);
+                        entries.set(record.id, createEntry(summary, async () => detail, detail));
+                    });
+                }
+            }
+            catch (err) {
+                storageFailed = true;
+                logger?.warn?.('[GMH] block viewer storage fetch failed', err);
+            }
+            const list = Array.from(entries.values());
+            list.sort((a, b) => {
+                const aStart = safeNumber(a.summary.ordinalRange?.[0]);
+                const bStart = safeNumber(b.summary.ordinalRange?.[0]);
+                if (aStart !== bStart)
+                    return aStart - bStart;
+                if (a.summary.timestamp !== b.summary.timestamp) {
+                    return a.summary.timestamp - b.summary.timestamp;
+                }
+                return a.summary.id.localeCompare(b.summary.id);
+            });
+            let previous = null;
+            list.forEach((entry) => {
+                entry.overlap = null;
+                if (previous) {
+                    const prevStart = safeNumber(previous.summary.ordinalRange?.[0]);
+                    const prevEnd = safeNumber(previous.summary.ordinalRange?.[1]);
+                    const currentStart = safeNumber(entry.summary.ordinalRange?.[0]);
+                    const currentEnd = safeNumber(entry.summary.ordinalRange?.[1]);
+                    const overlapStart = Math.max(prevStart, currentStart);
+                    const overlapEnd = Math.min(prevEnd, currentEnd);
+                    if (overlapStart <= overlapEnd) {
+                        entry.overlap = [overlapStart, overlapEnd];
+                    }
+                }
+                previous = entry;
+            });
+            const hadError = list.length === 0 && storageAttempted && storageFailed;
+            return { entries: list, hadError };
+        };
+        const createStatusElement = (docRef, text, tone = 'info') => {
+            const node = docRef.createElement('p');
+            node.className = 'gmh-block-viewer__status';
+            if (tone === 'error') {
+                node.classList.add('gmh-block-viewer__status--error');
+            }
+            node.textContent = text;
+            return node;
+        };
+        const renderMessages = (docRef, detail) => {
+            const wrapper = docRef.createElement('div');
+            wrapper.className = 'gmh-block-viewer__messages';
+            if (!Array.isArray(detail.messages) || !detail.messages.length) {
+                const empty = docRef.createElement('p');
+                empty.className = 'gmh-block-viewer__status';
+                empty.textContent = '메시지가 없습니다';
+                wrapper.appendChild(empty);
+                return wrapper;
+            }
+            detail.messages.forEach((message, index) => {
+                const item = docRef.createElement('div');
+                item.className = 'gmh-block-viewer__message';
+                const title = docRef.createElement('div');
+                title.className = 'gmh-block-viewer__message-title';
+                const speaker = typeof message?.speaker === 'string' && message.speaker.trim()
+                    ? message.speaker.trim()
+                    : typeof message?.role === 'string' && message.role.trim()
+                        ? message.role.trim()
+                        : '메시지';
+                title.textContent = `[${index + 1}] ${speaker}`;
+                item.appendChild(title);
+                const body = docRef.createElement('div');
+                body.className = 'gmh-block-viewer__message-body';
+                body.textContent = formatMessageBody(message);
+                item.appendChild(body);
+                const idLine = docRef.createElement('div');
+                idLine.className = 'gmh-block-viewer__message-id';
+                idLine.textContent = `ID: ${normalizeMessageId(message)}`;
+                item.appendChild(idLine);
+                wrapper.appendChild(item);
+            });
+            return wrapper;
+        };
+        const buildBlockItem = (docRef, entry, index) => {
+            const item = docRef.createElement('div');
+            item.className = 'gmh-block-viewer__item';
+            const header = docRef.createElement('div');
+            header.className = 'gmh-block-viewer__item-header';
+            const info = docRef.createElement('div');
+            info.className = 'gmh-block-viewer__item-info';
+            const [start, end] = entry.summary.ordinalRange;
+            const title = docRef.createElement('p');
+            title.className = 'gmh-block-viewer__item-title';
+            title.textContent = `📦 블록 ${index + 1}: 메시지 ${start}-${end} (${entry.summary.messageCount}개)`;
+            info.appendChild(title);
+            const timestampLine = docRef.createElement('p');
+            timestampLine.className = 'gmh-block-viewer__meta';
+            timestampLine.textContent = `생성: ${entry.summary.timestampLabel}`;
+            info.appendChild(timestampLine);
+            if (entry.overlap) {
+                const overlap = docRef.createElement('p');
+                overlap.className = 'gmh-block-viewer__overlap';
+                overlap.textContent = `overlap: ${entry.overlap[0]}-${entry.overlap[1]}`;
+                info.appendChild(overlap);
+            }
+            header.appendChild(info);
+            const toggle = docRef.createElement('button');
+            toggle.type = 'button';
+            toggle.className = 'gmh-block-viewer__toggle';
+            toggle.textContent = '▼ 상세보기';
+            header.appendChild(toggle);
+            item.appendChild(header);
+            const detail = docRef.createElement('div');
+            detail.className = 'gmh-block-viewer__detail';
+            detail.hidden = true;
+            item.appendChild(detail);
+            let expanded = false;
+            const setToggleLabel = () => {
+                toggle.textContent = expanded ? '▲ 접기' : '▼ 상세보기';
+            };
+            const showStatus = (text, tone = 'info') => {
+                detail.innerHTML = '';
+                detail.appendChild(createStatusElement(docRef, text, tone));
+            };
+            const ensureDetailRendered = async () => {
+                const detailData = await entry.ensureDetail();
+                detail.innerHTML = '';
+                if (!detailData) {
+                    const errorMessage = entry.detailError || '블록을 불러올 수 없습니다';
+                    detail.appendChild(createStatusElement(docRef, errorMessage, 'error'));
+                    return;
+                }
+                detail.appendChild(renderMessages(docRef, detailData));
+            };
+            toggle.addEventListener('click', async () => {
+                expanded = !expanded;
+                setToggleLabel();
+                if (expanded) {
+                    detail.hidden = false;
+                    if (!entry.detailLoaded && !entry.detailLoading) {
+                        showStatus('메시지를 불러오는 중...');
+                        await ensureDetailRendered();
+                    }
+                    else if (entry.detailLoading) {
+                        showStatus('메시지를 불러오는 중...');
+                    }
+                    else if (entry.detail) {
+                        detail.innerHTML = '';
+                        detail.appendChild(renderMessages(docRef, entry.detail));
+                    }
+                    else {
+                        await ensureDetailRendered();
+                    }
+                }
+                else {
+                    detail.hidden = true;
+                }
+            });
+            return item;
+        };
+        const renderEntries = (container, entries, hadError) => {
+            container.innerHTML = '';
+            if (hadError) {
+                container.appendChild(createStatusElement(container.ownerDocument, '블록을 불러올 수 없습니다', 'error'));
+                return;
+            }
+            if (!entries.length) {
+                container.appendChild(createStatusElement(container.ownerDocument, '아직 저장된 블록이 없습니다'));
+                return;
+            }
+            const header = container.ownerDocument.createElement('div');
+            header.className = 'gmh-block-viewer__header';
+            const title = container.ownerDocument.createElement('h3');
+            title.className = 'gmh-block-viewer__heading';
+            title.textContent = `💾 저장된 블록 (${entries.length}개)`;
+            header.appendChild(title);
+            container.appendChild(header);
+            const list = container.ownerDocument.createElement('div');
+            list.className = 'gmh-block-viewer__list';
+            entries.forEach((entry, index) => {
+                list.appendChild(buildBlockItem(container.ownerDocument, entry, index));
+            });
+            container.appendChild(list);
+        };
+        const renderError = (container) => {
+            container.innerHTML = '';
+            container.appendChild(createStatusElement(container.ownerDocument, '블록을 불러올 수 없습니다', 'error'));
+        };
+        const open = async () => {
+            const container = doc.createElement('div');
+            container.className = 'gmh-block-viewer';
+            container.appendChild(createStatusElement(doc, '블록 불러오는 중...'));
+            const sessionUrl = resolveSessionUrl();
+            const modalPromise = modal.open({
+                title: '💾 저장된 블록',
+                content: container,
+                size: 'large',
+                actions: [{ label: '닫기', value: false, variant: 'secondary' }],
+            });
+            void fetchEntries(sessionUrl)
+                .then(({ entries, hadError }) => {
+                if (!container.isConnected)
+                    return;
+                renderEntries(container, entries, hadError);
+            })
+                .catch((err) => {
+                logger?.warn?.('[GMH] block viewer failed to load entries', err);
+                if (!container.isConnected)
+                    return;
+                renderError(container);
+            });
+            await modalPromise;
+        };
+        return {
+            open,
         };
     };
 
@@ -10435,189 +11297,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         });
         const createDebugStore = () => {
             const buckets = new Map();
-            const cloneStructuredMessage = (message) => {
-                if (!message || typeof message !== 'object') {
-                    return message;
-                }
-                if (typeof structuredClone === 'function') {
-                    try {
-                        const cloned = structuredClone(message);
-                        const legacyLines = Reflect.get(message, 'legacyLines');
-                        if (Array.isArray(legacyLines)) {
-                            Object.defineProperty(cloned, 'legacyLines', {
-                                value: legacyLines.slice(),
-                                enumerable: false,
-                                configurable: true,
-                                writable: true,
-                            });
-                        }
-                        return cloned;
-                    }
-                    catch {
-                        // fall through to JSON clone
-                    }
-                }
-                const jsonClone = JSON.parse(JSON.stringify(message ?? null));
-                if (!jsonClone)
-                    return jsonClone;
-                const legacyLines = Reflect.get(message, 'legacyLines');
-                if (Array.isArray(legacyLines)) {
-                    Object.defineProperty(jsonClone, 'legacyLines', {
-                        value: legacyLines.slice(),
-                        enumerable: false,
-                        configurable: true,
-                        writable: true,
-                    });
-                }
-                return jsonClone;
-            };
-            const cloneMessages = (messages) => messages.map((message) => cloneStructuredMessage(message));
-            const cloneValue = (value) => {
-                if (value === null || value === undefined)
-                    return value;
-                if (typeof structuredClone === 'function') {
-                    try {
-                        return structuredClone(value);
-                    }
-                    catch {
-                        // fall through to JSON clone
-                    }
-                }
-                try {
-                    return JSON.parse(JSON.stringify(value));
-                }
-                catch {
-                    return value;
-                }
-            };
-            const selectPreviewText = (message) => {
-                if (!message || typeof message !== 'object')
-                    return '';
-                const legacyLines = Reflect.get(message, 'legacyLines');
-                if (Array.isArray(legacyLines)) {
-                    for (const rawLine of legacyLines) {
-                        const line = typeof rawLine === 'string' ? rawLine.trim() : '';
-                        if (line)
-                            return line;
-                    }
-                }
-                if (Array.isArray(message.parts)) {
-                    for (const part of message.parts) {
-                        if (!part)
-                            continue;
-                        const candidates = [];
-                        if (typeof part.text === 'string')
-                            candidates.push(part.text);
-                        if (Array.isArray(part.lines))
-                            candidates.push(...part.lines);
-                        if (Array.isArray(part.legacyLines))
-                            candidates.push(...part.legacyLines);
-                        if (Array.isArray(part.items))
-                            candidates.push(...part.items);
-                        for (const candidate of candidates) {
-                            const text = typeof candidate === 'string' ? candidate.trim() : String(candidate ?? '').trim();
-                            if (text)
-                                return text;
-                        }
-                    }
-                }
-                const fallbackSpeaker = typeof message.speaker === 'string' && message.speaker.trim() ? message.speaker.trim() : '';
-                return fallbackSpeaker;
-            };
-            const formatPreview = (messages) => {
-                const firstMessage = messages.length ? messages[0] : null;
-                if (!firstMessage)
-                    return '(no preview)';
-                const speaker = typeof firstMessage?.speaker === 'string' && firstMessage.speaker.trim()
-                    ? `${firstMessage.speaker.trim()}: `
-                    : '';
-                const text = selectPreviewText(firstMessage);
-                const preview = `${speaker}${text}`.trim();
-                if (!preview)
-                    return '(no preview)';
-                return preview.length > 80 ? `${preview.slice(0, 77)}...` : preview;
-            };
-            const collectMessageIds = (messages) => {
-                return messages.slice(0, 3).map((message) => {
-                    const id = typeof message?.id === 'string' && message.id.trim() ? message.id.trim() : null;
-                    return id ?? 'NO_ID';
-                });
-            };
-            const toTimestampLabel = (value) => {
-                if (!Number.isFinite(value))
-                    return '(invalid)';
-                try {
-                    return new Date(value).toLocaleTimeString();
-                }
-                catch {
-                    return '(invalid)';
-                }
-            };
-            const normalizeOrdinalRange = (range) => {
-                const startCandidate = Array.isArray(range) ? Number(range[0]) : Number.NaN;
-                const endCandidate = Array.isArray(range) ? Number(range[1]) : Number.NaN;
-                const start = Number.isFinite(startCandidate) ? Math.floor(startCandidate) : 0;
-                const end = Number.isFinite(endCandidate) ? Math.floor(endCandidate) : start;
-                return [start, end];
-            };
-            const normalizeId = (value) => {
-                const text = typeof value === 'string' ? value : String(value ?? '');
-                return text.trim();
-            };
-            const normalizeSessionUrl = (value) => {
-                const text = typeof value === 'string' ? value : String(value ?? '');
-                const trimmed = text.trim();
-                return trimmed || 'about:blank';
-            };
-            const buildDetail = (block) => {
-                const id = normalizeId(block.id);
-                const sessionUrl = normalizeSessionUrl(block.sessionUrl);
-                const timestampCandidate = Number(block.timestamp);
-                const timestamp = Number.isFinite(timestampCandidate) ? Math.floor(timestampCandidate) : Date.now();
-                const messages = Array.isArray(block.messages) ? cloneMessages(block.messages) : [];
-                const ordinalRange = normalizeOrdinalRange(block.ordinalRange);
-                const detail = {
-                    id,
-                    sessionUrl,
-                    ordinalRange,
-                    messageCount: messages.length,
-                    messageIds: collectMessageIds(messages),
-                    timestamp,
-                    timestampLabel: toTimestampLabel(timestamp),
-                    preview: formatPreview(messages),
-                    raw: typeof block.raw === 'string' ? block.raw : String(block.raw ?? ''),
-                    messages,
-                    meta: block.meta ? cloneValue(block.meta) : undefined,
-                    embedding: block.embedding ?? null,
-                };
-                return detail;
-            };
-            const cloneDetail = (detail) => {
-                return {
-                    id: detail.id,
-                    sessionUrl: detail.sessionUrl,
-                    ordinalRange: [detail.ordinalRange[0], detail.ordinalRange[1]],
-                    messageCount: detail.messageCount,
-                    messageIds: detail.messageIds.slice(),
-                    timestamp: detail.timestamp,
-                    timestampLabel: detail.timestampLabel,
-                    preview: detail.preview,
-                    raw: detail.raw,
-                    messages: cloneMessages(detail.messages),
-                    meta: detail.meta ? cloneValue(detail.meta) : undefined,
-                    embedding: detail.embedding ?? null,
-                };
-            };
-            const toSummary = (detail) => ({
-                id: detail.id,
-                sessionUrl: detail.sessionUrl,
-                ordinalRange: [detail.ordinalRange[0], detail.ordinalRange[1]],
-                messageCount: detail.messageCount,
-                messageIds: detail.messageIds.slice(),
-                timestamp: detail.timestamp,
-                timestampLabel: detail.timestampLabel,
-                preview: detail.preview,
-            });
             const listInternal = () => {
                 const entries = Array.from(buckets.values());
                 entries.sort((a, b) => {
@@ -10636,7 +11315,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             return {
                 capture(block) {
                     try {
-                        const detail = buildDetail(block);
+                        const detail = buildDebugBlockDetail(block);
                         if (!detail.id)
                             return;
                         buckets.set(detail.id, detail);
@@ -10646,14 +11325,14 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                     }
                 },
                 list() {
-                    return listInternal().map((detail) => toSummary(detail));
+                    return listInternal().map((detail) => toDebugBlockSummary(detail));
                 },
                 listBySession(sessionUrl) {
                     if (!sessionUrl)
                         return [];
                     return listInternal()
                         .filter((detail) => detail.sessionUrl === sessionUrl)
-                        .map((detail) => toSummary(detail));
+                        .map((detail) => toDebugBlockSummary(detail));
                 },
                 get(id) {
                     if (!id)
@@ -10661,7 +11340,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                     const detail = buckets.get(id);
                     if (!detail)
                         return null;
-                    return cloneDetail(detail);
+                    return cloneDebugBlockDetail(detail);
                 },
             };
         };
@@ -10769,6 +11448,24 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             parseListInput,
         });
         GMH.UI.StateView = stateView;
+        const blockViewer = createBlockViewer({
+            documentRef: document,
+            windowRef: PAGE_WINDOW,
+            modal,
+            blockStorage: blockStoragePromise,
+            getSessionUrl: () => {
+                try {
+                    return PAGE_WINDOW?.location?.href ?? null;
+                }
+                catch {
+                    return null;
+                }
+            },
+            getDebugApi: () => GMH.Debug ?? null,
+            logger: ENV.console,
+        });
+        GMH.UI.BlockViewer = blockViewer;
+        memoryStatus.setBlockViewerResolver(() => blockViewer);
         const { describeNode, downloadDomSnapshot } = createSnapshotFeature({
             getActiveAdapter: () => getActiveAdapter(),
             triggerDownload,

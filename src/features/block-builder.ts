@@ -14,6 +14,30 @@ interface BufferedMessage {
   ordinal: number;
 }
 
+const isNarrationMessage = (message: StructuredSnapshotMessage | null | undefined): boolean => {
+  if (!message || typeof message !== 'object') return false;
+  const role = typeof message.role === 'string' ? message.role.trim().toLowerCase() : '';
+  const channel = typeof message.channel === 'string' ? message.channel.trim().toLowerCase() : '';
+  if (role === 'narration' || channel === 'system') {
+    return true;
+  }
+  if (Array.isArray(message.parts) && message.parts.length) {
+    let narrationParts = 0;
+    message.parts.forEach((part) => {
+      if (!part) return;
+      const flavor = typeof part.flavor === 'string' ? part.flavor.trim().toLowerCase() : '';
+      const partRole = typeof part.role === 'string' ? part.role.trim().toLowerCase() : '';
+      if (flavor === 'narration' || partRole === 'narration') {
+        narrationParts += 1;
+      }
+    });
+    if (narrationParts === message.parts.length) {
+      return true;
+    }
+  }
+  return false;
+};
+
 const DEFAULT_BLOCK_SIZE = 5;
 const DEFAULT_BLOCK_OVERLAP = 2;
 const DEFAULT_SESSION_FALLBACK = 'about:blank';
@@ -243,8 +267,9 @@ export const createBlockBuilder = (options: BlockBuilderOptions = {}): BlockBuil
     if (!slice.length) {
       throw new Error('Cannot build block without messages.');
     }
-    const startOrdinal = slice[0]?.ordinal ?? 0;
-    const endOrdinal = slice[slice.length - 1]?.ordinal ?? startOrdinal;
+    const orderedSlice = slice.slice().sort((a, b) => a.ordinal - b.ordinal);
+    const startOrdinal = orderedSlice[0]?.ordinal ?? 0;
+    const endOrdinal = orderedSlice[orderedSlice.length - 1]?.ordinal ?? startOrdinal;
     blockCounter += 1;
     const blockId = buildBlockId({
       startOrdinal,
@@ -252,8 +277,12 @@ export const createBlockBuilder = (options: BlockBuilderOptions = {}): BlockBuil
       timestamp,
       counter: blockCounter,
     });
-    const messages = slice.map((entry) => cloneStructuredMessage(entry.message));
-    const raw = buildRawText(slice, removeNarration);
+    const filteredEntries =
+      removeNarration && orderedSlice.length
+        ? orderedSlice.filter((entry) => !isNarrationMessage(entry.message))
+        : orderedSlice.slice();
+    const messages = filteredEntries.map((entry) => cloneStructuredMessage(entry.message));
+    const raw = buildRawText(orderedSlice, removeNarration);
     const block: MemoryBlockInit = {
       id: blockId,
       sessionUrl,
@@ -265,7 +294,7 @@ export const createBlockBuilder = (options: BlockBuilderOptions = {}): BlockBuil
         blockSize: slice.length,
         configuredBlockSize: blockSize,
         overlap,
-        sourceOrdinals: slice.map((entry) => entry.ordinal),
+        sourceOrdinals: orderedSlice.map((entry) => entry.ordinal),
       },
     };
     return block;
@@ -351,6 +380,38 @@ export const createBlockBuilder = (options: BlockBuilderOptions = {}): BlockBuil
     return produced;
   };
 
+  const primeFromBlocksInternal = (blocks: MemoryBlockInit[]): void => {
+    if (!Array.isArray(blocks) || !blocks.length) return;
+    let highestOrdinal = ordinalCursor;
+    blocks.forEach((block) => {
+      if (!block) return;
+      if (Array.isArray(block.messages)) {
+        block.messages.forEach((message) => {
+          const messageId =
+            typeof message?.id === 'string' && message.id.trim().length ? message.id.trim() : null;
+          if (messageId) {
+            seenIds.add(messageId);
+          }
+        });
+      }
+      let blockEndOrdinal = Array.isArray(block.ordinalRange)
+        ? Number(block.ordinalRange[1])
+        : Number.NaN;
+      if (!Number.isFinite(blockEndOrdinal)) {
+        const sourceOrdinals = Array.isArray((block.meta as { sourceOrdinals?: number[] } | undefined)?.sourceOrdinals)
+          ? ((block.meta as { sourceOrdinals?: number[] }).sourceOrdinals as number[])
+          : [];
+        if (sourceOrdinals.length) {
+          blockEndOrdinal = Number(sourceOrdinals[sourceOrdinals.length - 1]);
+        }
+      }
+      if (Number.isFinite(blockEndOrdinal)) {
+        highestOrdinal = Math.max(highestOrdinal, Math.floor(blockEndOrdinal));
+      }
+    });
+    ordinalCursor = Math.max(ordinalCursor, highestOrdinal);
+  };
+
   return {
     append(message, optionsArg) {
       return appendInternal(message, optionsArg);
@@ -389,6 +450,9 @@ export const createBlockBuilder = (options: BlockBuilderOptions = {}): BlockBuil
         resetState();
       }
       sessionUrlRef = normalized ?? null;
+    },
+    primeFromBlocks(blocks) {
+      primeFromBlocksInternal(blocks);
     },
   };
 };

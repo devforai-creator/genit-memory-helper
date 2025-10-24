@@ -68,6 +68,7 @@ import { createShareWorkflow } from './features/share';
 import createBlockBuilder from './features/block-builder';
 import createMessageStream from './features/message-stream';
 import createMemoryStatus from './ui/memory-status';
+import createBlockViewer from './ui/block-viewer';
 import { createPanelInteractions } from './ui/panel-interactions';
 import { createModernPanel } from './ui/panel-modern';
 import { createModernPrivacyGate } from './ui/privacy-gate';
@@ -80,6 +81,11 @@ import { composeUI } from './composition/ui-composition';
 import { setupBootstrap } from './composition/bootstrap';
 import { CONFIG } from './config';
 import createBlockStorage from './storage/block-storage';
+import {
+  buildDebugBlockDetail,
+  cloneDebugBlockDetail,
+  toDebugBlockSummary,
+} from './utils/block-debug';
 import type {
   ClassicJSONExportOptions,
   ErrorHandler,
@@ -95,7 +101,6 @@ import type {
   StructuredJSONOptions,
   StructuredMarkdownOptions,
   StructuredTXTOptions,
-  StructuredSnapshotMessage,
   MemoryBlockInit,
   TranscriptSession,
 } from './types';
@@ -390,190 +395,6 @@ interface GMHFlags {
   const createDebugStore = () => {
     const buckets = new Map<string, DebugBlockDetails>();
 
-    const cloneStructuredMessage = (message: StructuredSnapshotMessage): StructuredSnapshotMessage => {
-      if (!message || typeof message !== 'object') {
-        return message;
-      }
-      if (typeof structuredClone === 'function') {
-        try {
-          const cloned = structuredClone(message) as StructuredSnapshotMessage;
-          const legacyLines = Reflect.get(message as Record<string, unknown>, 'legacyLines');
-          if (Array.isArray(legacyLines)) {
-            Object.defineProperty(cloned, 'legacyLines', {
-              value: legacyLines.slice(),
-              enumerable: false,
-              configurable: true,
-              writable: true,
-            });
-          }
-          return cloned;
-        } catch {
-          // fall through to JSON clone
-        }
-      }
-      const jsonClone = JSON.parse(JSON.stringify(message ?? null)) as StructuredSnapshotMessage;
-      if (!jsonClone) return jsonClone;
-      const legacyLines = Reflect.get(message as Record<string, unknown>, 'legacyLines');
-      if (Array.isArray(legacyLines)) {
-        Object.defineProperty(jsonClone, 'legacyLines', {
-          value: legacyLines.slice(),
-          enumerable: false,
-          configurable: true,
-          writable: true,
-        });
-      }
-      return jsonClone;
-    };
-
-    const cloneMessages = (messages: StructuredSnapshotMessage[]): StructuredSnapshotMessage[] =>
-      messages.map((message) => cloneStructuredMessage(message));
-
-    const cloneValue = <T>(value: T): T => {
-      if (value === null || value === undefined) return value;
-      if (typeof structuredClone === 'function') {
-        try {
-          return structuredClone(value);
-        } catch {
-          // fall through to JSON clone
-        }
-      }
-      try {
-        return JSON.parse(JSON.stringify(value)) as T;
-      } catch {
-        return value;
-      }
-    };
-
-    const selectPreviewText = (message: StructuredSnapshotMessage | null | undefined): string => {
-      if (!message || typeof message !== 'object') return '';
-      const legacyLines = Reflect.get(message as Record<string, unknown>, 'legacyLines');
-      if (Array.isArray(legacyLines)) {
-        for (const rawLine of legacyLines) {
-          const line = typeof rawLine === 'string' ? rawLine.trim() : '';
-          if (line) return line;
-        }
-      }
-      if (Array.isArray(message.parts)) {
-        for (const part of message.parts) {
-          if (!part) continue;
-          const candidates: unknown[] = [];
-          if (typeof part.text === 'string') candidates.push(part.text);
-          if (Array.isArray(part.lines)) candidates.push(...part.lines);
-          if (Array.isArray(part.legacyLines)) candidates.push(...part.legacyLines);
-          if (Array.isArray(part.items)) candidates.push(...part.items);
-          for (const candidate of candidates) {
-            const text = typeof candidate === 'string' ? candidate.trim() : String(candidate ?? '').trim();
-            if (text) return text;
-          }
-        }
-      }
-      const fallbackSpeaker =
-        typeof message.speaker === 'string' && message.speaker.trim() ? message.speaker.trim() : '';
-      return fallbackSpeaker;
-    };
-
-    const formatPreview = (messages: StructuredSnapshotMessage[]): string => {
-      const firstMessage = messages.length ? messages[0] : null;
-      if (!firstMessage) return '(no preview)';
-      const speaker =
-        typeof firstMessage?.speaker === 'string' && firstMessage.speaker.trim()
-          ? `${firstMessage.speaker.trim()}: `
-          : '';
-      const text = selectPreviewText(firstMessage);
-      const preview = `${speaker}${text}`.trim();
-      if (!preview) return '(no preview)';
-      return preview.length > 80 ? `${preview.slice(0, 77)}...` : preview;
-    };
-
-    const collectMessageIds = (messages: StructuredSnapshotMessage[]): string[] => {
-      return messages.slice(0, 3).map((message) => {
-        const id = typeof message?.id === 'string' && message.id.trim() ? message.id.trim() : null;
-        return id ?? 'NO_ID';
-      });
-    };
-
-    const toTimestampLabel = (value: number): string => {
-      if (!Number.isFinite(value)) return '(invalid)';
-      try {
-        return new Date(value).toLocaleTimeString();
-      } catch {
-        return '(invalid)';
-      }
-    };
-
-    const normalizeOrdinalRange = (
-      range: [number, number] | undefined | null,
-    ): [number, number] => {
-      const startCandidate = Array.isArray(range) ? Number(range[0]) : Number.NaN;
-      const endCandidate = Array.isArray(range) ? Number(range[1]) : Number.NaN;
-      const start = Number.isFinite(startCandidate) ? Math.floor(startCandidate) : 0;
-      const end = Number.isFinite(endCandidate) ? Math.floor(endCandidate) : start;
-      return [start, end];
-    };
-
-    const normalizeId = (value: unknown): string => {
-      const text = typeof value === 'string' ? value : String(value ?? '');
-      return text.trim();
-    };
-
-    const normalizeSessionUrl = (value: unknown): string => {
-      const text = typeof value === 'string' ? value : String(value ?? '');
-      const trimmed = text.trim();
-      return trimmed || 'about:blank';
-    };
-
-    const buildDetail = (block: MemoryBlockInit): DebugBlockDetails => {
-      const id = normalizeId(block.id);
-      const sessionUrl = normalizeSessionUrl(block.sessionUrl);
-      const timestampCandidate = Number(block.timestamp);
-      const timestamp = Number.isFinite(timestampCandidate) ? Math.floor(timestampCandidate) : Date.now();
-      const messages = Array.isArray(block.messages) ? cloneMessages(block.messages) : [];
-      const ordinalRange = normalizeOrdinalRange(block.ordinalRange);
-      const detail: DebugBlockDetails = {
-        id,
-        sessionUrl,
-        ordinalRange,
-        messageCount: messages.length,
-        messageIds: collectMessageIds(messages),
-        timestamp,
-        timestampLabel: toTimestampLabel(timestamp),
-        preview: formatPreview(messages),
-        raw: typeof block.raw === 'string' ? block.raw : String(block.raw ?? ''),
-        messages,
-        meta: block.meta ? cloneValue(block.meta) : undefined,
-        embedding: block.embedding ?? null,
-      };
-      return detail;
-    };
-
-    const cloneDetail = (detail: DebugBlockDetails): DebugBlockDetails => {
-      return {
-        id: detail.id,
-        sessionUrl: detail.sessionUrl,
-        ordinalRange: [detail.ordinalRange[0], detail.ordinalRange[1]],
-        messageCount: detail.messageCount,
-        messageIds: detail.messageIds.slice(),
-        timestamp: detail.timestamp,
-        timestampLabel: detail.timestampLabel,
-        preview: detail.preview,
-        raw: detail.raw,
-        messages: cloneMessages(detail.messages),
-        meta: detail.meta ? cloneValue(detail.meta) : undefined,
-        embedding: detail.embedding ?? null,
-      };
-    };
-
-    const toSummary = (detail: DebugBlockDetails): DebugBlockSummary => ({
-      id: detail.id,
-      sessionUrl: detail.sessionUrl,
-      ordinalRange: [detail.ordinalRange[0], detail.ordinalRange[1]],
-      messageCount: detail.messageCount,
-      messageIds: detail.messageIds.slice(),
-      timestamp: detail.timestamp,
-      timestampLabel: detail.timestampLabel,
-      preview: detail.preview,
-    });
-
     const listInternal = (): DebugBlockDetails[] => {
       const entries = Array.from(buckets.values());
       entries.sort((a, b) => {
@@ -593,7 +414,7 @@ interface GMHFlags {
     return {
       capture(block: MemoryBlockInit) {
         try {
-          const detail = buildDetail(block);
+          const detail = buildDebugBlockDetail(block);
           if (!detail.id) return;
           buckets.set(detail.id, detail);
         } catch (err) {
@@ -601,19 +422,19 @@ interface GMHFlags {
         }
       },
       list(): DebugBlockSummary[] {
-        return listInternal().map((detail) => toSummary(detail));
+        return listInternal().map((detail) => toDebugBlockSummary(detail));
       },
       listBySession(sessionUrl: string | null): DebugBlockSummary[] {
         if (!sessionUrl) return [];
         return listInternal()
           .filter((detail) => detail.sessionUrl === sessionUrl)
-          .map((detail) => toSummary(detail));
+          .map((detail) => toDebugBlockSummary(detail));
       },
       get(id: string): DebugBlockDetails | null {
         if (!id) return null;
         const detail = buckets.get(id);
         if (!detail) return null;
-        return cloneDetail(detail);
+        return cloneDebugBlockDetail(detail);
       },
     };
   };
@@ -750,6 +571,25 @@ interface GMHFlags {
   });
 
   GMH.UI.StateView = stateView;
+
+  const blockViewer = createBlockViewer({
+    documentRef: document,
+    windowRef: PAGE_WINDOW,
+    modal,
+    blockStorage: blockStoragePromise,
+    getSessionUrl: () => {
+      try {
+        return PAGE_WINDOW?.location?.href ?? null;
+      } catch {
+        return null;
+      }
+    },
+    getDebugApi: () => GMH.Debug ?? null,
+    logger: ENV.console,
+  });
+
+  (GMH.UI as Record<string, unknown>).BlockViewer = blockViewer;
+  memoryStatus.setBlockViewerResolver(() => blockViewer);
 
   const { describeNode, downloadDomSnapshot } = createSnapshotFeature({
     getActiveAdapter: () => getActiveAdapter(),
