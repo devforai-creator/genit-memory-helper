@@ -37,6 +37,18 @@ const toIterableElements = (
   nodes: Iterable<Element> | Element[] | NodeListOf<Element>,
 ): Element[] => Array.from(nodes).filter((node): node is Element => node instanceof Element);
 
+const isPreviewMessageNode = (node: Element | null | undefined): boolean => {
+  if (!(node instanceof Element)) return false;
+  const rawId =
+    node.getAttribute('data-message-id') ||
+    node.getAttribute('data-id') ||
+    node.getAttribute('id') ||
+    '';
+  if (!rawId) return false;
+  const normalized = rawId.trim().toLowerCase();
+  return normalized.startsWith('preview-');
+};
+
 export const createMessageIndexer = ({
   console: consoleLike,
   document: documentLike,
@@ -105,19 +117,21 @@ export const createMessageIndexer = ({
   const indexMessages = (): MessageIndexerSummary => {
     const adapter = getAdapter();
     const container = adapter?.findContainer?.(documentRef) ?? null;
-    const blockNodes =
-      adapter?.listMessageBlocks?.(container ?? documentRef) ?? [];
+  const blockNodes =
+    adapter?.listMessageBlocks?.(container ?? documentRef) ?? [];
 
-    const blocks = Array.isArray(blockNodes)
-      ? toIterableElements(blockNodes)
-      : blockNodes
-        ? toIterableElements(blockNodes as Iterable<Element>)
-        : [];
+  const rawBlocks = Array.isArray(blockNodes)
+    ? toIterableElements(blockNodes)
+    : blockNodes
+      ? toIterableElements(blockNodes as Iterable<Element>)
+      : [];
 
-    if (!container) {
-      knownMessages = new WeakSet();
-      lastContainer = null;
-    } else if (container !== lastContainer) {
+  const blocks = rawBlocks.filter((block) => !isPreviewMessageNode(block));
+
+  if (!container) {
+    knownMessages = new WeakSet();
+    lastContainer = null;
+  } else if (container !== lastContainer) {
       knownMessages = new WeakSet();
       lastContainer = container;
     }
@@ -137,14 +151,23 @@ export const createMessageIndexer = ({
           block.getAttribute('data-id') ||
           null;
         if (messageId) {
-          block.setAttribute('data-gmh-message-id', messageId);
-        } else {
-          block.removeAttribute('data-gmh-message-id');
-        }
-        const role = adapter?.detectRole?.(block) || 'unknown';
-        block.setAttribute('data-gmh-message-role', role);
-        const channel = role === 'player' ? 'user' : 'llm';
-        block.setAttribute('data-gmh-channel', channel);
+        block.setAttribute('data-gmh-message-id', messageId);
+      } else {
+        block.removeAttribute('data-gmh-message-id');
+      }
+      if (isPreviewMessageNode(block)) {
+        block.removeAttribute('data-gmh-message');
+        block.removeAttribute('data-gmh-message-id');
+        block.removeAttribute('data-gmh-message-index');
+        block.removeAttribute('data-gmh-message-role');
+        block.removeAttribute('data-gmh-channel');
+        block.removeAttribute('data-gmh-user-ordinal');
+        return;
+      }
+      const role = adapter?.detectRole?.(block) || 'unknown';
+      block.setAttribute('data-gmh-message-role', role);
+      const channel = role === 'player' ? 'user' : 'llm';
+      block.setAttribute('data-gmh-channel', channel);
         if (channel === 'user') userMessageCount += 1;
         block.removeAttribute('data-gmh-player-turn');
         block.removeAttribute('data-gmh-user-ordinal');
@@ -188,6 +211,9 @@ export const createMessageIndexer = ({
       const timestamp = Date.now();
       const events: MessageIndexerEvent[] = [];
       newBlocks.forEach((block) => {
+        if (isPreviewMessageNode(block)) {
+          return;
+        }
         const ordinalAttr = Number(block.getAttribute('data-gmh-message-ordinal'));
         if (!Number.isFinite(ordinalAttr)) return;
         const indexAttr = Number(block.getAttribute('data-gmh-message-index'));

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { createMessageIndexer } from '../../src/core/message-indexer';
 import createBlockBuilder from '../../src/features/block-builder';
@@ -6,6 +6,8 @@ import createMessageStream from '../../src/features/message-stream';
 import createBlockStorage from '../../src/storage/block-storage';
 import type {
   MessageIndexer,
+  MessageIndexerEvent,
+  MessageIndexerSummary,
   StructuredSnapshotMessage,
   MemoryBlockInit,
 } from '../../src/types';
@@ -56,6 +58,7 @@ describe('message stream integration', () => {
   let messageIndexer: MessageIndexer;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     dom = new JSDOM('<div id="root"><div id="chat"></div></div>', {
       url: 'https://genit.ai/chat',
       pretendToBeVisual: true,
@@ -74,6 +77,14 @@ describe('message stream integration', () => {
       getEntryOrigin: () => [],
     });
   });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const settleMessages = async (): Promise<void> => {
+    await vi.advanceTimersByTimeAsync(4000);
+  };
 
   const appendMessage = (id: string, text: string, role: string = 'npc'): void => {
     const block = documentRef.createElement('div');
@@ -120,11 +131,13 @@ describe('message stream integration', () => {
 
     appendMessage('m1', 'Hello there', 'player');
     messageIndexer.refresh({ immediate: true });
+    await settleMessages();
     await messageStream.flush({ includePartial: false });
     expect(persistedBlocks).toHaveLength(0);
 
     appendMessage('m2', 'Greetings back', 'npc');
     messageIndexer.refresh({ immediate: true });
+    await settleMessages();
     await messageStream.flush({ includePartial: false });
 
     expect(streamedMessages.length).toBeGreaterThanOrEqual(2);
@@ -135,5 +148,122 @@ describe('message stream integration', () => {
     const stats = await blockStorage.getStats();
     expect(stats.totalBlocks).toBe(1);
     expect(stats.totalMessages).toBe(2);
+  });
+
+  it('retries message collection until content is available', async () => {
+    const blockBuilder = createBlockBuilder({
+      blockSize: 1,
+      overlap: 0,
+      sessionUrl: 'https://genit.ai/chat/retry',
+      console: dom.window.console,
+    });
+
+    const summary: MessageIndexerSummary = {
+      totalMessages: 0,
+      userMessages: 0,
+      llmMessages: 0,
+      containerPresent: true,
+      timestamp: Date.now(),
+    };
+
+    let messageListener: ((event: MessageIndexerEvent) => void) | null = null;
+    const messageIndexerStub: MessageIndexer = {
+      start: vi.fn(),
+      stop: vi.fn(),
+      refresh: vi.fn(() => summary),
+      getSummary: vi.fn(() => summary),
+      lookupOrdinalByIndex: vi.fn(() => null),
+      lookupOrdinalByMessageId: vi.fn(() => null),
+      subscribe: vi.fn(() => () => {}),
+      subscribeMessages(listener: (event: MessageIndexerEvent) => void) {
+        messageListener = listener;
+        return () => {
+          if (messageListener === listener) {
+            messageListener = null;
+          }
+        };
+      },
+    };
+
+    const attempts = new WeakMap<Element, number>();
+    const collectStructuredMessage = (element: Element): StructuredSnapshotMessage | null => {
+      const count = attempts.get(element) ?? 0;
+      attempts.set(element, count + 1);
+      if (count === 0) {
+        return {
+          id: 'retry-msg',
+          role: 'narration',
+          channel: 'llm',
+          parts: [
+            {
+              type: 'info',
+              flavor: 'meta',
+              role: 'system',
+              speaker: 'INFO',
+              lines: ['Loading...'],
+              legacyLines: ['INFO', 'Loading...'],
+            },
+          ],
+        };
+      }
+      return {
+        id: 'retry-msg',
+        role: 'narration',
+        channel: 'llm',
+        parts: [
+          {
+            type: 'info',
+            flavor: 'meta',
+            role: 'system',
+            speaker: 'INFO',
+            lines: ['Loading...'],
+            legacyLines: ['INFO', 'Loading...'],
+          },
+          {
+            type: 'narration',
+            flavor: 'narration',
+            role: 'narration',
+            speaker: 'Narrator',
+            lines: ['Final line draws in.'],
+          },
+        ],
+      };
+    };
+
+    const messageStream = createMessageStream({
+      messageIndexer: messageIndexerStub,
+      blockBuilder,
+      blockStorage: null,
+      collectStructuredMessage,
+      getSessionUrl: () => 'https://genit.ai/chat/retry',
+      console: dom.window.console,
+    });
+
+    const streamedMessages: StructuredSnapshotMessage[] = [];
+    messageStream.subscribeMessages((message) => {
+      streamedMessages.push(message);
+    });
+
+    messageStream.start();
+    await Promise.resolve();
+
+    const targetElement = documentRef.createElement('div');
+    container.appendChild(targetElement);
+    const event: MessageIndexerEvent = {
+      element: targetElement,
+      ordinal: 1,
+      index: 0,
+      messageId: 'retry-msg',
+      channel: 'llm',
+      timestamp: Date.now(),
+    };
+    messageListener?.(event);
+
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(streamedMessages).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(streamedMessages).toHaveLength(1);
+    expect(streamedMessages[0]?.parts?.some((part) => part?.type === 'narration')).toBe(true);
   });
 });

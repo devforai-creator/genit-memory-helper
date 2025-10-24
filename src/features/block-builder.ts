@@ -14,30 +14,6 @@ interface BufferedMessage {
   ordinal: number;
 }
 
-const isNarrationMessage = (message: StructuredSnapshotMessage | null | undefined): boolean => {
-  if (!message || typeof message !== 'object') return false;
-  const role = typeof message.role === 'string' ? message.role.trim().toLowerCase() : '';
-  const channel = typeof message.channel === 'string' ? message.channel.trim().toLowerCase() : '';
-  if (role === 'narration' || channel === 'system') {
-    return true;
-  }
-  if (Array.isArray(message.parts) && message.parts.length) {
-    let narrationParts = 0;
-    message.parts.forEach((part) => {
-      if (!part) return;
-      const flavor = typeof part.flavor === 'string' ? part.flavor.trim().toLowerCase() : '';
-      const partRole = typeof part.role === 'string' ? part.role.trim().toLowerCase() : '';
-      if (flavor === 'narration' || partRole === 'narration') {
-        narrationParts += 1;
-      }
-    });
-    if (narrationParts === message.parts.length) {
-      return true;
-    }
-  }
-  return false;
-};
-
 const DEFAULT_BLOCK_SIZE = 5;
 const DEFAULT_BLOCK_OVERLAP = 2;
 const DEFAULT_SESSION_FALLBACK = 'about:blank';
@@ -102,48 +78,76 @@ const toNormalizedLines = (
     return [];
   }
 
-  const legacyLines = Reflect.get(message as Record<string, unknown>, 'legacyLines');
-  if (Array.isArray(legacyLines) && legacyLines.length) {
-    return legacyLines.map((line) => String(line || '').trim()).filter((line) => line.length > 0);
+  const lines: string[] = [];
+  const seenLines = new Set<string>();
+  const pushLine = (value: string | null | undefined) => {
+    if (typeof value !== 'string') return;
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    if (seenLines.has(trimmed)) return;
+    seenLines.add(trimmed);
+    lines.push(trimmed);
+  };
+  let observedInfoPart = false;
+  let observedNonInfoPart = false;
+
+  if (Array.isArray(message.parts)) {
+    message.parts.forEach((part) => {
+      if (!part) return;
+      if (part.type === 'info' || part.speaker === 'INFO') {
+        observedInfoPart = true;
+        return;
+      }
+      if (
+        removeNarration &&
+        (part.flavor === 'narration' || part.role === 'narration' || message.role === 'narration')
+      ) {
+        return;
+      }
+      observedNonInfoPart = true;
+      pushLine(part.text);
+      if (Array.isArray(part.lines)) {
+        part.lines.forEach((line) => {
+          pushLine(line);
+        });
+      }
+      if (Array.isArray(part.legacyLines)) {
+        part.legacyLines.forEach((line) => {
+          pushLine(line);
+        });
+      }
+      if (Array.isArray(part.items)) {
+        part.items.forEach((item) => {
+          if (item === null || item === undefined) return;
+          const text = typeof item === 'string' ? item : String(item ?? '');
+          pushLine(text);
+        });
+      }
+    });
   }
 
-  if (!Array.isArray(message.parts)) return [];
+  if (lines.length) {
+    return lines;
+  }
 
-  const lines: string[] = [];
-  message.parts.forEach((part) => {
-    if (!part) return;
-    if (
-      removeNarration &&
-      (part.flavor === 'narration' || part.role === 'narration' || message.role === 'narration')
-    ) {
-      return;
+  if (observedInfoPart && !observedNonInfoPart) {
+    return [];
+  }
+
+  const legacyLines = Reflect.get(message as Record<string, unknown>, 'legacyLines');
+  if (Array.isArray(legacyLines) && legacyLines.length) {
+    const firstLegacy = String(legacyLines[0] || '').trim().toUpperCase();
+    if (firstLegacy === 'INFO') {
+      return [];
     }
-    if (typeof part.text === 'string' && part.text.trim()) {
-      lines.push(part.text.trim());
-    }
-    if (Array.isArray(part.lines)) {
-      part.lines.forEach((line) => {
-        if (typeof line === 'string' && line.trim()) {
-          lines.push(line.trim());
-        }
-      });
-    }
-    if (Array.isArray(part.legacyLines)) {
-      part.legacyLines.forEach((line) => {
-        if (typeof line === 'string' && line.trim()) {
-          lines.push(line.trim());
-        }
-      });
-    }
-    if (Array.isArray(part.items)) {
-      part.items.forEach((item) => {
-        const text = typeof item === 'string' ? item : String(item ?? '');
-        if (text.trim()) {
-          lines.push(text.trim());
-        }
-      });
-    }
-  });
+    legacyLines.forEach((line) => {
+      if (typeof line !== 'string') return;
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.toUpperCase() === 'INFO') return;
+      pushLine(trimmed);
+    });
+    return lines;
+  }
 
   return lines;
 };
@@ -277,11 +281,7 @@ export const createBlockBuilder = (options: BlockBuilderOptions = {}): BlockBuil
       timestamp,
       counter: blockCounter,
     });
-    const filteredEntries =
-      removeNarration && orderedSlice.length
-        ? orderedSlice.filter((entry) => !isNarrationMessage(entry.message))
-        : orderedSlice.slice();
-    const messages = filteredEntries.map((entry) => cloneStructuredMessage(entry.message));
+    const messages = orderedSlice.map((entry) => cloneStructuredMessage(entry.message));
     const raw = buildRawText(orderedSlice, removeNarration);
     const block: MemoryBlockInit = {
       id: blockId,

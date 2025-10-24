@@ -43,46 +43,58 @@ const safeNumber = (value: unknown): number => {
 
 const collectMessageLines = (message: DebugBlockDetails['messages'][number]): string[] => {
   if (!message || typeof message !== 'object') return [];
-  const lines: string[] = [];
-  const legacyLines = Reflect.get(message as Record<string, unknown>, 'legacyLines');
-  if (Array.isArray(legacyLines)) {
-    legacyLines.forEach((line) => {
-      if (typeof line === 'string' && line.trim()) {
-        lines.push(line.trim());
-      }
-    });
-  }
+  const seen = new Set<string>();
+  const mainLines: string[] = [];
+  const infoLines: string[] = [];
+
+  const pushLine = (line: unknown, bucket: 'info' | 'main') => {
+    if (typeof line !== 'string') return;
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    if (trimmed.toUpperCase() === 'INFO' && bucket === 'info') {
+      // keep "INFO" headers with the rest of the info block, but dedupe separately
+    }
+    if (seen.has(trimmed)) return;
+    seen.add(trimmed);
+    if (bucket === 'info') {
+      infoLines.push(trimmed);
+    } else {
+      mainLines.push(trimmed);
+    }
+  };
+
   if (Array.isArray(message.parts)) {
     message.parts.forEach((part) => {
       if (!part) return;
-      if (typeof part.text === 'string' && part.text.trim()) {
-        lines.push(part.text.trim());
-      }
+      const bucket = part.type === 'info' || part.speaker === 'INFO' ? 'info' : 'main';
+      pushLine(part.text, bucket);
       if (Array.isArray(part.lines)) {
-        part.lines.forEach((line) => {
-          if (typeof line === 'string' && line.trim()) {
-            lines.push(line.trim());
-          }
-        });
+        part.lines.forEach((line) => pushLine(line, bucket));
       }
       if (Array.isArray(part.legacyLines)) {
-        part.legacyLines.forEach((line) => {
-          if (typeof line === 'string' && line.trim()) {
-            lines.push(line.trim());
-          }
-        });
+        part.legacyLines.forEach((line) => pushLine(line, bucket));
       }
       if (Array.isArray(part.items)) {
         part.items.forEach((item) => {
           const text = typeof item === 'string' ? item : String(item ?? '');
-          if (text.trim()) {
-            lines.push(text.trim());
-          }
+          pushLine(text, bucket);
         });
       }
     });
   }
-  return lines;
+
+  const legacyLines = Reflect.get(message as Record<string, unknown>, 'legacyLines');
+  if (Array.isArray(legacyLines)) {
+    legacyLines.forEach((line) => {
+      const trimmed = typeof line === 'string' ? line.trim() : '';
+      if (!trimmed) return;
+      const bucket =
+        trimmed.toUpperCase() === 'INFO' || trimmed.startsWith('기록코드') ? 'info' : 'main';
+      pushLine(trimmed, bucket);
+    });
+  }
+
+  return mainLines.concat(infoLines);
 };
 
 const formatMessageBody = (message: DebugBlockDetails['messages'][number]): string => {

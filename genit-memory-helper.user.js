@@ -1025,6 +1025,18 @@ var GMHBundle = (function (exports) {
     const noop$3 = () => { };
     const cloneSummary = (summary) => ({ ...summary });
     const toIterableElements = (nodes) => Array.from(nodes).filter((node) => node instanceof Element);
+    const isPreviewMessageNode = (node) => {
+        if (!(node instanceof Element))
+            return false;
+        const rawId = node.getAttribute('data-message-id') ||
+            node.getAttribute('data-id') ||
+            node.getAttribute('id') ||
+            '';
+        if (!rawId)
+            return false;
+        const normalized = rawId.trim().toLowerCase();
+        return normalized.startsWith('preview-');
+    };
     const createMessageIndexer = ({ console: consoleLike, document: documentLike, MutationObserver: MutationObserverLike, requestAnimationFrame: rafLike, exportRange, getActiveAdapter, getEntryOrigin, } = {}) => {
         const logger = consoleLike ??
             (typeof console !== 'undefined' ? console : {});
@@ -1073,11 +1085,12 @@ var GMHBundle = (function (exports) {
             const adapter = getAdapter();
             const container = adapter?.findContainer?.(documentRef) ?? null;
             const blockNodes = adapter?.listMessageBlocks?.(container ?? documentRef) ?? [];
-            const blocks = Array.isArray(blockNodes)
+            const rawBlocks = Array.isArray(blockNodes)
                 ? toIterableElements(blockNodes)
                 : blockNodes
                     ? toIterableElements(blockNodes)
                     : [];
+            const blocks = rawBlocks.filter((block) => !isPreviewMessageNode(block));
             if (!container) {
                 knownMessages = new WeakSet();
                 lastContainer = null;
@@ -1103,6 +1116,15 @@ var GMHBundle = (function (exports) {
                     }
                     else {
                         block.removeAttribute('data-gmh-message-id');
+                    }
+                    if (isPreviewMessageNode(block)) {
+                        block.removeAttribute('data-gmh-message');
+                        block.removeAttribute('data-gmh-message-id');
+                        block.removeAttribute('data-gmh-message-index');
+                        block.removeAttribute('data-gmh-message-role');
+                        block.removeAttribute('data-gmh-channel');
+                        block.removeAttribute('data-gmh-user-ordinal');
+                        return;
                     }
                     const role = adapter?.detectRole?.(block) || 'unknown';
                     block.setAttribute('data-gmh-message-role', role);
@@ -1153,6 +1175,9 @@ var GMHBundle = (function (exports) {
                 const timestamp = Date.now();
                 const events = [];
                 newBlocks.forEach((block) => {
+                    if (isPreviewMessageNode(block)) {
+                        return;
+                    }
                     const ordinalAttr = Number(block.getAttribute('data-gmh-message-ordinal'));
                     if (!Number.isFinite(ordinalAttr))
                         return;
@@ -6156,31 +6181,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         };
     }
 
-    const isNarrationMessage = (message) => {
-        if (!message || typeof message !== 'object')
-            return false;
-        const role = typeof message.role === 'string' ? message.role.trim().toLowerCase() : '';
-        const channel = typeof message.channel === 'string' ? message.channel.trim().toLowerCase() : '';
-        if (role === 'narration' || channel === 'system') {
-            return true;
-        }
-        if (Array.isArray(message.parts) && message.parts.length) {
-            let narrationParts = 0;
-            message.parts.forEach((part) => {
-                if (!part)
-                    return;
-                const flavor = typeof part.flavor === 'string' ? part.flavor.trim().toLowerCase() : '';
-                const partRole = typeof part.role === 'string' ? part.role.trim().toLowerCase() : '';
-                if (flavor === 'narration' || partRole === 'narration') {
-                    narrationParts += 1;
-                }
-            });
-            if (narrationParts === message.parts.length) {
-                return true;
-            }
-        }
-        return false;
-    };
     const DEFAULT_BLOCK_SIZE = 5;
     const DEFAULT_BLOCK_OVERLAP = 2;
     const DEFAULT_SESSION_FALLBACK$1 = 'about:blank';
@@ -6242,46 +6242,77 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         if (removeNarration && (message.role === 'narration' || message.channel === 'system')) {
             return [];
         }
+        const lines = [];
+        const seenLines = new Set();
+        const pushLine = (value) => {
+            if (typeof value !== 'string')
+                return;
+            const trimmed = value.trim();
+            if (!trimmed)
+                return;
+            if (seenLines.has(trimmed))
+                return;
+            seenLines.add(trimmed);
+            lines.push(trimmed);
+        };
+        let observedInfoPart = false;
+        let observedNonInfoPart = false;
+        if (Array.isArray(message.parts)) {
+            message.parts.forEach((part) => {
+                if (!part)
+                    return;
+                if (part.type === 'info' || part.speaker === 'INFO') {
+                    observedInfoPart = true;
+                    return;
+                }
+                if (removeNarration &&
+                    (part.flavor === 'narration' || part.role === 'narration' || message.role === 'narration')) {
+                    return;
+                }
+                observedNonInfoPart = true;
+                pushLine(part.text);
+                if (Array.isArray(part.lines)) {
+                    part.lines.forEach((line) => {
+                        pushLine(line);
+                    });
+                }
+                if (Array.isArray(part.legacyLines)) {
+                    part.legacyLines.forEach((line) => {
+                        pushLine(line);
+                    });
+                }
+                if (Array.isArray(part.items)) {
+                    part.items.forEach((item) => {
+                        if (item === null || item === undefined)
+                            return;
+                        const text = typeof item === 'string' ? item : String(item ?? '');
+                        pushLine(text);
+                    });
+                }
+            });
+        }
+        if (lines.length) {
+            return lines;
+        }
+        if (observedInfoPart && !observedNonInfoPart) {
+            return [];
+        }
         const legacyLines = Reflect.get(message, 'legacyLines');
         if (Array.isArray(legacyLines) && legacyLines.length) {
-            return legacyLines.map((line) => String(line || '').trim()).filter((line) => line.length > 0);
+            const firstLegacy = String(legacyLines[0] || '').trim().toUpperCase();
+            if (firstLegacy === 'INFO') {
+                return [];
+            }
+            legacyLines.forEach((line) => {
+                if (typeof line !== 'string')
+                    return;
+                const trimmed = line.trim();
+                if (!trimmed || trimmed.toUpperCase() === 'INFO')
+                    return;
+                pushLine(trimmed);
+            });
+            return lines;
         }
-        if (!Array.isArray(message.parts))
-            return [];
-        const lines = [];
-        message.parts.forEach((part) => {
-            if (!part)
-                return;
-            if (removeNarration &&
-                (part.flavor === 'narration' || part.role === 'narration' || message.role === 'narration')) {
-                return;
-            }
-            if (typeof part.text === 'string' && part.text.trim()) {
-                lines.push(part.text.trim());
-            }
-            if (Array.isArray(part.lines)) {
-                part.lines.forEach((line) => {
-                    if (typeof line === 'string' && line.trim()) {
-                        lines.push(line.trim());
-                    }
-                });
-            }
-            if (Array.isArray(part.legacyLines)) {
-                part.legacyLines.forEach((line) => {
-                    if (typeof line === 'string' && line.trim()) {
-                        lines.push(line.trim());
-                    }
-                });
-            }
-            if (Array.isArray(part.items)) {
-                part.items.forEach((item) => {
-                    const text = typeof item === 'string' ? item : String(item ?? '');
-                    if (text.trim()) {
-                        lines.push(text.trim());
-                    }
-                });
-            }
-        });
         return lines;
     };
     const buildRawText = (sequence, removeNarration) => {
@@ -6390,10 +6421,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 timestamp,
                 counter: blockCounter,
             });
-            const filteredEntries = removeNarration && orderedSlice.length
-                ? orderedSlice.filter((entry) => !isNarrationMessage(entry.message))
-                : orderedSlice.slice();
-            const messages = filteredEntries.map((entry) => cloneStructuredMessage$2(entry.message));
+            const messages = orderedSlice.map((entry) => cloneStructuredMessage$2(entry.message));
             const raw = buildRawText(orderedSlice, removeNarration);
             const block = {
                 id: blockId,
@@ -6781,6 +6809,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     });
 
     const noop = () => { };
+    const MESSAGE_EVENT_SETTLE_DELAY_MS = 4000;
+    const MESSAGE_EVENT_RETRY_INTERVAL_MS = 2000;
+    const MESSAGE_EVENT_MAX_ATTEMPTS = 8;
     const selectConsole$1 = (consoleRef) => {
         if (consoleRef)
             return consoleRef;
@@ -6849,6 +6880,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         const blockListeners = new Set();
         const structuredListeners = new Set();
         const pendingMessageEvents = [];
+        const delayedEventTimers = new Set();
         let running = false;
         let unsubscribeMessages = null;
         let storage = null;
@@ -6978,19 +7010,46 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             }
             return current ?? derived ?? null;
         };
-        const processMessageEvent = (event) => {
-            if (!running)
-                return;
-            let structured = null;
-            try {
-                structured = options.collectStructuredMessage(event.element);
+        const messageHasRenderableContent = (message) => {
+            if (!message)
+                return false;
+            if (Array.isArray(message.parts)) {
+                const richPart = message.parts.some((part) => {
+                    if (!part || part.type === 'info' || part.speaker === 'INFO')
+                        return false;
+                    if (typeof part.text === 'string' && part.text.trim().length > 0)
+                        return true;
+                    if (Array.isArray(part.lines) && part.lines.some((line) => typeof line === 'string' && line.trim().length > 0)) {
+                        return true;
+                    }
+                    if (Array.isArray(part.items) &&
+                        part.items.some((item) => {
+                            const text = typeof item === 'string' ? item : String(item ?? '');
+                            return text.trim().length > 0;
+                        })) {
+                        return true;
+                    }
+                    return false;
+                });
+                if (richPart)
+                    return true;
             }
-            catch (err) {
-                logger.warn?.('[GMH] collectStructuredMessage failed', err);
-                return;
+            const legacyLines = Reflect.get(message, 'legacyLines');
+            if (Array.isArray(legacyLines)) {
+                return legacyLines.some((line) => {
+                    if (typeof line !== 'string')
+                        return false;
+                    const trimmed = line.trim();
+                    if (!trimmed)
+                        return false;
+                    if (trimmed.toUpperCase() === 'INFO')
+                        return false;
+                    return true;
+                });
             }
-            if (!structured)
-                return;
+            return false;
+        };
+        const commitStructuredMessage = (structured, event) => {
             if (!structured.id && event.messageId) {
                 structured.id = event.messageId;
             }
@@ -7016,12 +7075,44 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 void persistBlocks(blocks);
             }
         };
+        const attemptProcessMessageEvent = (event, attempt) => {
+            if (!running)
+                return;
+            let structured = null;
+            try {
+                structured = options.collectStructuredMessage(event.element);
+            }
+            catch (err) {
+                logger.warn?.('[GMH] collectStructuredMessage failed', err);
+                structured = null;
+            }
+            const hasRenderableContent = messageHasRenderableContent(structured);
+            if ((!structured || !hasRenderableContent) && attempt < MESSAGE_EVENT_MAX_ATTEMPTS) {
+                scheduleMessageEventProcessing(event, attempt + 1);
+                return;
+            }
+            if (!structured)
+                return;
+            commitStructuredMessage(structured, event);
+        };
+        const scheduleMessageEventProcessing = (event, attempt = 0) => {
+            if (!running)
+                return;
+            const delay = attempt === 0 ? MESSAGE_EVENT_SETTLE_DELAY_MS : MESSAGE_EVENT_RETRY_INTERVAL_MS;
+            const timer = setTimeout(() => {
+                delayedEventTimers.delete(timer);
+                if (!running)
+                    return;
+                attemptProcessMessageEvent(event, attempt);
+            }, delay);
+            delayedEventTimers.add(timer);
+        };
         const flushPendingEvents = () => {
             if (!primed || !pendingMessageEvents.length)
                 return;
             const queue = pendingMessageEvents.splice(0, pendingMessageEvents.length);
             queue.forEach((event) => {
-                processMessageEvent(event);
+                scheduleMessageEventProcessing(event);
             });
         };
         const handleMessageEvent = (event) => {
@@ -7029,7 +7120,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 pendingMessageEvents.push(event);
                 return;
             }
-            processMessageEvent(event);
+            scheduleMessageEventProcessing(event);
         };
         const awaitPriming = async () => {
             if (primePromise) {
@@ -7108,6 +7199,11 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             if (!running)
                 return;
             running = false;
+            delayedEventTimers.forEach((timer) => {
+                clearTimeout(timer);
+            });
+            delayedEventTimers.clear();
+            pendingMessageEvents.length = 0;
             if (unsubscribeMessages) {
                 unsubscribeMessages();
                 unsubscribeMessages = null;
@@ -7681,47 +7777,57 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     const collectMessageLines = (message) => {
         if (!message || typeof message !== 'object')
             return [];
-        const lines = [];
-        const legacyLines = Reflect.get(message, 'legacyLines');
-        if (Array.isArray(legacyLines)) {
-            legacyLines.forEach((line) => {
-                if (typeof line === 'string' && line.trim()) {
-                    lines.push(line.trim());
-                }
-            });
-        }
+        const seen = new Set();
+        const mainLines = [];
+        const infoLines = [];
+        const pushLine = (line, bucket) => {
+            if (typeof line !== 'string')
+                return;
+            const trimmed = line.trim();
+            if (!trimmed)
+                return;
+            if (trimmed.toUpperCase() === 'INFO' && bucket === 'info') ;
+            if (seen.has(trimmed))
+                return;
+            seen.add(trimmed);
+            if (bucket === 'info') {
+                infoLines.push(trimmed);
+            }
+            else {
+                mainLines.push(trimmed);
+            }
+        };
         if (Array.isArray(message.parts)) {
             message.parts.forEach((part) => {
                 if (!part)
                     return;
-                if (typeof part.text === 'string' && part.text.trim()) {
-                    lines.push(part.text.trim());
-                }
+                const bucket = part.type === 'info' || part.speaker === 'INFO' ? 'info' : 'main';
+                pushLine(part.text, bucket);
                 if (Array.isArray(part.lines)) {
-                    part.lines.forEach((line) => {
-                        if (typeof line === 'string' && line.trim()) {
-                            lines.push(line.trim());
-                        }
-                    });
+                    part.lines.forEach((line) => pushLine(line, bucket));
                 }
                 if (Array.isArray(part.legacyLines)) {
-                    part.legacyLines.forEach((line) => {
-                        if (typeof line === 'string' && line.trim()) {
-                            lines.push(line.trim());
-                        }
-                    });
+                    part.legacyLines.forEach((line) => pushLine(line, bucket));
                 }
                 if (Array.isArray(part.items)) {
                     part.items.forEach((item) => {
                         const text = typeof item === 'string' ? item : String(item ?? '');
-                        if (text.trim()) {
-                            lines.push(text.trim());
-                        }
+                        pushLine(text, bucket);
                     });
                 }
             });
         }
-        return lines;
+        const legacyLines = Reflect.get(message, 'legacyLines');
+        if (Array.isArray(legacyLines)) {
+            legacyLines.forEach((line) => {
+                const trimmed = typeof line === 'string' ? line.trim() : '';
+                if (!trimmed)
+                    return;
+                const bucket = trimmed.toUpperCase() === 'INFO' || trimmed.startsWith('기록코드') ? 'info' : 'main';
+                pushLine(trimmed, bucket);
+            });
+        }
+        return mainLines.concat(infoLines);
     };
     const formatMessageBody = (message) => {
         const lines = collectMessageLines(message);
@@ -11257,6 +11363,8 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         });
         const blockBuilder = createBlockBuilder({
             console: ENV.console,
+            removeNarration: false,
+            overlap: 0,
             getSessionUrl: () => {
                 try {
                     return PAGE_WINDOW?.location?.href ?? null;

@@ -9,11 +9,19 @@ import type {
   MemoryBlockInit,
   StructuredSnapshotMessage,
 } from '../types';
-import { collectMessageIdsFromBlock, formatBlockPreview, formatTimestampLabel } from '../utils/block-debug';
+import {
+  collectMessageIdsFromBlock,
+  formatBlockPreview,
+  formatTimestampLabel,
+} from '../utils/block-debug';
 
 type ConsoleLike = Pick<Console, 'log' | 'warn' | 'error'>;
 
 const noop = (): void => {};
+
+const MESSAGE_EVENT_SETTLE_DELAY_MS = 4000;
+const MESSAGE_EVENT_RETRY_INTERVAL_MS = 2000;
+const MESSAGE_EVENT_MAX_ATTEMPTS = 8;
 
 const selectConsole = (consoleRef?: ConsoleLike | null): ConsoleLike => {
   if (consoleRef) return consoleRef;
@@ -85,6 +93,7 @@ export const createMessageStream = (options: MessageStreamOptions): MessageStrea
   const blockListeners = new Set<(block: MemoryBlockInit) => void>();
   const structuredListeners = new Set<(message: StructuredSnapshotMessage) => void>();
   const pendingMessageEvents: MessageIndexerEvent[] = [];
+  const delayedEventTimers = new Set<ReturnType<typeof setTimeout>>();
 
   let running = false;
   let unsubscribeMessages: (() => void) | null = null;
@@ -216,17 +225,45 @@ export const createMessageStream = (options: MessageStreamOptions): MessageStrea
     return current ?? derived ?? null;
   };
 
-  const processMessageEvent = (event: MessageIndexerEvent): void => {
-    if (!running) return;
-    let structured: StructuredSnapshotMessage | null = null;
-    try {
-      structured = options.collectStructuredMessage(event.element);
-    } catch (err) {
-      logger.warn?.('[GMH] collectStructuredMessage failed', err);
-      return;
+  const messageHasRenderableContent = (message: StructuredSnapshotMessage | null): boolean => {
+    if (!message) return false;
+    if (Array.isArray(message.parts)) {
+      const richPart = message.parts.some((part) => {
+        if (!part || part.type === 'info' || part.speaker === 'INFO') return false;
+        if (typeof part.text === 'string' && part.text.trim().length > 0) return true;
+        if (Array.isArray(part.lines) && part.lines.some((line) => typeof line === 'string' && line.trim().length > 0)) {
+          return true;
+        }
+        if (
+          Array.isArray(part.items) &&
+          part.items.some((item) => {
+            const text = typeof item === 'string' ? item : String(item ?? '');
+            return text.trim().length > 0;
+          })
+        ) {
+          return true;
+        }
+        return false;
+      });
+      if (richPart) return true;
     }
-    if (!structured) return;
+    const legacyLines = Reflect.get(message as Record<string, unknown>, 'legacyLines');
+    if (Array.isArray(legacyLines)) {
+      return legacyLines.some((line) => {
+        if (typeof line !== 'string') return false;
+        const trimmed = line.trim();
+        if (!trimmed) return false;
+        if (trimmed.toUpperCase() === 'INFO') return false;
+        return true;
+      });
+    }
+    return false;
+  };
 
+  const commitStructuredMessage = (
+    structured: StructuredSnapshotMessage,
+    event: MessageIndexerEvent,
+  ): void => {
     if (!structured.id && event.messageId) {
       structured.id = event.messageId;
     }
@@ -254,11 +291,45 @@ export const createMessageStream = (options: MessageStreamOptions): MessageStrea
     }
   };
 
+  const attemptProcessMessageEvent = (event: MessageIndexerEvent, attempt: number): void => {
+    if (!running) return;
+    let structured: StructuredSnapshotMessage | null = null;
+    try {
+      structured = options.collectStructuredMessage(event.element);
+    } catch (err) {
+      logger.warn?.('[GMH] collectStructuredMessage failed', err);
+      structured = null;
+    }
+
+    const hasRenderableContent = messageHasRenderableContent(structured);
+    if ((!structured || !hasRenderableContent) && attempt < MESSAGE_EVENT_MAX_ATTEMPTS) {
+      scheduleMessageEventProcessing(event, attempt + 1);
+      return;
+    }
+    if (!structured) return;
+    commitStructuredMessage(structured, event);
+  };
+
+  const scheduleMessageEventProcessing = (
+    event: MessageIndexerEvent,
+    attempt: number = 0,
+  ): void => {
+    if (!running) return;
+    const delay =
+      attempt === 0 ? MESSAGE_EVENT_SETTLE_DELAY_MS : MESSAGE_EVENT_RETRY_INTERVAL_MS;
+    const timer = setTimeout(() => {
+      delayedEventTimers.delete(timer);
+      if (!running) return;
+      attemptProcessMessageEvent(event, attempt);
+    }, delay);
+    delayedEventTimers.add(timer);
+  };
+
   const flushPendingEvents = (): void => {
     if (!primed || !pendingMessageEvents.length) return;
     const queue = pendingMessageEvents.splice(0, pendingMessageEvents.length);
     queue.forEach((event) => {
-      processMessageEvent(event);
+      scheduleMessageEventProcessing(event);
     });
   };
 
@@ -267,7 +338,7 @@ export const createMessageStream = (options: MessageStreamOptions): MessageStrea
       pendingMessageEvents.push(event);
       return;
     }
-    processMessageEvent(event);
+    scheduleMessageEventProcessing(event);
   };
 
   const awaitPriming = async (): Promise<void> => {
@@ -344,6 +415,11 @@ export const createMessageStream = (options: MessageStreamOptions): MessageStrea
   const stop = (): void => {
     if (!running) return;
     running = false;
+    delayedEventTimers.forEach((timer) => {
+      clearTimeout(timer);
+    });
+    delayedEventTimers.clear();
+    pendingMessageEvents.length = 0;
     if (unsubscribeMessages) {
       unsubscribeMessages();
       unsubscribeMessages = null;

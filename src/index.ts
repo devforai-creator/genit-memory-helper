@@ -355,6 +355,8 @@ interface GMHFlags {
 
   const blockBuilder = createBlockBuilder({
     console: ENV.console,
+    removeNarration: false,
+    overlap: 0,
     getSessionUrl: () => {
       try {
         return PAGE_WINDOW?.location?.href ?? null;
