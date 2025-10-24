@@ -17,11 +17,12 @@ Key features:
 
 ### Building
 ```bash
-npm run build          # Injects version from package.json into userscript
-npm run sync:version   # Syncs version metadata only
+USE_ROLLUP=1 npm run build   # TypeScript → Rollup bundle → version injection (REQUIRED after v2.0.0)
+npm run build                # Legacy: version injection only (DO NOT USE for development)
+npm run sync:version         # Syncs version metadata only
 ```
 
-> Tip: set `USE_ROLLUP=1` when running `npm run build` to exercise the Rollup bundle that stitches together the modules under `src/`.
+**IMPORTANT**: Since v2.0.0 (TypeScript migration), `USE_ROLLUP=1` is **mandatory** for building. The plain `npm run build` only injects version numbers and does not bundle TypeScript sources.
 
 ### Testing
 ```bash
@@ -31,7 +32,7 @@ npm run test:smoke     # Playwright smoke tests (requires credentials)
 npm run pretest        # Auto-runs before tests to ensure dist is built
 ```
 
-**Important**: Unit tests validate the **built** `dist/genit-memory-helper.user.js` file, not source files directly. Always run `npm run build` before testing if you modify the userscript.
+**Important**: Unit tests validate the **built** `dist/genit-memory-helper.user.js` file, not source files directly. The `pretest` script automatically runs `USE_ROLLUP=1 npm run build` before testing, so you can just run `npm test` directly.
 
 ### Smoke Testing
 Smoke tests require environment variables:
@@ -217,18 +218,19 @@ chore: update rollup dependencies
 
 ## Development Workflow
 
-1. Edit modules under `src/` (core/adapters/privacy/export/ui/features). `src/legacy.js` should only glue modules together—avoid re-introducing large inline blocks there.
-2. Run `USE_ROLLUP=1 npm run build` to generate the bundled userscript, then run plain `npm run build` if you also need the legacy copy-with-version step for tests.
-3. Execute `npm test` to validate (Vitest imports the built `dist/genit-memory-helper.user.js`).
+1. Edit TypeScript modules under `src/` (core/adapters/privacy/export/ui/features).
+2. Run `npm test` - this automatically runs `USE_ROLLUP=1 npm run build` via `pretest` hook.
+3. For manual builds without testing: `USE_ROLLUP=1 npm run build`
 4. For smoke tests, ensure `GENIT_TEST_URL` and related credentials are set, then run `npm run test:smoke`.
 5. Use bump scripts for releases (they sync metadata, build, tag, and push).
 
 ## Common Pitfalls
 
 - **Don't edit `dist/genit-memory-helper.user.js` directly** - changes will be overwritten by the build pipeline
-- **Tests require a build** - `pretest` runs `npm run build`, but modular changes should also be verified with `USE_ROLLUP=1 npm run build`
+- **Always use `USE_ROLLUP=1` for builds** - since v2.0.0, plain `npm run build` does NOT bundle TypeScript sources
+- **`npm test` handles builds automatically** - `pretest` hook runs Rollup build before tests
 - **Smoke tests need real credentials** - they're skipped in CI if secrets aren't configured
-- **Bypass legacy glue carefully** - new features should live in `src/features/` or `src/ui/`; keep `src/legacy.js` lean and avoid importing Tampermonkey globals directly (use `src/env.js` instead)
+- **Keep `src/index.ts` lean** - new features should live in `src/features/` or `src/ui/`; avoid importing Tampermonkey globals directly (use `src/env.ts` instead)
 
 ## Documentation
 

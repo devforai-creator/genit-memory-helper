@@ -219,22 +219,30 @@ export function createRangeControls({
 
       const handleStartChange = (): void => {
         if (!rangeStartInput) return;
+        if (!exportRange || typeof exportRange.setStart !== 'function') {
+          win?.console?.warn?.('[GMH] exportRange.setStart is not available');
+          return;
+        }
         const value = toNumber(rangeStartInput.value);
         if (value && value > 0) {
-          exportRange?.setStart?.(value);
+          exportRange.setStart(value);
         } else {
-          exportRange?.setStart?.(null);
+          exportRange.setStart(null);
           rangeStartInput.value = '';
         }
       };
 
       const handleEndChange = (): void => {
         if (!rangeEndInput) return;
+        if (!exportRange || typeof exportRange.setEnd !== 'function') {
+          win?.console?.warn?.('[GMH] exportRange.setEnd is not available');
+          return;
+        }
         const value = toNumber(rangeEndInput.value);
         if (value && value > 0) {
-          exportRange?.setEnd?.(value);
+          exportRange.setEnd(value);
         } else {
-          exportRange?.setEnd?.(null);
+          exportRange.setEnd(null);
           rangeEndInput.value = '';
         }
       };

@@ -4,6 +4,38 @@
 
 - _No changes yet_
 
+## v2.0.1 (2025-10-24)
+
+### 🐛 Bug Fixes
+
+**범위 입력 필드 회귀 버그 수정**
+- v2.0.0 TypeScript 전환 후 발생한 범위 입력 필드 미작동 문제 해결
+- 자동 스크롤 중 사용자 지정 범위가 초기화되는 버그 수정
+
+**상세 수정 내역:**
+- `src/ui/range-controls.ts`: Optional chaining 제거, 명시적 가드 추가
+  - `exportRange.setStart/setEnd` 호출 전 명시적 검증
+  - 실패 시 콘솔 경고 출력으로 디버깅 가능성 향상
+- `src/features/auto-loader.ts`: 사용자 범위 보존 로직 추가
+  - 메시지 총합 감소 시 사용자가 설정한 범위는 `clear()` 건너뜀
+  - 자동 스크롤 중에도 범위 설정 유지
+- 회귀 방지 테스트 추가
+  - `tests/unit/range-controls.spec.ts`: 범위 입력 핸들러 테스트 (3개)
+  - `tests/unit/auto-loader.spec.js`: 사용자 범위 보존 테스트 추가
+
+### 🔧 개발 환경 개선
+
+- `package.json`: `pretest` 스크립트에 `USE_ROLLUP=1` 추가
+  - TypeScript 빌드를 테스트 전 자동 실행
+  - `npm test` 명령만으로 빌드 + 테스트 가능
+- `CLAUDE.md`: 빌드 가이드 명확화
+  - v2.0.0 이후 `USE_ROLLUP=1` 필수임을 명시
+  - 개발 워크플로우 간소화 설명 추가
+
+### 📚 문서 정리
+
+- 리뷰 문서들을 `reviews/2025-09/`로 재구성
+
 ## v2.0.0 (2025-10-09)
 
 ### 🚀 Breaking Changes

@@ -270,7 +270,13 @@ export function createAutoLoader({
       const userShrank = Number.isFinite(previousTotals.user) && previousTotals.user > nextTotals.user;
       const llmShrank = Number.isFinite(previousTotals.llm) && previousTotals.llm > nextTotals.llm;
       const entryShrank = Number.isFinite(previousTotals.entry) && previousTotals.entry > nextTotals.entry;
-      if (totalsShrank || userShrank || llmShrank || entryShrank) {
+      const currentRange = typeof exportRange?.getRange === 'function'
+        ? exportRange.getRange()
+        : { start: null, end: null };
+      const hasRequestedRange =
+        (typeof currentRange?.start === 'number' && Number.isFinite(currentRange.start) && currentRange.start > 0) ||
+        (typeof currentRange?.end === 'number' && Number.isFinite(currentRange.end) && currentRange.end > 0);
+      if (!hasRequestedRange && (totalsShrank || userShrank || llmShrank || entryShrank)) {
         exportRange?.clear?.();
       }
       exportRange?.setTotals?.(nextTotals);
