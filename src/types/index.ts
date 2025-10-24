@@ -460,6 +460,48 @@ export interface StructuredSelectionResult {
   [key: string]: unknown;
 }
 
+export interface MemoryBlockInit {
+  id: string;
+  sessionUrl: string;
+  raw: string;
+  messages: StructuredSnapshotMessage[];
+  ordinalRange: [number, number];
+  timestamp: number;
+  embedding?: ArrayBuffer | ArrayBufferView | null;
+  meta?: Record<string, unknown>;
+}
+
+export interface MemoryBlockRecord extends Omit<MemoryBlockInit, 'embedding'> {
+  embedding: ArrayBuffer | null;
+  messageCount: number;
+  startOrdinal: number;
+  endOrdinal: number;
+}
+
+export interface BlockStorageStats {
+  totalBlocks: number;
+  totalMessages: number;
+  sessions: number;
+}
+
+export interface BlockStorageController {
+  save(block: MemoryBlockInit): Promise<void>;
+  get(id: string): Promise<MemoryBlockRecord | null>;
+  getBySession(sessionUrl: string): Promise<MemoryBlockRecord[]>;
+  delete(id: string): Promise<boolean>;
+  clear(sessionUrl?: string): Promise<number>;
+  getStats(): Promise<BlockStorageStats>;
+  close(): void;
+}
+
+export interface BlockStorageOptions {
+  dbName?: string;
+  storeName?: string;
+  version?: number;
+  indexedDB?: IDBFactory | null;
+  console?: Pick<Console, 'warn' | 'log' | 'error'> | null;
+}
+
 export interface StripLegacySpeechOptions {
   playerMark?: string;
 }
