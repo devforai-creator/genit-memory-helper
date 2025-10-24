@@ -22,6 +22,7 @@ export function createPanelInteractions({
   ensureAutoLoadControlsLegacy,
   mountStatusActionsModern,
   mountStatusActionsLegacy,
+  mountMemoryStatusModern,
   bindRangeControls,
   bindShortcuts,
   bindGuideControls,
@@ -188,6 +189,7 @@ export function createPanelInteractions({
     });
 
     if (modern) {
+      mountMemoryStatusModern?.(panel);
       ensureAutoLoadControlsModern?.(panel);
       mountStatusActionsModern?.(panel);
     } else {

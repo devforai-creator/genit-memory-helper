@@ -564,6 +564,33 @@ export interface MessageStreamController {
   subscribeMessages(listener: (message: StructuredSnapshotMessage) => void): () => void;
 }
 
+export interface MemoryStatusSnapshot {
+  enabled: boolean;
+  totalBlocks: number;
+  totalMessages: number;
+  sessionUrl: string | null;
+  sessionBlocks: number;
+  sessionMessages: number;
+  lastSavedAt: number | null;
+}
+
+export interface MemoryStatusOptions {
+  documentRef?: Document | null;
+  windowRef?: (Window & typeof globalThis) | null;
+  messageStream?: MessageStreamController | null;
+  blockStorage?: BlockStorageController | Promise<BlockStorageController> | null;
+  getSessionUrl?: () => string | null;
+  experimentalEnabled?: boolean;
+  console?: Pick<Console, 'log' | 'warn' | 'error'> | null;
+}
+
+export interface MemoryStatusController {
+  mount(panel: Element | null): void;
+  setEnabled(enabled: boolean): void;
+  destroy(): void;
+  forceRefresh(): Promise<void>;
+}
+
 export interface StripLegacySpeechOptions {
   playerMark?: string;
 }
@@ -889,6 +916,7 @@ export interface PanelInteractionsOptions {
   ensureAutoLoadControlsLegacy?(panel: Element): void;
   mountStatusActionsModern?(panel: Element): void;
   mountStatusActionsLegacy?(panel: Element): void;
+  mountMemoryStatusModern?(panel: Element): void;
   bindRangeControls(panel: Element): void;
   bindShortcuts(panel: Element, options?: { modern?: boolean }): void;
   bindGuideControls?(panel: Element): void;

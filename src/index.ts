@@ -67,6 +67,7 @@ import { createPanelShortcuts } from './ui/panel-shortcuts';
 import { createShareWorkflow } from './features/share';
 import createBlockBuilder from './features/block-builder';
 import createMessageStream from './features/message-stream';
+import createMemoryStatus from './ui/memory-status';
 import { createPanelInteractions } from './ui/panel-interactions';
 import { createModernPanel } from './ui/panel-modern';
 import { createLegacyPanel } from './ui/panel-legacy';
@@ -400,10 +401,33 @@ interface GMHFlags {
     console: ENV.console,
   });
 
+  const memoryIndexEnabled = Boolean(GMH.Experimental?.MemoryIndex?.enabled);
+
+  const memoryStatus = createMemoryStatus({
+    documentRef: document,
+    windowRef: PAGE_WINDOW,
+    messageStream,
+    blockStorage: blockStoragePromise,
+    getSessionUrl: () => {
+      try {
+        return PAGE_WINDOW?.location?.href ?? null;
+      } catch (err) {
+        return null;
+      }
+    },
+    experimentalEnabled: memoryIndexEnabled,
+    console: ENV.console,
+  });
+
+  if (memoryIndexEnabled) {
+    void memoryStatus.forceRefresh();
+  }
+
   GMH.Core.BlockBuilder = blockBuilder;
   GMH.Core.MessageStream = messageStream;
+  GMH.UI.MemoryStatus = memoryStatus;
 
-  if (GMH.Experimental?.MemoryIndex?.enabled) {
+  if (memoryIndexEnabled) {
     try {
       messageStream.start();
     } catch (err) {
@@ -674,6 +698,7 @@ interface GMHFlags {
     ensureAutoLoadControlsLegacy,
     mountStatusActionsModern,
     mountStatusActionsLegacy,
+    mountMemoryStatusModern: (panel) => memoryStatus.mount(panel),
     bindRangeControls,
     bindShortcuts,
     bindGuideControls,
