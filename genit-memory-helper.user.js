@@ -3870,34 +3870,6 @@ var GMHBundle = (function (exports) {
     };
 
     /**
-     * CSS used for the legacy preview privacy overlay.
-     */
-    const LEGACY_PREVIEW_CSS = `
-.gmh-preview-overlay{position:fixed;inset:0;background:rgba(15,23,42,0.72);z-index:9999999;display:flex;align-items:center;justify-content:center;padding:24px;}
-.gmh-preview-card{background:#0f172a;color:#e2e8f0;border-radius:14px;box-shadow:0 18px 48px rgba(8,15,30,0.55);width:min(520px,94vw);max-height:94vh;display:flex;flex-direction:column;overflow:hidden;font:13px/1.5 'Inter',system-ui,sans-serif;}
-.gmh-preview-header{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid rgba(148,163,184,0.25);font-weight:600;}
-.gmh-preview-body{padding:18px 20px;overflow:auto;display:grid;gap:16px;}
-.gmh-preview-summary{display:grid;gap:8px;border:1px solid rgba(148,163,184,0.25);border-radius:10px;padding:12px;background:rgba(30,41,59,0.65);}
-.gmh-preview-summary div{display:flex;justify-content:space-between;gap:12px;}
-.gmh-preview-summary strong{color:#bfdbfe;}
-.gmh-preview-turns{list-style:none;margin:0;padding:0;display:grid;gap:10px;}
-.gmh-preview-turn{background:rgba(30,41,59,0.55);border-radius:10px;padding:10px 12px;border:1px solid rgba(59,130,246,0.12);}
-.gmh-preview-turn--selected{border-color:rgba(56,189,248,0.45);background:rgba(56,189,248,0.12);}
-.gmh-turn-list__badge{display:inline-flex;align-items:center;gap:4px;margin-left:8px;font-size:11px;color:#38bdf8;background:rgba(56,189,248,0.12);padding:0 8px;border-radius:999px;}
-.gmh-preview-turn-speaker{font-weight:600;color:#c4b5fd;margin-bottom:4px;}
-.gmh-preview-turn-text{color:#e2e8f0;}
-.gmh-preview-footnote{font-size:12px;color:#94a3b8;}
-.gmh-preview-actions{display:flex;gap:10px;padding:16px 20px;border-top:1px solid rgba(148,163,184,0.25);background:rgba(15,23,42,0.92);}
-.gmh-preview-actions button{flex:1;padding:10px 12px;border-radius:10px;border:0;font-weight:600;cursor:pointer;transition:background 0.15s ease;}
-.gmh-preview-cancel{background:#1e293b;color:#e2e8f0;}
-.gmh-preview-cancel:hover{background:#243049;}
-.gmh-preview-confirm{background:#34d399;color:#053527;}
-.gmh-preview-confirm:hover{background:#22c55e;color:#052e21;}
-.gmh-preview-close{background:none;border:0;color:#94a3b8;font-size:18px;cursor:pointer;}
-.gmh-preview-close:hover{color:#f8fafc;}
-@media (max-width:480px){.gmh-preview-card{width:100%;border-radius:12px;}}
-`;
-    /**
      * CSS bundle for the modern design-system panel.
      */
     const DESIGN_SYSTEM_CSS = `
@@ -4007,19 +3979,6 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 @media (max-width:480px){.gmh-modal{width:100%;border-radius:12px;}.gmh-modal__actions{flex-direction:column;}.gmh-panel{right:12px;left:12px;bottom:12px;width:auto;max-height:76vh;}.gmh-panel::-webkit-scrollbar{width:6px;}.gmh-panel::-webkit-scrollbar-thumb{background:rgba(148,163,184,0.35);border-radius:999px;}#gmh-fab{width:48px;height:48px;right:12px;bottom:12px;font-size:12px;}}
 @media (prefers-reduced-motion:reduce){.gmh-panel,.gmh-modal,.gmh-progress__fill,#gmh-fab{transition:none !important;animation-duration:0.001s !important;}}
 `;
-    /**
-     * Injects the legacy preview stylesheet into the provided document once.
-     */
-    function ensureLegacyPreviewStyles(doc = typeof document !== 'undefined' ? document : null) {
-        if (!doc)
-            return;
-        if (doc.getElementById('gmh-preview-style'))
-            return;
-        const style = doc.createElement('style');
-        style.id = 'gmh-preview-style';
-        style.textContent = LEGACY_PREVIEW_CSS;
-        doc.head.appendChild(style);
-    }
     /**
      * Injects the design-system stylesheet into the provided document once.
      */
@@ -5159,83 +5118,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
                 startTurnMeter(meter);
             }
         };
-        const ensureAutoLoadControlsLegacy = (panel) => {
-            if (!panel || panel.querySelector('#gmh-autoload-controls'))
-                return;
-            const wrap = doc.createElement('div');
-            wrap.id = 'gmh-autoload-controls';
-            wrap.style.cssText = 'display:grid; gap:6px; border-top:1px solid #1f2937; padding-top:6px;';
-            wrap.innerHTML = `
-      <div style="display:flex; gap:8px;">
-        <button id="gmh-autoload-all" style="flex:1; background:#38bdf8; border:0; color:#041; border-radius:8px; padding:6px; cursor:pointer;">위로 끝까지 로딩</button>
-        <button id="gmh-autoload-stop" style="width:88px; background:#ef4444; border:0; color:#fff; border-radius:8px; padding:6px; cursor:pointer;">정지</button>
-      </div>
-      <div style="display:flex; gap:8px; align-items:center;">
-        <input id="gmh-autoload-turns" type="number" min="1" step="1" placeholder="최근 유저 메시지 N" style="flex:1; background:#111827; color:#f1f5f9; border:1px solid #1f2937; border-radius:8px; padding:6px;" />
-        <button id="gmh-autoload-turns-btn" style="width:96px; background:#34d399; border:0; color:#041; border-radius:8px; padding:6px; cursor:pointer;">메시지 확보</button>
-      </div>
-      <div id="gmh-turn-meter" style="opacity:.7; font-size:11px;"></div>
-    `;
-            panel.appendChild(wrap);
-            const btnAll = wrap.querySelector('#gmh-autoload-all');
-            const btnStop = wrap.querySelector('#gmh-autoload-stop');
-            const btnTurns = wrap.querySelector('#gmh-autoload-turns-btn');
-            const inputTurns = wrap.querySelector('#gmh-autoload-turns');
-            const meter = wrap.querySelector('#gmh-turn-meter');
-            const disableControls = (disabled) => {
-                [btnAll, btnTurns].forEach((btn) => {
-                    if (!btn)
-                        return;
-                    btn.disabled = disabled;
-                    btn.style.opacity = disabled ? '0.6' : '1';
-                });
-            };
-            btnAll?.addEventListener('click', async () => {
-                if (autoState.running)
-                    return;
-                disableControls(true);
-                try {
-                    await autoLoader.start('all');
-                }
-                finally {
-                    disableControls(false);
-                }
-            });
-            btnTurns?.addEventListener('click', async () => {
-                if (autoState.running)
-                    return;
-                const rawVal = inputTurns?.value?.trim();
-                const target = Number.parseInt(rawVal || '0', 10);
-                if (!Number.isFinite(target) || target <= 0) {
-                    setPanelStatus?.('유저 메시지 수를 입력해주세요.', 'error');
-                    return;
-                }
-                disableControls(true);
-                try {
-                    const stats = await autoLoader.start('turns', target);
-                    if (stats && !stats.error) {
-                        setPanelStatus?.(`현재 유저 메시지 ${stats.userMessages}개 확보.`, 'success');
-                    }
-                }
-                finally {
-                    disableControls(false);
-                }
-            });
-            btnStop?.addEventListener('click', () => {
-                if (!autoState.running) {
-                    setPanelStatus?.('자동 로딩이 실행 중이 아닙니다.', 'muted');
-                    return;
-                }
-                autoLoader.stop();
-                setPanelStatus?.('자동 로딩 중지를 요청했습니다.', 'warning');
-            });
-            if (meter instanceof HTMLElement) {
-                startTurnMeter(meter);
-            }
-        };
-        const createStatusActionsMarkup = (modern = false) => {
-            if (modern) {
-                return `
+        const createStatusActionsMarkup = () => {
+            return `
       <div class="gmh-field-row">
         <label for="gmh-profile-select" class="gmh-subtext gmh-field-label--inline">프로파일</label>
         <select id="gmh-profile-select" class="gmh-select">
@@ -5248,21 +5132,6 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         <button id="gmh-btn-retry" class="gmh-small-btn gmh-small-btn--muted">재시도</button>
         <button id="gmh-btn-retry-stable" class="gmh-small-btn gmh-small-btn--muted">안정 모드</button>
         <button id="gmh-btn-snapshot" class="gmh-small-btn gmh-small-btn--muted">DOM 스냅샷</button>
-      </div>`;
-            }
-            return `
-      <div style="display:flex; gap:6px; align-items:center;">
-        <label for="gmh-profile-select" style="font-size:11px; color:#94a3b8;">프로파일</label>
-        <select id="gmh-profile-select" style="flex:1; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:6px; padding:6px;">
-          <option value="default">기본</option>
-          <option value="stability">안정</option>
-          <option value="fast">빠름</option>
-        </select>
-      </div>
-      <div style="display:flex; gap:6px;">
-        <button id="gmh-btn-retry" style="flex:1; background:#f1f5f9; color:#0f172a; border:0; border-radius:6px; padding:6px; cursor:pointer;">재시도</button>
-        <button id="gmh-btn-retry-stable" style="flex:1; background:#e0e7ff; color:#1e1b4b; border:0; border-radius:6px; padding:6px; cursor:pointer;">안정 모드 재시도</button>
-        <button id="gmh-btn-snapshot" style="flex:1; background:#ffe4e6; color:#881337; border:0; border-radius:6px; padding:6px; cursor:pointer;">DOM 스냅샷</button>
       </div>`;
         };
         const bindStatusActions = (actions) => {
@@ -5302,25 +5171,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             if (actions.dataset.ready === 'true')
                 return;
             actions.dataset.ready = 'true';
-            actions.innerHTML = createStatusActionsMarkup(true);
+            actions.innerHTML = createStatusActionsMarkup();
             bindStatusActions(actions);
-        };
-        const mountStatusActionsLegacy = (panel) => {
-            if (!panel || panel.querySelector('#gmh-status-actions'))
-                return;
-            const actions = doc.createElement('div');
-            actions.id = 'gmh-status-actions';
-            actions.style.cssText =
-                'display:grid; gap:6px; border-top:1px solid rgba(148,163,184,0.25); padding-top:6px;';
-            actions.innerHTML = createStatusActionsMarkup(false);
-            bindStatusActions(actions);
-            panel.appendChild(actions);
         };
         return {
             ensureAutoLoadControlsModern,
-            ensureAutoLoadControlsLegacy,
             mountStatusActionsModern,
-            mountStatusActionsLegacy,
         };
     }
 
@@ -5714,10 +5570,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         if (!configurePrivacyLists)
             throw new Error('createPanelShortcuts requires configurePrivacyLists');
         let shortcutsBound = false;
-        const bindShortcuts = (panel, { modern } = {}) => {
-            if (!modern || shortcutsBound)
-                return;
-            if (!panel)
+        const bindShortcuts = (panel) => {
+            if (shortcutsBound || !panel)
                 return;
             const win = windowRef;
             const handler = (event) => {
@@ -7303,7 +7157,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     const DEFAULT_ALERT = (message) => {
         globalThis.alert?.(message);
     };
-    function createPanelInteractions({ panelVisibility, setPanelStatus, setPrivacyProfile, getPrivacyProfile, privacyProfiles, configurePrivacyLists, openPanelSettings, ensureAutoLoadControlsModern, ensureAutoLoadControlsLegacy, mountStatusActionsModern, mountStatusActionsLegacy, mountMemoryStatusModern, bindRangeControls, bindShortcuts, bindGuideControls, prepareShare, performExport, copyRecentShare, copyAllShare, autoLoader, autoState, stateApi, stateEnum, alert: alertFn = DEFAULT_ALERT, logger = typeof console !== 'undefined' ? console : null, }) {
+    function createPanelInteractions({ panelVisibility, setPanelStatus, setPrivacyProfile, getPrivacyProfile, privacyProfiles, configurePrivacyLists, openPanelSettings, ensureAutoLoadControlsModern, mountStatusActionsModern, mountMemoryStatusModern, bindRangeControls, bindShortcuts, bindGuideControls, prepareShare, performExport, copyRecentShare, copyAllShare, autoLoader, autoState, stateApi, stateEnum, alert: alertFn = DEFAULT_ALERT, logger = typeof console !== 'undefined' ? console : null, }) {
         if (!panelVisibility)
             throw new Error('createPanelInteractions requires panelVisibility');
         if (!setPrivacyProfile)
@@ -7350,7 +7204,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         const copyRecent = () => copyRecentShare(prepareShareWithDialog);
         const copyAll = () => copyAllShare(prepareShareWithDialog);
         const isAutoRunning = () => Boolean(autoState?.running);
-        const attachShareHandlers = (panel, modern = false) => {
+        const attachShareHandlers = (panel) => {
             const exportFormatSelect = panel.querySelector('#gmh-export-format');
             const quickExportBtn = panel.querySelector('#gmh-quick-export');
             const copyRecentBtn = panel.querySelector('#gmh-copy-recent');
@@ -7413,12 +7267,12 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 });
             }
         };
-        const bindPanelInteractions = (panel, { modern = false } = {}) => {
+        const bindPanelInteractions = (panel) => {
             if (!panel || typeof panel.querySelector !== 'function') {
                 logger?.warn?.('[GMH] panel interactions: invalid panel element');
                 return;
             }
-            panelVisibility.bind(panel, { modern });
+            panelVisibility.bind(panel);
             privacySelect = panel.querySelector('#gmh-privacy-profile');
             if (privacySelect) {
                 syncPrivacyProfileSelect();
@@ -7437,19 +7291,13 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             settingsBtn?.addEventListener('click', () => {
                 openPanelSettings?.();
             });
-            if (modern) {
-                mountMemoryStatusModern?.(panel);
-                ensureAutoLoadControlsModern?.(panel);
-                mountStatusActionsModern?.(panel);
-            }
-            else {
-                ensureAutoLoadControlsLegacy?.(panel);
-                mountStatusActionsLegacy?.(panel);
-            }
+            mountMemoryStatusModern?.(panel);
+            ensureAutoLoadControlsModern?.(panel);
+            mountStatusActionsModern?.(panel);
             bindRangeControls(panel);
-            bindShortcuts(panel, { modern });
+            bindShortcuts(panel);
             bindGuideControls?.(panel);
-            attachShareHandlers(panel, modern);
+            attachShareHandlers(panel);
         };
         return {
             bindPanelInteractions,
@@ -7620,109 +7468,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         return { mount };
     }
 
-    function createLegacyPanel({ documentRef = typeof document !== 'undefined' ? document : null, getActiveAdapter, attachStatusElement, setPanelStatus, stateView, bindPanelInteractions, panelId = 'genit-memory-helper-panel', }) {
-        const doc = documentRef;
-        if (!doc)
-            throw new Error('createLegacyPanel requires documentRef');
-        if (typeof getActiveAdapter !== 'function') {
-            throw new Error('createLegacyPanel requires getActiveAdapter');
-        }
-        if (typeof attachStatusElement !== 'function') {
-            throw new Error('createLegacyPanel requires attachStatusElement');
-        }
-        if (typeof setPanelStatus !== 'function') {
-            throw new Error('createLegacyPanel requires setPanelStatus');
-        }
-        if (!stateView || typeof stateView.bind !== 'function') {
-            throw new Error('createLegacyPanel requires stateView with bind');
-        }
-        if (typeof bindPanelInteractions !== 'function') {
-            throw new Error('createLegacyPanel requires bindPanelInteractions');
-        }
-        const mount = () => {
-            const existing = doc.querySelector(`#${panelId}`);
-            if (existing)
-                return existing;
-            const panel = doc.createElement('div');
-            panel.id = panelId;
-            panel.style.cssText = `
-      position: fixed; right: 16px; bottom: 16px; z-index: 999999;
-      background: #0b1020; color: #fff; padding: 10px 12px; border-radius: 10px;
-      font: 12px/1.3 ui-sans-serif, system-ui; box-shadow: 0 8px 20px rgba(0,0,0,.4);
-      display: grid; gap: 8px; min-width: 260px;
-    `;
-            panel.innerHTML = `
-      <div style="font-weight:600">Genit Memory Helper</div>
-      <div style="display:flex; gap:8px; align-items:center;">
-        <select id="gmh-privacy-profile" style="flex:1; background:#111827; color:#f1f5f9; border:1px solid #1f2937; border-radius:8px; padding:8px;">
-          <option value="safe">SAFE (권장)</option>
-          <option value="standard">STANDARD</option>
-          <option value="research">RESEARCH</option>
-        </select>
-        <button id="gmh-privacy-config" style="background:#c084fc; border:0; color:#210; border-radius:8px; padding:8px; cursor:pointer;">민감어</button>
-      </div>
-      <div style="display:flex; gap:8px;">
-        <button id="gmh-copy-recent" style="flex:1; background:#22c55e; border:0; color:#051; border-radius:8px; padding:8px; cursor:pointer;">최근 15메시지 복사</button>
-        <button id="gmh-copy-all" style="flex:1; background:#60a5fa; border:0; color:#031; border-radius:8px; padding:8px; cursor:pointer;">전체 MD 복사</button>
-      </div>
-      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-        <label for="gmh-range-start" style="font-size:11px; color:#94a3b8; font-weight:600;">메시지 범위</label>
-        <div style="display:flex; gap:6px; align-items:center; flex:1;">
-          <input id="gmh-range-start" type="number" min="1" inputmode="numeric" pattern="[0-9]*" placeholder="시작 메시지" style="width:70px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;" />
-          <span style="color:#94a3b8;">~</span>
-          <input id="gmh-range-end" type="number" min="1" inputmode="numeric" pattern="[0-9]*" placeholder="끝 메시지" style="width:70px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;" />
-          <button id="gmh-range-mark-start" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;" title="현재 메시지를 시작으로 지정">시작지정</button>
-          <button id="gmh-range-mark-end" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;" title="현재 메시지를 끝으로 지정">끝지정</button>
-          <button id="gmh-range-clear" type="button" style="background:rgba(15,23,42,0.65); color:#94a3b8; border:1px solid #1f2937; border-radius:8px; padding:6px 10px; cursor:pointer;">전체</button>
-        </div>
-      </div>
-      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-        <label for="gmh-range-bookmark-select" style="font-size:11px; color:#94a3b8; font-weight:600;">최근 북마크</label>
-        <select id="gmh-range-bookmark-select" style="flex:1; min-width:160px; background:#111827; color:#f8fafc; border:1px solid #1f2937; border-radius:8px; padding:6px 8px;">
-          <option value="">최근 클릭한 메시지가 없습니다</option>
-        </select>
-      </div>
-      <div id="gmh-range-summary" style="font-size:11px; color:#94a3b8;">범위 전체 내보내기</div>
-      <div style="display:flex; gap:8px; align-items:center;">
-        <select id="gmh-export-format" style="flex:1; background:#111827; color:#f1f5f9; border:1px solid #1f2937; border-radius:8px; padding:8px;">
-          <option value="structured-md" selected>Rich Markdown (.md) — 추천</option>
-          <option value="structured-json">Rich JSON (.json)</option>
-          <option value="structured-txt">Rich TXT (.txt)</option>
-          <optgroup label="Classic (경량/호환)">
-            <option value="json">Classic JSON (.json)</option>
-            <option value="md">Classic Markdown (.md)</option>
-            <option value="txt">Classic TXT (.txt)</option>
-          </optgroup>
-        </select>
-        <button id="gmh-export" style="flex:1; background:#2dd4bf; border:0; color:#052; border-radius:8px; padding:8px; cursor:pointer;">내보내기</button>
-      </div>
-      <div style="display:flex; gap:8px;">
-        <button id="gmh-quick-export" style="flex:1; background:#38bdf8; border:0; color:#031; border-radius:8px; padding:8px; cursor:pointer;">원클릭 내보내기</button>
-      </div>
-      <div style="display:flex; gap:8px;">
-        <button id="gmh-reparse" style="flex:1; background:#f59e0b; border:0; color:#210; border-radius:8px; padding:8px; cursor:pointer;">재파싱</button>
-        <button id="gmh-guide" style="flex:1; background:#a78bfa; border:0; color:#210; border-radius:8px; padding:8px; cursor:pointer;">요약 가이드</button>
-      </div>
-      <div style="display:flex; gap:8px;">
-        <button id="gmh-reguide" style="flex:1; background:#fbbf24; border:0; color:#210; border-radius:8px; padding:8px; cursor:pointer;">재요약 가이드</button>
-      </div>
-      <div id="gmh-status" style="opacity:.85"></div>
-    `;
-            const adapter = getActiveAdapter();
-            const anchor = adapter?.getPanelAnchor?.(doc) || doc.body;
-            if (!anchor)
-                return null;
-            anchor.appendChild(panel);
-            const statusEl = panel.querySelector('#gmh-status');
-            attachStatusElement(statusEl ?? null);
-            setPanelStatus('준비 완료', 'info');
-            stateView.bind();
-            bindPanelInteractions(panel, { modern: false });
-            return panel;
-        };
-        return { mount };
-    }
-
     const DEFAULT_PREVIEW_LIMIT = 5;
     const ensureDocument = (documentRef) => {
         if (!documentRef || typeof documentRef.createElement !== 'function') {
@@ -7747,10 +7492,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         }
         return counts;
     };
-    const buildTurns = ({ documentRef, previewTurns, previewLimit, rangeInfo, selectedIndices, selectedOrdinals, truncateText, modern, }) => {
+    const buildTurns = ({ documentRef, previewTurns, previewLimit, rangeInfo, selectedIndices, selectedOrdinals, truncateText, }) => {
         const doc = ensureDocument(documentRef);
         const list = doc.createElement('ul');
-        list.className = modern ? 'gmh-turn-list' : 'gmh-preview-turns';
+        list.className = 'gmh-turn-list';
         const highlightActive = Boolean(rangeInfo?.active);
         const selectedIndexSet = new Set(selectedIndices ?? []);
         const ordinalLookup = new Map();
@@ -7764,7 +7509,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 return;
             const turn = turnRaw;
             const item = doc.createElement('li');
-            item.className = modern ? 'gmh-turn-list__item' : 'gmh-preview-turn';
+            item.className = 'gmh-turn-list__item';
             item.tabIndex = 0;
             const turnData = turn;
             const sourceIndex = typeof turnData.__gmhIndex === 'number' ? turnData.__gmhIndex : null;
@@ -7779,10 +7524,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 item.dataset.playerTurn = String(playerOrdinal);
             }
             if (highlightActive && sourceIndex !== null && selectedIndexSet.has(sourceIndex)) {
-                item.classList.add(modern ? 'gmh-turn-list__item--selected' : 'gmh-preview-turn--selected');
+                item.classList.add('gmh-turn-list__item--selected');
             }
             const speaker = doc.createElement('div');
-            speaker.className = modern ? 'gmh-turn-list__speaker' : 'gmh-preview-turn-speaker';
+            speaker.className = 'gmh-turn-list__speaker';
             const speakerLabel = doc.createElement('span');
             const speakerName = typeof turn.speaker === 'string' && turn.speaker.trim().length ? turn.speaker : '??';
             const roleLabel = typeof turn.role === 'string' ? turn.role : '';
@@ -7790,12 +7535,12 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             speaker.appendChild(speakerLabel);
             if (typeof playerOrdinal === 'number' && playerOrdinal > 0) {
                 const badge = doc.createElement('span');
-                badge.className = modern ? 'gmh-turn-list__badge' : 'gmh-turn-list__badge';
+                badge.className = 'gmh-turn-list__badge';
                 badge.textContent = `메시지 ${playerOrdinal}`;
                 speaker.appendChild(badge);
             }
             const text = doc.createElement('div');
-            text.className = modern ? 'gmh-turn-list__text' : 'gmh-preview-turn-text';
+            text.className = 'gmh-turn-list__text';
             const truncate = typeof truncateText === 'function' ? truncateText : defaultTruncate;
             const turnText = typeof turn.text === 'string'
                 ? turn.text
@@ -7808,24 +7553,14 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             list.appendChild(item);
         });
         if (!list.children.length) {
-            const empty = doc.createElement(modern ? 'li' : 'div');
-            empty.className = modern
-                ? 'gmh-turn-list__item gmh-turn-list__empty'
-                : 'gmh-preview-turn';
-            if (modern) {
-                empty.textContent = '표시할 메시지가 없습니다. 상단 요약만 확인해주세요.';
-            }
-            else {
-                const emptyText = doc.createElement('div');
-                emptyText.className = 'gmh-preview-turn-text';
-                emptyText.textContent = '표시할 메시지가 없습니다. 상단 요약만 확인해주세요.';
-                empty.appendChild(emptyText);
-            }
+            const empty = doc.createElement('li');
+            empty.className = 'gmh-turn-list__item gmh-turn-list__empty';
+            empty.textContent = '표시할 메시지가 없습니다. 상단 요약만 확인해주세요.';
             list.appendChild(empty);
         }
         return list;
     };
-    const buildSummaryBox = ({ documentRef, formatRedactionCounts, privacyProfiles, profile, counts, stats, overallStats = null, rangeInfo, modern, }) => {
+    const buildSummaryBox = ({ documentRef, formatRedactionCounts, privacyProfiles, profile, counts, stats, overallStats = null, rangeInfo, }) => {
         const doc = ensureDocument(documentRef);
         const summaryCounts = normalizeCounts(counts);
         const summary = typeof formatRedactionCounts === 'function' ? formatRedactionCounts(summaryCounts) : '';
@@ -7836,27 +7571,17 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             ? `유저 메시지 ${stats.userMessages}/${overallStats.userMessages} · 전체 메시지 ${statsTotal}/${overallTotal}`
             : `유저 메시지 ${stats.userMessages} · 전체 메시지 ${statsTotal}`;
         const container = doc.createElement('div');
-        container.className = modern ? 'gmh-privacy-summary' : 'gmh-preview-summary';
+        container.className = 'gmh-privacy-summary';
         const createRow = (labelText, valueText) => {
             const row = doc.createElement('div');
-            if (modern) {
-                row.className = 'gmh-privacy-summary__row';
-                const labelEl = doc.createElement('span');
-                labelEl.className = 'gmh-privacy-summary__label';
-                labelEl.textContent = labelText;
-                const valueEl = doc.createElement('span');
-                valueEl.textContent = valueText;
-                row.appendChild(labelEl);
-                row.appendChild(valueEl);
-            }
-            else {
-                const strong = doc.createElement('strong');
-                strong.textContent = labelText;
-                const value = doc.createElement('span');
-                value.textContent = valueText;
-                row.appendChild(strong);
-                row.appendChild(value);
-            }
+            row.className = 'gmh-privacy-summary__row';
+            const labelEl = doc.createElement('span');
+            labelEl.className = 'gmh-privacy-summary__label';
+            labelEl.textContent = labelText;
+            const valueEl = doc.createElement('span');
+            valueEl.textContent = valueText;
+            row.appendChild(labelEl);
+            row.appendChild(valueEl);
             return row;
         };
         [
@@ -7883,113 +7608,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         }
         return container;
     };
-    function createLegacyPrivacyGate({ documentRef = typeof document !== 'undefined' ? document : null, formatRedactionCounts, privacyProfiles, ensureLegacyPreviewStyles, truncateText = defaultTruncate, previewLimit = DEFAULT_PREVIEW_LIMIT, } = {}) {
-        const doc = ensureDocument(documentRef);
-        if (typeof ensureLegacyPreviewStyles !== 'function') {
-            throw new Error('legacy privacy gate requires ensureLegacyPreviewStyles');
-        }
-        const confirm = async (options) => {
-            const { profile, counts, stats, overallStats = null, rangeInfo = null, selectedIndices = [], selectedOrdinals = [], previewTurns = [], actionLabel = '계속', heading = '공유 전 확인', subheading = '외부로 공유하기 전에 민감정보가 없는지 확인하세요.', } = options;
-            if (!profile)
-                throw new Error('privacy gate confirm requires profile');
-            if (!counts)
-                throw new Error('privacy gate confirm requires counts');
-            if (!stats)
-                throw new Error('privacy gate confirm requires stats');
-            ensureLegacyPreviewStyles();
-            const overlay = doc.createElement('div');
-            overlay.className = 'gmh-preview-overlay';
-            const card = doc.createElement('div');
-            card.className = 'gmh-preview-card';
-            overlay.appendChild(card);
-            const header = doc.createElement('div');
-            header.className = 'gmh-preview-header';
-            const headerLabel = doc.createElement('span');
-            headerLabel.textContent = heading;
-            header.appendChild(headerLabel);
-            const closeBtn = doc.createElement('button');
-            closeBtn.type = 'button';
-            closeBtn.className = 'gmh-preview-close';
-            closeBtn.setAttribute('aria-label', '닫기');
-            closeBtn.textContent = '✕';
-            header.appendChild(closeBtn);
-            card.appendChild(header);
-            const body = doc.createElement('div');
-            body.className = 'gmh-preview-body';
-            body.appendChild(buildSummaryBox({
-                documentRef: doc,
-                formatRedactionCounts,
-                privacyProfiles,
-                profile,
-                counts,
-                stats,
-                overallStats,
-                rangeInfo,
-                modern: false,
-            }));
-            const previewList = Array.isArray(previewTurns) ? previewTurns : [];
-            const previewTitle = doc.createElement('div');
-            previewTitle.style.fontWeight = '600';
-            previewTitle.style.color = '#cbd5f5';
-            previewTitle.textContent = `미리보기 (${Math.min(previewList.length, previewLimit)}메시지)`;
-            body.appendChild(previewTitle);
-            body.appendChild(buildTurns({
-                documentRef: doc,
-                previewTurns: previewList,
-                previewLimit,
-                rangeInfo,
-                selectedIndices,
-                selectedOrdinals,
-                truncateText,
-                modern: false,
-            }));
-            const footnote = doc.createElement('div');
-            footnote.className = 'gmh-preview-footnote';
-            footnote.textContent = subheading;
-            body.appendChild(footnote);
-            card.appendChild(body);
-            const actions = doc.createElement('div');
-            actions.className = 'gmh-preview-actions';
-            const cancelBtn = doc.createElement('button');
-            cancelBtn.type = 'button';
-            cancelBtn.className = 'gmh-preview-cancel';
-            cancelBtn.textContent = '취소';
-            const confirmBtn = doc.createElement('button');
-            confirmBtn.type = 'button';
-            confirmBtn.className = 'gmh-preview-confirm';
-            confirmBtn.textContent = actionLabel;
-            actions.appendChild(cancelBtn);
-            actions.appendChild(confirmBtn);
-            card.appendChild(actions);
-            const bodyEl = doc.body || doc.querySelector('body');
-            if (!bodyEl)
-                throw new Error('document body missing');
-            const prevOverflow = bodyEl.style.overflow;
-            bodyEl.style.overflow = 'hidden';
-            bodyEl.appendChild(overlay);
-            return new Promise((resolve) => {
-                const cleanup = (result) => {
-                    bodyEl.style.overflow = prevOverflow;
-                    overlay.remove();
-                    doc.removeEventListener('keydown', onKey);
-                    resolve(result);
-                };
-                const onKey = (event) => {
-                    if (event.key === 'Escape')
-                        cleanup(false);
-                };
-                doc.addEventListener('keydown', onKey);
-                overlay.addEventListener('click', (event) => {
-                    if (event.target === overlay)
-                        cleanup(false);
-                });
-                closeBtn.addEventListener('click', () => cleanup(false));
-                cancelBtn.addEventListener('click', () => cleanup(false));
-                confirmBtn.addEventListener('click', () => cleanup(true));
-            });
-        };
-        return { confirm };
-    }
     function createModernPrivacyGate({ documentRef = typeof document !== 'undefined' ? document : null, formatRedactionCounts, privacyProfiles, ensureDesignSystemStyles, modal, truncateText = defaultTruncate, previewLimit = DEFAULT_PREVIEW_LIMIT, } = {}) {
         const doc = ensureDocument(documentRef);
         if (typeof ensureDesignSystemStyles !== 'function') {
@@ -8018,7 +7636,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 stats,
                 overallStats,
                 rangeInfo,
-                modern: true,
             }));
             const previewList = Array.isArray(previewTurns) ? previewTurns : [];
             const previewTitle = doc.createElement('div');
@@ -8033,7 +7650,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 selectedIndices,
                 selectedOrdinals,
                 truncateText,
-                modern: true,
             }));
             const footnote = doc.createElement('div');
             footnote.className = 'gmh-modal-footnote';
@@ -9453,7 +9069,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             close('user');
             return false;
         };
-        const bind = (panel, { modern } = {}) => {
+        const bind = (panel) => {
             const panelElement = panel instanceof HTMLElement ? panel : null;
             if (panel && !panelElement) {
                 if (logger?.warn) {
@@ -9462,10 +9078,8 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             }
             panelEl = panelElement;
             panelListenersBound = false;
-            modernMode = !!modern && !!panelEl;
-            if (!panelEl)
-                return;
-            if (!modernMode) {
+            modernMode = !!panelEl;
+            if (!panelEl) {
                 if (fabEl && fabEl.isConnected) {
                     fabEl.remove();
                     fabEl = null;
@@ -9701,12 +9315,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     /**
      * Creates privacy list configuration helpers for modal or legacy prompts.
      */
-    function createPrivacyConfigurator({ privacyConfig, setCustomList, parseListInput, setPanelStatus, modal, isModernUIActive, documentRef = typeof document !== 'undefined' ? document : null, windowRef = typeof window !== 'undefined' ? window : null, }) {
+    function createPrivacyConfigurator({ privacyConfig, setCustomList, parseListInput, setPanelStatus, modal, documentRef = typeof document !== 'undefined' ? document : null, }) {
         if (!documentRef)
             throw new Error('createPrivacyConfigurator requires document');
         const doc = documentRef;
-        const win = windowRef;
-        const resolveModernActive = () => typeof isModernUIActive === 'function' ? isModernUIActive() : Boolean(isModernUIActive);
         /**
          * Launches the design-system modal for editing privacy lists.
          */
@@ -9772,34 +9384,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             setPanelStatus('프라이버시 사용자 목록을 저장했습니다.', 'success');
         };
         /**
-         * Prompts using classic dialogs to update privacy lists.
-         */
-        const configurePrivacyListsLegacy = () => {
-            const currentBlack = privacyConfig.blacklist?.join('\n') || '';
-            const nextBlack = win?.prompt
-                ? win.prompt('레다크션 강제 대상(블랙리스트)을 줄바꿈 또는 쉼표로 구분해 입력하세요.\n비워두면 목록을 초기화합니다.', currentBlack)
-                : null;
-            if (nextBlack !== null) {
-                setCustomList('blacklist', parseListInput(nextBlack));
-            }
-            const currentWhite = privacyConfig.whitelist?.join('\n') || '';
-            const nextWhite = win?.prompt
-                ? win.prompt('레다크션 예외 대상(화이트리스트)을 줄바꿈 또는 쉼표로 구분해 입력하세요.\n비워두면 목록을 초기화합니다.', currentWhite)
-                : null;
-            if (nextWhite !== null) {
-                setCustomList('whitelist', parseListInput(nextWhite));
-            }
-            setPanelStatus('프라이버시 사용자 목록을 저장했습니다.', 'info');
-        };
-        /**
          * Opens either the modern modal or legacy prompt workflow.
          */
         const configurePrivacyLists = async () => {
-            if (resolveModernActive()) {
-                await configurePrivacyListsModern();
-                return;
-            }
-            configurePrivacyListsLegacy();
+            await configurePrivacyListsModern();
         };
         return {
             configurePrivacyLists,
@@ -9997,7 +9585,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
      * @param options Dependency container.
      * @returns Composed UI helpers.
      */
-    const composeUI = ({ GMH, documentRef, windowRef, PanelSettings, stateManager, stateEnum, ENV, privacyConfig, privacyProfiles: _privacyProfiles, setCustomList, parseListInput, isModernUIActive, }) => {
+    const composeUI = ({ GMH, documentRef, windowRef, PanelSettings, stateManager, stateEnum, ENV, privacyConfig, privacyProfiles: _privacyProfiles, setCustomList, parseListInput, }) => {
         const modal = createModal({ documentRef, windowRef });
         GMH.UI.Modal = modal;
         const panelVisibility = createPanelVisibility({
@@ -10024,9 +9612,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             parseListInput,
             setPanelStatus,
             modal,
-            isModernUIActive,
             documentRef,
-            windowRef,
         });
         const { openPanelSettings } = createPanelSettingsController({
             panelSettings: PanelSettings,
@@ -10053,7 +9639,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
      * @param options Dependency container.
      * @returns Mount/boot control helpers.
      */
-    const setupBootstrap = ({ documentRef, windowRef, mountPanelModern, mountPanelLegacy, isModernUIActive, Flags, errorHandler, messageIndexer, bookmarkListener, }) => {
+    const setupBootstrap = ({ documentRef, windowRef, mountPanelModern, errorHandler, messageIndexer, bookmarkListener, }) => {
         const doc = documentRef;
         const win = windowRef;
         const MutationObserverCtor = win.MutationObserver || globalThis.MutationObserver;
@@ -10064,15 +9650,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         let bootInProgress = false;
         let observerScheduled = false;
         const mountPanel = () => {
-            if (isModernUIActive()) {
-                mountPanelModern();
-                return;
-            }
-            if (Flags.killSwitch) {
-                const level = errorHandler.LEVELS?.INFO || 'info';
-                errorHandler.handle('modern UI disabled by kill switch', 'ui/panel', level);
-            }
-            mountPanelLegacy();
+            mountPanelModern();
         };
         const boot = () => {
             if (panelMounted || bootInProgress)
@@ -10601,11 +10179,11 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             playerMark: options.playerMark ?? PLAYER_MARK,
         });
         const buildExportManifest$1 = (params) => buildExportManifest({ ...params, version: GMH.VERSION });
-        const toJSONExportLegacy = withPlayerNames(getPlayerNames, toJSONExport);
+        const toJSONExportDefault = withPlayerNames(getPlayerNames, toJSONExport);
         const toJSONExportForShare = (session, options = {}) => toJSONExport(session, '', {
             playerNames: options.playerNames ? [...options.playerNames] : [...getPlayerNames()],
         });
-        const toStructuredMarkdownLegacy = (options = {}) => {
+        const toStructuredMarkdownDefault = (options = {}) => {
             const { playerNames, playerMark, ...rest } = options;
             return toStructuredMarkdown({
                 ...rest,
@@ -10613,13 +10191,13 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 playerMark: playerMark ?? PLAYER_MARK,
             });
         };
-        const toStructuredJSONLegacy = (options = {}) => {
+        const toStructuredJSONDefault = (options = {}) => {
             const { playerNames, playerMark, ...rest } = options;
             return toStructuredJSON({
                 ...rest,
                 playerNames: playerNames ? [...playerNames] : [...getPlayerNames()]});
         };
-        const toStructuredTXTLegacy = (options = {}) => {
+        const toStructuredTXTDefault = (options = {}) => {
             const { playerNames, playerMark, ...rest } = options;
             return toStructuredTXT({
                 ...rest,
@@ -10680,22 +10258,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             }
         }
         const Flags = (() => {
-            let betaQuery = false;
-            try {
-                const params = new URLSearchParams(location.search || '');
-                betaQuery = params.has('gmhBeta');
-            }
-            catch (err) {
-                betaQuery = false;
-            }
-            const storedNewUI = (() => {
-                try {
-                    return localStorage.getItem('gmh_flag_newUI');
-                }
-                catch (err) {
-                    return null;
-                }
-            })();
             const storedKill = (() => {
                 try {
                     return localStorage.getItem('gmh_kill');
@@ -10704,23 +10266,21 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                     return null;
                 }
             })();
-            const newUI = storedNewUI === '1' || betaQuery;
             const killSwitch = storedKill === '1';
             return {
-                newUI,
                 killSwitch,
-                betaQuery,
             };
         })();
         GMH.Flags = Flags;
         GMH.Experimental = GMHExperimental;
-        const isModernUIActive = Flags.newUI && !Flags.killSwitch;
+        if (Flags.killSwitch) {
+            ENV.console?.warn?.('[GMH] Script disabled via kill switch');
+            return;
+        }
         const stateManager = createStateManager({
             console: ENV.console,
             debug: (...args) => {
-                if (isModernUIActive) {
-                    ENV.console?.debug?.('[GMH]', ...args);
-                }
+                ENV.console?.debug?.('[GMH]', ...args);
             },
         });
         GMH.Core.STATE = GMH_STATE;
@@ -10820,25 +10380,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 errorHandler.handle?.(err, 'message-stream/start', level);
             }
         }
-        const ensureDefaultUIFlag = () => {
-            try {
-                const storage = ENV.localStorage || localStorage;
-                if (!storage)
-                    return;
-                const killSwitchEnabled = storage.getItem('gmh_kill') === '1';
-                if (killSwitchEnabled)
-                    return;
-                const currentValue = storage.getItem('gmh_flag_newUI');
-                if (currentValue !== '1') {
-                    storage.setItem('gmh_flag_newUI', '1');
-                }
-            }
-            catch (err) {
-                const level = errorHandler.LEVELS?.WARN || 'warn';
-                errorHandler.handle(err, 'storage/write', level);
-            }
-        };
-        ensureDefaultUIFlag();
         // -------------------------------
         // 0) Privacy composition
         // -------------------------------
@@ -10874,7 +10415,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             privacyProfiles: PRIVACY_PROFILES,
             setCustomList,
             parseListInput,
-            isModernUIActive: () => isModernUIActive,
         });
         GMH.UI.StateView = stateView;
         const { describeNode, downloadDomSnapshot } = createSnapshotFeature({
@@ -10909,7 +10449,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             readTranscriptText,
             logger: ENV.console,
         });
-        const { ensureAutoLoadControlsModern, ensureAutoLoadControlsLegacy, mountStatusActionsModern, mountStatusActionsLegacy, } = createAutoLoaderControls({
+        const { ensureAutoLoadControlsModern, mountStatusActionsModern } = createAutoLoaderControls({
             documentRef: document,
             autoLoader,
             autoState: AUTO_STATE,
@@ -10927,13 +10467,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             messageIndexer,
             setPanelStatus,
         });
-        const { confirm: confirmPrivacyGateLegacy } = createLegacyPrivacyGate({
-            documentRef: document,
-            formatRedactionCounts,
-            privacyProfiles: PRIVACY_PROFILES,
-            ensureLegacyPreviewStyles,
-            previewLimit: CONFIG.LIMITS.PREVIEW_TURN_LIMIT,
-        });
         const { confirm: confirmPrivacyGateModern } = createModernPrivacyGate({
             documentRef: document,
             formatRedactionCounts,
@@ -10942,7 +10475,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             modal,
             previewLimit: CONFIG.LIMITS.PREVIEW_TURN_LIMIT,
         });
-        const confirmPrivacyGate = (options) => (isModernUIActive ? confirmPrivacyGateModern : confirmPrivacyGateLegacy)(options);
+        const confirmPrivacyGate = confirmPrivacyGateModern;
         const { prepareShare, performExport, copyRecent: copyRecentShare, copyAll: copyAllShare, reparse: reparseShare, collectSessionStats, } = composeShareWorkflow({
             createShareWorkflow,
             captureStructuredSnapshot,
@@ -10958,9 +10491,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             toMarkdownExport,
             toJSONExport: toJSONExportForShare,
             toTXTExport,
-            toStructuredMarkdown: toStructuredMarkdownLegacy,
-            toStructuredJSON: toStructuredJSONLegacy,
-            toStructuredTXT: toStructuredTXTLegacy,
+            toStructuredMarkdown: toStructuredMarkdownDefault,
+            toStructuredJSON: toStructuredJSONDefault,
+            toStructuredTXT: toStructuredTXTDefault,
             buildExportBundle: buildExportBundle$1,
             buildExportManifest: buildExportManifest$1,
             triggerDownload,
@@ -11002,9 +10535,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             configurePrivacyLists,
             openPanelSettings,
             ensureAutoLoadControlsModern,
-            ensureAutoLoadControlsLegacy,
             mountStatusActionsModern,
-            mountStatusActionsLegacy,
             mountMemoryStatusModern: (panel) => memoryStatus.mount(panel),
             bindRangeControls,
             bindShortcuts,
@@ -11033,21 +10564,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             bindPanelInteractions,
             logger: ENV.console,
         });
-        const { mount: mountPanelLegacy } = createLegacyPanel({
-            documentRef: document,
-            getActiveAdapter: () => getActiveAdapter(),
-            attachStatusElement,
-            setPanelStatus,
-            stateView,
-            bindPanelInteractions,
-        });
         const { mountPanel } = setupBootstrap({
             documentRef: document,
             windowRef: PAGE_WINDOW,
             mountPanelModern,
-            mountPanelLegacy,
-            isModernUIActive: () => isModernUIActive,
-            Flags,
             errorHandler,
             messageIndexer,
             bookmarkListener,
@@ -11097,12 +10617,12 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             formatRedactionCounts,
         });
         Object.assign(GMH.Export, {
-            toJSONExport: toJSONExportLegacy,
+            toJSONExport: toJSONExportDefault,
             toTXTExport,
             toMarkdownExport,
-            toStructuredJSON: toStructuredJSONLegacy,
-            toStructuredMarkdown: toStructuredMarkdownLegacy,
-            toStructuredTXT: toStructuredTXTLegacy,
+            toStructuredJSON: toStructuredJSONDefault,
+            toStructuredMarkdown: toStructuredMarkdownDefault,
+            toStructuredTXT: toStructuredTXTDefault,
             buildExportBundle: buildExportBundle$1,
             buildExportManifest: buildExportManifest$1,
         });

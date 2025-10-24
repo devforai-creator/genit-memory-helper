@@ -21,6 +21,7 @@ describe('build output', () => {
     expect(built).toMatch(versionPattern);
     expect(built).toContain('Object.defineProperty');
     expect(built).toContain('const GMH = {');
-    expect(built).toMatch(/(?:localStorage|storage)\.setItem\('gmh_flag_newUI', '1'\)/);
+    expect(built).toMatch(/gmh_kill/);
+    expect(built).not.toMatch(/gmh_flag_newUI/);
   });
 });

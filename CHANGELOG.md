@@ -4,6 +4,20 @@
 
 - _No changes yet_
 
+## v2.1.0 (YYYY-MM-DD)
+
+### 💥 BREAKING CHANGES
+
+- **Legacy UI removed**: Modern design-system 패널이 기본이자 유일한 인터페이스입니다.
+- `gmh_flag_newUI` 플래그 삭제: 추가 토글 없이 항상 Modern UI가 로드됩니다.
+- `gmh_kill` 킬스위치는 이제 GMH 전체를 비활성화합니다.
+
+### 🗑️ Removed
+
+- `src/ui/panel-legacy.ts`
+- `createLegacyPrivacyGate`, `ensureLegacyPreviewStyles`
+- Legacy auto-loader 컨트롤 API (`ensureAutoLoadControlsLegacy`, `mountStatusActionsLegacy`)
+
 ## v2.0.1 (2025-10-24)
 
 ### 🐛 Bug Fixes

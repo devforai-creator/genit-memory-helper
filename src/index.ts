@@ -57,7 +57,7 @@ import {
 import { sleep, triggerDownload, isScrollable } from './utils/dom';
 import { luhnValid } from './utils/validation';
 import { withPlayerNames } from './utils/factories';
-import { ensureLegacyPreviewStyles, ensureDesignSystemStyles } from './ui/styles';
+import { ensureDesignSystemStyles } from './ui/styles';
 import { createPanelSettings } from './ui/panel-settings';
 import { createSnapshotFeature, createStructuredSnapshotReader } from './features/snapshot';
 import { createAutoLoader } from './features/auto-loader';
@@ -70,8 +70,7 @@ import createMessageStream from './features/message-stream';
 import createMemoryStatus from './ui/memory-status';
 import { createPanelInteractions } from './ui/panel-interactions';
 import { createModernPanel } from './ui/panel-modern';
-import { createLegacyPanel } from './ui/panel-legacy';
-import { createLegacyPrivacyGate, createModernPrivacyGate } from './ui/privacy-gate';
+import { createModernPrivacyGate } from './ui/privacy-gate';
 import { createGuidePrompts } from './features/guides';
 import { createGuideControls } from './ui/guide-controls';
 import { composeAdapters } from './composition/adapter-composition';
@@ -108,9 +107,7 @@ type PageWindow = (Window & typeof globalThis) & {
 };
 
 interface GMHFlags {
-  newUI: boolean;
   killSwitch: boolean;
-  betaQuery: boolean;
   [key: string]: boolean;
 }
 
@@ -177,7 +174,7 @@ interface GMHFlags {
   const buildExportManifest = (params: ExportManifestOptions): ExportManifest =>
     buildExportManifestStandalone({ ...params, version: GMH.VERSION });
 
-  const toJSONExportLegacy = withPlayerNames(getPlayerNames, toJSONExport);
+  const toJSONExportDefault = withPlayerNames(getPlayerNames, toJSONExport);
 
   const toJSONExportForShare: ShareWorkflowOptions['toJSONExport'] = (
     session,
@@ -188,7 +185,7 @@ interface GMHFlags {
       playerNames: options.playerNames ? [...options.playerNames] : [...getPlayerNames()],
     });
 
-  const toStructuredMarkdownLegacy = (options: StructuredMarkdownOptions = {}): string => {
+  const toStructuredMarkdownDefault = (options: StructuredMarkdownOptions = {}): string => {
     const { playerNames, playerMark, ...rest } = options;
     return toStructuredMarkdown({
       ...rest,
@@ -197,7 +194,7 @@ interface GMHFlags {
     });
   };
 
-  const toStructuredJSONLegacy = (options: StructuredJSONOptions = {}): string => {
+  const toStructuredJSONDefault = (options: StructuredJSONOptions = {}): string => {
     const { playerNames, playerMark, ...rest } = options;
     return toStructuredJSON({
       ...rest,
@@ -206,7 +203,7 @@ interface GMHFlags {
     });
   };
 
-  const toStructuredTXTLegacy = (options: StructuredTXTOptions = {}): string => {
+  const toStructuredTXTDefault = (options: StructuredTXTOptions = {}): string => {
     const { playerNames, playerMark, ...rest } = options;
     return toStructuredTXT({
       ...rest,
@@ -281,20 +278,6 @@ interface GMHFlags {
   }
 
   const Flags: GMHFlags = (() => {
-    let betaQuery = false;
-    try {
-      const params = new URLSearchParams(location.search || '');
-      betaQuery = params.has('gmhBeta');
-    } catch (err) {
-      betaQuery = false;
-    }
-    const storedNewUI = (() => {
-      try {
-        return localStorage.getItem('gmh_flag_newUI');
-      } catch (err) {
-        return null;
-      }
-    })();
     const storedKill = (() => {
       try {
         return localStorage.getItem('gmh_kill');
@@ -302,26 +285,24 @@ interface GMHFlags {
         return null;
       }
     })();
-    const newUI = storedNewUI === '1' || betaQuery;
     const killSwitch = storedKill === '1';
     return {
-      newUI,
       killSwitch,
-      betaQuery,
     };
   })();
 
   GMH.Flags = Flags;
   GMH.Experimental = GMHExperimental;
 
-  const isModernUIActive = Flags.newUI && !Flags.killSwitch;
+  if (Flags.killSwitch) {
+    ENV.console?.warn?.('[GMH] Script disabled via kill switch');
+    return;
+  }
 
   const stateManager = createStateManager({
     console: ENV.console,
     debug: (...args: unknown[]) => {
-      if (isModernUIActive) {
-        ENV.console?.debug?.('[GMH]', ...args);
-      }
+      ENV.console?.debug?.('[GMH]', ...args);
     },
   });
 
@@ -436,24 +417,6 @@ interface GMHFlags {
     }
   }
 
-  const ensureDefaultUIFlag = () => {
-    try {
-      const storage = ENV.localStorage || localStorage;
-      if (!storage) return;
-      const killSwitchEnabled = storage.getItem('gmh_kill') === '1';
-      if (killSwitchEnabled) return;
-      const currentValue = storage.getItem('gmh_flag_newUI');
-      if (currentValue !== '1') {
-        storage.setItem('gmh_flag_newUI', '1');
-      }
-    } catch (err) {
-      const level = errorHandler.LEVELS?.WARN || 'warn';
-      errorHandler.handle(err, 'storage/write', level);
-    }
-  };
-
-  ensureDefaultUIFlag();
-
   // -------------------------------
   // 0) Privacy composition
   // -------------------------------
@@ -510,7 +473,6 @@ interface GMHFlags {
     privacyProfiles: PRIVACY_PROFILES,
     setCustomList,
     parseListInput,
-    isModernUIActive: () => isModernUIActive,
   });
 
   GMH.UI.StateView = stateView;
@@ -564,12 +526,7 @@ interface GMHFlags {
     logger: ENV.console,
   });
 
-  const {
-    ensureAutoLoadControlsModern,
-    ensureAutoLoadControlsLegacy,
-    mountStatusActionsModern,
-    mountStatusActionsLegacy,
-  } = createAutoLoaderControls({
+  const { ensureAutoLoadControlsModern, mountStatusActionsModern } = createAutoLoaderControls({
     documentRef: document,
     autoLoader,
     autoState: AUTO_STATE,
@@ -589,14 +546,6 @@ interface GMHFlags {
     setPanelStatus,
   });
 
-  const { confirm: confirmPrivacyGateLegacy } = createLegacyPrivacyGate({
-    documentRef: document,
-    formatRedactionCounts,
-    privacyProfiles: PRIVACY_PROFILES,
-    ensureLegacyPreviewStyles,
-    previewLimit: CONFIG.LIMITS.PREVIEW_TURN_LIMIT,
-  });
-
   const { confirm: confirmPrivacyGateModern } = createModernPrivacyGate({
     documentRef: document,
     formatRedactionCounts,
@@ -606,9 +555,7 @@ interface GMHFlags {
     previewLimit: CONFIG.LIMITS.PREVIEW_TURN_LIMIT,
   });
 
-  type PrivacyGateConfirmOptions = Parameters<typeof confirmPrivacyGateModern>[0];
-  const confirmPrivacyGate = (options: PrivacyGateConfirmOptions) =>
-    (isModernUIActive ? confirmPrivacyGateModern : confirmPrivacyGateLegacy)(options);
+  const confirmPrivacyGate = confirmPrivacyGateModern;
 
   const {
     parseAll,
@@ -633,9 +580,9 @@ interface GMHFlags {
     toMarkdownExport,
     toJSONExport: toJSONExportForShare,
     toTXTExport,
-    toStructuredMarkdown: toStructuredMarkdownLegacy,
-    toStructuredJSON: toStructuredJSONLegacy,
-    toStructuredTXT: toStructuredTXTLegacy,
+    toStructuredMarkdown: toStructuredMarkdownDefault,
+    toStructuredJSON: toStructuredJSONDefault,
+    toStructuredTXT: toStructuredTXTDefault,
     buildExportBundle,
     buildExportManifest,
     triggerDownload,
@@ -695,9 +642,7 @@ interface GMHFlags {
     configurePrivacyLists,
     openPanelSettings,
     ensureAutoLoadControlsModern,
-    ensureAutoLoadControlsLegacy,
     mountStatusActionsModern,
-    mountStatusActionsLegacy,
     mountMemoryStatusModern: (panel) => memoryStatus.mount(panel),
     bindRangeControls,
     bindShortcuts,
@@ -729,21 +674,10 @@ interface GMHFlags {
     logger: ENV.console,
   });
 
-  const { mount: mountPanelLegacy } = createLegacyPanel({
-    documentRef: document,
-    getActiveAdapter: () => getActiveAdapter(),
-    attachStatusElement,
-    setPanelStatus,
-    stateView,
-    bindPanelInteractions,
-  });
   const { boot, mountPanel } = setupBootstrap({
     documentRef: document,
     windowRef: PAGE_WINDOW,
     mountPanelModern,
-    mountPanelLegacy,
-    isModernUIActive: () => isModernUIActive,
-    Flags,
     errorHandler,
     messageIndexer,
     bookmarkListener,
@@ -796,12 +730,12 @@ interface GMHFlags {
   });
 
   Object.assign(GMH.Export, {
-    toJSONExport: toJSONExportLegacy,
+    toJSONExport: toJSONExportDefault,
     toTXTExport,
     toMarkdownExport,
-    toStructuredJSON: toStructuredJSONLegacy,
-    toStructuredMarkdown: toStructuredMarkdownLegacy,
-    toStructuredTXT: toStructuredTXTLegacy,
+    toStructuredJSON: toStructuredJSONDefault,
+    toStructuredMarkdown: toStructuredMarkdownDefault,
+    toStructuredTXT: toStructuredTXTDefault,
     buildExportBundle,
     buildExportManifest,
   });

@@ -12,9 +12,7 @@ interface PrivacyConfiguratorOptions {
   parseListInput(value: string): string[];
   setPanelStatus(message: string, tone?: string | null): void;
   modal: ModalController;
-  isModernUIActive?: (() => boolean) | boolean;
   documentRef?: Document | null;
-  windowRef?: (Window & typeof globalThis) | null;
 }
 
 interface PrivacyConfigurator {
@@ -30,17 +28,11 @@ export function createPrivacyConfigurator({
   parseListInput,
   setPanelStatus,
   modal,
-  isModernUIActive,
   documentRef = typeof document !== 'undefined' ? document : null,
-  windowRef = typeof window !== 'undefined' ? (window as Window & typeof globalThis) : null,
 }: PrivacyConfiguratorOptions): PrivacyConfigurator {
   if (!documentRef) throw new Error('createPrivacyConfigurator requires document');
 
   const doc = documentRef;
-  const win = windowRef;
-
-  const resolveModernActive = (): boolean =>
-    typeof isModernUIActive === 'function' ? isModernUIActive() : Boolean(isModernUIActive);
 
   /**
    * Launches the design-system modal for editing privacy lists.
@@ -120,42 +112,10 @@ export function createPrivacyConfigurator({
   };
 
   /**
-   * Prompts using classic dialogs to update privacy lists.
-   */
-  const configurePrivacyListsLegacy = (): void => {
-    const currentBlack = privacyConfig.blacklist?.join('\n') || '';
-    const nextBlack = win?.prompt
-      ? win.prompt(
-          '레다크션 강제 대상(블랙리스트)을 줄바꿈 또는 쉼표로 구분해 입력하세요.\n비워두면 목록을 초기화합니다.',
-          currentBlack,
-        )
-      : null;
-    if (nextBlack !== null) {
-      setCustomList('blacklist', parseListInput(nextBlack));
-    }
-
-    const currentWhite = privacyConfig.whitelist?.join('\n') || '';
-    const nextWhite = win?.prompt
-      ? win.prompt(
-          '레다크션 예외 대상(화이트리스트)을 줄바꿈 또는 쉼표로 구분해 입력하세요.\n비워두면 목록을 초기화합니다.',
-          currentWhite,
-        )
-      : null;
-    if (nextWhite !== null) {
-      setCustomList('whitelist', parseListInput(nextWhite));
-    }
-    setPanelStatus('프라이버시 사용자 목록을 저장했습니다.', 'info');
-  };
-
-  /**
    * Opens either the modern modal or legacy prompt workflow.
    */
   const configurePrivacyLists = async (): Promise<void> => {
-    if (resolveModernActive()) {
-      await configurePrivacyListsModern();
-      return;
-    }
-    configurePrivacyListsLegacy();
+    await configurePrivacyListsModern();
   };
 
   return {

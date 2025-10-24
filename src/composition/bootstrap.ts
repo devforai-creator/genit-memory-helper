@@ -2,20 +2,12 @@ import type { BookmarkListener, ErrorHandler, MessageIndexer } from '../types';
 
 type BootstrapWindow = (Window & typeof globalThis) & { __GMHTeardownHook?: boolean };
 
-type BootstrapFlags = {
-  killSwitch?: boolean;
-  [key: string]: unknown;
-};
-
 type RequestFrame = (callback: FrameRequestCallback) => number;
 
 interface SetupBootstrapOptions {
   documentRef: Document;
   windowRef: BootstrapWindow;
   mountPanelModern: () => void;
-  mountPanelLegacy: () => void;
-  isModernUIActive: () => boolean;
-  Flags: BootstrapFlags;
   errorHandler: ErrorHandler;
   messageIndexer: MessageIndexer | null;
   bookmarkListener: BookmarkListener | null;
@@ -36,9 +28,6 @@ export const setupBootstrap = ({
   documentRef,
   windowRef,
   mountPanelModern,
-  mountPanelLegacy,
-  isModernUIActive,
-  Flags,
   errorHandler,
   messageIndexer,
   bookmarkListener,
@@ -57,16 +46,7 @@ export const setupBootstrap = ({
   let observerScheduled = false;
 
   const mountPanel = (): void => {
-    if (isModernUIActive()) {
-      mountPanelModern();
-      return;
-    }
-
-    if (Flags.killSwitch) {
-      const level = errorHandler.LEVELS?.INFO || 'info';
-      errorHandler.handle('modern UI disabled by kill switch', 'ui/panel', level);
-    }
-    mountPanelLegacy();
+    mountPanelModern();
   };
 
   const boot = (): void => {

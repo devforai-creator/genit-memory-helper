@@ -1,33 +1,4 @@
 /**
- * CSS used for the legacy preview privacy overlay.
- */
-export const LEGACY_PREVIEW_CSS = `
-.gmh-preview-overlay{position:fixed;inset:0;background:rgba(15,23,42,0.72);z-index:9999999;display:flex;align-items:center;justify-content:center;padding:24px;}
-.gmh-preview-card{background:#0f172a;color:#e2e8f0;border-radius:14px;box-shadow:0 18px 48px rgba(8,15,30,0.55);width:min(520px,94vw);max-height:94vh;display:flex;flex-direction:column;overflow:hidden;font:13px/1.5 'Inter',system-ui,sans-serif;}
-.gmh-preview-header{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid rgba(148,163,184,0.25);font-weight:600;}
-.gmh-preview-body{padding:18px 20px;overflow:auto;display:grid;gap:16px;}
-.gmh-preview-summary{display:grid;gap:8px;border:1px solid rgba(148,163,184,0.25);border-radius:10px;padding:12px;background:rgba(30,41,59,0.65);}
-.gmh-preview-summary div{display:flex;justify-content:space-between;gap:12px;}
-.gmh-preview-summary strong{color:#bfdbfe;}
-.gmh-preview-turns{list-style:none;margin:0;padding:0;display:grid;gap:10px;}
-.gmh-preview-turn{background:rgba(30,41,59,0.55);border-radius:10px;padding:10px 12px;border:1px solid rgba(59,130,246,0.12);}
-.gmh-preview-turn--selected{border-color:rgba(56,189,248,0.45);background:rgba(56,189,248,0.12);}
-.gmh-turn-list__badge{display:inline-flex;align-items:center;gap:4px;margin-left:8px;font-size:11px;color:#38bdf8;background:rgba(56,189,248,0.12);padding:0 8px;border-radius:999px;}
-.gmh-preview-turn-speaker{font-weight:600;color:#c4b5fd;margin-bottom:4px;}
-.gmh-preview-turn-text{color:#e2e8f0;}
-.gmh-preview-footnote{font-size:12px;color:#94a3b8;}
-.gmh-preview-actions{display:flex;gap:10px;padding:16px 20px;border-top:1px solid rgba(148,163,184,0.25);background:rgba(15,23,42,0.92);}
-.gmh-preview-actions button{flex:1;padding:10px 12px;border-radius:10px;border:0;font-weight:600;cursor:pointer;transition:background 0.15s ease;}
-.gmh-preview-cancel{background:#1e293b;color:#e2e8f0;}
-.gmh-preview-cancel:hover{background:#243049;}
-.gmh-preview-confirm{background:#34d399;color:#053527;}
-.gmh-preview-confirm:hover{background:#22c55e;color:#052e21;}
-.gmh-preview-close{background:none;border:0;color:#94a3b8;font-size:18px;cursor:pointer;}
-.gmh-preview-close:hover{color:#f8fafc;}
-@media (max-width:480px){.gmh-preview-card{width:100%;border-radius:12px;}}
-`;
-
-/**
  * CSS bundle for the modern design-system panel.
  */
 export const DESIGN_SYSTEM_CSS = `
@@ -137,20 +108,6 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
 @media (max-width:480px){.gmh-modal{width:100%;border-radius:12px;}.gmh-modal__actions{flex-direction:column;}.gmh-panel{right:12px;left:12px;bottom:12px;width:auto;max-height:76vh;}.gmh-panel::-webkit-scrollbar{width:6px;}.gmh-panel::-webkit-scrollbar-thumb{background:rgba(148,163,184,0.35);border-radius:999px;}#gmh-fab{width:48px;height:48px;right:12px;bottom:12px;font-size:12px;}}
 @media (prefers-reduced-motion:reduce){.gmh-panel,.gmh-modal,.gmh-progress__fill,#gmh-fab{transition:none !important;animation-duration:0.001s !important;}}
 `;
-
-/**
- * Injects the legacy preview stylesheet into the provided document once.
- */
-export function ensureLegacyPreviewStyles(
-  doc: Document | null = typeof document !== 'undefined' ? document : null,
-): void {
-  if (!doc) return;
-  if (doc.getElementById('gmh-preview-style')) return;
-  const style = doc.createElement('style');
-  style.id = 'gmh-preview-style';
-  style.textContent = LEGACY_PREVIEW_CSS;
-  doc.head.appendChild(style);
-}
 
 /**
  * Injects the design-system stylesheet into the provided document once.

@@ -56,10 +56,6 @@ interface PrivacyGateOptions {
   truncateText?: (value: unknown, max?: number) => string;
 }
 
-type LegacyPrivacyGateOptions = PrivacyGateOptions & {
-  ensureLegacyPreviewStyles?: () => void;
-};
-
 type ModernPrivacyGateOptions = PrivacyGateOptions & {
   ensureDesignSystemStyles?: () => void;
   modal?: ModalController | null;
@@ -103,7 +99,6 @@ interface BuildTurnsParams {
   selectedIndices: number[];
   selectedOrdinals: number[];
   truncateText?: (value: unknown, max?: number) => string;
-  modern: boolean;
 }
 
 const buildTurns = ({
@@ -114,11 +109,10 @@ const buildTurns = ({
   selectedIndices,
   selectedOrdinals,
   truncateText,
-  modern,
 }: BuildTurnsParams): HTMLElement => {
   const doc = ensureDocument(documentRef);
   const list = doc.createElement('ul');
-  list.className = modern ? 'gmh-turn-list' : 'gmh-preview-turns';
+  list.className = 'gmh-turn-list';
 
   const highlightActive = Boolean(rangeInfo?.active);
   const selectedIndexSet = new Set(selectedIndices ?? []);
@@ -133,7 +127,7 @@ const buildTurns = ({
     if (!turnRaw) return;
     const turn = turnRaw as PrivacyPreviewTurn;
     const item = doc.createElement('li');
-    item.className = modern ? 'gmh-turn-list__item' : 'gmh-preview-turn';
+    item.className = 'gmh-turn-list__item';
     item.tabIndex = 0;
 
     const turnData = turn as PrivacyPreviewTurn & Record<string, unknown>;
@@ -152,11 +146,11 @@ const buildTurns = ({
     }
 
     if (highlightActive && sourceIndex !== null && selectedIndexSet.has(sourceIndex)) {
-      item.classList.add(modern ? 'gmh-turn-list__item--selected' : 'gmh-preview-turn--selected');
+      item.classList.add('gmh-turn-list__item--selected');
     }
 
     const speaker = doc.createElement('div');
-    speaker.className = modern ? 'gmh-turn-list__speaker' : 'gmh-preview-turn-speaker';
+    speaker.className = 'gmh-turn-list__speaker';
     const speakerLabel = doc.createElement('span');
     const speakerName =
       typeof turn.speaker === 'string' && turn.speaker.trim().length ? turn.speaker : '??';
@@ -166,13 +160,13 @@ const buildTurns = ({
 
     if (typeof playerOrdinal === 'number' && playerOrdinal > 0) {
       const badge = doc.createElement('span');
-      badge.className = modern ? 'gmh-turn-list__badge' : 'gmh-turn-list__badge';
+      badge.className = 'gmh-turn-list__badge';
       badge.textContent = `메시지 ${playerOrdinal}`;
       speaker.appendChild(badge);
     }
 
     const text = doc.createElement('div');
-    text.className = modern ? 'gmh-turn-list__text' : 'gmh-preview-turn-text';
+    text.className = 'gmh-turn-list__text';
     const truncate = typeof truncateText === 'function' ? truncateText : defaultTruncate;
     const turnText =
       typeof turn.text === 'string'
@@ -188,18 +182,9 @@ const buildTurns = ({
   });
 
   if (!list.children.length) {
-    const empty = doc.createElement(modern ? 'li' : 'div');
-    empty.className = modern
-      ? 'gmh-turn-list__item gmh-turn-list__empty'
-      : 'gmh-preview-turn';
-    if (modern) {
-      empty.textContent = '표시할 메시지가 없습니다. 상단 요약만 확인해주세요.';
-    } else {
-      const emptyText = doc.createElement('div');
-      emptyText.className = 'gmh-preview-turn-text';
-      emptyText.textContent = '표시할 메시지가 없습니다. 상단 요약만 확인해주세요.';
-      empty.appendChild(emptyText);
-    }
+    const empty = doc.createElement('li');
+    empty.className = 'gmh-turn-list__item gmh-turn-list__empty';
+    empty.textContent = '표시할 메시지가 없습니다. 상단 요약만 확인해주세요.';
     list.appendChild(empty);
   }
 
@@ -215,7 +200,6 @@ interface BuildSummaryBoxParams {
   stats: PrivacyGateStats;
   overallStats?: PrivacyGateStats | null;
   rangeInfo?: StructuredSelectionRangeInfo | ExportRangeInfo | null;
-  modern: boolean;
 }
 
 const buildSummaryBox = ({
@@ -227,7 +211,6 @@ const buildSummaryBox = ({
   stats,
   overallStats = null,
   rangeInfo,
-  modern,
 }: BuildSummaryBoxParams): HTMLElement => {
   const doc = ensureDocument(documentRef);
   const summaryCounts = normalizeCounts(counts);
@@ -242,27 +225,18 @@ const buildSummaryBox = ({
     : `유저 메시지 ${stats.userMessages} · 전체 메시지 ${statsTotal}`;
 
   const container = doc.createElement('div');
-  container.className = modern ? 'gmh-privacy-summary' : 'gmh-preview-summary';
+  container.className = 'gmh-privacy-summary';
 
   const createRow = (labelText: string, valueText: string): HTMLElement => {
     const row = doc.createElement('div');
-    if (modern) {
-      row.className = 'gmh-privacy-summary__row';
-      const labelEl = doc.createElement('span');
-      labelEl.className = 'gmh-privacy-summary__label';
-      labelEl.textContent = labelText;
-      const valueEl = doc.createElement('span');
-      valueEl.textContent = valueText;
-      row.appendChild(labelEl);
-      row.appendChild(valueEl);
-    } else {
-      const strong = doc.createElement('strong');
-      strong.textContent = labelText;
-      const value = doc.createElement('span');
-      value.textContent = valueText;
-      row.appendChild(strong);
-      row.appendChild(value);
-    }
+    row.className = 'gmh-privacy-summary__row';
+    const labelEl = doc.createElement('span');
+    labelEl.className = 'gmh-privacy-summary__label';
+    labelEl.textContent = labelText;
+    const valueEl = doc.createElement('span');
+    valueEl.textContent = valueText;
+    row.appendChild(labelEl);
+    row.appendChild(valueEl);
     return row;
   };
 
@@ -293,148 +267,6 @@ const buildSummaryBox = ({
 
   return container;
 };
-
-export function createLegacyPrivacyGate({
-  documentRef = typeof document !== 'undefined' ? document : null,
-  formatRedactionCounts,
-  privacyProfiles,
-  ensureLegacyPreviewStyles,
-  truncateText = defaultTruncate,
-  previewLimit = DEFAULT_PREVIEW_LIMIT,
-}: LegacyPrivacyGateOptions = {}): { confirm: (confirmOptions: PrivacyGateConfirmOptions) => Promise<boolean> } {
-  const doc = ensureDocument(documentRef);
-  if (typeof ensureLegacyPreviewStyles !== 'function') {
-    throw new Error('legacy privacy gate requires ensureLegacyPreviewStyles');
-  }
-
-  const confirm = async (options: PrivacyGateConfirmOptions): Promise<boolean> => {
-    const {
-      profile,
-      counts,
-      stats,
-      overallStats = null,
-      rangeInfo = null,
-      selectedIndices = [],
-      selectedOrdinals = [],
-      previewTurns = [],
-      actionLabel = '계속',
-      heading = '공유 전 확인',
-      subheading = '외부로 공유하기 전에 민감정보가 없는지 확인하세요.',
-    } = options;
-
-    if (!profile) throw new Error('privacy gate confirm requires profile');
-    if (!counts) throw new Error('privacy gate confirm requires counts');
-    if (!stats) throw new Error('privacy gate confirm requires stats');
-
-    ensureLegacyPreviewStyles();
-
-    const overlay = doc.createElement('div');
-    overlay.className = 'gmh-preview-overlay';
-    const card = doc.createElement('div');
-    card.className = 'gmh-preview-card';
-    overlay.appendChild(card);
-
-    const header = doc.createElement('div');
-    header.className = 'gmh-preview-header';
-    const headerLabel = doc.createElement('span');
-    headerLabel.textContent = heading;
-    header.appendChild(headerLabel);
-    const closeBtn = doc.createElement('button');
-    closeBtn.type = 'button';
-    closeBtn.className = 'gmh-preview-close';
-    closeBtn.setAttribute('aria-label', '닫기');
-    closeBtn.textContent = '✕';
-    header.appendChild(closeBtn);
-    card.appendChild(header);
-
-    const body = doc.createElement('div');
-    body.className = 'gmh-preview-body';
-    body.appendChild(
-      buildSummaryBox({
-        documentRef: doc,
-        formatRedactionCounts,
-        privacyProfiles,
-        profile,
-        counts,
-        stats,
-        overallStats,
-        rangeInfo,
-        modern: false,
-      }),
-    );
-
-    const previewList = Array.isArray(previewTurns) ? previewTurns : [];
-    const previewTitle = doc.createElement('div');
-    previewTitle.style.fontWeight = '600';
-    previewTitle.style.color = '#cbd5f5';
-    previewTitle.textContent = `미리보기 (${Math.min(previewList.length, previewLimit)}메시지)`;
-    body.appendChild(previewTitle);
-
-    body.appendChild(
-      buildTurns({
-        documentRef: doc,
-        previewTurns: previewList,
-        previewLimit,
-        rangeInfo,
-        selectedIndices,
-        selectedOrdinals,
-        truncateText,
-        modern: false,
-      }),
-    );
-
-    const footnote = doc.createElement('div');
-    footnote.className = 'gmh-preview-footnote';
-    footnote.textContent = subheading;
-    body.appendChild(footnote);
-
-    card.appendChild(body);
-
-    const actions = doc.createElement('div');
-    actions.className = 'gmh-preview-actions';
-    const cancelBtn = doc.createElement('button');
-    cancelBtn.type = 'button';
-    cancelBtn.className = 'gmh-preview-cancel';
-    cancelBtn.textContent = '취소';
-    const confirmBtn = doc.createElement('button');
-    confirmBtn.type = 'button';
-    confirmBtn.className = 'gmh-preview-confirm';
-    confirmBtn.textContent = actionLabel;
-    actions.appendChild(cancelBtn);
-    actions.appendChild(confirmBtn);
-    card.appendChild(actions);
-
-    const bodyEl = doc.body || doc.querySelector('body');
-    if (!bodyEl) throw new Error('document body missing');
-    const prevOverflow = bodyEl.style.overflow;
-    bodyEl.style.overflow = 'hidden';
-    bodyEl.appendChild(overlay);
-
-    return new Promise<boolean>((resolve) => {
-      const cleanup = (result: boolean): void => {
-        bodyEl.style.overflow = prevOverflow;
-        overlay.remove();
-        doc.removeEventListener('keydown', onKey);
-        resolve(result);
-      };
-
-      const onKey = (event: KeyboardEvent): void => {
-        if (event.key === 'Escape') cleanup(false);
-      };
-
-      doc.addEventListener('keydown', onKey);
-
-      overlay.addEventListener('click', (event) => {
-        if (event.target === overlay) cleanup(false);
-      });
-      closeBtn.addEventListener('click', () => cleanup(false));
-      cancelBtn.addEventListener('click', () => cleanup(false));
-      confirmBtn.addEventListener('click', () => cleanup(true));
-    });
-  };
-
-  return { confirm };
-}
 
 export function createModernPrivacyGate({
   documentRef = typeof document !== 'undefined' ? document : null,
@@ -487,7 +319,6 @@ export function createModernPrivacyGate({
         stats,
         overallStats,
         rangeInfo,
-        modern: true,
       }),
     );
 
@@ -506,7 +337,6 @@ export function createModernPrivacyGate({
         selectedIndices,
         selectedOrdinals,
         truncateText,
-        modern: true,
       }),
     );
 

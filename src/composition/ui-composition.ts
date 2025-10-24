@@ -31,7 +31,6 @@ interface ComposeUIOptions {
   privacyProfiles?: Record<string, { label?: string; [key: string]: unknown }>;
   setCustomList(type: string, values: string[]): void;
   parseListInput(value: string): string[];
-  isModernUIActive(): boolean;
 }
 
 type ComposeUIResult = {
@@ -63,7 +62,6 @@ export const composeUI = ({
   privacyProfiles: _privacyProfiles,
   setCustomList,
   parseListInput,
-  isModernUIActive,
 }: ComposeUIOptions): ComposeUIResult => {
   const modal = createModal({ documentRef, windowRef });
   (GMH.UI as Record<string, unknown>).Modal = modal;
@@ -95,9 +93,7 @@ export const composeUI = ({
     parseListInput,
     setPanelStatus,
     modal,
-    isModernUIActive,
     documentRef,
-    windowRef,
   });
 
   const { openPanelSettings } = createPanelSettingsController({

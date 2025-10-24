@@ -19,9 +19,7 @@ export function createPanelInteractions({
   configurePrivacyLists,
   openPanelSettings,
   ensureAutoLoadControlsModern,
-  ensureAutoLoadControlsLegacy,
   mountStatusActionsModern,
-  mountStatusActionsLegacy,
   mountMemoryStatusModern,
   bindRangeControls,
   bindShortcuts,
@@ -37,7 +35,7 @@ export function createPanelInteractions({
   alert: alertFn = DEFAULT_ALERT,
   logger = typeof console !== 'undefined' ? console : null,
 }: PanelInteractionsOptions): {
-  bindPanelInteractions: (panel: Element | null, options?: { modern?: boolean }) => void;
+  bindPanelInteractions: (panel: Element | null) => void;
   syncPrivacyProfileSelect: (profileKey?: string | null) => void;
 } {
   if (!panelVisibility) throw new Error('createPanelInteractions requires panelVisibility');
@@ -92,7 +90,7 @@ export function createPanelInteractions({
 
   const isAutoRunning = () => Boolean(autoState?.running);
 
-  const attachShareHandlers = (panel: Element, modern = false): void => {
+  const attachShareHandlers = (panel: Element): void => {
     const exportFormatSelect = panel.querySelector<HTMLSelectElement>('#gmh-export-format');
     const quickExportBtn = panel.querySelector<HTMLButtonElement>('#gmh-quick-export');
 
@@ -159,13 +157,13 @@ export function createPanelInteractions({
     }
   };
 
-  const bindPanelInteractions = (panel: Element | null, { modern = false } = {}): void => {
+  const bindPanelInteractions = (panel: Element | null): void => {
     if (!panel || typeof panel.querySelector !== 'function') {
       logger?.warn?.('[GMH] panel interactions: invalid panel element');
       return;
     }
 
-    panelVisibility.bind(panel, { modern });
+    panelVisibility.bind(panel);
 
     privacySelect = panel.querySelector<HTMLSelectElement>('#gmh-privacy-profile');
     if (privacySelect) {
@@ -188,19 +186,14 @@ export function createPanelInteractions({
       openPanelSettings?.();
     });
 
-    if (modern) {
-      mountMemoryStatusModern?.(panel);
-      ensureAutoLoadControlsModern?.(panel);
-      mountStatusActionsModern?.(panel);
-    } else {
-      ensureAutoLoadControlsLegacy?.(panel);
-      mountStatusActionsLegacy?.(panel);
-    }
+    mountMemoryStatusModern?.(panel);
+    ensureAutoLoadControlsModern?.(panel);
+    mountStatusActionsModern?.(panel);
 
     bindRangeControls(panel);
-    bindShortcuts(panel, { modern });
+    bindShortcuts(panel);
     bindGuideControls?.(panel);
-    attachShareHandlers(panel, modern);
+    attachShareHandlers(panel);
   };
 
   return {

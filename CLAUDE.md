@@ -125,9 +125,10 @@ Tests inject the userscript via Playwright's `addInitScript()` before page load.
 
 ### UI Flag System
 The script uses localStorage flags for feature rollout:
-- `gmh_flag_newUI='1'` - Enables modern panel (default since v1.4+)
-- `gmh_kill='1'` - Emergency killswitch to disable new UI
+- `gmh_kill='1'` - Emergency killswitch to disable GMH entirely
 - Debug flags: `gmh_debug_range`, `gmh_beta_structured`
+
+**Breaking Change (v2.1.0)**: The legacy panel has been removed. Modern UI is always active unless the kill switch is toggled.
 
 ### Privacy Gate
 All copy/export operations show a confirmation modal displaying:

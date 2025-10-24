@@ -1,9 +1,5 @@
 import type { PanelShortcutsOptions } from '../types';
 
-interface BindOptions {
-  modern?: boolean;
-}
-
 export function createPanelShortcuts({
   windowRef = typeof window !== 'undefined' ? window : (undefined as unknown as Window & typeof globalThis),
   panelVisibility,
@@ -11,7 +7,7 @@ export function createPanelShortcuts({
   autoState,
   configurePrivacyLists,
   modal,
-}: PanelShortcutsOptions): { bindShortcuts: (panel: Element | null, options?: BindOptions) => void } {
+}: PanelShortcutsOptions): { bindShortcuts: (panel: Element | null) => void } {
   if (!windowRef) throw new Error('createPanelShortcuts requires window reference');
   if (!panelVisibility) throw new Error('createPanelShortcuts requires panelVisibility');
   if (!autoLoader) throw new Error('createPanelShortcuts requires autoLoader');
@@ -20,9 +16,8 @@ export function createPanelShortcuts({
 
   let shortcutsBound = false;
 
-  const bindShortcuts = (panel: Element | null, { modern }: BindOptions = {}): void => {
-    if (!modern || shortcutsBound) return;
-    if (!panel) return;
+  const bindShortcuts = (panel: Element | null): void => {
+    if (shortcutsBound || !panel) return;
 
     const win = windowRef;
     const handler = (event: KeyboardEvent): void => {

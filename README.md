@@ -77,14 +77,12 @@ Genit Memory Helper는 **현재 화면에 로드된 대화만** JSON으로 내�
 
 ```js
 // 콘솔에서 실행 (브라우저 F12)
-localStorage.setItem("gmh_kill", "1"); // 긴급 킬스위치 (새 UI 임시 비활성화)
-localStorage.removeItem("gmh_kill"); // 킬스위치 해제 (새 UI 복구)
-localStorage.removeItem("gmh_flag_newUI"); // 플래그 초기화 (다음 로드 시 자동 재설정)
+localStorage.setItem("gmh_kill", "1"); // 긴급 킬스위치 (GMH 전체 비활성화)
+localStorage.removeItem("gmh_kill"); // 킬스위치 해제 (기능 복구)
 ```
 
-- 킬스위치(`gmh_kill`)가 켜져 있으면 새 UI가 완전히 우회됩니다. 급한 롤백이 필요할 때만 사용한 뒤, 문제가 해결되면 꼭 해제하세요.
-- 킬스위치를 비활성화하고 페이지를 새로고침하면 새 UI가 자동으로 복구됩니다.
-- 주소 뒤에 `?gmhBeta`를 붙이는 임시 플래그는 여전히 동작하지만, 기본적으로는 사용할 필요가 없습니다.
+- 킬스위치(`gmh_kill`)가 켜져 있으면 GMH 스크립트가 완전히 비활성화됩니다. 급한 롤백이 필요할 때만 사용한 뒤, 문제가 해결되면 꼭 해제하세요.
+- 킬스위치를 비활성화하고 페이지를 새로고침하면 현대 디자인 패널이 자동으로 복구됩니다.
 - ⚙ 버튼의 **GMH 설정**에서 자동 접힘 시간, 집중 모드, 드래그/리사이즈 옵션을 조정할 수 있습니다.
 
 ## 개발 & 테스트

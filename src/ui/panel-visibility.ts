@@ -759,7 +759,7 @@ export function createPanelVisibility({
     return false;
   };
 
-  const bind = (panel: Element | null, { modern }: { modern?: boolean } = {}): void => {
+  const bind = (panel: Element | null): void => {
     const panelElement = panel instanceof HTMLElement ? panel : null;
     if (panel && !panelElement) {
       if (logger?.warn) {
@@ -768,9 +768,8 @@ export function createPanelVisibility({
     }
     panelEl = panelElement;
     panelListenersBound = false;
-    modernMode = !!modern && !!panelEl;
-    if (!panelEl) return;
-    if (!modernMode) {
+    modernMode = !!panelEl;
+    if (!panelEl) {
       if (fabEl && fabEl.isConnected) {
         fabEl.remove();
         fabEl = null;

@@ -125,7 +125,7 @@ export interface PanelSettingsController {
 }
 
 export interface PanelVisibilityController {
-  bind(panel: Element | null | undefined, options?: { modern?: boolean }): void;
+  bind(panel: Element | null | undefined): void;
   open(options?: { focus?: boolean; persist?: boolean }): boolean;
   close(reason?: string): boolean;
   toggle(): boolean;
@@ -913,12 +913,10 @@ export interface PanelInteractionsOptions {
   configurePrivacyLists?(): Promise<void> | void;
   openPanelSettings?(): void;
   ensureAutoLoadControlsModern?(panel: Element): void;
-  ensureAutoLoadControlsLegacy?(panel: Element): void;
   mountStatusActionsModern?(panel: Element): void;
-  mountStatusActionsLegacy?(panel: Element): void;
   mountMemoryStatusModern?(panel: Element): void;
   bindRangeControls(panel: Element): void;
-  bindShortcuts(panel: Element, options?: { modern?: boolean }): void;
+  bindShortcuts(panel: Element): void;
   bindGuideControls?(panel: Element): void;
   prepareShare: ShareWorkflowApi['prepareShare'];
   performExport: ShareWorkflowApi['performExport'];
