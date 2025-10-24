@@ -97,16 +97,19 @@ const collectMessageLines = (message: DebugBlockDetails['messages'][number]): st
   return mainLines.concat(infoLines);
 };
 
-const formatMessageBody = (message: DebugBlockDetails['messages'][number]): string => {
+const summarizeMessageBody = (
+  message: DebugBlockDetails['messages'][number],
+): { full: string; excerpt: string; truncated: boolean } => {
   const lines = collectMessageLines(message);
-  const text = lines.length ? lines.join('\n') : '';
-  if (!text.trim()) {
-    return '(내용 없음)';
+  const full = lines.length ? lines.join('\n').trim() : '';
+  if (!full) {
+    return { full: '', excerpt: '(내용 없음)', truncated: false };
   }
-  if (text.length > 150) {
-    return `${text.slice(0, 147)}...더보기`;
+  if (full.length > 150) {
+    const excerpt = `${full.slice(0, 147).trimEnd()}…`;
+    return { full, excerpt, truncated: true };
   }
-  return text;
+  return { full, excerpt: full, truncated: false };
 };
 
 const normalizeMessageId = (message: DebugBlockDetails['messages'][number]): string => {
@@ -338,10 +341,30 @@ export const createBlockViewer = (options: BlockViewerOptions = {}): BlockViewer
       title.textContent = `[${index + 1}] ${speaker}`;
       item.appendChild(title);
 
+      const summary = summarizeMessageBody(message);
+
       const body = docRef.createElement('div');
       body.className = 'gmh-block-viewer__message-body';
-      body.textContent = formatMessageBody(message);
+      body.textContent = summary.truncated ? summary.excerpt : summary.full;
       item.appendChild(body);
+
+      if (summary.truncated) {
+        const toggle = docRef.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'gmh-block-viewer__message-toggle';
+        toggle.textContent = '더보기';
+        let expanded = false;
+        const applyState = () => {
+          body.textContent = expanded ? summary.full : summary.excerpt;
+          toggle.textContent = expanded ? '접기' : '더보기';
+        };
+        toggle.addEventListener('click', () => {
+          expanded = !expanded;
+          applyState();
+        });
+        applyState();
+        item.appendChild(toggle);
+      }
 
       const idLine = docRef.createElement('div');
       idLine.className = 'gmh-block-viewer__message-id';
