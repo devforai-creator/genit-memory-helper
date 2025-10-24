@@ -118,7 +118,86 @@ export const createMessageStream = (options: MessageStreamOptions): MessageStrea
     return null;
   };
 
+  const selectPreviewText = (message: StructuredSnapshotMessage | null | undefined): string => {
+    if (!message || typeof message !== 'object') return '';
+    const legacyLines = Reflect.get(message as Record<string, unknown>, 'legacyLines');
+    if (Array.isArray(legacyLines)) {
+      for (const rawLine of legacyLines) {
+        const line = typeof rawLine === 'string' ? rawLine.trim() : '';
+        if (line) return line;
+      }
+    }
+    if (Array.isArray(message.parts)) {
+      for (const part of message.parts) {
+        if (!part) continue;
+        const candidates: unknown[] = [];
+        if (typeof part.text === 'string') candidates.push(part.text);
+        if (Array.isArray(part.lines)) candidates.push(...part.lines);
+        if (Array.isArray(part.legacyLines)) candidates.push(...part.legacyLines);
+        if (Array.isArray(part.items)) candidates.push(...part.items);
+        for (const candidate of candidates) {
+          const text = typeof candidate === 'string' ? candidate.trim() : String(candidate ?? '').trim();
+          if (text) return text;
+        }
+      }
+    }
+    const fallbackSpeaker =
+      typeof message.speaker === 'string' && message.speaker.trim() ? message.speaker.trim() : '';
+    return fallbackSpeaker;
+  };
+
+  const formatBlockPreview = (block: MemoryBlockInit): string => {
+    const firstMessage = Array.isArray(block.messages) && block.messages.length ? block.messages[0] : null;
+    if (!firstMessage) return '(no preview)';
+    const speaker =
+      typeof firstMessage?.speaker === 'string' && firstMessage.speaker.trim()
+        ? `${firstMessage.speaker.trim()}: `
+        : '';
+    const text = selectPreviewText(firstMessage);
+    const preview = `${speaker}${text}`.trim();
+    if (!preview) return '(no preview)';
+    return preview.length > 80 ? `${preview.slice(0, 77)}...` : preview;
+  };
+
+  const collectMessageIds = (block: MemoryBlockInit): string[] => {
+    if (!Array.isArray(block.messages)) return [];
+    return block.messages.slice(0, 3).map((message) => {
+      const id = typeof message?.id === 'string' && message.id.trim() ? message.id.trim() : null;
+      return id ?? 'NO_ID';
+    });
+  };
+
+  const toTimestampLabel = (value: number): string => {
+    if (!Number.isFinite(value)) return '(invalid)';
+    try {
+      return new Date(value).toLocaleTimeString();
+    } catch {
+      return '(invalid)';
+    }
+  };
+
+  const logBlockReady = (block: MemoryBlockInit): void => {
+    const ordinalRange = Array.isArray(block.ordinalRange)
+      ? block.ordinalRange
+      : [Number.NaN, Number.NaN];
+    const [startOrdinal, endOrdinal] = ordinalRange;
+    const messageCount = Array.isArray(block.messages) ? block.messages.length : 0;
+    const preview = formatBlockPreview(block);
+    const messageIds = collectMessageIds(block);
+    const timestampValue = Number(block.timestamp);
+    const timestampLabel = toTimestampLabel(timestampValue);
+    logger.log?.('[GMH] block ready', {
+      id: String(block.id ?? ''),
+      ordinalRange: [startOrdinal, endOrdinal],
+      messageCount,
+      preview,
+      messageIds,
+      timestamp: timestampLabel,
+    });
+  };
+
   const notifyBlockListeners = (block: MemoryBlockInit): void => {
+    logBlockReady(block);
     blockListeners.forEach((listener) => {
       try {
         listener(block);

@@ -23,6 +23,30 @@ export interface ExperimentalNamespace {
   MemoryIndex: ExperimentalFeatureFlag;
 }
 
+export interface DebugBlockSummary {
+  id: string;
+  sessionUrl: string;
+  ordinalRange: [number, number];
+  messageCount: number;
+  messageIds: string[];
+  timestamp: number;
+  timestampLabel: string;
+  preview: string;
+}
+
+export interface DebugBlockDetails extends DebugBlockSummary {
+  raw: string;
+  messages: StructuredSnapshotMessage[];
+  meta?: Record<string, unknown>;
+  embedding?: ArrayBuffer | ArrayBufferView | null;
+}
+
+export interface DebugNamespace {
+  listBlocks(): DebugBlockSummary[];
+  getSessionBlocks(): DebugBlockSummary[];
+  getBlockDetails(id: string): DebugBlockDetails | null;
+}
+
 export interface ExperimentalNamespaceOptions {
   storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null;
   console?: Pick<Console, 'log' | 'warn'> | null;
@@ -38,6 +62,7 @@ export interface GMHNamespace {
   Adapters: Record<string, unknown>;
   Settings: Record<string, unknown>;
   Flags?: Record<string, unknown>;
+  Debug?: DebugNamespace;
   Experimental?: ExperimentalNamespace;
 }
 

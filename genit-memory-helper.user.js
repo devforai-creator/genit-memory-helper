@@ -6559,7 +6559,92 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             }
             return null;
         };
+        const selectPreviewText = (message) => {
+            if (!message || typeof message !== 'object')
+                return '';
+            const legacyLines = Reflect.get(message, 'legacyLines');
+            if (Array.isArray(legacyLines)) {
+                for (const rawLine of legacyLines) {
+                    const line = typeof rawLine === 'string' ? rawLine.trim() : '';
+                    if (line)
+                        return line;
+                }
+            }
+            if (Array.isArray(message.parts)) {
+                for (const part of message.parts) {
+                    if (!part)
+                        continue;
+                    const candidates = [];
+                    if (typeof part.text === 'string')
+                        candidates.push(part.text);
+                    if (Array.isArray(part.lines))
+                        candidates.push(...part.lines);
+                    if (Array.isArray(part.legacyLines))
+                        candidates.push(...part.legacyLines);
+                    if (Array.isArray(part.items))
+                        candidates.push(...part.items);
+                    for (const candidate of candidates) {
+                        const text = typeof candidate === 'string' ? candidate.trim() : String(candidate ?? '').trim();
+                        if (text)
+                            return text;
+                    }
+                }
+            }
+            const fallbackSpeaker = typeof message.speaker === 'string' && message.speaker.trim() ? message.speaker.trim() : '';
+            return fallbackSpeaker;
+        };
+        const formatBlockPreview = (block) => {
+            const firstMessage = Array.isArray(block.messages) && block.messages.length ? block.messages[0] : null;
+            if (!firstMessage)
+                return '(no preview)';
+            const speaker = typeof firstMessage?.speaker === 'string' && firstMessage.speaker.trim()
+                ? `${firstMessage.speaker.trim()}: `
+                : '';
+            const text = selectPreviewText(firstMessage);
+            const preview = `${speaker}${text}`.trim();
+            if (!preview)
+                return '(no preview)';
+            return preview.length > 80 ? `${preview.slice(0, 77)}...` : preview;
+        };
+        const collectMessageIds = (block) => {
+            if (!Array.isArray(block.messages))
+                return [];
+            return block.messages.slice(0, 3).map((message) => {
+                const id = typeof message?.id === 'string' && message.id.trim() ? message.id.trim() : null;
+                return id ?? 'NO_ID';
+            });
+        };
+        const toTimestampLabel = (value) => {
+            if (!Number.isFinite(value))
+                return '(invalid)';
+            try {
+                return new Date(value).toLocaleTimeString();
+            }
+            catch {
+                return '(invalid)';
+            }
+        };
+        const logBlockReady = (block) => {
+            const ordinalRange = Array.isArray(block.ordinalRange)
+                ? block.ordinalRange
+                : [Number.NaN, Number.NaN];
+            const [startOrdinal, endOrdinal] = ordinalRange;
+            const messageCount = Array.isArray(block.messages) ? block.messages.length : 0;
+            const preview = formatBlockPreview(block);
+            const messageIds = collectMessageIds(block);
+            const timestampValue = Number(block.timestamp);
+            const timestampLabel = toTimestampLabel(timestampValue);
+            logger.log?.('[GMH] block ready', {
+                id: String(block.id ?? ''),
+                ordinalRange: [startOrdinal, endOrdinal],
+                messageCount,
+                preview,
+                messageIds,
+                timestamp: timestampLabel,
+            });
+        };
         const notifyBlockListeners = (block) => {
+            logBlockReady(block);
             blockListeners.forEach((listener) => {
                 try {
                     listener(block);
@@ -10347,6 +10432,273 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 }
             },
             console: ENV.console,
+        });
+        const createDebugStore = () => {
+            const buckets = new Map();
+            const cloneStructuredMessage = (message) => {
+                if (!message || typeof message !== 'object') {
+                    return message;
+                }
+                if (typeof structuredClone === 'function') {
+                    try {
+                        const cloned = structuredClone(message);
+                        const legacyLines = Reflect.get(message, 'legacyLines');
+                        if (Array.isArray(legacyLines)) {
+                            Object.defineProperty(cloned, 'legacyLines', {
+                                value: legacyLines.slice(),
+                                enumerable: false,
+                                configurable: true,
+                                writable: true,
+                            });
+                        }
+                        return cloned;
+                    }
+                    catch {
+                        // fall through to JSON clone
+                    }
+                }
+                const jsonClone = JSON.parse(JSON.stringify(message ?? null));
+                if (!jsonClone)
+                    return jsonClone;
+                const legacyLines = Reflect.get(message, 'legacyLines');
+                if (Array.isArray(legacyLines)) {
+                    Object.defineProperty(jsonClone, 'legacyLines', {
+                        value: legacyLines.slice(),
+                        enumerable: false,
+                        configurable: true,
+                        writable: true,
+                    });
+                }
+                return jsonClone;
+            };
+            const cloneMessages = (messages) => messages.map((message) => cloneStructuredMessage(message));
+            const cloneValue = (value) => {
+                if (value === null || value === undefined)
+                    return value;
+                if (typeof structuredClone === 'function') {
+                    try {
+                        return structuredClone(value);
+                    }
+                    catch {
+                        // fall through to JSON clone
+                    }
+                }
+                try {
+                    return JSON.parse(JSON.stringify(value));
+                }
+                catch {
+                    return value;
+                }
+            };
+            const selectPreviewText = (message) => {
+                if (!message || typeof message !== 'object')
+                    return '';
+                const legacyLines = Reflect.get(message, 'legacyLines');
+                if (Array.isArray(legacyLines)) {
+                    for (const rawLine of legacyLines) {
+                        const line = typeof rawLine === 'string' ? rawLine.trim() : '';
+                        if (line)
+                            return line;
+                    }
+                }
+                if (Array.isArray(message.parts)) {
+                    for (const part of message.parts) {
+                        if (!part)
+                            continue;
+                        const candidates = [];
+                        if (typeof part.text === 'string')
+                            candidates.push(part.text);
+                        if (Array.isArray(part.lines))
+                            candidates.push(...part.lines);
+                        if (Array.isArray(part.legacyLines))
+                            candidates.push(...part.legacyLines);
+                        if (Array.isArray(part.items))
+                            candidates.push(...part.items);
+                        for (const candidate of candidates) {
+                            const text = typeof candidate === 'string' ? candidate.trim() : String(candidate ?? '').trim();
+                            if (text)
+                                return text;
+                        }
+                    }
+                }
+                const fallbackSpeaker = typeof message.speaker === 'string' && message.speaker.trim() ? message.speaker.trim() : '';
+                return fallbackSpeaker;
+            };
+            const formatPreview = (messages) => {
+                const firstMessage = messages.length ? messages[0] : null;
+                if (!firstMessage)
+                    return '(no preview)';
+                const speaker = typeof firstMessage?.speaker === 'string' && firstMessage.speaker.trim()
+                    ? `${firstMessage.speaker.trim()}: `
+                    : '';
+                const text = selectPreviewText(firstMessage);
+                const preview = `${speaker}${text}`.trim();
+                if (!preview)
+                    return '(no preview)';
+                return preview.length > 80 ? `${preview.slice(0, 77)}...` : preview;
+            };
+            const collectMessageIds = (messages) => {
+                return messages.slice(0, 3).map((message) => {
+                    const id = typeof message?.id === 'string' && message.id.trim() ? message.id.trim() : null;
+                    return id ?? 'NO_ID';
+                });
+            };
+            const toTimestampLabel = (value) => {
+                if (!Number.isFinite(value))
+                    return '(invalid)';
+                try {
+                    return new Date(value).toLocaleTimeString();
+                }
+                catch {
+                    return '(invalid)';
+                }
+            };
+            const normalizeOrdinalRange = (range) => {
+                const startCandidate = Array.isArray(range) ? Number(range[0]) : Number.NaN;
+                const endCandidate = Array.isArray(range) ? Number(range[1]) : Number.NaN;
+                const start = Number.isFinite(startCandidate) ? Math.floor(startCandidate) : 0;
+                const end = Number.isFinite(endCandidate) ? Math.floor(endCandidate) : start;
+                return [start, end];
+            };
+            const normalizeId = (value) => {
+                const text = typeof value === 'string' ? value : String(value ?? '');
+                return text.trim();
+            };
+            const normalizeSessionUrl = (value) => {
+                const text = typeof value === 'string' ? value : String(value ?? '');
+                const trimmed = text.trim();
+                return trimmed || 'about:blank';
+            };
+            const buildDetail = (block) => {
+                const id = normalizeId(block.id);
+                const sessionUrl = normalizeSessionUrl(block.sessionUrl);
+                const timestampCandidate = Number(block.timestamp);
+                const timestamp = Number.isFinite(timestampCandidate) ? Math.floor(timestampCandidate) : Date.now();
+                const messages = Array.isArray(block.messages) ? cloneMessages(block.messages) : [];
+                const ordinalRange = normalizeOrdinalRange(block.ordinalRange);
+                const detail = {
+                    id,
+                    sessionUrl,
+                    ordinalRange,
+                    messageCount: messages.length,
+                    messageIds: collectMessageIds(messages),
+                    timestamp,
+                    timestampLabel: toTimestampLabel(timestamp),
+                    preview: formatPreview(messages),
+                    raw: typeof block.raw === 'string' ? block.raw : String(block.raw ?? ''),
+                    messages,
+                    meta: block.meta ? cloneValue(block.meta) : undefined,
+                    embedding: block.embedding ?? null,
+                };
+                return detail;
+            };
+            const cloneDetail = (detail) => {
+                return {
+                    id: detail.id,
+                    sessionUrl: detail.sessionUrl,
+                    ordinalRange: [detail.ordinalRange[0], detail.ordinalRange[1]],
+                    messageCount: detail.messageCount,
+                    messageIds: detail.messageIds.slice(),
+                    timestamp: detail.timestamp,
+                    timestampLabel: detail.timestampLabel,
+                    preview: detail.preview,
+                    raw: detail.raw,
+                    messages: cloneMessages(detail.messages),
+                    meta: detail.meta ? cloneValue(detail.meta) : undefined,
+                    embedding: detail.embedding ?? null,
+                };
+            };
+            const toSummary = (detail) => ({
+                id: detail.id,
+                sessionUrl: detail.sessionUrl,
+                ordinalRange: [detail.ordinalRange[0], detail.ordinalRange[1]],
+                messageCount: detail.messageCount,
+                messageIds: detail.messageIds.slice(),
+                timestamp: detail.timestamp,
+                timestampLabel: detail.timestampLabel,
+                preview: detail.preview,
+            });
+            const listInternal = () => {
+                const entries = Array.from(buckets.values());
+                entries.sort((a, b) => {
+                    if (a.timestamp !== b.timestamp) {
+                        return a.timestamp - b.timestamp;
+                    }
+                    const aStart = a.ordinalRange[0];
+                    const bStart = b.ordinalRange[0];
+                    if (aStart !== bStart) {
+                        return aStart - bStart;
+                    }
+                    return a.id.localeCompare(b.id);
+                });
+                return entries;
+            };
+            return {
+                capture(block) {
+                    try {
+                        const detail = buildDetail(block);
+                        if (!detail.id)
+                            return;
+                        buckets.set(detail.id, detail);
+                    }
+                    catch (err) {
+                        ENV.console?.warn?.('[GMH] debug block capture failed', err);
+                    }
+                },
+                list() {
+                    return listInternal().map((detail) => toSummary(detail));
+                },
+                listBySession(sessionUrl) {
+                    if (!sessionUrl)
+                        return [];
+                    return listInternal()
+                        .filter((detail) => detail.sessionUrl === sessionUrl)
+                        .map((detail) => toSummary(detail));
+                },
+                get(id) {
+                    if (!id)
+                        return null;
+                    const detail = buckets.get(id);
+                    if (!detail)
+                        return null;
+                    return cloneDetail(detail);
+                },
+            };
+        };
+        const debugStore = createDebugStore();
+        const resolveDebugSessionUrl = () => {
+            try {
+                const sessionFromStream = typeof messageStream.getSessionUrl === 'function' ? messageStream.getSessionUrl() : null;
+                if (sessionFromStream)
+                    return sessionFromStream;
+            }
+            catch {
+                // ignore errors when reading session from messageStream
+            }
+            if (typeof blockBuilder.getSessionUrl === 'function') {
+                try {
+                    return blockBuilder.getSessionUrl();
+                }
+                catch {
+                    return null;
+                }
+            }
+            return null;
+        };
+        const debugApi = {
+            listBlocks() {
+                return debugStore.list();
+            },
+            getSessionBlocks() {
+                return debugStore.listBySession(resolveDebugSessionUrl());
+            },
+            getBlockDetails(id) {
+                return debugStore.get(id);
+            },
+        };
+        GMH.Debug = debugApi;
+        messageStream.subscribeBlocks((block) => {
+            debugStore.capture(block);
         });
         const memoryIndexEnabled = Boolean(GMH.Experimental?.MemoryIndex?.enabled);
         const memoryStatus = createMemoryStatus({
