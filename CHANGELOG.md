@@ -18,6 +18,19 @@
 - `createLegacyPrivacyGate`, `ensureLegacyPreviewStyles`
 - Legacy auto-loader 컨트롤 API (`ensureAutoLoadControlsLegacy`, `mountStatusActionsLegacy`)
 
+### ✨ Enhancements
+
+- **실시간 메시지 파이프라인 안정화**: `MessageIndexer`가 `preview-*` 카드와 중복 노드를 필터링하고, `MessageStream`이 스트리밍 완료를 최대 12회까지 재시도(초기 8초 대기, 이후 3초 간격)하여 블록 생성 타이밍을 안정화합니다.
+- **블록 빌더 개선**: 모든 메시지를 빠짐없이 포함하되 INFO/나레이션은 `raw` 출력에서 정리하고, 겹침을 0으로 조정하여 블록 경계를 명확히 했습니다.
+- **블록 뷰어 UX 향상**: 긴 메시지를 150자까지 요약해 보여주고 `더보기/접기` 토글로 전체 내용을 확인할 수 있습니다.
+- **시험적 기능 플래그 연동**: 메모리 인덱스를 실험 플래그로 제어하면서 Tampermonkey 패널이 즉시 새로운 파이프라인을 반영하도록 했습니다.
+
+### 🐛 Fixes
+
+- 스트리밍 도중 생성되는 빈 내레이션 블록 제거 및 INFO 카드가 단독 블록을 차지하지 않도록 필터링을 추가했습니다.
+- 중복된 플레이어 메세지/따옴표가 raw 텍스트와 UI에 반복 표시되던 문제를 해결했습니다.
+- 기존 세션을 다시 열었을 때 IndexedDB에 저장된 블록이 패널에서 누락되는 문제를 해결했습니다.
+
 ## v2.0.1 (2025-10-24)
 
 ### 🐛 Bug Fixes

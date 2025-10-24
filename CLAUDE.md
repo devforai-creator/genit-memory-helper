@@ -6,12 +6,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Genit Memory Helper** is a Tampermonkey userscript that extracts chat logs from genit.ai (a Korean AI chatbot platform) and exports them in structured formats (JSON/Markdown/TXT) with privacy redaction features. It helps users create memory summaries for the platform's 2000-character user notes by exporting conversation history and providing LLM-ready summarization prompts.
 
+**v2.1.0** adds real-time message indexing infrastructure for future semantic search capabilities.
+
 Key features:
 - Auto-scroll to load conversation history
 - Privacy-aware redaction (email, phone, addresses, etc.)
 - Export in multiple formats (Rich Markdown/JSON/TXT, Classic formats)
 - Message range selection with bookmarking
 - Clipboard integration for LLM summarization workflows
+- **[v2.1.0]** Real-time message indexing with 5-message block generation
+- **[v2.1.0]** IndexedDB persistent storage for conversation blocks
+- **[v2.1.0]** Feature flag system for experimental features
 
 ## Development Commands
 
@@ -71,14 +76,17 @@ The userscript now composes from modules under `src/`, while the bundled `genit-
 
 ```
 src/
-├── index.js            # Tampermonkey entry point (exports GMH/ENV)
-├── legacy.js           # Transitional bootstrap that wires modules together
-├── core/               # State machine, error handler, export range, bookmarks
+├── index.ts            # Tampermonkey entry point (exports GMH/ENV)
+├── env.ts              # Environment abstraction (window, localStorage, GM_* APIs)
+├── types/              # TypeScript type definitions
+├── core/               # State machine, error handler, export range, bookmarks, message indexer
 ├── adapters/           # genit.ai adapter registry and DOM selectors
 ├── privacy/            # Profiles, settings store, redaction pipeline
 ├── export/             # Structured + classic writers, manifest builder, parsers
-├── features/           # Auto-loader, share workflow, snapshot, guide prompts
-├── ui/                 # Panel layout, modal system, range controls, shortcuts
+├── features/           # Auto-loader, share workflow, snapshot, guide prompts, block builder, message stream
+├── storage/            # [v2.1.0] IndexedDB block storage
+├── experimental/       # [v2.1.0] Feature flag system
+├── ui/                 # Panel layout, modal system, range controls, shortcuts, block viewer
 └── utils/              # Text, DOM, validation helpers
 ```
 
@@ -86,27 +94,51 @@ Rollup (see `rollup.config.js`) stitches these modules into the single userscrip
 
 ### Key Modules
 
+**Core Infrastructure:**
 - `src/core/state.js` / `createStateManager`: centralises progress + status transitions consumed by auto-loader/export routines.
 - `src/core/export-range.js`: range calculator used by UI controls and exporters; coordinates bookmarks via `src/core/turn-bookmarks.js`.
+- `src/core/message-indexer.ts`: MutationObserver-based real-time message tracking with ordinal assignment and deduplication.
+
+**v2.1.0 Memory Index Pipeline:**
+- `src/features/block-builder.ts`: creates 5-message blocks with configurable overlap (currently 0), filters INFO/narration from raw text.
+- `src/features/message-stream.ts`: orchestrates MessageIndexer → BlockBuilder → BlockStorage pipeline with streaming completion detection (8s + retry).
+- `src/storage/block-storage.ts`: IndexedDB wrapper for persistent block storage with session-based indexing.
+- `src/experimental/index.ts`: feature flag system (localStorage-based toggles for experimental features).
+- `src/ui/memory-status.ts`: panel UI showing block count and indexing status.
+- `src/ui/block-viewer.ts`: modal UI for inspecting stored blocks with message previews and expandable details.
+
+**Export & Privacy:**
 - `src/features/share.ts`: end-to-end export workflow (privacy gate, manifest, download) injected with clipboard + GM APIs.
 - `src/features/guides.js`: houses the 요약/재요약 prompt templates and exposes copy helpers for reuse and testing.
-- `src/ui/panel-interactions.ts`: centralises panel wiring (privacy profile select, export buttons, quick export flow) and composes range/guide/shortcut bindings.
-- `src/ui/privacy-gate.ts`: renders both legacy overlay and modern modal variants of the privacy confirmation step, accepting injected DOM/style/modals for testing.
-- `src/ui/guide-controls.ts`: binds the “Guides & Tools” panel buttons, delegating to injected feature functions.
-- `src/ui/range-controls.ts`, `src/ui/auto-loader-controls.ts`, `src/ui/panel-shortcuts.ts`: modern panel wiring for range selection, auto-load toggles, and keyboard shortcuts.
 - `src/privacy/*`: profile settings, pattern constants, redaction pipeline and validation utilities.
 - `src/export/*`: DOM snapshot parsers plus structured/classic writers and manifest generator.
 
-`src/legacy.js` still mounts both modern and legacy panels, but it now delegates most behaviour to the modules above. The remaining inline blocks are being trimmed as part of the multi-phase split.
+**UI Components:**
+- `src/ui/panel-interactions.ts`: centralises panel wiring (privacy profile select, export buttons, quick export flow) and composes range/guide/shortcut bindings.
+- `src/ui/privacy-gate.ts`: renders modern modal for privacy confirmation with redaction preview.
+- `src/ui/guide-controls.ts`: binds the "Guides & Tools" panel buttons.
+- `src/ui/range-controls.ts`, `src/ui/auto-loader-controls.ts`, `src/ui/panel-shortcuts.ts`: modern panel wiring for range selection, auto-load toggles, and keyboard shortcuts.
+
+**Adapters:**
+- `src/adapters/genit.ts`: DOM selector definitions and role detection heuristics for genit.ai.
 
 ### Data Flow
 
-1. **DOM Parsing**: `src/adapters/genit.js` describes the host DOM and feeds parsers under `src/export/parsers.js`.
-2. **Turn Processing**: Parsed turns flow through `src/core/export-range.js` and `src/features/share.js`, where bookmarks and range filters are applied.
+**Export Flow (v2.0):**
+1. **DOM Parsing**: `src/adapters/genit.ts` describes the host DOM and feeds parsers under `src/export/parsers.js`.
+2. **Turn Processing**: Parsed turns flow through `src/core/export-range.js` and `src/features/share.ts`, where bookmarks and range filters are applied.
 3. **Privacy Pass**: `src/privacy/pipeline.js` redacts the selected turns using the active profile/settings store.
 4. **Format Conversion**: `src/export/writers-*.js` serialise the sanitized session into JSON/MD/TXT.
 5. **Manifest Generation**: `src/export/manifest.js` records redaction statistics for reproducibility.
-6. **UI Feedback**: `src/ui/state-view.ts` and `src/ui/status-manager.ts` mirror state transitions in the panel, while `src/ui/guide-controls.ts` and `src/features/guides.js` manage clipboard workflows.
+6. **UI Feedback**: `src/ui/state-view.ts` and `src/ui/status-manager.ts` mirror state transitions in the panel.
+
+**Memory Index Pipeline (v2.1.0):**
+1. **Message Detection**: `src/core/message-indexer.ts` observes DOM mutations and assigns ordinals to new messages, filtering `preview-*` cards.
+2. **Streaming Completion**: `src/features/message-stream.ts` waits 8s + retry (up to 12 attempts, 3s intervals) for streaming to complete before processing.
+3. **Message Collection**: Adapter's `collectStructuredMessage()` converts DOM elements to `StructuredSnapshotMessage`.
+4. **Block Building**: `src/features/block-builder.ts` accumulates 5 messages, removes narration/INFO from `raw` text, creates block with all messages.
+5. **Persistent Storage**: `src/storage/block-storage.ts` saves blocks to IndexedDB (`gmh-memory-blocks` database) with session URL indexing.
+6. **UI Display**: `src/ui/memory-status.ts` shows block count; `src/ui/block-viewer.ts` allows inspection with 150-char summaries and expand/collapse.
 
 ### Testing Architecture
 
@@ -123,12 +155,33 @@ Tests inject the userscript via Playwright's `addInitScript()` before page load.
 
 ## Important Notes
 
-### UI Flag System
-The script uses localStorage flags for feature rollout:
+### Feature Flag System
+
+**v2.1.0 introduces a formal feature flag system** via `src/experimental/index.ts`:
+
+```javascript
+// Enable memory indexing (experimental)
+GMH.Experimental.MemoryIndex.enable();
+location.reload();
+
+// Check status
+GMH.Experimental.MemoryIndex.enabled; // true/false
+
+// Disable
+GMH.Experimental.MemoryIndex.disable();
+```
+
+**Legacy flags** (still supported):
 - `gmh_kill='1'` - Emergency killswitch to disable GMH entirely
 - Debug flags: `gmh_debug_range`, `gmh_beta_structured`
 
 **Breaking Change (v2.1.0)**: The legacy panel has been removed. Modern UI is always active unless the kill switch is toggled.
+
+**Memory Index Activation**:
+- Feature is enabled by default in v2.1.0
+- Uses IndexedDB (`gmh-memory-blocks`) for persistent storage
+- Blocks are session-specific (keyed by conversation URL)
+- New sessions automatically index from start; existing sessions index new messages only
 
 ### Privacy Gate
 All copy/export operations show a confirmation modal displaying:
@@ -162,6 +215,40 @@ The codebase follows strict SoT patterns to prevent configuration drift:
 - The `*.baseline` files (e.g., `genit-memory-helper.user.js.baseline`) are historical references preserved during major refactors
 - These files are NOT used by the build system, tests, or runtime
 - All current source code lives in `src/` directory
+
+### IndexedDB Block Storage (v2.1.0)
+
+**Database**: `gmh-memory-blocks` (version 1)
+**Object Store**: `blocks` (keyPath: `id`)
+
+**Block Schema**:
+```typescript
+interface MemoryBlockInit {
+  id: string;                    // gmh-block-{start}-{end}-{timestamp}-{counter}
+  sessionUrl: string;            // genit.ai conversation URL
+  messages: StructuredSnapshotMessage[];  // All messages (no filtering)
+  raw: string;                   // Text with INFO/narration filtered
+  ordinalRange: [number, number]; // [start, end]
+  timestamp: number;             // Block creation time
+  meta: {
+    blockSize: number;           // Actual message count
+    configuredBlockSize: number; // Target size (5)
+    overlap: number;             // Overlap count (0)
+    sourceOrdinals: number[];    // Ordinal list for debugging
+  };
+}
+```
+
+**Indexes**:
+- `sessionUrl` - Query blocks by conversation
+- `startOrdinal` - Range queries (future use)
+- `timestamp` - Temporal ordering
+
+**Limitations** (see ROADMAP.md for details):
+- Per-browser, per-device storage (no cross-device sync)
+- Subject to browser storage quotas (~5-10% of disk space)
+- Data loss scenarios: private mode, browser reset, manual cache clear
+- Backfill (indexing past messages) not yet implemented
 
 ### Build Process
 The `scripts/build.js` file:
@@ -237,7 +324,11 @@ chore: update rollup dependencies
 
 - `README.md` - Korean user guide with installation, features, and FAQ
 - `CHANGELOG.md` - Version history and release notes
+- `ROADMAP.md` - Development roadmap with v2.1.0-v2.4.0+ milestones and semantic search plans
 - `CONTRIBUTING.md` - Contributor guidelines and tier system
 - `PRIVACY.md` - Privacy policy and data handling details
+- `CLAUDE.md` - This file (guidance for Claude Code)
+- `AGENTS.md` - Guidelines for AI coding agents
 - `docs/dom-genit-structure.md` - DOM structure analysis for genit.ai
 - `docs/role-classification-heuristics.md` - Logic for detecting user vs. assistant messages
+- `gmh_poc_final_report.md` - Embedding PoC results (BGE-M3, 5+2 block strategy validation)
