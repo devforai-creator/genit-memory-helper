@@ -4595,7 +4595,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
                 const userShrank = Number.isFinite(previousTotals.user) && previousTotals.user > nextTotals.user;
                 const llmShrank = Number.isFinite(previousTotals.llm) && previousTotals.llm > nextTotals.llm;
                 const entryShrank = Number.isFinite(previousTotals.entry) && previousTotals.entry > nextTotals.entry;
-                if (totalsShrank || userShrank || llmShrank || entryShrank) {
+                const currentRange = typeof exportRange?.getRange === 'function'
+                    ? exportRange.getRange()
+                    : { start: null, end: null };
+                const hasRequestedRange = (typeof currentRange?.start === 'number' && Number.isFinite(currentRange.start) && currentRange.start > 0) ||
+                    (typeof currentRange?.end === 'number' && Number.isFinite(currentRange.end) && currentRange.end > 0);
+                if (!hasRequestedRange && (totalsShrank || userShrank || llmShrank || entryShrank)) {
                     exportRange?.clear?.();
                 }
                 exportRange?.setTotals?.(nextTotals);
@@ -5376,24 +5381,32 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
                 const handleStartChange = () => {
                     if (!rangeStartInput)
                         return;
+                    if (!exportRange || typeof exportRange.setStart !== 'function') {
+                        win?.console?.warn?.('[GMH] exportRange.setStart is not available');
+                        return;
+                    }
                     const value = toNumber(rangeStartInput.value);
                     if (value && value > 0) {
-                        exportRange?.setStart?.(value);
+                        exportRange.setStart(value);
                     }
                     else {
-                        exportRange?.setStart?.(null);
+                        exportRange.setStart(null);
                         rangeStartInput.value = '';
                     }
                 };
                 const handleEndChange = () => {
                     if (!rangeEndInput)
                         return;
+                    if (!exportRange || typeof exportRange.setEnd !== 'function') {
+                        win?.console?.warn?.('[GMH] exportRange.setEnd is not available');
+                        return;
+                    }
                     const value = toNumber(rangeEndInput.value);
                     if (value && value > 0) {
-                        exportRange?.setEnd?.(value);
+                        exportRange.setEnd(value);
                     }
                     else {
-                        exportRange?.setEnd?.(null);
+                        exportRange.setEnd(null);
                         rangeEndInput.value = '';
                     }
                 };

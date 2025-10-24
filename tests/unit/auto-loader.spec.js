@@ -52,6 +52,7 @@ describe('auto-loader stats caching', () => {
       getTotals: vi.fn(() => noopExportTotals()),
       setTotals: vi.fn(),
       clear: vi.fn(),
+      getRange: vi.fn(() => ({ start: null, end: null })),
     };
 
     const autoLoaderFactory = createAutoLoader({
@@ -132,6 +133,7 @@ describe('auto-loader stats caching', () => {
       turns: [{ channel: 'user', __gmhSourceBlocks: [0] }],
     };
     exportRange.getTotals.mockReturnValue({ message: 5, user: 3, llm: 2, entry: 4 });
+    exportRange.getRange.mockReturnValue({ start: null, end: null });
     rawRef = 'shrunk-run';
 
     collectTurnStats({ force: true });
@@ -144,5 +146,22 @@ describe('auto-loader stats caching', () => {
       llm: 0,
       entry: 1,
     });
+  });
+
+  it('does not clear export range when totals shrink but range is active', () => {
+    collectTurnStats();
+    expect(exportRange.clear).not.toHaveBeenCalled();
+
+    sessionRef = {
+      turns: [{ channel: 'user', __gmhSourceBlocks: [0] }],
+    };
+    exportRange.getTotals.mockReturnValue({ message: 5, user: 3, llm: 2, entry: 4 });
+    exportRange.getRange.mockReturnValue({ start: 5, end: null });
+    rawRef = 'shrunk-run-active';
+
+    collectTurnStats({ force: true });
+
+    expect(exportRange.clear).not.toHaveBeenCalled();
+    expect(exportRange.setTotals).toHaveBeenCalledTimes(2);
   });
 });
