@@ -29,10 +29,10 @@ var GMHBundle = (function (exports) {
         Flags: createModuleBucket(),
     };
 
-    const noop$6 = () => { };
+    const noop$8 = () => { };
     const fallbackClipboard = (text) => {
         if (typeof navigator !== 'undefined' && navigator?.clipboard?.writeText) {
-            navigator.clipboard.writeText(text).catch(noop$6);
+            navigator.clipboard.writeText(text).catch(noop$8);
         }
     };
     const detectWindow = (globals) => {
@@ -63,10 +63,10 @@ var GMHBundle = (function (exports) {
         if (typeof console !== 'undefined')
             return console;
         return {
-            log: noop$6,
-            warn: noop$6,
-            error: noop$6,
-            debug: noop$6,
+            log: noop$8,
+            warn: noop$8,
+            error: noop$8,
+            debug: noop$8,
         };
     };
     const detectStorage = () => {
@@ -94,7 +94,7 @@ var GMHBundle = (function (exports) {
             return localStorage;
         return null;
     };
-    const selectConsole = (consoleRef) => {
+    const selectConsole$3 = (consoleRef) => {
         if (consoleRef)
             return consoleRef;
         if (ENV.console)
@@ -155,7 +155,7 @@ var GMHBundle = (function (exports) {
     };
     const createExperimentalNamespace = (options = {}) => {
         const storage = selectStorage(options.storage ?? null);
-        const consoleRef = selectConsole(options.console ?? null);
+        const consoleRef = selectConsole$3(options.console ?? null);
         return {
             MemoryIndex: createBooleanFlag(MEMORY_INDEX_STORAGE_KEY, 'Memory Index', storage, consoleRef),
         };
@@ -190,7 +190,7 @@ var GMHBundle = (function (exports) {
         return base;
     };
 
-    const noop$5 = () => { };
+    const noop$7 = () => { };
     const GMH_STATE = {
         IDLE: 'idle',
         SCANNING: 'scanning',
@@ -217,10 +217,10 @@ var GMHBundle = (function (exports) {
     };
     const createStateManager = ({ console: consoleLike, debug } = {}) => {
         const defaultConsole = typeof console !== 'undefined' ? console : null;
-        const logger = consoleLike ?? defaultConsole ?? { warn: noop$5, error: noop$5 };
-        const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$5;
-        const error = typeof logger.error === 'function' ? logger.error.bind(logger) : noop$5;
-        const debugLog = typeof debug === 'function' ? debug : noop$5;
+        const logger = consoleLike ?? defaultConsole ?? { warn: noop$7, error: noop$7 };
+        const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$7;
+        const error = typeof logger.error === 'function' ? logger.error.bind(logger) : noop$7;
+        const debugLog = typeof debug === 'function' ? debug : noop$7;
         const subscribers = new Set();
         const state = {
             current: GMH_STATE.IDLE,
@@ -231,7 +231,7 @@ var GMHBundle = (function (exports) {
             },
             subscribe(listener) {
                 if (typeof listener !== 'function')
-                    return noop$5;
+                    return noop$7;
                 subscribers.add(listener);
                 return () => {
                     subscribers.delete(listener);
@@ -278,7 +278,7 @@ var GMHBundle = (function (exports) {
         return state;
     };
 
-    const noop$4 = () => { };
+    const noop$6 = () => { };
     const ERROR_LEVELS = {
         DEBUG: 'debug',
         INFO: 'info',
@@ -330,14 +330,14 @@ var GMHBundle = (function (exports) {
             return consoleLike;
         if (typeof console !== 'undefined')
             return console;
-        return { info: noop$4, warn: noop$4, error: noop$4 };
+        return { info: noop$6, warn: noop$6, error: noop$6 };
     };
     const createErrorHandler = ({ console: consoleLike, alert: alertImpl, localStorage, state, } = {}) => {
         const logger = ensureConsole(consoleLike);
-        const info = typeof logger.info === 'function' ? logger.info.bind(logger) : noop$4;
-        const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$4;
-        const error = typeof logger.error === 'function' ? logger.error.bind(logger) : noop$4;
-        const alertFn = typeof alertImpl === 'function' ? alertImpl : noop$4;
+        const info = typeof logger.info === 'function' ? logger.info.bind(logger) : noop$6;
+        const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$6;
+        const error = typeof logger.error === 'function' ? logger.error.bind(logger) : noop$6;
+        const alertFn = typeof alertImpl === 'function' ? alertImpl : noop$6;
         const storage = localStorage;
         const stateApi = state ?? undefined;
         const logToConsole = (context, message, original, level) => {
@@ -452,14 +452,14 @@ var GMHBundle = (function (exports) {
         return handler;
     };
 
-    const noop$3 = () => { };
+    const noop$5 = () => { };
     const createExportRange = ({ console: consoleLike, window: windowLike, localStorage, } = {}) => {
         const defaultConsole = typeof console !== 'undefined' ? console : null;
         const logger = consoleLike ?? defaultConsole ?? {};
-        const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$3;
+        const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$5;
         const table = typeof logger.table === 'function'
             ? logger.table.bind(logger)
-            : noop$3;
+            : noop$5;
         const pageWindow = windowLike ??
             (typeof window !== 'undefined' ? window : undefined);
         const storage = localStorage ?? null;
@@ -895,7 +895,7 @@ var GMHBundle = (function (exports) {
             },
             subscribe(listener) {
                 if (typeof listener !== 'function')
-                    return noop$3;
+                    return noop$5;
                 listeners.add(listener);
                 try {
                     listener(snapshot());
@@ -910,7 +910,7 @@ var GMHBundle = (function (exports) {
         return controller;
     };
 
-    const noop$2 = () => { };
+    const noop$4 = () => { };
     const HISTORY_LIMIT = 5;
     const cloneEntry = (entry) => entry ? { ...entry } : null;
     const makeKey = (index, messageId) => {
@@ -923,7 +923,7 @@ var GMHBundle = (function (exports) {
     const createTurnBookmarks = ({ console: consoleLike } = {}) => {
         const logger = consoleLike ??
             (typeof console !== 'undefined' ? console : {});
-        const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$2;
+        const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$4;
         const history = [];
         const listeners = new Set();
         const snapshotHistory = () => history.map((item) => ({ ...item }));
@@ -1008,7 +1008,7 @@ var GMHBundle = (function (exports) {
             },
             subscribe(listener) {
                 if (typeof listener !== 'function')
-                    return noop$2;
+                    return noop$4;
                 listeners.add(listener);
                 try {
                     listener(snapshotHistory());
@@ -1022,14 +1022,13 @@ var GMHBundle = (function (exports) {
         return api;
     };
 
-    const noop$1 = () => { };
+    const noop$3 = () => { };
     const cloneSummary = (summary) => ({ ...summary });
     const toIterableElements = (nodes) => Array.from(nodes).filter((node) => node instanceof Element);
     const createMessageIndexer = ({ console: consoleLike, document: documentLike, MutationObserver: MutationObserverLike, requestAnimationFrame: rafLike, exportRange, getActiveAdapter, getEntryOrigin, } = {}) => {
         const logger = consoleLike ??
             (typeof console !== 'undefined' ? console : {});
-        const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$1;
-        typeof logger.error === 'function' ? logger.error.bind(logger) : noop$1;
+        const warn = typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$3;
         const documentRef = documentLike ?? (typeof document !== 'undefined' ? document : undefined);
         const MutationObserverRef = MutationObserverLike ?? (typeof MutationObserver !== 'undefined' ? MutationObserver : undefined);
         const raf = typeof rafLike === 'function'
@@ -1056,6 +1055,9 @@ var GMHBundle = (function (exports) {
             timestamp: 0,
         };
         const listeners = new Set();
+        const messageListeners = new Set();
+        let knownMessages = new WeakSet();
+        let lastContainer = null;
         const notify = () => {
             const snapshot = cloneSummary(lastSummary);
             listeners.forEach((listener) => {
@@ -1076,9 +1078,18 @@ var GMHBundle = (function (exports) {
                 : blockNodes
                     ? toIterableElements(blockNodes)
                     : [];
+            if (!container) {
+                knownMessages = new WeakSet();
+                lastContainer = null;
+            }
+            else if (container !== lastContainer) {
+                knownMessages = new WeakSet();
+                lastContainer = container;
+            }
             let userMessageCount = 0;
             ordinalCacheByIndex.clear();
             ordinalCacheById.clear();
+            const newBlocks = [];
             blocks.forEach((block, idx) => {
                 try {
                     block.setAttribute('data-gmh-message', '1');
@@ -1102,6 +1113,10 @@ var GMHBundle = (function (exports) {
                     block.removeAttribute('data-gmh-player-turn');
                     block.removeAttribute('data-gmh-user-ordinal');
                     block.removeAttribute('data-gmh-message-ordinal');
+                    if (!knownMessages.has(block)) {
+                        knownMessages.add(block);
+                        newBlocks.push(block);
+                    }
                 }
                 catch {
                     // ignore per-node errors
@@ -1132,6 +1147,38 @@ var GMHBundle = (function (exports) {
                 const blockMessageId = block.getAttribute('data-gmh-message-id');
                 if (blockMessageId) {
                     ordinalCacheById.set(blockMessageId, messageOrdinal);
+                }
+            }
+            if (newBlocks.length && messageListeners.size) {
+                const timestamp = Date.now();
+                const events = [];
+                newBlocks.forEach((block) => {
+                    const ordinalAttr = Number(block.getAttribute('data-gmh-message-ordinal'));
+                    if (!Number.isFinite(ordinalAttr))
+                        return;
+                    const indexAttr = Number(block.getAttribute('data-gmh-message-index'));
+                    const messageId = block.getAttribute('data-gmh-message-id') || null;
+                    const channelAttr = block.getAttribute('data-gmh-channel') || null;
+                    events.push({
+                        element: block,
+                        ordinal: ordinalAttr,
+                        index: Number.isFinite(indexAttr) ? indexAttr : -1,
+                        messageId,
+                        channel: channelAttr,
+                        timestamp,
+                    });
+                });
+                if (events.length) {
+                    events.forEach((event) => {
+                        messageListeners.forEach((listener) => {
+                            try {
+                                listener(event);
+                            }
+                            catch (err) {
+                                warn('[GMH] message event listener failed', err);
+                            }
+                        });
+                    });
                 }
             }
             const entryOrigin = getOrigins() || [];
@@ -1222,6 +1269,8 @@ var GMHBundle = (function (exports) {
                     observer = null;
                 }
                 scheduled = false;
+                knownMessages = new WeakSet();
+                lastContainer = null;
             },
             refresh(options) {
                 const immediate = Boolean(options?.immediate);
@@ -1250,7 +1299,7 @@ var GMHBundle = (function (exports) {
             },
             subscribe(listener) {
                 if (typeof listener !== 'function')
-                    return noop$1;
+                    return noop$3;
                 listeners.add(listener);
                 try {
                     listener(cloneSummary(lastSummary));
@@ -1260,17 +1309,23 @@ var GMHBundle = (function (exports) {
                 }
                 return () => listeners.delete(listener);
             },
+            subscribeMessages(listener) {
+                if (typeof listener !== 'function')
+                    return noop$3;
+                messageListeners.add(listener);
+                return () => messageListeners.delete(listener);
+            },
         };
         return api;
     };
 
-    const noop = () => { };
+    const noop$2 = () => { };
     const resolveDocument = (doc) => doc ?? (typeof document !== 'undefined' ? document : undefined);
     const resolveElementClass = (ElementClass) => ElementClass ?? (typeof Element !== 'undefined' ? Element : undefined);
     const resolveConsole = (consoleLike) => consoleLike ?? (typeof console !== 'undefined' ? console : {});
     const resolveMessageIndexer = (indexer) => indexer ?? null;
     const resolveTurnBookmarks = (bookmarks) => bookmarks ?? null;
-    const ensureWarn = (logger) => typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop;
+    const ensureWarn = (logger) => typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop$2;
     const toElement = (target, ElementRef) => {
         if (!ElementRef || !target || !(target instanceof ElementRef))
             return null;
@@ -6223,6 +6278,588 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         };
     }
 
+    const DEFAULT_BLOCK_SIZE = 5;
+    const DEFAULT_BLOCK_OVERLAP = 2;
+    const DEFAULT_SESSION_FALLBACK = 'about:blank';
+    const noop$1 = () => { };
+    const selectConsole$2 = (consoleRef) => {
+        if (consoleRef)
+            return consoleRef;
+        if (typeof console !== 'undefined')
+            return console;
+        return {
+            warn: noop$1,
+            error: noop$1,
+        };
+    };
+    const selectClock = (clockRef) => {
+        if (typeof clockRef === 'function')
+            return clockRef;
+        return () => Date.now();
+    };
+    const cloneStructuredMessage$1 = (message) => {
+        if (!message || typeof message !== 'object') {
+            return message;
+        }
+        if (typeof structuredClone === 'function') {
+            try {
+                const cloned = structuredClone(message);
+                const legacyLines = Reflect.get(message, 'legacyLines');
+                if (Array.isArray(legacyLines)) {
+                    Object.defineProperty(cloned, 'legacyLines', {
+                        value: legacyLines.slice(),
+                        enumerable: false,
+                        configurable: true,
+                        writable: true,
+                    });
+                }
+                return cloned;
+            }
+            catch {
+                // fall through to JSON clone
+            }
+        }
+        const jsonClone = JSON.parse(JSON.stringify(message ?? null));
+        if (!jsonClone)
+            return jsonClone;
+        const legacyLines = Reflect.get(message, 'legacyLines');
+        if (Array.isArray(legacyLines)) {
+            Object.defineProperty(jsonClone, 'legacyLines', {
+                value: legacyLines.slice(),
+                enumerable: false,
+                configurable: true,
+                writable: true,
+            });
+        }
+        return jsonClone;
+    };
+    const toNormalizedLines = (message, removeNarration) => {
+        if (!message)
+            return [];
+        if (removeNarration && (message.role === 'narration' || message.channel === 'system')) {
+            return [];
+        }
+        const legacyLines = Reflect.get(message, 'legacyLines');
+        if (Array.isArray(legacyLines) && legacyLines.length) {
+            return legacyLines.map((line) => String(line || '').trim()).filter((line) => line.length > 0);
+        }
+        if (!Array.isArray(message.parts))
+            return [];
+        const lines = [];
+        message.parts.forEach((part) => {
+            if (!part)
+                return;
+            if (removeNarration &&
+                (part.flavor === 'narration' || part.role === 'narration' || message.role === 'narration')) {
+                return;
+            }
+            if (typeof part.text === 'string' && part.text.trim()) {
+                lines.push(part.text.trim());
+            }
+            if (Array.isArray(part.lines)) {
+                part.lines.forEach((line) => {
+                    if (typeof line === 'string' && line.trim()) {
+                        lines.push(line.trim());
+                    }
+                });
+            }
+            if (Array.isArray(part.legacyLines)) {
+                part.legacyLines.forEach((line) => {
+                    if (typeof line === 'string' && line.trim()) {
+                        lines.push(line.trim());
+                    }
+                });
+            }
+            if (Array.isArray(part.items)) {
+                part.items.forEach((item) => {
+                    const text = typeof item === 'string' ? item : String(item ?? '');
+                    if (text.trim()) {
+                        lines.push(text.trim());
+                    }
+                });
+            }
+        });
+        return lines;
+    };
+    const buildRawText = (sequence, removeNarration) => {
+        const sections = [];
+        sequence.forEach(({ message }) => {
+            const lines = toNormalizedLines(message, removeNarration);
+            if (!lines.length)
+                return;
+            const speaker = message.speaker || message.role || message.channel || 'message';
+            const head = lines[0];
+            const tail = lines.slice(1);
+            const formatted = [`${speaker}: ${head}`];
+            tail.forEach((line) => {
+                formatted.push(line);
+            });
+            sections.push(formatted.join('\n'));
+        });
+        return sections.join('\n\n');
+    };
+    const sanitizeSessionUrl = (value) => {
+        if (!value)
+            return null;
+        const trimmed = String(value).trim();
+        return trimmed.length ? trimmed : null;
+    };
+    const resolveOrdinal = (candidate, fallback) => {
+        const numeric = Number(candidate);
+        if (Number.isFinite(numeric) && numeric > 0) {
+            return Math.floor(numeric);
+        }
+        return fallback;
+    };
+    const defaultBuildBlockId = ({ startOrdinal, endOrdinal, timestamp, counter, }) => {
+        return `gmh-block-${startOrdinal}-${endOrdinal}-${timestamp}-${counter}`;
+    };
+    const createBlockBuilder = (options = {}) => {
+        const blockSize = Math.max(1, Math.floor(options.blockSize ?? DEFAULT_BLOCK_SIZE));
+        const overlapCandidate = Math.max(0, Math.floor(options.overlap ?? DEFAULT_BLOCK_OVERLAP));
+        const overlap = Math.min(overlapCandidate, blockSize - 1);
+        const removeNarration = options.removeNarration !== false;
+        const logger = selectConsole$2(options.console ?? null);
+        const clock = selectClock(options.clock ?? null);
+        const buildBlockId = typeof options.buildBlockId === 'function' ? options.buildBlockId : defaultBuildBlockId;
+        const onBlockReady = typeof options.onBlockReady === 'function' ? options.onBlockReady : null;
+        const getSessionUrlOption = typeof options.getSessionUrl === 'function' ? options.getSessionUrl : null;
+        let sessionUrlRef = sanitizeSessionUrl(options.sessionUrl ?? null);
+        let ordinalCursor = 0;
+        let blockCounter = 0;
+        const buffer = [];
+        const seenIds = new Set();
+        const emitBlocks = (blocks) => {
+            if (!blocks.length || !onBlockReady)
+                return blocks;
+            blocks.forEach((block) => {
+                try {
+                    onBlockReady(block);
+                }
+                catch (err) {
+                    logger.warn?.('[GMH] block builder onBlockReady failed', err);
+                }
+            });
+            return blocks;
+        };
+        const resetState = () => {
+            buffer.length = 0;
+            seenIds.clear();
+            ordinalCursor = 0;
+        };
+        const ensureSessionUrl = (override) => {
+            if (override !== undefined) {
+                sessionUrlRef = sanitizeSessionUrl(override);
+            }
+            if (sessionUrlRef)
+                return sessionUrlRef;
+            if (getSessionUrlOption) {
+                try {
+                    const derived = sanitizeSessionUrl(getSessionUrlOption());
+                    if (derived) {
+                        sessionUrlRef = derived;
+                        return sessionUrlRef;
+                    }
+                }
+                catch (err) {
+                    logger.warn?.('[GMH] block builder session resolver failed', err);
+                }
+            }
+            return DEFAULT_SESSION_FALLBACK;
+        };
+        const resolveTimestamp = (override) => {
+            if (Number.isFinite(override)) {
+                return Math.floor(Number(override));
+            }
+            return clock();
+        };
+        const buildBlock = (slice, sessionUrl, timestamp) => {
+            if (!slice.length) {
+                throw new Error('Cannot build block without messages.');
+            }
+            const startOrdinal = slice[0]?.ordinal ?? 0;
+            const endOrdinal = slice[slice.length - 1]?.ordinal ?? startOrdinal;
+            blockCounter += 1;
+            const blockId = buildBlockId({
+                startOrdinal,
+                endOrdinal,
+                timestamp,
+                counter: blockCounter,
+            });
+            const messages = slice.map((entry) => cloneStructuredMessage$1(entry.message));
+            const raw = buildRawText(slice, removeNarration);
+            const block = {
+                id: blockId,
+                sessionUrl,
+                raw,
+                messages,
+                ordinalRange: [startOrdinal, endOrdinal],
+                timestamp,
+                meta: {
+                    blockSize: slice.length,
+                    configuredBlockSize: blockSize,
+                    overlap,
+                    sourceOrdinals: slice.map((entry) => entry.ordinal),
+                },
+            };
+            return block;
+        };
+        const drain = ({ allowPartial = false, sessionOverride, timestampOverride, }) => {
+            const produced = [];
+            const sessionUrl = ensureSessionUrl(sessionOverride);
+            const makeTimestamp = () => resolveTimestamp(timestampOverride);
+            while (buffer.length >= blockSize) {
+                const slice = buffer.slice(0, blockSize);
+                const block = buildBlock(slice, sessionUrl, makeTimestamp());
+                produced.push(block);
+                const removeCount = blockSize - overlap;
+                buffer.splice(0, removeCount);
+                // no need to update seenIds; retain set to avoid duplicates for remainder of session
+            }
+            if (allowPartial && buffer.length > 0) {
+                const slice = buffer.splice(0, buffer.length);
+                const block = buildBlock(slice, sessionUrl, makeTimestamp());
+                produced.push(block);
+                buffer.length = 0;
+            }
+            return emitBlocks(produced);
+        };
+        const appendInternal = (message, optionsArg) => {
+            if (!message || typeof message !== 'object')
+                return [];
+            const messageId = typeof message.id === 'string' && message.id.trim().length ? message.id.trim() : null;
+            if (messageId && seenIds.has(messageId)) {
+                return [];
+            }
+            const ordinal = resolveOrdinal(message.ordinal, ordinalCursor + 1);
+            ordinalCursor = Math.max(ordinalCursor + 1, ordinal);
+            const cloned = cloneStructuredMessage$1(message);
+            buffer.push({
+                message: cloned,
+                ordinal,
+            });
+            if (messageId) {
+                seenIds.add(messageId);
+            }
+            return drain({
+                allowPartial: false,
+                sessionOverride: optionsArg?.sessionUrl,
+                timestampOverride: optionsArg?.timestamp,
+            });
+        };
+        const appendManyInternal = (messages, optionsArg) => {
+            if (!Array.isArray(messages) || !messages.length)
+                return [];
+            const produced = [];
+            messages.forEach((entry) => {
+                const blocks = appendInternal(entry, optionsArg);
+                if (blocks.length) {
+                    produced.push(...blocks);
+                }
+            });
+            return produced;
+        };
+        return {
+            append(message, optionsArg) {
+                return appendInternal(message, optionsArg);
+            },
+            appendMany(messages, optionsArg) {
+                return appendManyInternal(messages, optionsArg);
+            },
+            flush(optionsArg) {
+                if (optionsArg?.includePartial) {
+                    return drain({
+                        allowPartial: true,
+                        sessionOverride: optionsArg.sessionUrl,
+                        timestampOverride: optionsArg.timestamp,
+                    });
+                }
+                return drain({
+                    allowPartial: false,
+                    sessionOverride: optionsArg?.sessionUrl,
+                    timestampOverride: optionsArg?.timestamp,
+                });
+            },
+            clear() {
+                resetState();
+            },
+            getBuffer() {
+                return buffer.map((entry) => cloneStructuredMessage$1(entry.message));
+            },
+            getSessionUrl() {
+                return sessionUrlRef ?? null;
+            },
+            setSessionUrl(next) {
+                const normalized = sanitizeSessionUrl(next);
+                if (sessionUrlRef && normalized && sessionUrlRef !== normalized) {
+                    resetState();
+                }
+                else if (sessionUrlRef && !normalized) {
+                    resetState();
+                }
+                sessionUrlRef = normalized ?? null;
+            },
+        };
+    };
+
+    const noop = () => { };
+    const selectConsole$1 = (consoleRef) => {
+        if (consoleRef)
+            return consoleRef;
+        if (typeof console !== 'undefined')
+            return console;
+        return {
+            log: noop,
+            warn: noop,
+            error: noop,
+        };
+    };
+    const isPromiseLike = (value) => {
+        return typeof value === 'object' && value !== null && 'then' in value;
+    };
+    const cloneStructuredMessage = (message) => {
+        if (!message || typeof message !== 'object') {
+            return message;
+        }
+        if (typeof structuredClone === 'function') {
+            try {
+                const cloned = structuredClone(message);
+                const legacyLines = Reflect.get(message, 'legacyLines');
+                if (Array.isArray(legacyLines)) {
+                    Object.defineProperty(cloned, 'legacyLines', {
+                        value: legacyLines.slice(),
+                        enumerable: false,
+                        configurable: true,
+                        writable: true,
+                    });
+                }
+                return cloned;
+            }
+            catch {
+                // fallback to JSON clone below
+            }
+        }
+        const cloned = JSON.parse(JSON.stringify(message ?? null));
+        if (!cloned)
+            return cloned;
+        const legacyLines = Reflect.get(message, 'legacyLines');
+        if (Array.isArray(legacyLines)) {
+            Object.defineProperty(cloned, 'legacyLines', {
+                value: legacyLines.slice(),
+                enumerable: false,
+                configurable: true,
+                writable: true,
+            });
+        }
+        return cloned;
+    };
+    const resolveTimestamp = (value) => {
+        if (Number.isFinite(value)) {
+            return Math.floor(Number(value));
+        }
+        return Date.now();
+    };
+    const createMessageStream = (options) => {
+        const logger = selectConsole$1(options.console ?? null);
+        const { messageIndexer, blockBuilder } = options;
+        if (!messageIndexer || typeof messageIndexer.subscribeMessages !== 'function') {
+            throw new Error('createMessageStream requires a messageIndexer with subscribeMessages support.');
+        }
+        if (!blockBuilder) {
+            throw new Error('createMessageStream requires a blockBuilder instance.');
+        }
+        const blockListeners = new Set();
+        const structuredListeners = new Set();
+        let running = false;
+        let unsubscribeMessages = null;
+        let storage = null;
+        let storagePromise = null;
+        let storageInitError = null;
+        let saveChain = Promise.resolve();
+        if (options.blockStorage) {
+            if (isPromiseLike(options.blockStorage)) {
+                storagePromise = options.blockStorage.then((store) => {
+                    storage = store;
+                    return store;
+                });
+            }
+            else {
+                storage = options.blockStorage;
+            }
+        }
+        const ensureStorage = async () => {
+            if (storage)
+                return storage;
+            if (storageInitError)
+                return null;
+            if (storagePromise) {
+                try {
+                    storage = await storagePromise;
+                    return storage;
+                }
+                catch (err) {
+                    storageInitError = err;
+                    logger.warn?.('[GMH] message stream storage unavailable', err);
+                    return null;
+                }
+            }
+            return null;
+        };
+        const notifyBlockListeners = (block) => {
+            blockListeners.forEach((listener) => {
+                try {
+                    listener(block);
+                }
+                catch (err) {
+                    logger.warn?.('[GMH] block listener failed', err);
+                }
+            });
+        };
+        const notifyStructuredListeners = (message) => {
+            structuredListeners.forEach((listener) => {
+                try {
+                    listener(cloneStructuredMessage(message));
+                }
+                catch (err) {
+                    logger.warn?.('[GMH] message listener failed', err);
+                }
+            });
+        };
+        const persistBlocks = (blocks) => {
+            if (!blocks.length)
+                return saveChain;
+            saveChain = saveChain
+                .then(async () => {
+                const store = await ensureStorage();
+                if (!store) {
+                    blocks.forEach((block) => notifyBlockListeners(block));
+                    return;
+                }
+                for (const block of blocks) {
+                    try {
+                        await store.save(block);
+                        notifyBlockListeners(block);
+                    }
+                    catch (err) {
+                        logger.warn?.('[GMH] failed to persist memory block', err);
+                    }
+                }
+            })
+                .catch((err) => {
+                logger.warn?.('[GMH] block persistence chain failed', err);
+            });
+            return saveChain;
+        };
+        const resolveSessionUrl = () => {
+            const derived = typeof options.getSessionUrl === 'function' ? options.getSessionUrl() : null;
+            const current = blockBuilder.getSessionUrl();
+            if (derived && derived !== current) {
+                blockBuilder.setSessionUrl(derived);
+                return blockBuilder.getSessionUrl();
+            }
+            if (!current && derived) {
+                blockBuilder.setSessionUrl(derived);
+                return blockBuilder.getSessionUrl();
+            }
+            return current ?? derived ?? null;
+        };
+        const handleMessageEvent = (event) => {
+            if (!running)
+                return;
+            let structured = null;
+            try {
+                structured = options.collectStructuredMessage(event.element);
+            }
+            catch (err) {
+                logger.warn?.('[GMH] collectStructuredMessage failed', err);
+                return;
+            }
+            if (!structured)
+                return;
+            if (!structured.id && event.messageId) {
+                structured.id = event.messageId;
+            }
+            structured.ordinal = event.ordinal;
+            if (!structured.channel && event.channel) {
+                structured.channel = event.channel;
+            }
+            if (structured.index === undefined || structured.index === null) {
+                structured.index = event.index >= 0 ? event.index : null;
+            }
+            notifyStructuredListeners(structured);
+            const sessionUrl = resolveSessionUrl();
+            const blocks = blockBuilder.append(structured, {
+                sessionUrl,
+                timestamp: event.timestamp,
+            });
+            if (blocks.length) {
+                void persistBlocks(blocks);
+            }
+        };
+        const start = () => {
+            if (running)
+                return;
+            running = true;
+            resolveSessionUrl();
+            unsubscribeMessages = messageIndexer.subscribeMessages(handleMessageEvent);
+            messageIndexer.refresh({ immediate: true });
+            messageIndexer.start();
+        };
+        const stop = () => {
+            if (!running)
+                return;
+            running = false;
+            if (unsubscribeMessages) {
+                unsubscribeMessages();
+                unsubscribeMessages = null;
+            }
+            messageIndexer.stop();
+        };
+        const flush = async (optionsArg) => {
+            const sessionUrl = optionsArg?.sessionUrl ?? resolveSessionUrl();
+            const timestamp = resolveTimestamp(optionsArg?.timestamp);
+            const blocks = blockBuilder.flush({
+                includePartial: optionsArg?.includePartial,
+                sessionUrl,
+                timestamp,
+            });
+            await persistBlocks(blocks);
+            return blocks.length;
+        };
+        const api = {
+            start,
+            stop,
+            isRunning() {
+                return running;
+            },
+            flush(optionsArg) {
+                return flush(optionsArg);
+            },
+            getBuffer() {
+                return blockBuilder.getBuffer();
+            },
+            getSessionUrl() {
+                return blockBuilder.getSessionUrl();
+            },
+            setSessionUrl(next) {
+                blockBuilder.setSessionUrl(next);
+            },
+            subscribeBlocks(listener) {
+                if (typeof listener !== 'function')
+                    return () => { };
+                blockListeners.add(listener);
+                return () => blockListeners.delete(listener);
+            },
+            subscribeMessages(listener) {
+                if (typeof listener !== 'function')
+                    return () => { };
+                structuredListeners.add(listener);
+                return () => structuredListeners.delete(listener);
+            },
+        };
+        return api;
+    };
+
     const DEFAULT_ALERT = (message) => {
         globalThis.alert?.(message);
     };
@@ -9076,6 +9713,415 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         return { boot, mountPanel };
     };
 
+    const DEFAULT_DB_NAME = 'gmh-memory-blocks';
+    const DEFAULT_STORE_NAME = 'blocks';
+    const DEFAULT_DB_VERSION = 1;
+    const compareRecords = (a, b) => {
+        if (a.startOrdinal !== b.startOrdinal) {
+            return a.startOrdinal - b.startOrdinal;
+        }
+        if (a.timestamp !== b.timestamp) {
+            return a.timestamp - b.timestamp;
+        }
+        return a.id.localeCompare(b.id);
+    };
+    const isArrayBufferView = (value) => {
+        return typeof ArrayBuffer !== 'undefined' && ArrayBuffer.isView(value);
+    };
+    const cloneArrayBuffer = (buffer) => {
+        if (!buffer)
+            return null;
+        if (typeof buffer.slice === 'function') {
+            return buffer.slice(0);
+        }
+        const copy = new Uint8Array(buffer.byteLength);
+        copy.set(new Uint8Array(buffer));
+        return copy.buffer;
+    };
+    const toArrayBuffer = (value) => {
+        if (!value)
+            return null;
+        if (value instanceof ArrayBuffer) {
+            return cloneArrayBuffer(value);
+        }
+        if (isArrayBufferView(value)) {
+            const view = value;
+            const bytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+            const copy = new Uint8Array(bytes);
+            return copy.buffer;
+        }
+        throw new TypeError('Memory block embedding must be an ArrayBuffer or typed array view.');
+    };
+    const cloneValue = (value) => {
+        if (value === null || value === undefined) {
+            return value;
+        }
+        if (typeof structuredClone === 'function') {
+            try {
+                return structuredClone(value);
+            }
+            catch (err) {
+                // fall back to JSON clone below
+            }
+        }
+        try {
+            return JSON.parse(JSON.stringify(value));
+        }
+        catch (err) {
+            return value;
+        }
+    };
+    const cloneRecord = (record) => {
+        const copy = {
+            id: record.id,
+            sessionUrl: record.sessionUrl,
+            raw: record.raw,
+            messages: cloneValue(record.messages),
+            ordinalRange: [record.ordinalRange[0], record.ordinalRange[1]],
+            timestamp: record.timestamp,
+            embedding: cloneArrayBuffer(record.embedding),
+            messageCount: record.messageCount,
+            startOrdinal: record.startOrdinal,
+            endOrdinal: record.endOrdinal,
+        };
+        if (record.meta) {
+            copy.meta = cloneValue(record.meta);
+        }
+        return copy;
+    };
+    const normalizeBlock = (block) => {
+        if (!block || typeof block !== 'object') {
+            throw new TypeError('Memory block payload must be an object.');
+        }
+        const id = typeof block.id === 'string' ? block.id.trim() : String(block.id ?? '').trim();
+        if (!id) {
+            throw new Error('Memory block requires a stable id.');
+        }
+        const sessionUrl = typeof block.sessionUrl === 'string' ? block.sessionUrl.trim() : String(block.sessionUrl ?? '').trim();
+        if (!sessionUrl) {
+            throw new Error('Memory block requires sessionUrl.');
+        }
+        const ordinalRangeCandidate = Array.isArray(block.ordinalRange) ? block.ordinalRange : [NaN, NaN];
+        const ordinalStart = Number(ordinalRangeCandidate[0]);
+        const ordinalEnd = Number(ordinalRangeCandidate[1]);
+        if (!Number.isFinite(ordinalStart) || !Number.isFinite(ordinalEnd)) {
+            throw new Error('Memory block requires a finite ordinalRange.');
+        }
+        const timestamp = Number(block.timestamp);
+        if (!Number.isFinite(timestamp)) {
+            throw new Error('Memory block requires a numeric timestamp.');
+        }
+        const messages = Array.isArray(block.messages) ? block.messages : [];
+        const embedding = toArrayBuffer(block.embedding ?? null);
+        const messageCount = messages.length;
+        const record = {
+            id,
+            sessionUrl,
+            raw: typeof block.raw === 'string' ? block.raw : String(block.raw ?? ''),
+            messages,
+            ordinalRange: [ordinalStart, ordinalEnd],
+            timestamp,
+            embedding,
+            messageCount,
+            startOrdinal: ordinalStart,
+            endOrdinal: ordinalEnd,
+        };
+        if (block.meta) {
+            record.meta = block.meta;
+        }
+        return record;
+    };
+    const sanitizeLoadedRecord = (record) => {
+        const start = Number.isFinite(record.startOrdinal)
+            ? record.startOrdinal
+            : Number(record.ordinalRange?.[0]);
+        const end = Number.isFinite(record.endOrdinal) ? record.endOrdinal : Number(record.ordinalRange?.[1]);
+        const ordinalStart = Number.isFinite(start) ? start : 0;
+        const ordinalEnd = Number.isFinite(end) ? end : ordinalStart;
+        const embedding = record.embedding ? cloneArrayBuffer(record.embedding) : null;
+        const messageCount = Number.isFinite(record.messageCount)
+            ? record.messageCount
+            : Array.isArray(record.messages)
+                ? record.messages.length
+                : 0;
+        const sanitized = {
+            id: String(record.id),
+            sessionUrl: String(record.sessionUrl),
+            raw: typeof record.raw === 'string' ? record.raw : String(record.raw ?? ''),
+            messages: Array.isArray(record.messages) ? record.messages : [],
+            ordinalRange: [ordinalStart, ordinalEnd],
+            timestamp: Number.isFinite(record.timestamp) ? Number(record.timestamp) : Date.now(),
+            embedding,
+            messageCount,
+            startOrdinal: ordinalStart,
+            endOrdinal: ordinalEnd,
+        };
+        if (record.meta) {
+            sanitized.meta = record.meta;
+        }
+        return sanitized;
+    };
+    const selectConsole = (consoleRef) => {
+        if (consoleRef)
+            return consoleRef;
+        if (ENV.console)
+            return ENV.console;
+        if (typeof console !== 'undefined')
+            return console;
+        return null;
+    };
+    const selectIndexedDB = (factory) => {
+        if (factory)
+            return factory;
+        const envWindow = ENV.window;
+        if (envWindow?.indexedDB)
+            return envWindow.indexedDB;
+        if (typeof indexedDB !== 'undefined')
+            return indexedDB;
+        const globalFactory = globalThis.indexedDB;
+        return globalFactory ?? null;
+    };
+    const requestToPromise = (request) => new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'));
+    });
+    const createMemoryEngine = () => {
+        const buckets = new Map();
+        return {
+            async put(record) {
+                buckets.set(record.id, cloneRecord(record));
+            },
+            async get(id) {
+                const record = buckets.get(id);
+                return record ? cloneRecord(record) : null;
+            },
+            async getBySession(sessionUrl) {
+                const records = [];
+                for (const entry of buckets.values()) {
+                    if (entry.sessionUrl === sessionUrl) {
+                        records.push(cloneRecord(entry));
+                    }
+                }
+                records.sort(compareRecords);
+                return records;
+            },
+            async delete(id) {
+                return buckets.delete(id);
+            },
+            async clear(sessionUrl) {
+                if (!sessionUrl) {
+                    const removed = buckets.size;
+                    buckets.clear();
+                    return removed;
+                }
+                let removed = 0;
+                for (const [key, record] of buckets.entries()) {
+                    if (record.sessionUrl === sessionUrl) {
+                        buckets.delete(key);
+                        removed += 1;
+                    }
+                }
+                return removed;
+            },
+            async getAll() {
+                return Array.from(buckets.values(), (record) => cloneRecord(record));
+            },
+            async count() {
+                return buckets.size;
+            },
+            close() {
+                buckets.clear();
+            },
+        };
+    };
+    const openIndexedDB = (factory, config) => new Promise((resolve, reject) => {
+        const request = factory.open(config.dbName, config.version);
+        request.onerror = () => reject(request.error ?? new Error('Failed to open IndexedDB for block storage.'));
+        request.onupgradeneeded = (event) => {
+            const db = request.result;
+            const storeExists = db.objectStoreNames.contains(config.storeName);
+            const oldVersion = Number(event.oldVersion || 0);
+            if (!storeExists) {
+                const store = db.createObjectStore(config.storeName, { keyPath: 'id' });
+                store.createIndex('sessionUrl', 'sessionUrl', { unique: false });
+                store.createIndex('startOrdinal', 'startOrdinal', { unique: false });
+                store.createIndex('timestamp', 'timestamp', { unique: false });
+            }
+            else if (oldVersion < 1) {
+                const store = request.transaction?.objectStore(config.storeName);
+                store?.createIndex?.('sessionUrl', 'sessionUrl', { unique: false });
+                store?.createIndex?.('startOrdinal', 'startOrdinal', { unique: false });
+                store?.createIndex?.('timestamp', 'timestamp', { unique: false });
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+    });
+    const runTransaction = async (dbPromise, config, mode, executor) => {
+        const db = await dbPromise;
+        const tx = db.transaction(config.storeName, mode);
+        const store = tx.objectStore(config.storeName);
+        const completion = new Promise((resolve, reject) => {
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error ?? new Error('IndexedDB transaction failed'));
+            tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+        });
+        try {
+            const result = await executor(store);
+            await completion;
+            return result;
+        }
+        catch (err) {
+            try {
+                if (tx.readyState !== 'done') {
+                    tx.abort();
+                }
+            }
+            catch (abortErr) {
+                config.console?.warn?.('[GMH] Failed to abort block storage transaction', abortErr);
+            }
+            await completion.catch(() => undefined);
+            throw err;
+        }
+    };
+    const createIndexedDBEngine = async (factory, config) => {
+        const dbPromise = openIndexedDB(factory, config);
+        return {
+            async put(record) {
+                await runTransaction(dbPromise, config, 'readwrite', async (store) => {
+                    await requestToPromise(store.put(record));
+                    return undefined;
+                });
+            },
+            async get(id) {
+                const record = await runTransaction(dbPromise, config, 'readonly', async (store) => {
+                    const result = await requestToPromise(store.get(id));
+                    return result ?? null;
+                });
+                return record ? sanitizeLoadedRecord(record) : null;
+            },
+            async getBySession(sessionUrl) {
+                const records = await runTransaction(dbPromise, config, 'readonly', async (store) => {
+                    const index = store.index('sessionUrl');
+                    const result = await requestToPromise(index.getAll(sessionUrl));
+                    return result ?? [];
+                });
+                const sanitized = records.map((record) => sanitizeLoadedRecord(record));
+                sanitized.sort(compareRecords);
+                return sanitized;
+            },
+            async delete(id) {
+                return runTransaction(dbPromise, config, 'readwrite', async (store) => {
+                    const existing = await requestToPromise(store.get(id));
+                    if (!existing)
+                        return false;
+                    await requestToPromise(store.delete(id));
+                    return true;
+                });
+            },
+            async clear(sessionUrl) {
+                if (!sessionUrl) {
+                    return runTransaction(dbPromise, config, 'readwrite', async (store) => {
+                        const total = await requestToPromise(store.count());
+                        await requestToPromise(store.clear());
+                        return total;
+                    });
+                }
+                return runTransaction(dbPromise, config, 'readwrite', async (store) => {
+                    const index = store.index('sessionUrl');
+                    const keys = await requestToPromise(index.getAllKeys(sessionUrl));
+                    let removed = 0;
+                    for (const key of keys) {
+                        await requestToPromise(store.delete(key));
+                        removed += 1;
+                    }
+                    return removed;
+                });
+            },
+            async getAll() {
+                const records = await runTransaction(dbPromise, config, 'readonly', async (store) => {
+                    const result = await requestToPromise(store.getAll());
+                    return result ?? [];
+                });
+                return records.map((record) => sanitizeLoadedRecord(record));
+            },
+            async count() {
+                return runTransaction(dbPromise, config, 'readonly', async (store) => {
+                    const total = await requestToPromise(store.count());
+                    return total;
+                });
+            },
+            close() {
+                dbPromise
+                    .then((db) => db.close())
+                    .catch((err) => {
+                    config.console?.warn?.('[GMH] Failed to close block storage database', err);
+                });
+            },
+        };
+    };
+    const createBlockStorage = async (options = {}) => {
+        const consoleRef = selectConsole(options.console ?? null);
+        const dbName = typeof options.dbName === 'string' && options.dbName.trim() ? options.dbName.trim() : DEFAULT_DB_NAME;
+        const storeName = typeof options.storeName === 'string' && options.storeName.trim()
+            ? options.storeName.trim()
+            : DEFAULT_STORE_NAME;
+        const versionCandidate = Number(options.version);
+        const version = Number.isFinite(versionCandidate) && versionCandidate > 0 ? Math.floor(versionCandidate) : DEFAULT_DB_VERSION;
+        const factory = selectIndexedDB(options.indexedDB ?? null);
+        let engine;
+        if (factory) {
+            engine = await createIndexedDBEngine(factory, {
+                dbName,
+                storeName,
+                version,
+                console: consoleRef,
+            });
+        }
+        else {
+            consoleRef?.warn?.('[GMH] IndexedDB unavailable. Falling back to in-memory block storage.');
+            engine = createMemoryEngine();
+        }
+        const controller = {
+            async save(block) {
+                const record = normalizeBlock(block);
+                await engine.put(record);
+            },
+            async get(id) {
+                const record = await engine.get(id);
+                return record ? cloneRecord(record) : null;
+            },
+            async getBySession(sessionUrl) {
+                const records = await engine.getBySession(sessionUrl);
+                return records.map((record) => cloneRecord(record));
+            },
+            async delete(id) {
+                return engine.delete(id);
+            },
+            async clear(sessionUrl) {
+                return engine.clear(sessionUrl);
+            },
+            async getStats() {
+                const records = await engine.getAll();
+                const totalBlocks = records.length;
+                let totalMessages = 0;
+                const sessions = new Set();
+                for (const record of records) {
+                    sessions.add(record.sessionUrl);
+                    totalMessages += Number.isFinite(record.messageCount) ? record.messageCount : 0;
+                }
+                return {
+                    totalBlocks,
+                    totalMessages,
+                    sessions: sessions.size,
+                };
+            },
+            close() {
+                engine.close();
+            },
+        };
+        return controller;
+    };
+
     (function () {
         const { unsafeWindow: unsafeGlobalWindow } = globalThis;
         const fallbackWindow = typeof window !== 'undefined' ? window : undefined;
@@ -9245,6 +10291,73 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             state: stateManager,
         });
         GMH.Core.ErrorHandler = errorHandler;
+        const blockStoragePromise = createBlockStorage({
+            console: ENV.console,
+        });
+        blockStoragePromise
+            .then((storage) => {
+            if (storage) {
+                GMH.Core.BlockStorage = storage;
+            }
+            return storage;
+        })
+            .catch((err) => {
+            const level = errorHandler.LEVELS?.WARN || 'warn';
+            errorHandler.handle?.(err, 'message-stream/storage', level);
+            ENV.console?.warn?.('[GMH] block storage initialization failed', err);
+            return null;
+        });
+        const blockBuilder = createBlockBuilder({
+            console: ENV.console,
+            getSessionUrl: () => {
+                try {
+                    return PAGE_WINDOW?.location?.href ?? null;
+                }
+                catch (err) {
+                    return null;
+                }
+            },
+        });
+        const messageStream = createMessageStream({
+            messageIndexer,
+            blockBuilder,
+            blockStorage: blockStoragePromise,
+            collectStructuredMessage: (element) => {
+                const adapter = getActiveAdapter();
+                const collector = adapter?.collectStructuredMessage;
+                if (typeof collector === 'function') {
+                    try {
+                        return collector.call(adapter, element) ?? null;
+                    }
+                    catch (err) {
+                        const level = errorHandler.LEVELS?.WARN || 'warn';
+                        errorHandler.handle?.(err, 'message-stream/collect', level);
+                        return null;
+                    }
+                }
+                return null;
+            },
+            getSessionUrl: () => {
+                try {
+                    return PAGE_WINDOW?.location?.href ?? null;
+                }
+                catch (err) {
+                    return null;
+                }
+            },
+            console: ENV.console,
+        });
+        GMH.Core.BlockBuilder = blockBuilder;
+        GMH.Core.MessageStream = messageStream;
+        if (GMH.Experimental?.MemoryIndex?.enabled) {
+            try {
+                messageStream.start();
+            }
+            catch (err) {
+                const level = errorHandler.LEVELS?.WARN || 'warn';
+                errorHandler.handle?.(err, 'message-stream/start', level);
+            }
+        }
         const ensureDefaultUIFlag = () => {
             try {
                 const storage = ENV.localStorage || localStorage;

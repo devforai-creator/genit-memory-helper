@@ -42,6 +42,8 @@ describe('MessageIndexer', () => {
     const { GMH } = window;
     expect(GMH).toBeDefined();
 
+    expect(typeof GMH.Core.MessageIndexer.subscribeMessages).toBe('function');
+
     GMH.Core.MessageIndexer.refresh({ immediate: true });
 
     const transcript = GMH.Core.readTranscriptText();

@@ -65,6 +65,8 @@ import { createAutoLoaderControls } from './ui/auto-loader-controls';
 import { createRangeControls } from './ui/range-controls';
 import { createPanelShortcuts } from './ui/panel-shortcuts';
 import { createShareWorkflow } from './features/share';
+import createBlockBuilder from './features/block-builder';
+import createMessageStream from './features/message-stream';
 import { createPanelInteractions } from './ui/panel-interactions';
 import { createModernPanel } from './ui/panel-modern';
 import { createLegacyPanel } from './ui/panel-legacy';
@@ -77,6 +79,7 @@ import { composeShareWorkflow } from './composition/share-composition';
 import { composeUI } from './composition/ui-composition';
 import { setupBootstrap } from './composition/bootstrap';
 import { CONFIG } from './config';
+import createBlockStorage from './storage/block-storage';
 import type {
   ClassicJSONExportOptions,
   ErrorHandler,
@@ -339,6 +342,75 @@ interface GMHFlags {
   });
 
   GMH.Core.ErrorHandler = errorHandler;
+
+  const blockStoragePromise = createBlockStorage({
+    console: ENV.console,
+  });
+
+  blockStoragePromise
+    .then((storage) => {
+      if (storage) {
+        GMH.Core.BlockStorage = storage;
+      }
+      return storage;
+    })
+    .catch((err) => {
+      const level = errorHandler.LEVELS?.WARN || 'warn';
+      errorHandler.handle?.(err, 'message-stream/storage', level);
+      ENV.console?.warn?.('[GMH] block storage initialization failed', err);
+      return null;
+    });
+
+  const blockBuilder = createBlockBuilder({
+    console: ENV.console,
+    getSessionUrl: () => {
+      try {
+        return PAGE_WINDOW?.location?.href ?? null;
+      } catch (err) {
+        return null;
+      }
+    },
+  });
+
+  const messageStream = createMessageStream({
+    messageIndexer,
+    blockBuilder,
+    blockStorage: blockStoragePromise,
+    collectStructuredMessage: (element) => {
+      const adapter = getActiveAdapter();
+      const collector = adapter?.collectStructuredMessage;
+      if (typeof collector === 'function') {
+        try {
+          return collector.call(adapter, element) ?? null;
+        } catch (err) {
+          const level = errorHandler.LEVELS?.WARN || 'warn';
+          errorHandler.handle?.(err, 'message-stream/collect', level);
+          return null;
+        }
+      }
+      return null;
+    },
+    getSessionUrl: () => {
+      try {
+        return PAGE_WINDOW?.location?.href ?? null;
+      } catch (err) {
+        return null;
+      }
+    },
+    console: ENV.console,
+  });
+
+  GMH.Core.BlockBuilder = blockBuilder;
+  GMH.Core.MessageStream = messageStream;
+
+  if (GMH.Experimental?.MemoryIndex?.enabled) {
+    try {
+      messageStream.start();
+    } catch (err) {
+      const level = errorHandler.LEVELS?.WARN || 'warn';
+      errorHandler.handle?.(err, 'message-stream/start', level);
+    }
+  }
 
   const ensureDefaultUIFlag = () => {
     try {

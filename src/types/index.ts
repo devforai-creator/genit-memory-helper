@@ -147,6 +147,15 @@ export interface MessageIndexerSummary {
   [key: string]: unknown;
 }
 
+export interface MessageIndexerEvent {
+  element: Element;
+  index: number;
+  ordinal: number;
+  messageId: string | null;
+  channel: string | null;
+  timestamp: number;
+}
+
 export interface MessageIndexer {
   start(): void;
   stop(): void;
@@ -155,6 +164,7 @@ export interface MessageIndexer {
   lookupOrdinalByIndex(index: number): number | null;
   lookupOrdinalByMessageId(messageId: string): number | null;
   subscribe(listener: (summary: MessageIndexerSummary) => void): () => void;
+  subscribeMessages(listener: (event: MessageIndexerEvent) => void): () => void;
 }
 
 export interface MessageIndexerOptions {
@@ -531,6 +541,27 @@ export interface BlockBuilderController {
   getBuffer(): StructuredSnapshotMessage[];
   getSessionUrl(): string | null;
   setSessionUrl(next: string | null): void;
+}
+
+export interface MessageStreamOptions {
+  messageIndexer: MessageIndexer;
+  blockBuilder: BlockBuilderController;
+  blockStorage?: BlockStorageController | Promise<BlockStorageController> | null;
+  collectStructuredMessage: (element: Element) => StructuredSnapshotMessage | null;
+  getSessionUrl?: () => string | null;
+  console?: Pick<Console, 'log' | 'warn' | 'error'> | null;
+}
+
+export interface MessageStreamController {
+  start(): void;
+  stop(): void;
+  isRunning(): boolean;
+  flush(options?: BlockBuilderFlushOptions): Promise<number>;
+  getBuffer(): StructuredSnapshotMessage[];
+  getSessionUrl(): string | null;
+  setSessionUrl(next: string | null): void;
+  subscribeBlocks(listener: (block: MemoryBlockInit) => void): () => void;
+  subscribeMessages(listener: (message: StructuredSnapshotMessage) => void): () => void;
 }
 
 export interface StripLegacySpeechOptions {

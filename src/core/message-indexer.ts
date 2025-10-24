@@ -1,6 +1,7 @@
 import type {
   ExportRangeController,
   MessageIndexer,
+  MessageIndexerEvent,
   MessageIndexerOptions,
   MessageIndexerSummary,
 } from '../types';
@@ -26,6 +27,7 @@ type AdapterRef =
 type RangeTotalsSetter = Pick<ExportRangeController, 'setTotals'>;
 
 type SummaryListener = (summary: MessageIndexerSummary) => void;
+type MessageListener = (event: MessageIndexerEvent) => void;
 
 const noop = (): void => {};
 
@@ -49,9 +51,6 @@ export const createMessageIndexer = ({
     (typeof console !== 'undefined' ? console : {});
   const warn =
     typeof logger.warn === 'function' ? logger.warn.bind(logger) : noop;
-  const error =
-    typeof logger.error === 'function' ? logger.error.bind(logger) : noop;
-
   const documentRef: Document | undefined =
     documentLike ?? (typeof document !== 'undefined' ? document : undefined);
 
@@ -88,6 +87,9 @@ export const createMessageIndexer = ({
     timestamp: 0,
   };
   const listeners = new Set<SummaryListener>();
+  const messageListeners = new Set<MessageListener>();
+  let knownMessages: WeakSet<Element> = new WeakSet();
+  let lastContainer: Element | null = null;
 
   const notify = (): void => {
     const snapshot = cloneSummary(lastSummary);
@@ -112,9 +114,18 @@ export const createMessageIndexer = ({
         ? toIterableElements(blockNodes as Iterable<Element>)
         : [];
 
+    if (!container) {
+      knownMessages = new WeakSet();
+      lastContainer = null;
+    } else if (container !== lastContainer) {
+      knownMessages = new WeakSet();
+      lastContainer = container;
+    }
+
     let userMessageCount = 0;
     ordinalCacheByIndex.clear();
     ordinalCacheById.clear();
+    const newBlocks: Element[] = [];
 
     blocks.forEach((block, idx) => {
       try {
@@ -138,6 +149,10 @@ export const createMessageIndexer = ({
         block.removeAttribute('data-gmh-player-turn');
         block.removeAttribute('data-gmh-user-ordinal');
         block.removeAttribute('data-gmh-message-ordinal');
+        if (!knownMessages.has(block)) {
+          knownMessages.add(block);
+          newBlocks.push(block);
+        }
       } catch {
         // ignore per-node errors
       }
@@ -166,6 +181,37 @@ export const createMessageIndexer = ({
       const blockMessageId = block.getAttribute('data-gmh-message-id');
       if (blockMessageId) {
         ordinalCacheById.set(blockMessageId, messageOrdinal);
+      }
+    }
+
+    if (newBlocks.length && messageListeners.size) {
+      const timestamp = Date.now();
+      const events: MessageIndexerEvent[] = [];
+      newBlocks.forEach((block) => {
+        const ordinalAttr = Number(block.getAttribute('data-gmh-message-ordinal'));
+        if (!Number.isFinite(ordinalAttr)) return;
+        const indexAttr = Number(block.getAttribute('data-gmh-message-index'));
+        const messageId = block.getAttribute('data-gmh-message-id') || null;
+        const channelAttr = block.getAttribute('data-gmh-channel') || null;
+        events.push({
+          element: block,
+          ordinal: ordinalAttr,
+          index: Number.isFinite(indexAttr) ? indexAttr : -1,
+          messageId,
+          channel: channelAttr,
+          timestamp,
+        });
+      });
+      if (events.length) {
+        events.forEach((event) => {
+          messageListeners.forEach((listener) => {
+            try {
+              listener(event);
+            } catch (err) {
+              warn('[GMH] message event listener failed', err);
+            }
+          });
+        });
       }
     }
 
@@ -257,6 +303,8 @@ export const createMessageIndexer = ({
         observer = null;
       }
       scheduled = false;
+      knownMessages = new WeakSet();
+      lastContainer = null;
     },
     refresh(options?: { immediate?: boolean }) {
       const immediate = Boolean(options?.immediate);
@@ -289,6 +337,11 @@ export const createMessageIndexer = ({
         warn('[GMH] index subscriber failed', err);
       }
       return () => listeners.delete(listener);
+    },
+    subscribeMessages(listener: MessageListener) {
+      if (typeof listener !== 'function') return noop;
+      messageListeners.add(listener);
+      return () => messageListeners.delete(listener);
     },
   };
 
