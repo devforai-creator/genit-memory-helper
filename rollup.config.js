@@ -13,7 +13,7 @@ const metaBanner = `// ==UserScript==\n`
   + `// @name         Genit Memory Helper\n`
   + `// @namespace    local.dev\n`
   + `// @version      ${packageJson.version}\n`
-  + `// @description  Genit 대화로그 JSON/TXT/MD 추출 + 요약/재요약 프롬프트 복사 기능\n`
+  + `// @description  Genit.ai 대화 로그 추출 및 백업 도구 (JSON/Markdown/TXT Export + LLM 요약 프롬프트)\n`
   + `// @author       devforai-creator\n`
   + `// @match        https://genit.ai/*\n`
   + `// @match        https://www.genit.ai/*\n`
