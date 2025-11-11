@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Genit Memory Helper
 // @namespace    local.dev
-// @version      2.1.0
-// @description  Genit 대화로그 JSON/TXT/MD 추출 + 요약/재요약 프롬프트 복사 기능
+// @version      2.1.1
+// @description  Genit.ai 대화 로그 추출 및 백업 도구 (JSON/Markdown/TXT Export + LLM 요약 프롬프트)
 // @author       devforai-creator
 // @match        https://genit.ai/*
 // @match        https://www.genit.ai/*
