@@ -97,37 +97,70 @@ export function createPanelInteractions({
       });
     });
 
-    // HTML export button handler
+    // HTML export button handler (API-based, no images)
     const htmlExportBtn = panel.querySelector<HTMLButtonElement>('#gmh-export-html');
     if (htmlExportBtn) {
       htmlExportBtn.addEventListener('click', async () => {
         const originalText = htmlExportBtn.textContent;
         htmlExportBtn.disabled = true;
-        htmlExportBtn.textContent = '이미지 변환 중...';
+        htmlExportBtn.textContent = 'HTML 생성 중...';
 
         try {
-          // Access captureStructuredSnapshot from GMH.Core namespace
-          const captureStructuredSnapshot = (GMH.Core as Record<string, unknown>)?.captureStructuredSnapshot as
-            | (() => StructuredSnapshot)
-            | undefined;
+          notify('HTML 백업 생성 중...', 'progress');
 
-          if (typeof captureStructuredSnapshot !== 'function') {
-            throw new Error('captureStructuredSnapshot not available');
+          // Try API-based collection first (for babechat)
+          const adapter = (GMH.Core as Record<string, unknown>)?.getActiveAdapter as
+            | (() => Record<string, unknown> | null)
+            | undefined;
+          const activeAdapter = typeof adapter === 'function' ? adapter() : null;
+
+          let messages: StructuredSnapshot['messages'] = [];
+
+          // Check if adapter supports API collection
+          if (
+            activeAdapter &&
+            typeof activeAdapter.canUseApiCollection === 'function' &&
+            (activeAdapter.canUseApiCollection as () => boolean)() &&
+            typeof activeAdapter.fetchAllMessagesViaApi === 'function'
+          ) {
+            // Use API collection for full message history
+            messages = await (activeAdapter.fetchAllMessagesViaApi as () => Promise<StructuredSnapshot['messages']>)();
+          } else {
+            // Fallback to DOM-based capture
+            const captureStructuredSnapshot = (GMH.Core as Record<string, unknown>)?.captureStructuredSnapshot as
+              | (() => StructuredSnapshot)
+              | undefined;
+
+            if (typeof captureStructuredSnapshot !== 'function') {
+              throw new Error('captureStructuredSnapshot not available');
+            }
+
+            const snapshot = captureStructuredSnapshot();
+            messages = snapshot.messages || [];
           }
 
-          notify('HTML 백업 생성 중... (이미지 변환에 시간이 걸릴 수 있습니다)', 'progress');
+          if (messages.length === 0) {
+            throw new Error('내보낼 메시지가 없습니다');
+          }
 
-          const snapshot = captureStructuredSnapshot();
+          const snapshot: StructuredSnapshot = {
+            messages,
+            legacyLines: [],
+            entryOrigin: [],
+            errors: [],
+            generatedAt: Date.now(),
+          };
+
           const result = await exportFromStructuredData(snapshot, {
             title: document.title || 'Chat Backup',
-            includeImages: true,
+            includeImages: false, // API doesn't have image URLs
           });
 
           if (result.success && result.html) {
             const timestamp = new Date().toISOString().slice(0, 10);
             const filename = `chat-backup-${timestamp}.html`;
             downloadHtml(result.html, filename);
-            notify(`HTML 백업 완료: ${result.stats?.capturedImages || 0}개 이미지 포함`, 'success');
+            notify(`HTML 백업 완료: ${messages.length}개 메시지`, 'success');
           } else {
             throw new Error(result.error || 'HTML 생성 실패');
           }

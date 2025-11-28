@@ -9819,30 +9819,55 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                     blockedStatusMessage: '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
                 });
             });
-            // HTML export button handler
+            // HTML export button handler (API-based, no images)
             const htmlExportBtn = panel.querySelector('#gmh-export-html');
             if (htmlExportBtn) {
                 htmlExportBtn.addEventListener('click', async () => {
                     const originalText = htmlExportBtn.textContent;
                     htmlExportBtn.disabled = true;
-                    htmlExportBtn.textContent = '이미지 변환 중...';
+                    htmlExportBtn.textContent = 'HTML 생성 중...';
                     try {
-                        // Access captureStructuredSnapshot from GMH.Core namespace
-                        const captureStructuredSnapshot = GMH.Core?.captureStructuredSnapshot;
-                        if (typeof captureStructuredSnapshot !== 'function') {
-                            throw new Error('captureStructuredSnapshot not available');
+                        notify('HTML 백업 생성 중...', 'progress');
+                        // Try API-based collection first (for babechat)
+                        const adapter = GMH.Core?.getActiveAdapter;
+                        const activeAdapter = typeof adapter === 'function' ? adapter() : null;
+                        let messages = [];
+                        // Check if adapter supports API collection
+                        if (activeAdapter &&
+                            typeof activeAdapter.canUseApiCollection === 'function' &&
+                            activeAdapter.canUseApiCollection() &&
+                            typeof activeAdapter.fetchAllMessagesViaApi === 'function') {
+                            // Use API collection for full message history
+                            messages = await activeAdapter.fetchAllMessagesViaApi();
                         }
-                        notify('HTML 백업 생성 중... (이미지 변환에 시간이 걸릴 수 있습니다)', 'progress');
-                        const snapshot = captureStructuredSnapshot();
+                        else {
+                            // Fallback to DOM-based capture
+                            const captureStructuredSnapshot = GMH.Core?.captureStructuredSnapshot;
+                            if (typeof captureStructuredSnapshot !== 'function') {
+                                throw new Error('captureStructuredSnapshot not available');
+                            }
+                            const snapshot = captureStructuredSnapshot();
+                            messages = snapshot.messages || [];
+                        }
+                        if (messages.length === 0) {
+                            throw new Error('내보낼 메시지가 없습니다');
+                        }
+                        const snapshot = {
+                            messages,
+                            legacyLines: [],
+                            entryOrigin: [],
+                            errors: [],
+                            generatedAt: Date.now(),
+                        };
                         const result = await exportFromStructuredData(snapshot, {
                             title: document.title || 'Chat Backup',
-                            includeImages: true,
+                            includeImages: false, // API doesn't have image URLs
                         });
                         if (result.success && result.html) {
                             const timestamp = new Date().toISOString().slice(0, 10);
                             const filename = `chat-backup-${timestamp}.html`;
                             downloadHtml(result.html, filename);
-                            notify(`HTML 백업 완료: ${result.stats?.capturedImages || 0}개 이미지 포함`, 'success');
+                            notify(`HTML 백업 완료: ${messages.length}개 메시지`, 'success');
                         }
                         else {
                             throw new Error(result.error || 'HTML 생성 실패');
@@ -10018,7 +10043,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
           </select>
           <button id="gmh-export" class="gmh-small-btn gmh-small-btn--accent">내보내기</button>
         </div>
-        <button id="gmh-export-html" class="gmh-panel-btn gmh-panel-btn--neutral" title="실험적 기능: 현재 화면에 보이는 메시지만 백업됩니다">🧪 HTML 백업 (실험적)</button>
+        <button id="gmh-export-html" class="gmh-panel-btn gmh-panel-btn--neutral" title="전체 메시지를 HTML로 백업 (이미지 미포함)">🧪 HTML 백업 (이미지 미포함)</button>
       </section>
       <section class="gmh-panel__section" id="gmh-section-settings">
         <div class="gmh-panel__section-title">Settings</div>
