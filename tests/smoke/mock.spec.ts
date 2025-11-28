@@ -164,7 +164,7 @@ test.describe('GMH mock smoke (offline)', () => {
 
     await page.keyboard.press('Alt+S');
     const progressLabel = panel.locator('#gmh-progress-label');
-    await expect(progressLabel).toContainText(/위로 끝까지 로딩|턴 확보/, { timeout: 5_000 });
+    await expect(progressLabel).toContainText(/메시지 수집|턴 확보/, { timeout: 5_000 });
     await page.evaluate(() => {
       try {
         window.GMH?.Core?.autoLoader?.stop?.();
