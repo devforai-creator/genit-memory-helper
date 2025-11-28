@@ -9866,10 +9866,8 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 return;
             await performExport(prepared, format);
         };
-        const isAutoRunning = () => Boolean(autoState?.running);
         const attachShareHandlers = (panel) => {
             const exportFormatSelect = panel.querySelector('#gmh-export-format');
-            const quickExportBtn = panel.querySelector('#gmh-quick-export');
             const exportBtn = panel.querySelector('#gmh-export');
             exportBtn?.addEventListener('click', async () => {
                 const format = exportFormatSelect?.value || 'json';
@@ -9879,52 +9877,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                     blockedStatusMessage: '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
                 });
             });
-            if (quickExportBtn) {
-                quickExportBtn.addEventListener('click', async () => {
-                    if (!autoLoader || typeof autoLoader.start !== 'function') {
-                        notify('자동 로더 기능을 사용할 수 없습니다.', 'warning');
-                        return;
-                    }
-                    if (isAutoRunning()) {
-                        notify('이미 자동 로딩이 진행 중입니다.', 'muted');
-                        return;
-                    }
-                    const originalText = quickExportBtn.textContent;
-                    quickExportBtn.disabled = true;
-                    quickExportBtn.textContent = '진행 중...';
-                    try {
-                        stateApi.setState(stateEnum.SCANNING, {
-                            label: '원클릭 내보내기',
-                            message: '전체 로딩 중...',
-                            tone: 'progress',
-                            progress: { indeterminate: true },
-                        });
-                        await autoLoader.start('all');
-                        const format = exportFormatSelect?.value || 'json';
-                        await exportWithFormat(format, {
-                            confirmLabel: `${format.toUpperCase()} 내보내기`,
-                            cancelStatusMessage: '내보내기를 취소했습니다.',
-                            blockedStatusMessage: '미성년자 민감 맥락으로 내보내기가 차단되었습니다.',
-                        });
-                    }
-                    catch (error) {
-                        const message = error && typeof error === 'object' && 'message' in error
-                            ? String(error.message)
-                            : String(error);
-                        alertFn?.(`오류: ${message}`);
-                        stateApi.setState(stateEnum.ERROR, {
-                            label: '원클릭 실패',
-                            message: '원클릭 내보내기 실패',
-                            tone: 'error',
-                            progress: { value: 1 },
-                        });
-                    }
-                    finally {
-                        quickExportBtn.disabled = false;
-                        quickExportBtn.textContent = originalText ?? '';
-                    }
-                });
-            }
             // HTML export button handler
             const htmlExportBtn = panel.querySelector('#gmh-export-html');
             if (htmlExportBtn) {
@@ -10125,7 +10077,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
           </select>
           <button id="gmh-export" class="gmh-small-btn gmh-small-btn--accent">내보내기</button>
         </div>
-        <button id="gmh-quick-export" class="gmh-panel-btn gmh-panel-btn--accent">원클릭 내보내기</button>
         <button id="gmh-export-html" class="gmh-panel-btn gmh-panel-btn--neutral" title="실험적 기능: 현재 화면에 보이는 메시지만 백업됩니다">🧪 HTML 백업 (실험적)</button>
       </section>
       <section class="gmh-panel__section" id="gmh-section-guides">
