@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v2.3.0 (2025-01-29)
 
 ### 💥 BREAKING CHANGES
 
@@ -18,30 +18,33 @@
   - 시스템 메시지 영역(AI 면책조항, 시나리오, 오프닝) 파싱
   - DOM 순서 보존으로 대사와 나레이션이 원본 구조대로 출력
 
+- **babechat.ai API 기반 메시지 수집**: virtual scroll 한계 극복
+  - XHR 인터셉트로 API 파라미터(characterId, roomId) 및 Authorization 헤더 캡처
+  - 직접 API 호출로 스크롤 없이 전체 메시지 100% 수집
+  - 캐릭터 API 인터셉트로 initialAction(시나리오) + initialMessage(첫 인사) 자동 포함
+
 - **패널 테두리 리사이즈**: 패널의 상/하/좌/우 테두리 및 모서리를 드래그하여 크기 조절 가능
-  - 기존 우측 하단 리사이즈 핸들 제거 (불필요)
-  - 테두리 10px 이내 호버 시 리사이즈 커서 표시
-  - 모든 방향(n, s, e, w, ne, nw, se, sw)에서 리사이즈 지원
 
 - **🧪 HTML 백업 (실험적)**: 대화를 이미지 포함 standalone HTML로 내보내기
-  - Canvas API를 통한 이미지 base64 변환
-  - babechat.ai 어댑터에 이미지 수집 로직 추가
-  - ⚠️ **현재 한계**: Virtual scrolling으로 인해 현재 화면에 보이는 메시지만 백업됨
-  - 향후 개선 예정: 자동 스크롤하며 전체 메시지 누적 수집
+
+### 🎨 UI 개선
+
+- **버튼 텍스트 개선**: "위로 끝까지 로딩" → "메시지 수집"
+- **힌트 텍스트 추가**: "💡 백업 전에 먼저 눌러주세요"
+- **babechat API 실패 시 명확한 에러 표시**: 72% 수집되는 fallback 대신 에러 메시지로 안내
+
+### 🗑️ Removed (UI 간소화)
+
+- **Export 섹션**: 최근 15메시지 복사, 전체 MD 복사, 원클릭 내보내기 버튼 삭제
+- **Guides & Tools 섹션**: 재파싱, 요약 가이드, 재요약 가이드 버튼 삭제 → "Settings"로 이름 변경
+- **Settings 섹션**: 재시도, 안정 모드, DOM 스냅샷 버튼 삭제
+- babechat 스크롤 기반 수집 코드 삭제 (API 수집으로 대체)
+- 관련 함수/타입 정리: `copyRecent`, `copyAll`, `reparse`, `guides.ts`, `guide-controls.ts` 등
 
 ### 🐛 Fixes
 
 - Speaker 이름에 따옴표가 붙는 문제 수정 (`"치류` → `치류`)
 - 하드코딩된 플레이어 이름 제거 (`소중한코알라5299`)
-- **babechat.ai virtual scroll 메시지 수집 문제 해결**: DOM 기반 수집 → API 직접 호출 방식으로 전환
-  - 기존 문제: virtual scrolling으로 DOM에 보이는 메시지만 존재, 동일 내용 메시지 중복 제거 시 손실
-  - 해결: XHR 인터셉트로 API 파라미터(characterId, roomId) 및 Authorization 헤더 캡처 후 직접 API 호출
-  - 캐릭터 API 인터셉트로 initialAction(시나리오) + initialMessage(첫 인사) 자동 포함
-  - 결과: 스크롤 없이 전체 메시지 100% 수집 (첫 시스템 메시지 포함)
-
-### 🗑️ Removed
-
-- `#gmh-panel-resize-handle` 요소 및 관련 CSS/JS 코드 제거
 
 ## v2.1.0 (YYYY-MM-DD)
 
