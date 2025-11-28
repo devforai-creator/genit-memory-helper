@@ -16,7 +16,7 @@ describe('build output', () => {
     expect(existsSync(distPath)).toBe(true);
     const built = readFileSync(distPath, 'utf8');
     expect(built).toMatch(/==UserScript==/);
-    expect(built).toMatch(/@name\s+Genit Memory Helper/);
+    expect(built).toMatch(/@name\s+General Memory Helper/);
     const versionPattern = new RegExp(`@version\\s+${packageVersion.replaceAll('.', '\\.')}`);
     expect(built).toMatch(versionPattern);
     expect(built).toContain('Object.defineProperty');

@@ -10,7 +10,7 @@ const packageJsonPath = path.join(__dirname, 'package.json');
 const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
 
 const metaBanner = `// ==UserScript==\n`
-  + `// @name         Genit Memory Helper\n`
+  + `// @name         General Memory Helper\n`
   + `// @namespace    local.dev\n`
   + `// @version      ${packageJson.version}\n`
   + `// @description  AI 챗봇 대화 로그 추출 및 백업 도구 (JSON/Markdown/TXT Export + LLM 요약 프롬프트)\n`

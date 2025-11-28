@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### 💥 BREAKING CHANGES
+
+- **프로젝트 이름 변경**: "Genit Memory Helper" → "General Memory Helper"
+  - GMH 약어는 그대로 유지됩니다
+  - `@name` 메타데이터가 변경되어 **Tampermonkey에서 새 스크립트로 인식**될 수 있습니다
+  - **마이그레이션 안내**: 기존 스크립트를 수동으로 삭제하고 새 버전을 설치해 주세요
+
 ### ✨ New Features
 
 - **babechat.ai 어댑터 추가**: genit.ai 외에 babechat.ai도 지원합니다.

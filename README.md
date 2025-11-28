@@ -1,4 +1,4 @@
-# Genit Memory Helper
+# General Memory Helper (GMH)
 ## Chat Export & Conversation Backup Tool
 
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
@@ -9,6 +9,11 @@
 
 > **🚀 프로젝트 상태: 멀티플랫폼 확장 진행 중**
 > v2.2.0부터 babechat.ai 지원이 추가되었습니다. 향후 더 많은 AI 챗봇 플랫폼을 지원할 예정입니다.
+
+> **⚠️ v2.2.0 이름 변경 안내**
+> "Genit Memory Helper" → "General Memory Helper"로 이름이 변경되었습니다.
+> Tampermonkey에서 새 스크립트로 인식될 수 있으니, **기존 스크립트를 삭제 후 새로 설치**해 주세요.
+> GMH 약어와 기존 설정(localStorage)은 그대로 유지됩니다.
 
 AI 챗봇 대화 로그를 **구조 보존 JSON/Markdown**으로 추출하고 백업하는 Tampermonkey 사용자 스크립트입니다. LLM 요약 프롬프트 원클릭 복사로 유저노트(2000자) 작성을 돕고, 필요시 Classic(JSON/TXT/MD) 포맷으로도 전환할 수 있습니다.
 
@@ -71,7 +76,7 @@ AI 챗봇 대화 로그를 **구조 보존 JSON/Markdown**으로 추출하고 �
 
 ## 요약 범위 선택 (중요 UX)
 
-Genit Memory Helper는 **현재 화면에 로드된 대화만** JSON으로 내보냅니다.  
+General Memory Helper는 **현재 화면에 로드된 대화만** JSON으로 내보냅니다.  
 따라서 사용자가 원하는 구간까지 로그를 불러와야 그 부분이 요약에 포함됩니다.
 
 - Export 패널의 `메시지 범위` 입력을 사용하면 현재 확보된 메시지 중 원하는 시작/끝 지점을 선택해 부분만 내보낼 수 있습니다. 번호는 “가장 최근 = 1”부터 올라가므로, 오래된 메시지를 지정하려면 더 큰 숫자를 입력하면 됩니다. 선택을 비우면 전체 대화가 포함되며, `시작지정`/`끝지정` 버튼으로 미리보기에서 보고 있는 메시지를 바로 지정할 수 있습니다. 

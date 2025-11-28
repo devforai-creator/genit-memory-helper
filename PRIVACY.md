@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Genit Memory Helper는 사용자의 대화 로그를 정형화된 JSON/TXT/MD로 추출하고, 요약 프롬프트를 제공하는 Tampermonkey 스크립트입니다.
+General Memory Helper (GMH)는 사용자의 대화 로그를 정형화된 JSON/TXT/MD로 추출하고, 요약 프롬프트를 제공하는 Tampermonkey 스크립트입니다.
 
 ## 데이터 처리 원칙
 - **로컬 처리**: 모든 파싱과 레다크션은 브라우저 안에서만 수행됩니다.

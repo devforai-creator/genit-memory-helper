@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Genit Memory Helper
+// @name         General Memory Helper
 // @namespace    local.dev
 // @version      2.1.1
 // @description  AI 챗봇 대화 로그 추출 및 백업 도구 (JSON/Markdown/TXT Export + LLM 요약 프롬프트)
@@ -9041,7 +9041,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             panel.id = panelId;
             panel.className = 'gmh-panel';
             panel.setAttribute('role', 'region');
-            panel.setAttribute('aria-label', 'Genit Memory Helper');
+            panel.setAttribute('aria-label', 'General Memory Helper');
             panel.tabIndex = -1;
             panel.dataset.version = version;
             panel.innerHTML = `
@@ -9056,7 +9056,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
           <span class="gmh-panel__drag-icon" aria-hidden="true">⋮⋮</span>
         </button>
         <div class="gmh-panel__headline">
-          <div class="gmh-panel__title">Genit Memory Helper</div>
+          <div class="gmh-panel__title">General Memory Helper</div>
           <div class="gmh-panel__tag">v${version}</div>
         </div>
         <button id="gmh-panel-settings" class="gmh-small-btn gmh-small-btn--muted" title="설정">⚙</button>

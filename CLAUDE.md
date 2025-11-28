@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Genit Memory Helper** is a Tampermonkey userscript that extracts chat logs from AI chatbot platforms (genit.ai, babechat.ai) and exports them in structured formats (JSON/Markdown/TXT) with privacy redaction features. It helps users create memory summaries for platform user notes by exporting conversation history and providing LLM-ready summarization prompts.
+**General Memory Helper (GMH)** is a Tampermonkey userscript that extracts chat logs from AI chatbot platforms (genit.ai, babechat.ai) and exports them in structured formats (JSON/Markdown/TXT) with privacy redaction features. It helps users create memory summaries for platform user notes by exporting conversation history and providing LLM-ready summarization prompts.
 
 **Supported Platforms:**
 - **genit.ai** - Full support (original target)

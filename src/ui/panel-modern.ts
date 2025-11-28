@@ -54,7 +54,7 @@ export function createModernPanel({
     panel.id = panelId;
     panel.className = 'gmh-panel';
     panel.setAttribute('role', 'region');
-    panel.setAttribute('aria-label', 'Genit Memory Helper');
+    panel.setAttribute('aria-label', 'General Memory Helper');
     panel.tabIndex = -1;
     panel.dataset.version = version;
     panel.innerHTML = `
@@ -69,7 +69,7 @@ export function createModernPanel({
           <span class="gmh-panel__drag-icon" aria-hidden="true">⋮⋮</span>
         </button>
         <div class="gmh-panel__headline">
-          <div class="gmh-panel__title">Genit Memory Helper</div>
+          <div class="gmh-panel__title">General Memory Helper</div>
           <div class="gmh-panel__tag">v${version}</div>
         </div>
         <button id="gmh-panel-settings" class="gmh-small-btn gmh-small-btn--muted" title="설정">⚙</button>

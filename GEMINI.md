@@ -1,10 +1,10 @@
 # GEMINI.md
 
-This document provides guidance for the Gemini agent when working with the **Genit Memory Helper** repository.
+This document provides guidance for the Gemini agent when working with the **General Memory Helper (GMH)** repository.
 
 ## Project Overview
 
-**Genit Memory Helper** is a Tampermonkey userscript designed to extract and format chat logs from genit.ai. Its primary purpose is to help users summarize conversations for the platform's user notes by exporting chat history with privacy-preserving features.
+**General Memory Helper (GMH)** is a Tampermonkey userscript designed to extract and format chat logs from AI chatbot platforms (genit.ai, babechat.ai). Its primary purpose is to help users summarize conversations for the platform's user notes by exporting chat history with privacy-preserving features.
 
 - **Core Functionality**: Auto-scrolls to load history, redacts sensitive information, and exports conversations into various formats (JSON, Markdown, TXT).
 - **Key Goal**: Facilitate the creation of memory summaries for LLMs by providing clean, structured data and prompt templates.

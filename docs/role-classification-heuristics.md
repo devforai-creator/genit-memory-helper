@@ -1,6 +1,6 @@
 # Role Classification & Parsing Heuristics
 
-본 문서는 Genit Memory Helper의 **현재(2025-10-04 기준)** 역할 판정 및 파싱 로직을 정리한 것입니다. Tampermonkey 스크립트(`genit-memory-helper.user.js`)에서 DOM을 읽어 플레이어/어시스턴트/나레이션으로 분리하고, `parseTurns`로 턴 배열을 구축하는 흐름을 다룹니다.
+본 문서는 General Memory Helper (GMH)의 **현재(2025-10-04 기준)** 역할 판정 및 파싱 로직을 정리한 것입니다. Tampermonkey 스크립트(`genit-memory-helper.user.js`)에서 DOM을 읽어 플레이어/어시스턴트/나레이션으로 분리하고, `parseTurns`로 턴 배열을 구축하는 흐름을 다룹니다.
 
 ## 1. DOM → Role 판정 개요
 
