@@ -83,9 +83,10 @@ export function createAutoLoaderControls({
     wrap.dataset.ready = 'true';
     wrap.innerHTML = `
       <div class="gmh-field-row">
-        <button id="gmh-autoload-all" class="gmh-panel-btn gmh-panel-btn--accent">위로 끝까지 로딩</button>
+        <button id="gmh-autoload-all" class="gmh-panel-btn gmh-panel-btn--accent">메시지 수집</button>
         <button id="gmh-autoload-stop" class="gmh-panel-btn gmh-panel-btn--warn gmh-panel-btn--compact">정지</button>
       </div>
+      <div class="gmh-subtext" style="margin-bottom:8px;">💡 백업 전에 먼저 눌러주세요</div>
       <div class="gmh-field-row">
         <input id="gmh-autoload-turns" class="gmh-input" type="number" min="1" step="1" placeholder="최근 유저 메시지 N" />
         <button id="gmh-autoload-turns-btn" class="gmh-small-btn gmh-small-btn--accent">메시지 확보</button>

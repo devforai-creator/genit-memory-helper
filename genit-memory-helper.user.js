@@ -5622,12 +5622,6 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             meterTimer: null,
             lastProgressiveMessages: null,
         };
-        // Check if current adapter uses virtual scrolling (only visible messages in DOM)
-        const isVirtualScrollAdapter = () => {
-            const adapter = typeof getActiveAdapter === 'function' ? getActiveAdapter() : null;
-            // babechat uses virtual scrolling
-            return adapter?.id === 'babechat';
-        };
         // Check if current adapter supports API-based collection (bypasses virtual scroll)
         const canUseApiCollection = () => {
             const adapter = typeof getActiveAdapter === 'function' ? getActiveAdapter() : null;
@@ -5647,79 +5641,6 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
                 }
             }
             return [];
-        };
-        // Collect current visible messages using adapter (no deduplication here)
-        const collectVisibleMessages = () => {
-            const adapter = typeof getActiveAdapter === 'function' ? getActiveAdapter() : null;
-            if (!adapter?.listMessageBlocks || !adapter?.collectStructuredMessage) {
-                return [];
-            }
-            const messages = [];
-            try {
-                const blocksResult = adapter.listMessageBlocks(doc);
-                const blocks = blocksResult ? toElementArray(blocksResult) : [];
-                for (const block of blocks) {
-                    const msg = adapter.collectStructuredMessage(block);
-                    if (msg) {
-                        messages.push(msg);
-                    }
-                }
-            }
-            catch (err) {
-                warnWithHandler(err, 'autoload', '[GMH] progressive collection failed');
-            }
-            return messages;
-        };
-        /**
-         * Generate a content signature for a message
-         */
-        const getMessageSignature = (msg) => {
-            const role = msg.role || 'unknown';
-            const speaker = msg.speaker || '';
-            const contentParts = [];
-            if (Array.isArray(msg.parts)) {
-                for (const part of msg.parts) {
-                    if (Array.isArray(part.lines)) {
-                        contentParts.push(...part.lines);
-                    }
-                }
-            }
-            return `${role}:${speaker}:${contentParts.join('\n')}`;
-        };
-        /**
-         * Merge new messages into accumulated list using Set-based deduplication.
-         * Works for virtual scroll where visible window can be any portion of conversation.
-         *
-         * When scrolling DOWN (Top to Bottom):
-         * - newBatch contains current viewport (mix of old and new messages)
-         * - We filter to only truly new messages and APPEND them
-         */
-        const mergeMessageBatch = (accumulated, newBatch) => {
-            if (accumulated.length === 0) {
-                return [...newBatch];
-            }
-            if (newBatch.length === 0) {
-                return [...accumulated]; // Always return new array to avoid reference issues
-            }
-            // Build set of existing signatures for O(1) lookup
-            const existingSignatures = new Set();
-            for (const msg of accumulated) {
-                existingSignatures.add(getMessageSignature(msg));
-            }
-            // Filter newBatch to only include truly new messages
-            const newMessages = [];
-            for (const msg of newBatch) {
-                const sig = getMessageSignature(msg);
-                if (!existingSignatures.has(sig)) {
-                    newMessages.push(msg);
-                    existingSignatures.add(sig); // Prevent duplicates within newBatch too
-                }
-            }
-            if (newMessages.length === 0) {
-                return [...accumulated]; // Always return a new array to avoid reference issues
-            }
-            // APPEND new messages (they're newer, from scrolling DOWN)
-            return [...accumulated, ...newMessages];
         };
         const profileListeners = new Set();
         const warnWithHandler = (err, context, fallbackMessage) => {
@@ -5801,39 +5722,6 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             target.scrollTop = 0;
             const grew = await waitForGrowth(target, before, profile.settleTimeoutMs);
             return { grew, before, after: target.scrollHeight };
-        }
-        /**
-         * Gradual scroll DOWN for virtual scroll adapters (e.g., babechat)
-         * Strategy: Start from TOP, scroll DOWN to collect all messages in order
-         * This works better with virtual scroll that removes messages from both ends
-         */
-        async function gradualScrollDownCycle(container, profile) {
-            if (!container) {
-                logger?.warn?.('[GMH] gradualScrollDownCycle: no container');
-                return { reachedBottom: true, beforeScroll: 0, afterScroll: 0 };
-            }
-            const target = container;
-            const beforeScroll = target.scrollTop;
-            const scrollHeight = target.scrollHeight;
-            const clientHeight = target.clientHeight;
-            const maxScroll = scrollHeight - clientHeight;
-            logger?.log?.(`[GMH] scroll: before=${beforeScroll}, height=${scrollHeight}, client=${clientHeight}, max=${maxScroll}`);
-            // Already at bottom
-            if (beforeScroll >= maxScroll - 5) {
-                logger?.log?.('[GMH] Already at bottom, stopping');
-                return { reachedBottom: true, beforeScroll, afterScroll: beforeScroll };
-            }
-            // Scroll down by 50% of the container's client height
-            const scrollStep = Math.max(200, clientHeight * 0.5);
-            const newScrollTop = Math.min(maxScroll, beforeScroll + scrollStep);
-            target.scrollTop = newScrollTop;
-            // Wait for DOM to settle
-            await sleep(profile.settleTimeoutMs);
-            const afterScroll = target.scrollTop;
-            const newMaxScroll = target.scrollHeight - clientHeight;
-            const reachedBottom = afterScroll >= newMaxScroll - 5;
-            logger?.log?.(`[GMH] scroll: after=${afterScroll}, reachedBottom=${reachedBottom}`);
-            return { reachedBottom, beforeScroll, afterScroll };
         }
         const statsCache = {
             summaryKey: null,
@@ -5988,14 +5876,8 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             AUTO_STATE.container = container;
             let stableRounds = 0;
             let guard = 0;
-            // Check if API-based collection is available (bypasses virtual scroll entirely)
+            // Check if API-based collection is available (babechat)
             const useApiCollection = canUseApiCollection();
-            // Progressive collection fallback for virtual scroll adapters
-            const useProgressiveCollection = !useApiCollection && isVirtualScrollAdapter();
-            const collectedMessages = [];
-            if (useApiCollection || useProgressiveCollection) {
-                AUTO_STATE.lastProgressiveMessages = null;
-            }
             // API-based collection (best option for babechat - no scrolling needed)
             if (useApiCollection) {
                 logger?.log?.('[GMH] Using API-based collection (no scrolling needed)');
@@ -6007,13 +5889,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
                 });
                 try {
                     const apiMessages = await fetchMessagesViaApi();
-                    collectedMessages.push(...apiMessages);
-                    AUTO_STATE.lastProgressiveMessages = collectedMessages;
-                    const userCount = collectedMessages.filter(m => m.channel === 'user' || m.role === 'player').length;
-                    logger?.log?.(`[GMH] API collection complete: ${collectedMessages.length} messages (${userCount} user)`);
+                    AUTO_STATE.lastProgressiveMessages = apiMessages;
+                    const userCount = apiMessages.filter(m => m.channel === 'user' || m.role === 'player').length;
+                    logger?.log?.(`[GMH] API collection complete: ${apiMessages.length} messages (${userCount} user)`);
                     notifyDone({
                         label: 'API 수집 완료',
-                        message: `${collectedMessages.length}개 메시지 수집 (유저 ${userCount}개)`,
+                        message: `${apiMessages.length}개 메시지 수집 (유저 ${userCount}개)`,
                         tone: 'success',
                         progress: { value: 1 },
                     });
@@ -6022,107 +5903,46 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
                     return stats;
                 }
                 catch (err) {
-                    // API failed, fall back to progressive collection
-                    logger?.warn?.('[GMH] API collection failed, falling back to scroll-based:', err);
+                    // API failed - show clear error instead of silent fallback
+                    // (scroll-based fallback only gets ~72% of messages, which is misleading)
+                    logger?.warn?.('[GMH] API collection failed:', err);
                     warnWithHandler(err, 'autoload', '[GMH] API collection failed');
-                    // Continue to progressive collection
+                    const errorMessage = err instanceof Error ? err.message : String(err);
+                    notifyDone({
+                        label: 'API 수집 실패',
+                        message: `메시지 수집에 실패했습니다. 페이지 새로고침 후 다시 시도해주세요. (${errorMessage})`,
+                        tone: 'error',
+                        progress: { value: 0 },
+                    });
+                    AUTO_STATE.running = false;
+                    return collectTurnStats();
                 }
             }
-            // Different scroll strategies for virtual scroll vs traditional infinite scroll
-            if (useProgressiveCollection || (useApiCollection && collectedMessages.length === 0)) {
-                // Virtual scroll: Start from TOP, scroll DOWN to collect all messages
-                // Use 3x the normal guard limit for virtual scroll
-                const virtualScrollGuardLimit = profile.guardLimit * 3;
-                const target = container;
-                // Step 1: Jump to TOP first
-                logger?.log?.('[GMH] Virtual scroll: jumping to top first');
-                target.scrollTop = 0;
-                await sleep(profile.settleTimeoutMs);
-                // Step 2: Collect messages at top
-                const initialBatch = collectVisibleMessages();
-                collectedMessages.push(...initialBatch);
-                logger?.log?.(`[GMH] Initial collection at top: ${initialBatch.length} messages`);
+            // Traditional infinite scroll (genit.ai): jump to top and wait for content growth
+            while (AUTO_STATE.running && guard < profile.guardLimit) {
+                guard += 1;
                 notifyScan({
-                    label: '전체 로딩',
-                    message: `시작 위치에서 ${collectedMessages.length}개 수집`,
+                    label: '메시지 수집',
+                    message: `추가 수집 중 (${guard}/${profile.guardLimit})`,
                     tone: 'progress',
                     progress: { indeterminate: true },
                 });
+                const { grew, before, after } = await scrollUpCycle(container, profile);
+                if (!AUTO_STATE.running)
+                    break;
+                const delta = after - before;
+                stableRounds = !grew || delta < 6 ? stableRounds + 1 : 0;
+                if (stableRounds >= profile.maxStableRounds)
+                    break;
                 await sleep(profile.cycleDelayMs);
-                // Step 3: Scroll DOWN gradually, collecting new messages at each step
-                while (AUTO_STATE.running && guard < virtualScrollGuardLimit) {
-                    guard += 1;
-                    // Gradual scroll down
-                    const { reachedBottom } = await gradualScrollDownCycle(container, profile);
-                    if (!AUTO_STATE.running)
-                        break;
-                    // Collect visible messages and merge
-                    const newBatch = collectVisibleMessages();
-                    const beforeMerge = collectedMessages.length;
-                    const merged = mergeMessageBatch(collectedMessages, newBatch);
-                    const added = merged.length - beforeMerge;
-                    collectedMessages.length = 0;
-                    collectedMessages.push(...merged);
-                    logger?.log?.(`[GMH] collect: batch=${newBatch.length}, added=${added}, total=${collectedMessages.length}`);
-                    notifyScan({
-                        label: '전체 로딩',
-                        message: `수집 중 (${guard}/${virtualScrollGuardLimit}) · ${collectedMessages.length}개 누적`,
-                        tone: 'progress',
-                        progress: { indeterminate: true },
-                    });
-                    // Stop if we've reached the bottom
-                    if (reachedBottom) {
-                        logger?.log?.(`[GMH] Reached bottom: total=${collectedMessages.length} messages`);
-                        break;
-                    }
-                    await sleep(profile.cycleDelayMs);
-                }
-            }
-            else {
-                // Traditional infinite scroll: jump to top and wait for content growth
-                while (AUTO_STATE.running && guard < profile.guardLimit) {
-                    guard += 1;
-                    notifyScan({
-                        label: '위로 끝까지 로딩',
-                        message: `추가 수집 중 (${guard}/${profile.guardLimit})`,
-                        tone: 'progress',
-                        progress: { indeterminate: true },
-                    });
-                    const { grew, before, after } = await scrollUpCycle(container, profile);
-                    if (!AUTO_STATE.running)
-                        break;
-                    const delta = after - before;
-                    stableRounds = !grew || delta < 6 ? stableRounds + 1 : 0;
-                    if (stableRounds >= profile.maxStableRounds)
-                        break;
-                    await sleep(profile.cycleDelayMs);
-                }
-            }
-            // Final collection after scroll completes (catch any remaining messages)
-            if (useProgressiveCollection) {
-                const finalBatch = collectVisibleMessages();
-                const merged = mergeMessageBatch(collectedMessages, finalBatch);
-                AUTO_STATE.lastProgressiveMessages = merged;
-                logger?.log?.(`[GMH] Progressive collection complete: ${merged.length} messages`);
             }
             AUTO_STATE.running = false;
             const stats = collectTurnStats();
-            if (stats.error && !useProgressiveCollection) {
+            if (stats.error) {
                 notifyError({
                     label: '자동 로딩 실패',
                     message: '스크롤 후 파싱 실패',
                     tone: 'error',
-                    progress: { value: 1 },
-                });
-            }
-            else if (useProgressiveCollection && AUTO_STATE.lastProgressiveMessages) {
-                // For virtual scroll, show progressive collection count
-                const progressiveCount = AUTO_STATE.lastProgressiveMessages.length;
-                const userCount = AUTO_STATE.lastProgressiveMessages.filter(m => m.channel === 'user' || m.role === 'player').length;
-                notifyDone({
-                    label: '자동 로딩 완료',
-                    message: `${progressiveCount}개 메시지 수집 (유저 ${userCount}개)`,
-                    tone: 'success',
                     progress: { value: 1 },
                 });
             }
@@ -6427,9 +6247,10 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             wrap.dataset.ready = 'true';
             wrap.innerHTML = `
       <div class="gmh-field-row">
-        <button id="gmh-autoload-all" class="gmh-panel-btn gmh-panel-btn--accent">위로 끝까지 로딩</button>
+        <button id="gmh-autoload-all" class="gmh-panel-btn gmh-panel-btn--accent">메시지 수집</button>
         <button id="gmh-autoload-stop" class="gmh-panel-btn gmh-panel-btn--warn gmh-panel-btn--compact">정지</button>
       </div>
+      <div class="gmh-subtext" style="margin-bottom:8px;">💡 백업 전에 먼저 눌러주세요</div>
       <div class="gmh-field-row">
         <input id="gmh-autoload-turns" class="gmh-input" type="number" min="1" step="1" placeholder="최근 유저 메시지 N" />
         <button id="gmh-autoload-turns-btn" class="gmh-small-btn gmh-small-btn--accent">메시지 확보</button>
