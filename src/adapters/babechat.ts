@@ -1,9 +1,6 @@
 import { adapterRegistry, getAdapterConfig } from './registry';
 import { clone } from '../core/utils';
-import {
-  collapseSpaces,
-  stripQuotes,
-} from '../utils/text';
+import { collapseSpaces } from '../utils/text';
 import { isScrollable } from '../utils/dom';
 
 import type {
@@ -111,16 +108,26 @@ export const createBabechatAdapter = ({
   const adapterConfig = registryGet('babechat');
   const selectors: AdapterSelectors = adapterConfig.selectors || {};
 
+  const firstMatch = (selList: SelectorList, root: Document | Element = document): Element | null => {
+    if (!selList?.length) return null;
+    for (const sel of selList) {
+      if (!sel) continue;
+      try {
+        const node = root.querySelector(sel);
+        if (node) return node;
+      } catch (e) {
+        continue;
+      }
+    }
+    return null;
+  };
+
   const collectAll = (selList: SelectorList, root: Document | Element = document): Element[] => {
     const out: Element[] = [];
     const seen = new Set<Element>();
     if (!selList?.length) return out;
     for (const sel of selList) {
       if (!sel) continue;
-      if (root instanceof Element && root.matches(sel) && !seen.has(root)) {
-        seen.add(root);
-        out.push(root);
-      }
       let nodes: NodeListOf<Element> | undefined;
       try {
         nodes = root.querySelectorAll(sel);
@@ -136,28 +143,16 @@ export const createBabechatAdapter = ({
     return out;
   };
 
-  const firstMatch = (selList: SelectorList, root: Document | Element = document): Element | null => {
-    if (!selList?.length) return null;
-    for (const sel of selList) {
-      if (!sel) continue;
-      try {
-        const node = root.querySelector(sel);
-        if (node) return node;
-      } catch (e) {
-        continue;
-      }
+  const textFromNode = (node: Element | Node | null | undefined): string => {
+    if (!node) return '';
+    if (node instanceof HTMLElement) {
+      return (node.innerText ?? node.textContent ?? '').trim();
     }
-    return null;
+    return (node.textContent ?? '').trim();
   };
 
   const textSegmentsFromNode = (node: Element | Node | null | undefined): string[] => {
-    if (!node) return [];
-    let text = '';
-    if (node instanceof HTMLElement) {
-      text = node.innerText ?? node.textContent ?? '';
-    } else if (node instanceof Element || node instanceof Node) {
-      text = node.textContent ?? '';
-    }
+    const text = textFromNode(node);
     if (!text) return [];
     return text
       .split(/\r?\n+/)
@@ -175,27 +170,19 @@ export const createBabechatAdapter = ({
   };
 
   const getChatContainer = (doc: Document = document): Element | null => {
-    // Try direct selectors first
-    const direct = firstMatch(selectors.chatContainers, doc);
-    if (direct && isScrollable(direct)) return direct;
+    // Try form > div.overflow-hidden > div structure
+    const formContainer = doc.querySelector('form > div.overflow-hidden > div');
+    if (formContainer) return formContainer;
 
-    // Try finding form and its scrollable parent
+    const overflowContainer = doc.querySelector('form > div.overflow-hidden');
+    if (overflowContainer) return overflowContainer;
+
+    // Fallback to form
     const form = doc.querySelector('form');
     if (form) {
       const scrollable = findScrollableAncestor(form);
       if (scrollable) return scrollable;
-      // Return form's parent if it looks like a chat container
-      const parent = form.parentElement;
-      if (parent && parent.classList.contains('overflow-hidden')) {
-        return parent;
-      }
-    }
-
-    // Fallback: find message blocks and trace up
-    const block = firstMatch(selectors.messageRoot, doc);
-    if (block) {
-      const scrollable = findScrollableAncestor(block.parentElement);
-      if (scrollable) return scrollable;
+      return form;
     }
 
     return null;
@@ -203,91 +190,77 @@ export const createBabechatAdapter = ({
 
   const getMessageBlocks = (root: Document | Element | null | undefined): Element[] => {
     const targetRoot = root || document;
-    const blocks = collectAll(selectors.messageRoot, targetRoot);
-    if (blocks.length) return blocks;
 
-    // Fallback: query form directly
-    const form = targetRoot instanceof Document
-      ? targetRoot.querySelector('form')
-      : targetRoot.querySelector('form') || targetRoot.closest('form');
+    // Find the container first
+    const container = targetRoot instanceof Document
+      ? getChatContainer(targetRoot)
+      : targetRoot;
 
-    if (form) {
-      const userMessages = Array.from(form.querySelectorAll('.justify-end.font-normal'));
-      const aiMessages = Array.from(form.querySelectorAll('.justify-start.font-normal'));
-      return [...userMessages, ...aiMessages].sort((a, b) => {
-        const aRect = a.getBoundingClientRect();
-        const bRect = b.getBoundingClientRect();
-        return aRect.top - bRect.top;
-      });
-    }
+    if (!container) return [];
 
-    return [];
+    // Get turn wrappers
+    const turns = collectAll(selectors.messageRoot, container);
+
+    // Skip the first element if it's a system message (px-5 without flex-col)
+    // Filter out system messages that don't have the turn structure
+    return turns.filter((turn, index) => {
+      // First child is often system message - check if it has actual content structure
+      if (index === 0) {
+        const hasPlayerContent = turn.querySelector('.justify-end') !== null;
+        const hasNpcContent = turn.querySelector('a[href*="/character/"]') !== null;
+        if (!hasPlayerContent && !hasNpcContent) {
+          return false; // Skip system intro message
+        }
+      }
+      return true;
+    });
   };
 
   const detectRole = (block: Element | null | undefined): BabechatRole => {
     if (!block) return 'unknown';
 
-    // Check for user message (justify-end)
-    if (block.classList.contains('justify-end')) {
-      return 'player';
+    // Check for user message (has justify-end child)
+    const hasJustifyEnd = block.querySelector('.justify-end') !== null;
+    if (hasJustifyEnd) {
+      // Make sure it's not a system message disguised
+      const hasUserBubble = block.querySelector('[class*="B56576"]') !== null;
+      if (hasUserBubble) return 'player';
     }
 
-    // Check for AI message (justify-start with avatar)
-    if (block.classList.contains('justify-start')) {
-      const hasAvatar = block.querySelector('a[href*="/character/"][href*="/profile"]');
-      if (hasAvatar) return 'npc';
-    }
+    // Check for AI message (has avatar link)
+    const hasAvatarLink = block.querySelector('a[href*="/character/"]') !== null;
+    if (hasAvatarLink) return 'npc';
 
-    // Check for system message
-    const bgClass = Array.from(block.classList).find(c => c.includes('363636'));
-    if (bgClass) return 'system';
-
-    // Check parent classes as fallback
-    const parent = block.closest('.justify-end, .justify-start');
-    if (parent?.classList.contains('justify-end')) return 'player';
-    if (parent?.classList.contains('justify-start')) return 'npc';
+    // Check for system/narration only message
+    const hasNarrationBg = block.querySelector('[class*="363636"]') !== null;
+    if (hasNarrationBg && !hasAvatarLink) return 'system';
 
     return 'unknown';
   };
 
-  const resolvePartType = (node: Element | null): string => {
-    if (!(node instanceof Element)) return 'paragraph';
-    const tag = node.tagName?.toLowerCase?.() || '';
-    if (!tag) return 'paragraph';
-    if (tag === 'pre') return 'code';
-    if (tag === 'code' && node.closest('pre')) return 'code';
-    if (tag === 'blockquote') return 'blockquote';
-    if (tag === 'ul' || tag === 'ol') return 'list';
-    if (tag === 'img') return 'image';
-    if (tag === 'hr') return 'horizontal-rule';
-    if (/^h[1-6]$/.test(tag)) return 'heading';
-    if (tag === 'em' || tag === 'i') return 'narration';
-    return 'paragraph';
+  const isStatusBlock = (text: string): boolean => {
+    // Status blocks contain emoji indicators like 🕐, 🌐, 😶, ❤️, 🎭, 🎒
+    return /[🕐🌐😶❤️🎭🎒]/.test(text);
   };
 
-  const buildStructuredPart = (
-    node: Element | Node | null,
-    context: StructuredContext = {},
-    options: StructuredPartOptions = {},
-  ): StructuredSnapshotMessagePart => {
-    const baseLines = Array.isArray(options.lines) ? options.lines.slice() : [];
-    const partType = options.type || resolvePartType(node as Element | null);
-    const part: StructuredSnapshotMessagePart & { lines: string[] } = {
-      type: partType,
-      flavor: context.flavor || 'speech',
-      role: context.role || null,
-      speaker: context.speaker || null,
-      lines: baseLines,
-      legacyFormat: options.legacyFormat || context.legacyFormat || null,
-    };
-    if (Array.isArray(options.legacyLines)) {
-      part.legacyLines = options.legacyLines.slice();
+  const extractCharacterName = (block: Element): string => {
+    // Try to find character name from the small text element
+    const nameNode = block.querySelector('.text-\\[0\\.75rem\\], [class*="text-[0.75rem]"]');
+    if (nameNode) {
+      const name = nameNode.textContent?.trim();
+      if (name && name.length < 50) return name;
     }
-    if (!part.lines.length) {
-      const fallbackLines = textSegmentsFromNode(node);
-      part.lines = fallbackLines;
+
+    // Fallback: extract from avatar link
+    const avatarLink = block.querySelector('a[href*="/character/"]');
+    if (avatarLink) {
+      const href = avatarLink.getAttribute('href') || '';
+      // Try to extract name from URL if possible
+      const match = href.match(/\/character\/[^/]+\/([^/]+)/);
+      if (match) return decodeURIComponent(match[1]).slice(0, 40);
     }
-    return part;
+
+    return 'NPC';
   };
 
   const getOrderPath = (node: Node | null, root: Node | null): number[] | null => {
@@ -357,22 +330,28 @@ export const createBabechatAdapter = ({
     };
   };
 
-  const extractCharacterName = (block: Element): string => {
-    // Try character name selector
-    const nameNode = firstMatch(selectors.characterName, block);
-    if (nameNode) {
-      const name = nameNode.textContent?.trim();
-      if (name) return name.slice(0, 40);
+  const buildStructuredPart = (
+    node: Element | Node | null,
+    context: StructuredContext = {},
+    options: StructuredPartOptions = {},
+  ): StructuredSnapshotMessagePart => {
+    const baseLines = Array.isArray(options.lines) ? options.lines.slice() : [];
+    const part: StructuredSnapshotMessagePart & { lines: string[] } = {
+      type: options.type || 'paragraph',
+      flavor: context.flavor || 'speech',
+      role: context.role || null,
+      speaker: context.speaker || null,
+      lines: baseLines,
+      legacyFormat: options.legacyFormat || context.legacyFormat || null,
+    };
+    if (Array.isArray(options.legacyLines)) {
+      part.legacyLines = options.legacyLines.slice();
     }
-
-    // Fallback: look for small text before message bubble
-    const smallText = block.querySelector('.text-\\[0\\.75rem\\], [class*="text-[0.75rem]"]');
-    if (smallText) {
-      const name = smallText.textContent?.trim();
-      if (name) return name.slice(0, 40);
+    if (!part.lines.length) {
+      const fallbackLines = textSegmentsFromNode(node);
+      part.lines = fallbackLines;
     }
-
-    return 'NPC';
+    return part;
   };
 
   const emitPlayerLines = (
@@ -383,22 +362,23 @@ export const createBabechatAdapter = ({
     const role = detectRole(block);
     if (role !== 'player') return;
 
-    // Find text content in user message bubble
-    const textNode = block.querySelector('[class*="B56576"], [class*="bg-[#B56576]"]')
-      || block.querySelector('.rounded-tl-xl')
-      || block;
-
+    // Find all user message bubbles (pink background)
+    const userBubbles = block.querySelectorAll('[class*="B56576"]');
     const partLines: string[] = [];
-    textSegmentsFromNode(textNode).forEach((seg) => {
-      if (!seg) return;
-      pushLine(playerMark + seg);
-      partLines.push(seg);
+    const seenTexts = new Set<string>();
+
+    userBubbles.forEach((bubble) => {
+      const text = textFromNode(bubble);
+      if (!text || seenTexts.has(text)) return;
+      seenTexts.add(text);
+      pushLine(playerMark + text);
+      partLines.push(text);
     });
 
     if (collector && partLines.length) {
       const playerName = collector.defaults?.playerName || '플레이어';
       const part = buildStructuredPart(
-        textNode,
+        block,
         {
           flavor: 'speech',
           role: 'player',
@@ -410,7 +390,7 @@ export const createBabechatAdapter = ({
           legacyFormat: 'player',
         },
       );
-      collector.push(part, { node: textNode });
+      collector.push(part, { node: block });
     }
   };
 
@@ -423,49 +403,44 @@ export const createBabechatAdapter = ({
     if (role !== 'npc') return;
 
     const characterName = extractCharacterName(block);
+    const seenTexts = new Set<string>();
+    const dialogueLines: string[] = [];
+    const narrationLines: string[] = [];
 
-    // Find text content in AI message bubble
-    const textNode = block.querySelector('[class*="262727"], [class*="bg-[#262727]"]')
-      || block.querySelector('.rounded-bl-xl')
-      || block.querySelector('.relative.max-w-\\[70\\%\\]');
+    // Collect all dialogue bubbles (dark background #262727)
+    const dialogueBubbles = block.querySelectorAll('[class*="262727"]');
+    dialogueBubbles.forEach((bubble) => {
+      const text = textFromNode(bubble);
+      if (!text || seenTexts.has(text) || isStatusBlock(text)) return;
+      seenTexts.add(text);
 
-    if (!textNode) return;
+      // Check if text has speaker prefix like "치류 | "
+      const speakerMatch = text.match(/^(.+?)\s*\|\s*(.+)$/s);
+      if (speakerMatch) {
+        const speaker = speakerMatch[1].trim();
+        const dialogue = speakerMatch[2].trim();
+        pushLine(`@${speaker}@ "${dialogue}"`);
+        dialogueLines.push(dialogue);
+      } else {
+        pushLine(`@${characterName}@ "${text}"`);
+        dialogueLines.push(text);
+      }
+    });
 
-    const partLines: string[] = [];
+    // Collect all narration blocks (gray background #363636)
+    const narrationBlocks = block.querySelectorAll('[class*="363636"]');
+    narrationBlocks.forEach((narration) => {
+      const text = textFromNode(narration);
+      if (!text || seenTexts.has(text) || isStatusBlock(text)) return;
+      seenTexts.add(text);
+      pushLine(text); // Narration without speaker prefix
+      narrationLines.push(text);
+    });
 
-    // Handle italic text as narration, regular text as dialogue
-    const children = textNode.querySelectorAll('em, i, p, span');
-    if (children.length) {
-      children.forEach((child) => {
-        const text = child.textContent?.trim();
-        if (!text) return;
-
-        const isNarration = child.tagName.toLowerCase() === 'em' || child.tagName.toLowerCase() === 'i';
-        if (isNarration) {
-          pushLine(text);
-        } else {
-          pushLine(`@${characterName}@ "${text}"`);
-        }
-        partLines.push(text);
-      });
-    } else {
-      // No structured children, emit all text
-      textSegmentsFromNode(textNode).forEach((seg) => {
-        if (!seg) return;
-        // Check if line starts with speaker indicator (e.g., "치류 |")
-        const speakerMatch = seg.match(/^(.+?)\s*\|\s*(.+)$/);
-        if (speakerMatch) {
-          pushLine(`@${speakerMatch[1]}@ "${speakerMatch[2]}"`);
-        } else {
-          pushLine(`@${characterName}@ "${seg}"`);
-        }
-        partLines.push(seg);
-      });
-    }
-
-    if (collector && partLines.length) {
+    // Add dialogue parts to collector
+    if (collector && dialogueLines.length) {
       const part = buildStructuredPart(
-        textNode,
+        block,
         {
           flavor: 'speech',
           role: 'npc',
@@ -473,11 +448,29 @@ export const createBabechatAdapter = ({
           legacyFormat: 'npc',
         },
         {
-          lines: partLines,
+          lines: dialogueLines,
           legacyFormat: 'npc',
         },
       );
-      collector.push(part, { node: textNode });
+      collector.push(part, { node: block });
+    }
+
+    // Add narration parts to collector
+    if (collector && narrationLines.length) {
+      const part = buildStructuredPart(
+        block,
+        {
+          flavor: 'narration',
+          role: 'narration',
+          speaker: '내레이션',
+          legacyFormat: 'plain',
+        },
+        {
+          lines: narrationLines,
+          legacyFormat: 'plain',
+        },
+      );
+      collector.push(part, { node: block });
     }
   };
 
@@ -490,11 +483,12 @@ export const createBabechatAdapter = ({
     if (role !== 'system') return;
 
     const partLines: string[] = [];
-    textSegmentsFromNode(block).forEach((seg) => {
-      if (!seg) return;
-      pushLine(`[SYSTEM] ${seg}`);
-      partLines.push(seg);
-    });
+    const text = textFromNode(block);
+
+    if (text && !isStatusBlock(text)) {
+      pushLine(`[SYSTEM] ${text}`);
+      partLines.push(text);
+    }
 
     if (collector && partLines.length) {
       const part = buildStructuredPart(
@@ -581,7 +575,6 @@ export const createBabechatAdapter = ({
 
   const guessPlayerNames = (): string[] => {
     // babechat.ai doesn't expose player names in DOM easily
-    // Return empty and rely on fallbacks
     return [];
   };
 

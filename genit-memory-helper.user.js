@@ -2543,34 +2543,6 @@ var GMHBundle = (function (exports) {
             : getAdapterConfig;
         const adapterConfig = registryGet('babechat');
         const selectors = adapterConfig.selectors || {};
-        const collectAll = (selList, root = document) => {
-            const out = [];
-            const seen = new Set();
-            if (!selList?.length)
-                return out;
-            for (const sel of selList) {
-                if (!sel)
-                    continue;
-                if (root instanceof Element && root.matches(sel) && !seen.has(root)) {
-                    seen.add(root);
-                    out.push(root);
-                }
-                let nodes;
-                try {
-                    nodes = root.querySelectorAll(sel);
-                }
-                catch (e) {
-                    continue;
-                }
-                nodes.forEach((node) => {
-                    if (!node || seen.has(node))
-                        return;
-                    seen.add(node);
-                    out.push(node);
-                });
-            }
-            return out;
-        };
         const firstMatch = (selList, root = document) => {
             if (!selList?.length)
                 return null;
@@ -2588,16 +2560,40 @@ var GMHBundle = (function (exports) {
             }
             return null;
         };
-        const textSegmentsFromNode = (node) => {
+        const collectAll = (selList, root = document) => {
+            const out = [];
+            const seen = new Set();
+            if (!selList?.length)
+                return out;
+            for (const sel of selList) {
+                if (!sel)
+                    continue;
+                let nodes;
+                try {
+                    nodes = root.querySelectorAll(sel);
+                }
+                catch (e) {
+                    continue;
+                }
+                nodes.forEach((node) => {
+                    if (!node || seen.has(node))
+                        return;
+                    seen.add(node);
+                    out.push(node);
+                });
+            }
+            return out;
+        };
+        const textFromNode = (node) => {
             if (!node)
-                return [];
-            let text = '';
+                return '';
             if (node instanceof HTMLElement) {
-                text = node.innerText ?? node.textContent ?? '';
+                return (node.innerText ?? node.textContent ?? '').trim();
             }
-            else if (node instanceof Element || node instanceof Node) {
-                text = node.textContent ?? '';
-            }
+            return (node.textContent ?? '').trim();
+        };
+        const textSegmentsFromNode = (node) => {
+            const text = textFromNode(node);
             if (!text)
                 return [];
             return text
@@ -2615,119 +2611,90 @@ var GMHBundle = (function (exports) {
             return null;
         };
         const getChatContainer = (doc = document) => {
-            // Try direct selectors first
-            const direct = firstMatch(selectors.chatContainers, doc);
-            if (direct && isScrollable(direct))
-                return direct;
-            // Try finding form and its scrollable parent
+            // Try form > div.overflow-hidden > div structure
+            const formContainer = doc.querySelector('form > div.overflow-hidden > div');
+            if (formContainer)
+                return formContainer;
+            const overflowContainer = doc.querySelector('form > div.overflow-hidden');
+            if (overflowContainer)
+                return overflowContainer;
+            // Fallback to form
             const form = doc.querySelector('form');
             if (form) {
                 const scrollable = findScrollableAncestor(form);
                 if (scrollable)
                     return scrollable;
-                // Return form's parent if it looks like a chat container
-                const parent = form.parentElement;
-                if (parent && parent.classList.contains('overflow-hidden')) {
-                    return parent;
-                }
-            }
-            // Fallback: find message blocks and trace up
-            const block = firstMatch(selectors.messageRoot, doc);
-            if (block) {
-                const scrollable = findScrollableAncestor(block.parentElement);
-                if (scrollable)
-                    return scrollable;
+                return form;
             }
             return null;
         };
         const getMessageBlocks = (root) => {
             const targetRoot = root || document;
-            const blocks = collectAll(selectors.messageRoot, targetRoot);
-            if (blocks.length)
-                return blocks;
-            // Fallback: query form directly
-            const form = targetRoot instanceof Document
-                ? targetRoot.querySelector('form')
-                : targetRoot.querySelector('form') || targetRoot.closest('form');
-            if (form) {
-                const userMessages = Array.from(form.querySelectorAll('.justify-end.font-normal'));
-                const aiMessages = Array.from(form.querySelectorAll('.justify-start.font-normal'));
-                return [...userMessages, ...aiMessages].sort((a, b) => {
-                    const aRect = a.getBoundingClientRect();
-                    const bRect = b.getBoundingClientRect();
-                    return aRect.top - bRect.top;
-                });
-            }
-            return [];
+            // Find the container first
+            const container = targetRoot instanceof Document
+                ? getChatContainer(targetRoot)
+                : targetRoot;
+            if (!container)
+                return [];
+            // Get turn wrappers
+            const turns = collectAll(selectors.messageRoot, container);
+            // Skip the first element if it's a system message (px-5 without flex-col)
+            // Filter out system messages that don't have the turn structure
+            return turns.filter((turn, index) => {
+                // First child is often system message - check if it has actual content structure
+                if (index === 0) {
+                    const hasPlayerContent = turn.querySelector('.justify-end') !== null;
+                    const hasNpcContent = turn.querySelector('a[href*="/character/"]') !== null;
+                    if (!hasPlayerContent && !hasNpcContent) {
+                        return false; // Skip system intro message
+                    }
+                }
+                return true;
+            });
         };
         const detectRole = (block) => {
             if (!block)
                 return 'unknown';
-            // Check for user message (justify-end)
-            if (block.classList.contains('justify-end')) {
-                return 'player';
+            // Check for user message (has justify-end child)
+            const hasJustifyEnd = block.querySelector('.justify-end') !== null;
+            if (hasJustifyEnd) {
+                // Make sure it's not a system message disguised
+                const hasUserBubble = block.querySelector('[class*="B56576"]') !== null;
+                if (hasUserBubble)
+                    return 'player';
             }
-            // Check for AI message (justify-start with avatar)
-            if (block.classList.contains('justify-start')) {
-                const hasAvatar = block.querySelector('a[href*="/character/"][href*="/profile"]');
-                if (hasAvatar)
-                    return 'npc';
-            }
-            // Check for system message
-            const bgClass = Array.from(block.classList).find(c => c.includes('363636'));
-            if (bgClass)
-                return 'system';
-            // Check parent classes as fallback
-            const parent = block.closest('.justify-end, .justify-start');
-            if (parent?.classList.contains('justify-end'))
-                return 'player';
-            if (parent?.classList.contains('justify-start'))
+            // Check for AI message (has avatar link)
+            const hasAvatarLink = block.querySelector('a[href*="/character/"]') !== null;
+            if (hasAvatarLink)
                 return 'npc';
+            // Check for system/narration only message
+            const hasNarrationBg = block.querySelector('[class*="363636"]') !== null;
+            if (hasNarrationBg && !hasAvatarLink)
+                return 'system';
             return 'unknown';
         };
-        const resolvePartType = (node) => {
-            if (!(node instanceof Element))
-                return 'paragraph';
-            const tag = node.tagName?.toLowerCase?.() || '';
-            if (!tag)
-                return 'paragraph';
-            if (tag === 'pre')
-                return 'code';
-            if (tag === 'code' && node.closest('pre'))
-                return 'code';
-            if (tag === 'blockquote')
-                return 'blockquote';
-            if (tag === 'ul' || tag === 'ol')
-                return 'list';
-            if (tag === 'img')
-                return 'image';
-            if (tag === 'hr')
-                return 'horizontal-rule';
-            if (/^h[1-6]$/.test(tag))
-                return 'heading';
-            if (tag === 'em' || tag === 'i')
-                return 'narration';
-            return 'paragraph';
+        const isStatusBlock = (text) => {
+            // Status blocks contain emoji indicators like 🕐, 🌐, 😶, ❤️, 🎭, 🎒
+            return /[🕐🌐😶❤️🎭🎒]/.test(text);
         };
-        const buildStructuredPart = (node, context = {}, options = {}) => {
-            const baseLines = Array.isArray(options.lines) ? options.lines.slice() : [];
-            const partType = options.type || resolvePartType(node);
-            const part = {
-                type: partType,
-                flavor: context.flavor || 'speech',
-                role: context.role || null,
-                speaker: context.speaker || null,
-                lines: baseLines,
-                legacyFormat: options.legacyFormat || context.legacyFormat || null,
-            };
-            if (Array.isArray(options.legacyLines)) {
-                part.legacyLines = options.legacyLines.slice();
+        const extractCharacterName = (block) => {
+            // Try to find character name from the small text element
+            const nameNode = block.querySelector('.text-\\[0\\.75rem\\], [class*="text-[0.75rem]"]');
+            if (nameNode) {
+                const name = nameNode.textContent?.trim();
+                if (name && name.length < 50)
+                    return name;
             }
-            if (!part.lines.length) {
-                const fallbackLines = textSegmentsFromNode(node);
-                part.lines = fallbackLines;
+            // Fallback: extract from avatar link
+            const avatarLink = block.querySelector('a[href*="/character/"]');
+            if (avatarLink) {
+                const href = avatarLink.getAttribute('href') || '';
+                // Try to extract name from URL if possible
+                const match = href.match(/\/character\/[^/]+\/([^/]+)/);
+                if (match)
+                    return decodeURIComponent(match[1]).slice(0, 40);
             }
-            return part;
+            return 'NPC';
         };
         const getOrderPath = (node, root) => {
             if (!(node instanceof Node) || !(root instanceof Node))
@@ -2799,41 +2766,44 @@ var GMHBundle = (function (exports) {
                 defaults: snapshotDefaults,
             };
         };
-        const extractCharacterName = (block) => {
-            // Try character name selector
-            const nameNode = firstMatch(selectors.characterName, block);
-            if (nameNode) {
-                const name = nameNode.textContent?.trim();
-                if (name)
-                    return name.slice(0, 40);
+        const buildStructuredPart = (node, context = {}, options = {}) => {
+            const baseLines = Array.isArray(options.lines) ? options.lines.slice() : [];
+            const part = {
+                type: options.type || 'paragraph',
+                flavor: context.flavor || 'speech',
+                role: context.role || null,
+                speaker: context.speaker || null,
+                lines: baseLines,
+                legacyFormat: options.legacyFormat || context.legacyFormat || null,
+            };
+            if (Array.isArray(options.legacyLines)) {
+                part.legacyLines = options.legacyLines.slice();
             }
-            // Fallback: look for small text before message bubble
-            const smallText = block.querySelector('.text-\\[0\\.75rem\\], [class*="text-[0.75rem]"]');
-            if (smallText) {
-                const name = smallText.textContent?.trim();
-                if (name)
-                    return name.slice(0, 40);
+            if (!part.lines.length) {
+                const fallbackLines = textSegmentsFromNode(node);
+                part.lines = fallbackLines;
             }
-            return 'NPC';
+            return part;
         };
         const emitPlayerLines = (block, pushLine, collector = null) => {
             const role = detectRole(block);
             if (role !== 'player')
                 return;
-            // Find text content in user message bubble
-            const textNode = block.querySelector('[class*="B56576"], [class*="bg-[#B56576]"]')
-                || block.querySelector('.rounded-tl-xl')
-                || block;
+            // Find all user message bubbles (pink background)
+            const userBubbles = block.querySelectorAll('[class*="B56576"]');
             const partLines = [];
-            textSegmentsFromNode(textNode).forEach((seg) => {
-                if (!seg)
+            const seenTexts = new Set();
+            userBubbles.forEach((bubble) => {
+                const text = textFromNode(bubble);
+                if (!text || seenTexts.has(text))
                     return;
-                pushLine(playerMark + seg);
-                partLines.push(seg);
+                seenTexts.add(text);
+                pushLine(playerMark + text);
+                partLines.push(text);
             });
             if (collector && partLines.length) {
                 const playerName = collector.defaults?.playerName || '플레이어';
-                const part = buildStructuredPart(textNode, {
+                const part = buildStructuredPart(block, {
                     flavor: 'speech',
                     role: 'player',
                     speaker: playerName,
@@ -2842,7 +2812,7 @@ var GMHBundle = (function (exports) {
                     lines: partLines,
                     legacyFormat: 'player',
                 });
-                collector.push(part, { node: textNode });
+                collector.push(part, { node: block });
             }
         };
         const emitNpcLines = (block, pushLine, collector = null) => {
@@ -2850,57 +2820,64 @@ var GMHBundle = (function (exports) {
             if (role !== 'npc')
                 return;
             const characterName = extractCharacterName(block);
-            // Find text content in AI message bubble
-            const textNode = block.querySelector('[class*="262727"], [class*="bg-[#262727]"]')
-                || block.querySelector('.rounded-bl-xl')
-                || block.querySelector('.relative.max-w-\\[70\\%\\]');
-            if (!textNode)
-                return;
-            const partLines = [];
-            // Handle italic text as narration, regular text as dialogue
-            const children = textNode.querySelectorAll('em, i, p, span');
-            if (children.length) {
-                children.forEach((child) => {
-                    const text = child.textContent?.trim();
-                    if (!text)
-                        return;
-                    const isNarration = child.tagName.toLowerCase() === 'em' || child.tagName.toLowerCase() === 'i';
-                    if (isNarration) {
-                        pushLine(text);
-                    }
-                    else {
-                        pushLine(`@${characterName}@ "${text}"`);
-                    }
-                    partLines.push(text);
-                });
-            }
-            else {
-                // No structured children, emit all text
-                textSegmentsFromNode(textNode).forEach((seg) => {
-                    if (!seg)
-                        return;
-                    // Check if line starts with speaker indicator (e.g., "치류 |")
-                    const speakerMatch = seg.match(/^(.+?)\s*\|\s*(.+)$/);
-                    if (speakerMatch) {
-                        pushLine(`@${speakerMatch[1]}@ "${speakerMatch[2]}"`);
-                    }
-                    else {
-                        pushLine(`@${characterName}@ "${seg}"`);
-                    }
-                    partLines.push(seg);
-                });
-            }
-            if (collector && partLines.length) {
-                const part = buildStructuredPart(textNode, {
+            const seenTexts = new Set();
+            const dialogueLines = [];
+            const narrationLines = [];
+            // Collect all dialogue bubbles (dark background #262727)
+            const dialogueBubbles = block.querySelectorAll('[class*="262727"]');
+            dialogueBubbles.forEach((bubble) => {
+                const text = textFromNode(bubble);
+                if (!text || seenTexts.has(text) || isStatusBlock(text))
+                    return;
+                seenTexts.add(text);
+                // Check if text has speaker prefix like "치류 | "
+                const speakerMatch = text.match(/^(.+?)\s*\|\s*(.+)$/s);
+                if (speakerMatch) {
+                    const speaker = speakerMatch[1].trim();
+                    const dialogue = speakerMatch[2].trim();
+                    pushLine(`@${speaker}@ "${dialogue}"`);
+                    dialogueLines.push(dialogue);
+                }
+                else {
+                    pushLine(`@${characterName}@ "${text}"`);
+                    dialogueLines.push(text);
+                }
+            });
+            // Collect all narration blocks (gray background #363636)
+            const narrationBlocks = block.querySelectorAll('[class*="363636"]');
+            narrationBlocks.forEach((narration) => {
+                const text = textFromNode(narration);
+                if (!text || seenTexts.has(text) || isStatusBlock(text))
+                    return;
+                seenTexts.add(text);
+                pushLine(text); // Narration without speaker prefix
+                narrationLines.push(text);
+            });
+            // Add dialogue parts to collector
+            if (collector && dialogueLines.length) {
+                const part = buildStructuredPart(block, {
                     flavor: 'speech',
                     role: 'npc',
                     speaker: characterName,
                     legacyFormat: 'npc',
                 }, {
-                    lines: partLines,
+                    lines: dialogueLines,
                     legacyFormat: 'npc',
                 });
-                collector.push(part, { node: textNode });
+                collector.push(part, { node: block });
+            }
+            // Add narration parts to collector
+            if (collector && narrationLines.length) {
+                const part = buildStructuredPart(block, {
+                    flavor: 'narration',
+                    role: 'narration',
+                    speaker: '내레이션',
+                    legacyFormat: 'plain',
+                }, {
+                    lines: narrationLines,
+                    legacyFormat: 'plain',
+                });
+                collector.push(part, { node: block });
             }
         };
         const emitSystemLines = (block, pushLine, collector = null) => {
@@ -2908,12 +2885,11 @@ var GMHBundle = (function (exports) {
             if (role !== 'system')
                 return;
             const partLines = [];
-            textSegmentsFromNode(block).forEach((seg) => {
-                if (!seg)
-                    return;
-                pushLine(`[SYSTEM] ${seg}`);
-                partLines.push(seg);
-            });
+            const text = textFromNode(block);
+            if (text && !isStatusBlock(text)) {
+                pushLine(`[SYSTEM] ${text}`);
+                partLines.push(text);
+            }
             if (collector && partLines.length) {
                 const part = buildStructuredPart(block, {
                     flavor: 'meta',
@@ -2985,7 +2961,6 @@ var GMHBundle = (function (exports) {
         };
         const guessPlayerNames = () => {
             // babechat.ai doesn't expose player names in DOM easily
-            // Return empty and rely on fallbacks
             return [];
         };
         const getPanelAnchor = (doc = document) => {
@@ -9432,43 +9407,41 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         const config = {
             selectors: {
                 chatContainers: [
-                    '.overflow-hidden.max-w-\\[840px\\]',
+                    'form > div.overflow-hidden > div',
+                    'form > div.overflow-hidden',
                     'form',
-                    '.fixed.top-\\[5\\.75rem\\]',
                 ],
+                // Turn wrapper - each turn is wrapped in this
                 messageRoot: [
-                    'div.flex.justify-end.font-normal',
-                    'div.flex.justify-start.font-normal',
+                    'div.flex.flex-col.gap-3.px-5.pt-4',
                 ],
                 playerScopes: [
                     '.justify-end',
+                ],
+                playerText: [
                     '[class*="B56576"]',
                     '[class*="bg-[#B56576]"]',
                 ],
-                playerText: [
-                    '.justify-end [class*="B56576"]',
-                    '.justify-end .rounded-tl-xl',
-                    '.justify-end .whitespace-pre-line',
-                ],
                 npcGroups: [
-                    '.justify-start',
+                    'a[href*="/character/"]',
                 ],
                 npcBubble: [
                     '[class*="262727"]',
                     '[class*="bg-[#262727]"]',
-                    '.rounded-bl-xl',
+                ],
+                narrationBlocks: [
+                    '[class*="363636"]',
+                    '[class*="bg-[#363636]"]',
                 ],
                 characterName: [
-                    '.justify-start .text-\\[0\\.75rem\\]',
-                    '.justify-start [class*="text-[0.75rem]"]',
-                    '.justify-start .relative.max-w-\\[70\\%\\] > div:first-child',
+                    '.text-\\[0\\.75rem\\]',
+                    '[class*="text-[0.75rem]"]',
                 ],
                 avatarLink: [
-                    'a[href*="/character/"][href*="/profile"]',
+                    'a[href*="/character/"]',
                 ],
-                systemMessage: [
-                    '[class*="363636"]',
-                    '.bg-\\[\\#363636\\]\\/80',
+                statusBlock: [
+                // Status blocks contain emoji indicators
                 ],
                 panelAnchor: ['#__next', 'main', 'body'],
                 textHints: ['메시지', '채팅'],

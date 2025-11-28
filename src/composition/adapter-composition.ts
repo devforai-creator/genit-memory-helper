@@ -129,43 +129,41 @@ const registerBabechatConfig = (registerAdapterConfig: RegisterAdapterConfig): v
   const config: AdapterConfig = {
     selectors: {
       chatContainers: [
-        '.overflow-hidden.max-w-\\[840px\\]',
+        'form > div.overflow-hidden > div',
+        'form > div.overflow-hidden',
         'form',
-        '.fixed.top-\\[5\\.75rem\\]',
       ],
+      // Turn wrapper - each turn is wrapped in this
       messageRoot: [
-        'div.flex.justify-end.font-normal',
-        'div.flex.justify-start.font-normal',
+        'div.flex.flex-col.gap-3.px-5.pt-4',
       ],
       playerScopes: [
         '.justify-end',
+      ],
+      playerText: [
         '[class*="B56576"]',
         '[class*="bg-[#B56576]"]',
       ],
-      playerText: [
-        '.justify-end [class*="B56576"]',
-        '.justify-end .rounded-tl-xl',
-        '.justify-end .whitespace-pre-line',
-      ],
       npcGroups: [
-        '.justify-start',
+        'a[href*="/character/"]',
       ],
       npcBubble: [
         '[class*="262727"]',
         '[class*="bg-[#262727]"]',
-        '.rounded-bl-xl',
+      ],
+      narrationBlocks: [
+        '[class*="363636"]',
+        '[class*="bg-[#363636]"]',
       ],
       characterName: [
-        '.justify-start .text-\\[0\\.75rem\\]',
-        '.justify-start [class*="text-[0.75rem]"]',
-        '.justify-start .relative.max-w-\\[70\\%\\] > div:first-child',
+        '.text-\\[0\\.75rem\\]',
+        '[class*="text-[0.75rem]"]',
       ],
       avatarLink: [
-        'a[href*="/character/"][href*="/profile"]',
+        'a[href*="/character/"]',
       ],
-      systemMessage: [
-        '[class*="363636"]',
-        '.bg-\\[\\#363636\\]\\/80',
+      statusBlock: [
+        // Status blocks contain emoji indicators
       ],
       panelAnchor: ['#__next', 'main', 'body'],
       textHints: ['메시지', '채팅'],
