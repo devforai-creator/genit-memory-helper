@@ -58,6 +58,195 @@ export interface BabechatAdapterOptions {
     | null;
 }
 
+/** API message format from babechat API */
+export interface BabechatApiMessage {
+  id: number;
+  createdAt: string;
+  content: string;
+  emotion?: string;
+  role: 'user' | 'assistant';
+  location?: string;
+  date?: string;
+}
+
+/** API response format */
+export interface BabechatApiResponse {
+  count: number;
+  messages: BabechatApiMessage[];
+}
+
+/** Chat session info extracted from URL/page */
+export interface BabechatSessionInfo {
+  characterId: string;
+  isUGC: string;
+  roomId: string;
+}
+
+/** Captured API parameters from fetch intercept */
+let capturedApiParams: BabechatSessionInfo | null = null;
+let capturedAuthHeaders: Record<string, string> | null = null;
+let capturedCharacterData: {
+  name: string;
+  initialAction: string | null;
+  initialMessage: string | null;
+} | null = null;
+let fetchInterceptInstalled = false;
+
+/**
+ * Install fetch and XHR interceptor to capture babechat API parameters
+ * Called automatically on module load if on babechat.ai
+ */
+export function installFetchInterceptor(): void {
+  if (fetchInterceptInstalled || typeof window === 'undefined') return;
+
+  // Helper to extract params from URL
+  const extractParamsFromUrl = (url: string): void => {
+    if (url.includes('api.babechatapi.com') && url.includes('/api/messages/')) {
+      // URL pattern: /api/messages/{characterId}/{isUGC}/{roomId}
+      // roomId must be numeric (not the literal word "room")
+      const match = url.match(/\/api\/messages\/([a-f0-9-]{36})\/(true|false)\/(\d+)/i);
+      if (match) {
+        capturedApiParams = {
+          characterId: match[1],
+          isUGC: match[2],
+          roomId: match[3],
+        };
+        if (typeof console !== 'undefined') {
+          console.log('[GMH] Captured babechat API params:', capturedApiParams);
+        }
+      }
+    }
+  };
+
+  // Intercept fetch
+  const originalFetch = window.fetch;
+  window.fetch = async function(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    extractParamsFromUrl(url);
+    return originalFetch.apply(this, [input, init] as [RequestInfo | URL, RequestInit | undefined]);
+  };
+
+  // Intercept XMLHttpRequest (babechat uses XHR, not fetch!)
+  const originalXHROpen = XMLHttpRequest.prototype.open;
+  const originalXHRSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+
+  // Track headers per XHR instance
+  const xhrHeadersMap = new WeakMap<XMLHttpRequest, Record<string, string>>();
+  const xhrUrlMap = new WeakMap<XMLHttpRequest, string>();
+
+  XMLHttpRequest.prototype.open = function(
+    method: string,
+    url: string | URL,
+    async?: boolean,
+    username?: string | null,
+    password?: string | null
+  ): void {
+    const urlStr = typeof url === 'string' ? url : url.href;
+    xhrUrlMap.set(this, urlStr);
+    xhrHeadersMap.set(this, {});
+    extractParamsFromUrl(urlStr);
+
+    // Listen for character API response to capture initialAction/initialMessage
+    if (urlStr.includes('api.babechatapi.com') && urlStr.includes('/api/characters/') && !urlStr.includes('/messages/')) {
+      const xhr = this;
+      const originalOnReadyStateChange = xhr.onreadystatechange;
+      xhr.onreadystatechange = function(ev) {
+        if (xhr.readyState === 4 && xhr.status === 200) {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            if (data && (data.initialAction || data.initialMessage)) {
+              capturedCharacterData = {
+                name: data.name || 'NPC',
+                initialAction: data.initialAction || null,
+                initialMessage: data.initialMessage || null,
+              };
+              if (typeof console !== 'undefined') {
+                console.log('[GMH] Captured character initial data:', {
+                  name: capturedCharacterData.name,
+                  hasAction: !!capturedCharacterData.initialAction,
+                  hasMessage: !!capturedCharacterData.initialMessage,
+                });
+              }
+            }
+          } catch (e) {
+            // Ignore parse errors
+          }
+        }
+        if (originalOnReadyStateChange) {
+          return originalOnReadyStateChange.call(this, ev);
+        }
+      };
+    }
+
+    return originalXHROpen.apply(this, [method, url, async ?? true, username, password] as [string, string | URL, boolean, string | null | undefined, string | null | undefined]);
+  };
+
+  XMLHttpRequest.prototype.setRequestHeader = function(name: string, value: string): void {
+    const headers = xhrHeadersMap.get(this) || {};
+    headers[name] = value;
+    xhrHeadersMap.set(this, headers);
+
+    // Capture auth headers from messages API calls
+    const url = xhrUrlMap.get(this) || '';
+    if (url.includes('api.babechatapi.com') && url.includes('/api/messages/')) {
+      if (name.toLowerCase() === 'authorization' || name.toLowerCase() === 'x-auth-token') {
+        if (!capturedAuthHeaders) capturedAuthHeaders = {};
+        capturedAuthHeaders[name] = value;
+        if (typeof console !== 'undefined') {
+          console.log('[GMH] Captured auth header:', name);
+        }
+      }
+    }
+
+    return originalXHRSetRequestHeader.apply(this, [name, value]);
+  };
+
+  fetchInterceptInstalled = true;
+  if (typeof console !== 'undefined') {
+    console.log('[GMH] Fetch/XHR interceptor installed for babechat');
+  }
+}
+
+// Auto-install interceptor immediately if on babechat.ai
+// This runs at module load time, before any adapter is created
+if (typeof window !== 'undefined' && /babechat\.ai/i.test(window.location?.hostname || '')) {
+  installFetchInterceptor();
+}
+
+/**
+ * Get captured API parameters
+ */
+export function getCapturedApiParams(): BabechatSessionInfo | null {
+  return capturedApiParams;
+}
+
+/**
+ * Get captured auth headers
+ */
+export function getCapturedAuthHeaders(): Record<string, string> | null {
+  return capturedAuthHeaders;
+}
+
+/**
+ * Get captured character data (initialAction/initialMessage)
+ */
+export function getCapturedCharacterData(): {
+  name: string;
+  initialAction: string | null;
+  initialMessage: string | null;
+} | null {
+  return capturedCharacterData;
+}
+
+/**
+ * Clear captured API parameters
+ */
+export function clearCapturedApiParams(): void {
+  capturedApiParams = null;
+  capturedAuthHeaders = null;
+  capturedCharacterData = null;
+}
+
 export interface BabechatAdapter {
   id: string;
   label: string;
@@ -72,6 +261,12 @@ export interface BabechatAdapter {
   dumpSelectors(): AdapterSelectors;
   resetInfoRegistry(): void;
   setPlayerNameAccessor(accessor: () => string[] | null | undefined): void;
+  /** Extract session info from current URL for API calls */
+  extractSessionInfo(): BabechatSessionInfo | null;
+  /** Fetch all messages via API (bypasses virtual scroll) */
+  fetchAllMessagesViaApi(): Promise<StructuredSnapshotMessage[]>;
+  /** Check if API-based collection is available */
+  canUseApiCollection(): boolean;
 }
 
 export const createBabechatAdapter = ({
@@ -80,6 +275,9 @@ export const createBabechatAdapter = ({
   getPlayerNames = () => [],
   errorHandler,
 }: BabechatAdapterOptions = {}): BabechatAdapter => {
+  // Install fetch interceptor to capture API parameters
+  installFetchInterceptor();
+
   let playerNameAccessor: () => unknown = typeof getPlayerNames === 'function' ? getPlayerNames : () => [];
 
   const warnWithHandler = (err: unknown, context: string, fallbackMessage: string): void => {
@@ -841,6 +1039,201 @@ export const createBabechatAdapter = ({
   const match = (loc: Location | AdapterMatchLocation): boolean =>
     /babechat\.ai/i.test(loc.hostname ?? '');
 
+  /**
+   * Extract session info from captured API parameters
+   * Uses fetch interceptor to capture params from babechat's own API calls
+   */
+  const extractSessionInfo = (): BabechatSessionInfo | null => {
+    // Use captured params from fetch interceptor
+    const captured = getCapturedApiParams();
+    if (captured) {
+      return captured;
+    }
+    return null;
+  };
+
+  /**
+   * Convert API message to StructuredSnapshotMessage format
+   */
+  const convertApiMessage = (
+    apiMsg: BabechatApiMessage,
+    index: number,
+    characterName: string,
+  ): StructuredSnapshotMessage => {
+    const isUser = apiMsg.role === 'user';
+    const playerName = primaryPlayerName();
+
+    // Parse content - babechat API returns raw text
+    const content = apiMsg.content || '';
+    const lines = content.split(/\r?\n/).filter(Boolean);
+
+    const part: StructuredSnapshotMessagePart = {
+      type: 'paragraph',
+      flavor: 'speech',
+      role: isUser ? 'player' : 'npc',
+      speaker: isUser ? playerName : characterName,
+      lines,
+      legacyFormat: isUser ? 'player' : 'npc',
+    };
+
+    return {
+      id: String(apiMsg.id),
+      index,
+      ordinal: index,
+      role: isUser ? 'player' : 'npc',
+      channel: isUser ? 'user' : 'llm',
+      speaker: isUser ? playerName : characterName,
+      parts: [part],
+    };
+  };
+
+  /**
+   * Fetch all messages via API (bypasses virtual scroll limitation)
+   */
+  const fetchAllMessagesViaApi = async (): Promise<StructuredSnapshotMessage[]> => {
+    const sessionInfo = extractSessionInfo();
+    if (!sessionInfo) {
+      throw new Error('Could not extract session info - babechat API call not captured yet. Try scrolling first.');
+    }
+
+    const { characterId, isUGC, roomId } = sessionInfo;
+    const messages: StructuredSnapshotMessage[] = [];
+    let offset = 0;
+    const limit = 100; // Fetch in batches of 100
+
+    // Try to get character name from page
+    const characterNameEl = document.querySelector('a[href*="/character/"] span, [class*="character-name"]');
+    const characterName = characterNameEl?.textContent?.trim() || 'NPC';
+
+    if (typeof console !== 'undefined') {
+      console.log(`[GMH] Fetching messages: characterId=${characterId}, isUGC=${isUGC}, roomId=${roomId}`);
+    }
+
+    // Get captured auth headers
+    const authHeaders = getCapturedAuthHeaders();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (authHeaders) {
+      Object.assign(headers, authHeaders);
+    }
+
+    if (typeof console !== 'undefined') {
+      console.log('[GMH] Using auth headers:', Object.keys(headers));
+    }
+
+    // Paginate through all messages
+    while (true) {
+      const apiUrl = `https://api.babechatapi.com/ko/api/messages/${characterId}/${isUGC}/${roomId}?offset=${offset}&limit=${limit}`;
+
+      const response = await fetch(apiUrl, {
+        credentials: 'include', // Include cookies for auth
+        headers,
+      });
+
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+      }
+
+      const data: BabechatApiResponse = await response.json();
+
+      // Convert and add messages
+      for (let i = 0; i < data.messages.length; i++) {
+        const apiMsg = data.messages[i];
+        const globalIndex = offset + i;
+        const structuredMsg = convertApiMessage(apiMsg, globalIndex, characterName);
+        messages.push(structuredMsg);
+      }
+
+      // Check if we've fetched all messages
+      if (messages.length >= data.count || data.messages.length < limit) {
+        break;
+      }
+
+      offset += limit;
+    }
+
+    // Sort by ID to ensure correct order (oldest first)
+    messages.sort((a, b) => {
+      const idA = parseInt(a.id || '0', 10);
+      const idB = parseInt(b.id || '0', 10);
+      return idA - idB;
+    });
+
+    // Prepend initial messages from character data (scenario + first greeting)
+    const charData = getCapturedCharacterData();
+    const initialMessages: StructuredSnapshotMessage[] = [];
+
+    if (charData) {
+      const charName = charData.name || characterName;
+
+      // Add initialAction as narration/scenario
+      if (charData.initialAction) {
+        const actionPart: StructuredSnapshotMessagePart = {
+          type: 'paragraph',
+          flavor: 'narration',
+          role: 'narration',
+          speaker: '시나리오',
+          lines: charData.initialAction.split(/\r?\n/).filter(Boolean),
+          legacyFormat: 'plain',
+        };
+        initialMessages.push({
+          id: 'initial-action',
+          index: -2,
+          ordinal: -2,
+          role: 'system',
+          channel: 'system',
+          speaker: '시나리오',
+          parts: [actionPart],
+        });
+      }
+
+      // Add initialMessage as character's first greeting
+      if (charData.initialMessage) {
+        const msgPart: StructuredSnapshotMessagePart = {
+          type: 'paragraph',
+          flavor: 'speech',
+          role: 'npc',
+          speaker: charName,
+          lines: charData.initialMessage.split(/\r?\n/).filter(Boolean),
+          legacyFormat: 'npc',
+        };
+        initialMessages.push({
+          id: 'initial-message',
+          index: -1,
+          ordinal: -1,
+          role: 'npc',
+          channel: 'llm',
+          speaker: charName,
+          parts: [msgPart],
+        });
+      }
+
+      if (initialMessages.length > 0 && typeof console !== 'undefined') {
+        console.log(`[GMH] Prepending ${initialMessages.length} initial message(s) from character data`);
+      }
+    }
+
+    // Combine: initial messages first, then API messages
+    const allMessages = [...initialMessages, ...messages];
+
+    // Re-assign indices after combining
+    allMessages.forEach((msg, idx) => {
+      msg.index = idx;
+      msg.ordinal = idx;
+    });
+
+    return allMessages;
+  };
+
+  /**
+   * Check if API-based collection is available
+   */
+  const canUseApiCollection = (): boolean => {
+    const sessionInfo = extractSessionInfo();
+    return sessionInfo !== null;
+  };
+
   const babechatAdapter: BabechatAdapter = {
     id: 'babechat',
     label: 'BabeChat',
@@ -861,6 +1254,9 @@ export const createBabechatAdapter = ({
         playerNameAccessor = fn;
       }
     },
+    extractSessionInfo,
+    fetchAllMessagesViaApi,
+    canUseApiCollection,
   };
 
   return babechatAdapter;

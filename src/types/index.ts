@@ -372,12 +372,14 @@ export interface AutoLoaderOptions {
   exportRange?: ExportRangeController;
   setPanelStatus?(message: string, tone?: string): void;
   getActiveAdapter(): {
+    id?: string;
     findContainer?(doc: Document): Element | null;
     listMessageBlocks?(doc: Document | Element):
       | Iterable<Element>
       | Element[]
       | NodeListOf<Element>
       | null;
+    collectStructuredMessage?(block: Element): StructuredSnapshotMessage | null;
   } | null;
   sleep(ms: number): Promise<void>;
   isScrollable(element: Element | null | undefined): boolean;
@@ -386,7 +388,7 @@ export interface AutoLoaderOptions {
   normalizeTranscript(raw: string): string;
   buildSession(raw: string): TranscriptSession;
   readTranscriptText(options?: { force?: boolean }): string;
-  logger?: Console | { warn?: (...args: unknown[]) => void } | null;
+  logger?: Console | { warn?: (...args: unknown[]) => void; log?: (...args: unknown[]) => void } | null;
 }
 
 export interface AutoLoaderStats {
@@ -417,12 +419,19 @@ export interface AutoLoaderExports {
     running: boolean;
     container: Element | null;
     meterTimer: ReturnType<typeof setInterval> | null;
+    lastProgressiveMessages: StructuredSnapshotMessage[] | null;
   };
   autoProfiles: Record<string, Record<string, unknown>>;
   getProfile(): string;
   subscribeProfileChange(listener: (profile: string) => void): () => void;
   startTurnMeter(meter: HTMLElement): void;
   collectTurnStats(options?: { force?: boolean }): AutoLoaderStats;
+  /** Get progressively collected messages (for virtual scroll adapters) */
+  getProgressiveMessages(): StructuredSnapshotMessage[] | null;
+  /** Clear progressive collection cache */
+  clearProgressiveMessages(): void;
+  /** Check if progressive messages are available */
+  hasProgressiveMessages(): boolean;
 }
 
 export interface StructuredSnapshotMessagePart {
@@ -751,6 +760,8 @@ export interface StructuredSnapshotReaderOptions {
   getActiveAdapter: () => SnapshotAdapter | null | undefined;
   setEntryOriginProvider?: (provider: () => Array<number | null>) => void;
   documentRef?: Document | null;
+  /** Get progressively collected messages (for virtual scroll adapters) */
+  getProgressiveMessages?: () => StructuredSnapshotMessage[] | null;
 }
 
 export interface ExportBundleOptions {

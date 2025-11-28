@@ -256,6 +256,52 @@ interface MemoryBlockInit {
 - Data loss scenarios: private mode, browser reset, manual cache clear
 - Backfill (indexing past messages) not yet implemented
 
+### Babechat API-Based Message Collection
+
+**Problem**: babechat.ai uses virtual scrolling - only ~20-40 messages exist in DOM at any time. DOM-based collection with content signature deduplication caused message loss (identical messages like "네" merged into one).
+
+**Solution**: Intercept XHR calls to capture API parameters, then call the messages API directly.
+
+**API Endpoint**:
+```
+GET https://api.babechatapi.com/ko/api/messages/{characterId}/{isUGC}/{roomId}?offset={offset}&limit={limit}
+
+Response: { count: number, messages: [{ id, createdAt, content, role, ... }] }
+```
+
+**Implementation** (`src/adapters/babechat.ts`):
+
+1. **XHR Interception** (at module load, `@run-at document-start`):
+   ```typescript
+   // Intercept XMLHttpRequest.prototype.open to capture URL
+   // Intercept XMLHttpRequest.prototype.setRequestHeader to capture Authorization header
+   // Pattern: /\/api\/messages\/([a-f0-9-]{36})\/(true|false)\/(\d+)/
+   ```
+
+2. **Parameter Storage**:
+   - `capturedApiParams`: { characterId, isUGC, roomId }
+   - `capturedAuthHeaders`: { Authorization: "Bearer ..." }
+
+3. **Direct API Call** (`fetchAllMessagesViaApi`):
+   - Uses captured params and auth headers
+   - Paginates with limit=100 until all messages fetched
+   - Converts API response to `StructuredSnapshotMessage` format
+
+4. **Auto-loader Integration**:
+   - `canUseApiCollection()` checks if params are captured
+   - If available, skips DOM scrolling entirely
+   - Falls back to scroll-based collection if API fails
+
+**Key Files**:
+- `src/adapters/babechat.ts`: `installFetchInterceptor()`, `fetchAllMessagesViaApi()`
+- `src/features/auto-loader.ts`: `canUseApiCollection()`, `fetchMessagesViaApi()`
+
+5. **Character API Interception** (for initial messages):
+   - Intercepts `/api/characters/{characterId}` response
+   - Captures `initialAction` (scenario/prologue) and `initialMessage` (first greeting)
+   - Prepends these as the first messages when collecting via API
+   - Stored in `capturedCharacterData`: { name, initialAction, initialMessage }
+
 ### Build Process
 The `scripts/build.js` file:
 - Copies `genit-memory-helper.user.js` to `dist/`

@@ -9,7 +9,7 @@
 // @match        https://babechat.ai/*
 // @match        https://www.babechat.ai/*
 // @grant        GM_setClipboard
-// @run-at       document-idle
+// @run-at       document-start
 // @updateURL    https://github.com/devforai-creator/genit-memory-helper/raw/main/genit-memory-helper.user.js
 // @downloadURL  https://github.com/devforai-creator/genit-memory-helper/raw/main/genit-memory-helper.user.js
 // @license      GPL-3.0-or-later
@@ -2520,7 +2520,137 @@ var GMHBundle = (function (exports) {
     };
 
     const DEFAULT_PLAYER_MARK$1 = '⟦PLAYER⟧ ';
+    /** Captured API parameters from fetch intercept */
+    let capturedApiParams = null;
+    let capturedAuthHeaders = null;
+    let capturedCharacterData = null;
+    let fetchInterceptInstalled = false;
+    /**
+     * Install fetch and XHR interceptor to capture babechat API parameters
+     * Called automatically on module load if on babechat.ai
+     */
+    function installFetchInterceptor() {
+        if (fetchInterceptInstalled || typeof window === 'undefined')
+            return;
+        // Helper to extract params from URL
+        const extractParamsFromUrl = (url) => {
+            if (url.includes('api.babechatapi.com') && url.includes('/api/messages/')) {
+                // URL pattern: /api/messages/{characterId}/{isUGC}/{roomId}
+                // roomId must be numeric (not the literal word "room")
+                const match = url.match(/\/api\/messages\/([a-f0-9-]{36})\/(true|false)\/(\d+)/i);
+                if (match) {
+                    capturedApiParams = {
+                        characterId: match[1],
+                        isUGC: match[2],
+                        roomId: match[3],
+                    };
+                    if (typeof console !== 'undefined') {
+                        console.log('[GMH] Captured babechat API params:', capturedApiParams);
+                    }
+                }
+            }
+        };
+        // Intercept fetch
+        const originalFetch = window.fetch;
+        window.fetch = async function (input, init) {
+            const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+            extractParamsFromUrl(url);
+            return originalFetch.apply(this, [input, init]);
+        };
+        // Intercept XMLHttpRequest (babechat uses XHR, not fetch!)
+        const originalXHROpen = XMLHttpRequest.prototype.open;
+        const originalXHRSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+        // Track headers per XHR instance
+        const xhrHeadersMap = new WeakMap();
+        const xhrUrlMap = new WeakMap();
+        XMLHttpRequest.prototype.open = function (method, url, async, username, password) {
+            const urlStr = typeof url === 'string' ? url : url.href;
+            xhrUrlMap.set(this, urlStr);
+            xhrHeadersMap.set(this, {});
+            extractParamsFromUrl(urlStr);
+            // Listen for character API response to capture initialAction/initialMessage
+            if (urlStr.includes('api.babechatapi.com') && urlStr.includes('/api/characters/') && !urlStr.includes('/messages/')) {
+                const xhr = this;
+                const originalOnReadyStateChange = xhr.onreadystatechange;
+                xhr.onreadystatechange = function (ev) {
+                    if (xhr.readyState === 4 && xhr.status === 200) {
+                        try {
+                            const data = JSON.parse(xhr.responseText);
+                            if (data && (data.initialAction || data.initialMessage)) {
+                                capturedCharacterData = {
+                                    name: data.name || 'NPC',
+                                    initialAction: data.initialAction || null,
+                                    initialMessage: data.initialMessage || null,
+                                };
+                                if (typeof console !== 'undefined') {
+                                    console.log('[GMH] Captured character initial data:', {
+                                        name: capturedCharacterData.name,
+                                        hasAction: !!capturedCharacterData.initialAction,
+                                        hasMessage: !!capturedCharacterData.initialMessage,
+                                    });
+                                }
+                            }
+                        }
+                        catch (e) {
+                            // Ignore parse errors
+                        }
+                    }
+                    if (originalOnReadyStateChange) {
+                        return originalOnReadyStateChange.call(this, ev);
+                    }
+                };
+            }
+            return originalXHROpen.apply(this, [method, url, async ?? true, username, password]);
+        };
+        XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
+            const headers = xhrHeadersMap.get(this) || {};
+            headers[name] = value;
+            xhrHeadersMap.set(this, headers);
+            // Capture auth headers from messages API calls
+            const url = xhrUrlMap.get(this) || '';
+            if (url.includes('api.babechatapi.com') && url.includes('/api/messages/')) {
+                if (name.toLowerCase() === 'authorization' || name.toLowerCase() === 'x-auth-token') {
+                    if (!capturedAuthHeaders)
+                        capturedAuthHeaders = {};
+                    capturedAuthHeaders[name] = value;
+                    if (typeof console !== 'undefined') {
+                        console.log('[GMH] Captured auth header:', name);
+                    }
+                }
+            }
+            return originalXHRSetRequestHeader.apply(this, [name, value]);
+        };
+        fetchInterceptInstalled = true;
+        if (typeof console !== 'undefined') {
+            console.log('[GMH] Fetch/XHR interceptor installed for babechat');
+        }
+    }
+    // Auto-install interceptor immediately if on babechat.ai
+    // This runs at module load time, before any adapter is created
+    if (typeof window !== 'undefined' && /babechat\.ai/i.test(window.location?.hostname || '')) {
+        installFetchInterceptor();
+    }
+    /**
+     * Get captured API parameters
+     */
+    function getCapturedApiParams() {
+        return capturedApiParams;
+    }
+    /**
+     * Get captured auth headers
+     */
+    function getCapturedAuthHeaders() {
+        return capturedAuthHeaders;
+    }
+    /**
+     * Get captured character data (initialAction/initialMessage)
+     */
+    function getCapturedCharacterData() {
+        return capturedCharacterData;
+    }
     const createBabechatAdapter = ({ registry = adapterRegistry, playerMark = DEFAULT_PLAYER_MARK$1, getPlayerNames = () => [], errorHandler, } = {}) => {
+        // Install fetch interceptor to capture API parameters
+        installFetchInterceptor();
         let playerNameAccessor = typeof getPlayerNames === 'function' ? getPlayerNames : () => [];
         const warnWithHandler = (err, context, fallbackMessage) => {
             if (errorHandler?.handle) {
@@ -2538,6 +2668,7 @@ var GMHBundle = (function (exports) {
             }
             return [];
         };
+        const primaryPlayerName = () => resolvePlayerNames()[0] || '플레이어';
         const registryGet = registry && typeof registry.get === 'function'
             ? (name) => registry.get(name)
             : getAdapterConfig;
@@ -3191,6 +3322,169 @@ var GMHBundle = (function (exports) {
             return anchor || doc.body;
         };
         const match = (loc) => /babechat\.ai/i.test(loc.hostname ?? '');
+        /**
+         * Extract session info from captured API parameters
+         * Uses fetch interceptor to capture params from babechat's own API calls
+         */
+        const extractSessionInfo = () => {
+            // Use captured params from fetch interceptor
+            const captured = getCapturedApiParams();
+            if (captured) {
+                return captured;
+            }
+            return null;
+        };
+        /**
+         * Convert API message to StructuredSnapshotMessage format
+         */
+        const convertApiMessage = (apiMsg, index, characterName) => {
+            const isUser = apiMsg.role === 'user';
+            const playerName = primaryPlayerName();
+            // Parse content - babechat API returns raw text
+            const content = apiMsg.content || '';
+            const lines = content.split(/\r?\n/).filter(Boolean);
+            const part = {
+                type: 'paragraph',
+                flavor: 'speech',
+                role: isUser ? 'player' : 'npc',
+                speaker: isUser ? playerName : characterName,
+                lines,
+                legacyFormat: isUser ? 'player' : 'npc',
+            };
+            return {
+                id: String(apiMsg.id),
+                index,
+                ordinal: index,
+                role: isUser ? 'player' : 'npc',
+                channel: isUser ? 'user' : 'llm',
+                speaker: isUser ? playerName : characterName,
+                parts: [part],
+            };
+        };
+        /**
+         * Fetch all messages via API (bypasses virtual scroll limitation)
+         */
+        const fetchAllMessagesViaApi = async () => {
+            const sessionInfo = extractSessionInfo();
+            if (!sessionInfo) {
+                throw new Error('Could not extract session info - babechat API call not captured yet. Try scrolling first.');
+            }
+            const { characterId, isUGC, roomId } = sessionInfo;
+            const messages = [];
+            let offset = 0;
+            const limit = 100; // Fetch in batches of 100
+            // Try to get character name from page
+            const characterNameEl = document.querySelector('a[href*="/character/"] span, [class*="character-name"]');
+            const characterName = characterNameEl?.textContent?.trim() || 'NPC';
+            if (typeof console !== 'undefined') {
+                console.log(`[GMH] Fetching messages: characterId=${characterId}, isUGC=${isUGC}, roomId=${roomId}`);
+            }
+            // Get captured auth headers
+            const authHeaders = getCapturedAuthHeaders();
+            const headers = {
+                'Content-Type': 'application/json',
+            };
+            if (authHeaders) {
+                Object.assign(headers, authHeaders);
+            }
+            if (typeof console !== 'undefined') {
+                console.log('[GMH] Using auth headers:', Object.keys(headers));
+            }
+            // Paginate through all messages
+            while (true) {
+                const apiUrl = `https://api.babechatapi.com/ko/api/messages/${characterId}/${isUGC}/${roomId}?offset=${offset}&limit=${limit}`;
+                const response = await fetch(apiUrl, {
+                    credentials: 'include', // Include cookies for auth
+                    headers,
+                });
+                if (!response.ok) {
+                    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+                }
+                const data = await response.json();
+                // Convert and add messages
+                for (let i = 0; i < data.messages.length; i++) {
+                    const apiMsg = data.messages[i];
+                    const globalIndex = offset + i;
+                    const structuredMsg = convertApiMessage(apiMsg, globalIndex, characterName);
+                    messages.push(structuredMsg);
+                }
+                // Check if we've fetched all messages
+                if (messages.length >= data.count || data.messages.length < limit) {
+                    break;
+                }
+                offset += limit;
+            }
+            // Sort by ID to ensure correct order (oldest first)
+            messages.sort((a, b) => {
+                const idA = parseInt(a.id || '0', 10);
+                const idB = parseInt(b.id || '0', 10);
+                return idA - idB;
+            });
+            // Prepend initial messages from character data (scenario + first greeting)
+            const charData = getCapturedCharacterData();
+            const initialMessages = [];
+            if (charData) {
+                const charName = charData.name || characterName;
+                // Add initialAction as narration/scenario
+                if (charData.initialAction) {
+                    const actionPart = {
+                        type: 'paragraph',
+                        flavor: 'narration',
+                        role: 'narration',
+                        speaker: '시나리오',
+                        lines: charData.initialAction.split(/\r?\n/).filter(Boolean),
+                        legacyFormat: 'plain',
+                    };
+                    initialMessages.push({
+                        id: 'initial-action',
+                        index: -2,
+                        ordinal: -2,
+                        role: 'system',
+                        channel: 'system',
+                        speaker: '시나리오',
+                        parts: [actionPart],
+                    });
+                }
+                // Add initialMessage as character's first greeting
+                if (charData.initialMessage) {
+                    const msgPart = {
+                        type: 'paragraph',
+                        flavor: 'speech',
+                        role: 'npc',
+                        speaker: charName,
+                        lines: charData.initialMessage.split(/\r?\n/).filter(Boolean),
+                        legacyFormat: 'npc',
+                    };
+                    initialMessages.push({
+                        id: 'initial-message',
+                        index: -1,
+                        ordinal: -1,
+                        role: 'npc',
+                        channel: 'llm',
+                        speaker: charName,
+                        parts: [msgPart],
+                    });
+                }
+                if (initialMessages.length > 0 && typeof console !== 'undefined') {
+                    console.log(`[GMH] Prepending ${initialMessages.length} initial message(s) from character data`);
+                }
+            }
+            // Combine: initial messages first, then API messages
+            const allMessages = [...initialMessages, ...messages];
+            // Re-assign indices after combining
+            allMessages.forEach((msg, idx) => {
+                msg.index = idx;
+                msg.ordinal = idx;
+            });
+            return allMessages;
+        };
+        /**
+         * Check if API-based collection is available
+         */
+        const canUseApiCollection = () => {
+            const sessionInfo = extractSessionInfo();
+            return sessionInfo !== null;
+        };
         const babechatAdapter = {
             id: 'babechat',
             label: 'BabeChat',
@@ -3211,6 +3505,9 @@ var GMHBundle = (function (exports) {
                     playerNameAccessor = fn;
                 }
             },
+            extractSessionInfo,
+            fetchAllMessagesViaApi,
+            canUseApiCollection,
         };
         return babechatAdapter;
     };
@@ -3265,8 +3562,8 @@ var GMHBundle = (function (exports) {
                         guardLimit: 140,
                     },
                     fast: {
-                        cycleDelayMs: 350,
-                        settleTimeoutMs: 900,
+                        cycleDelayMs: 150,
+                        settleTimeoutMs: 400,
                         maxStableRounds: 2,
                         guardLimit: 40,
                     },
@@ -4916,7 +5213,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             downloadDomSnapshot,
         };
     }
-    function createStructuredSnapshotReader({ getActiveAdapter, setEntryOriginProvider, documentRef = typeof document !== 'undefined' ? document : null, }) {
+    function createStructuredSnapshotReader({ getActiveAdapter, setEntryOriginProvider, documentRef = typeof document !== 'undefined' ? document : null, getProgressiveMessages, }) {
         if (!getActiveAdapter)
             throw new Error('createStructuredSnapshotReader requires getActiveAdapter');
         const doc = ensureDocument$1(documentRef);
@@ -5042,6 +5339,62 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
                 blockCache = new WeakMap();
                 blockIdRegistry = new WeakMap();
                 blockIdCounter = 0;
+            }
+            // Check for progressively collected messages (for virtual scroll adapters like babechat)
+            const progressiveMessages = typeof getProgressiveMessages === 'function' ? getProgressiveMessages() : null;
+            if (progressiveMessages && progressiveMessages.length > 0) {
+                // Use progressively collected messages instead of DOM query
+                const legacyLines = [];
+                const origins = [];
+                const seenLine = new Set();
+                progressiveMessages.forEach((msg, idx) => {
+                    const ordinal = msg.ordinal ?? idx;
+                    // Extract legacy lines from message parts
+                    if (Array.isArray(msg.parts)) {
+                        msg.parts.forEach((part) => {
+                            if (Array.isArray(part.lines)) {
+                                part.lines.forEach((line) => {
+                                    const trimmed = (line || '').trim();
+                                    if (!trimmed)
+                                        return;
+                                    const lineKey = `${ordinal}::${trimmed}`;
+                                    if (seenLine.has(lineKey))
+                                        return;
+                                    seenLine.add(lineKey);
+                                    legacyLines.push(trimmed);
+                                    origins.push(ordinal);
+                                });
+                            }
+                        });
+                    }
+                    // Also check legacyLines property
+                    if (Array.isArray(msg.legacyLines)) {
+                        msg.legacyLines.forEach((line) => {
+                            const trimmed = (line || '').trim();
+                            if (!trimmed)
+                                return;
+                            const lineKey = `${ordinal}::${trimmed}`;
+                            if (seenLine.has(lineKey))
+                                return;
+                            seenLine.add(lineKey);
+                            legacyLines.push(trimmed);
+                            origins.push(ordinal);
+                        });
+                    }
+                });
+                entryOrigin = origins.slice();
+                latestStructuredSnapshot = {
+                    messages: progressiveMessages.map((msg, idx) => ({
+                        ...msg,
+                        index: msg.index ?? idx,
+                        ordinal: msg.ordinal ?? idx,
+                    })),
+                    legacyLines,
+                    entryOrigin: origins,
+                    errors: [],
+                    generatedAt: Date.now(),
+                };
+                return latestStructuredSnapshot;
             }
             const adapter = getActiveAdapter();
             const container = adapter?.findContainer?.(doc);
@@ -5218,6 +5571,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         };
     }
 
+    // DOM marking is now used for deduplication instead of progressive-collector
     const METER_INTERVAL_MS = CONFIG.TIMING.AUTO_LOADER.METER_INTERVAL_MS;
     const toElementArray = (collection) => {
         if (!collection)
@@ -5266,6 +5620,106 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             running: false,
             container: null,
             meterTimer: null,
+            lastProgressiveMessages: null,
+        };
+        // Check if current adapter uses virtual scrolling (only visible messages in DOM)
+        const isVirtualScrollAdapter = () => {
+            const adapter = typeof getActiveAdapter === 'function' ? getActiveAdapter() : null;
+            // babechat uses virtual scrolling
+            return adapter?.id === 'babechat';
+        };
+        // Check if current adapter supports API-based collection (bypasses virtual scroll)
+        const canUseApiCollection = () => {
+            const adapter = typeof getActiveAdapter === 'function' ? getActiveAdapter() : null;
+            if (adapter?.id === 'babechat') {
+                const babechatAdapter = adapter;
+                return typeof babechatAdapter.canUseApiCollection === 'function' && babechatAdapter.canUseApiCollection();
+            }
+            return false;
+        };
+        // Fetch all messages via API (for adapters that support it)
+        const fetchMessagesViaApi = async () => {
+            const adapter = typeof getActiveAdapter === 'function' ? getActiveAdapter() : null;
+            if (adapter?.id === 'babechat') {
+                const babechatAdapter = adapter;
+                if (typeof babechatAdapter.fetchAllMessagesViaApi === 'function') {
+                    return babechatAdapter.fetchAllMessagesViaApi();
+                }
+            }
+            return [];
+        };
+        // Collect current visible messages using adapter (no deduplication here)
+        const collectVisibleMessages = () => {
+            const adapter = typeof getActiveAdapter === 'function' ? getActiveAdapter() : null;
+            if (!adapter?.listMessageBlocks || !adapter?.collectStructuredMessage) {
+                return [];
+            }
+            const messages = [];
+            try {
+                const blocksResult = adapter.listMessageBlocks(doc);
+                const blocks = blocksResult ? toElementArray(blocksResult) : [];
+                for (const block of blocks) {
+                    const msg = adapter.collectStructuredMessage(block);
+                    if (msg) {
+                        messages.push(msg);
+                    }
+                }
+            }
+            catch (err) {
+                warnWithHandler(err, 'autoload', '[GMH] progressive collection failed');
+            }
+            return messages;
+        };
+        /**
+         * Generate a content signature for a message
+         */
+        const getMessageSignature = (msg) => {
+            const role = msg.role || 'unknown';
+            const speaker = msg.speaker || '';
+            const contentParts = [];
+            if (Array.isArray(msg.parts)) {
+                for (const part of msg.parts) {
+                    if (Array.isArray(part.lines)) {
+                        contentParts.push(...part.lines);
+                    }
+                }
+            }
+            return `${role}:${speaker}:${contentParts.join('\n')}`;
+        };
+        /**
+         * Merge new messages into accumulated list using Set-based deduplication.
+         * Works for virtual scroll where visible window can be any portion of conversation.
+         *
+         * When scrolling DOWN (Top to Bottom):
+         * - newBatch contains current viewport (mix of old and new messages)
+         * - We filter to only truly new messages and APPEND them
+         */
+        const mergeMessageBatch = (accumulated, newBatch) => {
+            if (accumulated.length === 0) {
+                return [...newBatch];
+            }
+            if (newBatch.length === 0) {
+                return [...accumulated]; // Always return new array to avoid reference issues
+            }
+            // Build set of existing signatures for O(1) lookup
+            const existingSignatures = new Set();
+            for (const msg of accumulated) {
+                existingSignatures.add(getMessageSignature(msg));
+            }
+            // Filter newBatch to only include truly new messages
+            const newMessages = [];
+            for (const msg of newBatch) {
+                const sig = getMessageSignature(msg);
+                if (!existingSignatures.has(sig)) {
+                    newMessages.push(msg);
+                    existingSignatures.add(sig); // Prevent duplicates within newBatch too
+                }
+            }
+            if (newMessages.length === 0) {
+                return [...accumulated]; // Always return a new array to avoid reference issues
+            }
+            // APPEND new messages (they're newer, from scrolling DOWN)
+            return [...accumulated, ...newMessages];
         };
         const profileListeners = new Set();
         const warnWithHandler = (err, context, fallbackMessage) => {
@@ -5347,6 +5801,39 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             target.scrollTop = 0;
             const grew = await waitForGrowth(target, before, profile.settleTimeoutMs);
             return { grew, before, after: target.scrollHeight };
+        }
+        /**
+         * Gradual scroll DOWN for virtual scroll adapters (e.g., babechat)
+         * Strategy: Start from TOP, scroll DOWN to collect all messages in order
+         * This works better with virtual scroll that removes messages from both ends
+         */
+        async function gradualScrollDownCycle(container, profile) {
+            if (!container) {
+                logger?.warn?.('[GMH] gradualScrollDownCycle: no container');
+                return { reachedBottom: true, beforeScroll: 0, afterScroll: 0 };
+            }
+            const target = container;
+            const beforeScroll = target.scrollTop;
+            const scrollHeight = target.scrollHeight;
+            const clientHeight = target.clientHeight;
+            const maxScroll = scrollHeight - clientHeight;
+            logger?.log?.(`[GMH] scroll: before=${beforeScroll}, height=${scrollHeight}, client=${clientHeight}, max=${maxScroll}`);
+            // Already at bottom
+            if (beforeScroll >= maxScroll - 5) {
+                logger?.log?.('[GMH] Already at bottom, stopping');
+                return { reachedBottom: true, beforeScroll, afterScroll: beforeScroll };
+            }
+            // Scroll down by 50% of the container's client height
+            const scrollStep = Math.max(200, clientHeight * 0.5);
+            const newScrollTop = Math.min(maxScroll, beforeScroll + scrollStep);
+            target.scrollTop = newScrollTop;
+            // Wait for DOM to settle
+            await sleep(profile.settleTimeoutMs);
+            const afterScroll = target.scrollTop;
+            const newMaxScroll = target.scrollHeight - clientHeight;
+            const reachedBottom = afterScroll >= newMaxScroll - 5;
+            logger?.log?.(`[GMH] scroll: after=${afterScroll}, reachedBottom=${reachedBottom}`);
+            return { reachedBottom, beforeScroll, afterScroll };
         }
         const statsCache = {
             summaryKey: null,
@@ -5501,30 +5988,141 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             AUTO_STATE.container = container;
             let stableRounds = 0;
             let guard = 0;
-            while (AUTO_STATE.running && guard < profile.guardLimit) {
-                guard += 1;
+            // Check if API-based collection is available (bypasses virtual scroll entirely)
+            const useApiCollection = canUseApiCollection();
+            // Progressive collection fallback for virtual scroll adapters
+            const useProgressiveCollection = !useApiCollection && isVirtualScrollAdapter();
+            const collectedMessages = [];
+            if (useApiCollection || useProgressiveCollection) {
+                AUTO_STATE.lastProgressiveMessages = null;
+            }
+            // API-based collection (best option for babechat - no scrolling needed)
+            if (useApiCollection) {
+                logger?.log?.('[GMH] Using API-based collection (no scrolling needed)');
                 notifyScan({
-                    label: '위로 끝까지 로딩',
-                    message: `추가 수집 중 (${guard}/${profile.guardLimit})`,
+                    label: 'API 수집',
+                    message: 'API에서 메시지를 가져오는 중...',
                     tone: 'progress',
                     progress: { indeterminate: true },
                 });
-                const { grew, before, after } = await scrollUpCycle(container, profile);
-                if (!AUTO_STATE.running)
-                    break;
-                const delta = after - before;
-                stableRounds = !grew || delta < 6 ? stableRounds + 1 : 0;
-                if (stableRounds >= profile.maxStableRounds)
-                    break;
+                try {
+                    const apiMessages = await fetchMessagesViaApi();
+                    collectedMessages.push(...apiMessages);
+                    AUTO_STATE.lastProgressiveMessages = collectedMessages;
+                    const userCount = collectedMessages.filter(m => m.channel === 'user' || m.role === 'player').length;
+                    logger?.log?.(`[GMH] API collection complete: ${collectedMessages.length} messages (${userCount} user)`);
+                    notifyDone({
+                        label: 'API 수집 완료',
+                        message: `${collectedMessages.length}개 메시지 수집 (유저 ${userCount}개)`,
+                        tone: 'success',
+                        progress: { value: 1 },
+                    });
+                    AUTO_STATE.running = false;
+                    const stats = collectTurnStats();
+                    return stats;
+                }
+                catch (err) {
+                    // API failed, fall back to progressive collection
+                    logger?.warn?.('[GMH] API collection failed, falling back to scroll-based:', err);
+                    warnWithHandler(err, 'autoload', '[GMH] API collection failed');
+                    // Continue to progressive collection
+                }
+            }
+            // Different scroll strategies for virtual scroll vs traditional infinite scroll
+            if (useProgressiveCollection || (useApiCollection && collectedMessages.length === 0)) {
+                // Virtual scroll: Start from TOP, scroll DOWN to collect all messages
+                // Use 3x the normal guard limit for virtual scroll
+                const virtualScrollGuardLimit = profile.guardLimit * 3;
+                const target = container;
+                // Step 1: Jump to TOP first
+                logger?.log?.('[GMH] Virtual scroll: jumping to top first');
+                target.scrollTop = 0;
+                await sleep(profile.settleTimeoutMs);
+                // Step 2: Collect messages at top
+                const initialBatch = collectVisibleMessages();
+                collectedMessages.push(...initialBatch);
+                logger?.log?.(`[GMH] Initial collection at top: ${initialBatch.length} messages`);
+                notifyScan({
+                    label: '전체 로딩',
+                    message: `시작 위치에서 ${collectedMessages.length}개 수집`,
+                    tone: 'progress',
+                    progress: { indeterminate: true },
+                });
                 await sleep(profile.cycleDelayMs);
+                // Step 3: Scroll DOWN gradually, collecting new messages at each step
+                while (AUTO_STATE.running && guard < virtualScrollGuardLimit) {
+                    guard += 1;
+                    // Gradual scroll down
+                    const { reachedBottom } = await gradualScrollDownCycle(container, profile);
+                    if (!AUTO_STATE.running)
+                        break;
+                    // Collect visible messages and merge
+                    const newBatch = collectVisibleMessages();
+                    const beforeMerge = collectedMessages.length;
+                    const merged = mergeMessageBatch(collectedMessages, newBatch);
+                    const added = merged.length - beforeMerge;
+                    collectedMessages.length = 0;
+                    collectedMessages.push(...merged);
+                    logger?.log?.(`[GMH] collect: batch=${newBatch.length}, added=${added}, total=${collectedMessages.length}`);
+                    notifyScan({
+                        label: '전체 로딩',
+                        message: `수집 중 (${guard}/${virtualScrollGuardLimit}) · ${collectedMessages.length}개 누적`,
+                        tone: 'progress',
+                        progress: { indeterminate: true },
+                    });
+                    // Stop if we've reached the bottom
+                    if (reachedBottom) {
+                        logger?.log?.(`[GMH] Reached bottom: total=${collectedMessages.length} messages`);
+                        break;
+                    }
+                    await sleep(profile.cycleDelayMs);
+                }
+            }
+            else {
+                // Traditional infinite scroll: jump to top and wait for content growth
+                while (AUTO_STATE.running && guard < profile.guardLimit) {
+                    guard += 1;
+                    notifyScan({
+                        label: '위로 끝까지 로딩',
+                        message: `추가 수집 중 (${guard}/${profile.guardLimit})`,
+                        tone: 'progress',
+                        progress: { indeterminate: true },
+                    });
+                    const { grew, before, after } = await scrollUpCycle(container, profile);
+                    if (!AUTO_STATE.running)
+                        break;
+                    const delta = after - before;
+                    stableRounds = !grew || delta < 6 ? stableRounds + 1 : 0;
+                    if (stableRounds >= profile.maxStableRounds)
+                        break;
+                    await sleep(profile.cycleDelayMs);
+                }
+            }
+            // Final collection after scroll completes (catch any remaining messages)
+            if (useProgressiveCollection) {
+                const finalBatch = collectVisibleMessages();
+                const merged = mergeMessageBatch(collectedMessages, finalBatch);
+                AUTO_STATE.lastProgressiveMessages = merged;
+                logger?.log?.(`[GMH] Progressive collection complete: ${merged.length} messages`);
             }
             AUTO_STATE.running = false;
             const stats = collectTurnStats();
-            if (stats.error) {
+            if (stats.error && !useProgressiveCollection) {
                 notifyError({
                     label: '자동 로딩 실패',
                     message: '스크롤 후 파싱 실패',
                     tone: 'error',
+                    progress: { value: 1 },
+                });
+            }
+            else if (useProgressiveCollection && AUTO_STATE.lastProgressiveMessages) {
+                // For virtual scroll, show progressive collection count
+                const progressiveCount = AUTO_STATE.lastProgressiveMessages.length;
+                const userCount = AUTO_STATE.lastProgressiveMessages.filter(m => m.channel === 'user' || m.role === 'player').length;
+                notifyDone({
+                    label: '자동 로딩 완료',
+                    message: `${progressiveCount}개 메시지 수집 (유저 ${userCount}개)`,
+                    tone: 'success',
                     progress: { value: 1 },
                 });
             }
@@ -5736,6 +6334,25 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             profileListeners.add(listener);
             return () => profileListeners.delete(listener);
         };
+        /**
+         * Get progressively collected messages (for virtual scroll adapters like babechat)
+         * Returns null if progressive collection wasn't used or no messages collected
+         */
+        const getProgressiveMessages = () => {
+            return AUTO_STATE.lastProgressiveMessages;
+        };
+        /**
+         * Clear progressive collection cache
+         */
+        const clearProgressiveMessages = () => {
+            AUTO_STATE.lastProgressiveMessages = null;
+        };
+        /**
+         * Check if progressive collection is available for current adapter
+         */
+        const hasProgressiveMessages = () => {
+            return Array.isArray(AUTO_STATE.lastProgressiveMessages) && AUTO_STATE.lastProgressiveMessages.length > 0;
+        };
         notifyProfileChange();
         return {
             autoLoader,
@@ -5745,6 +6362,9 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
             subscribeProfileChange,
             startTurnMeter,
             collectTurnStats,
+            getProgressiveMessages,
+            clearProgressiveMessages,
+            hasProgressiveMessages,
         };
     }
 
@@ -13192,15 +13812,19 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             documentRef: document,
             locationRef: location,
         });
+        // Mutable reference for progressive messages (set after autoLoader is created)
+        let progressiveMessagesGetter = null;
         const { captureStructuredSnapshot, readTranscriptText, projectStructuredMessages, readStructuredMessages, getEntryOrigin: structuredGetEntryOrigin, } = createStructuredSnapshotReader({
             getActiveAdapter,
             setEntryOriginProvider,
             documentRef: document,
+            // Wrap in callback to allow late binding
+            getProgressiveMessages: () => progressiveMessagesGetter?.() ?? null,
         });
         getSnapshotEntryOrigin = structuredGetEntryOrigin;
         GMH.Core.getEntryOrigin = () => (getSnapshotEntryOrigin ? getSnapshotEntryOrigin() : []);
         GMH.Core.captureStructuredSnapshot = captureStructuredSnapshot;
-        const { autoLoader, autoState: AUTO_STATE, startTurnMeter, subscribeProfileChange, getProfile: getAutoProfile, } = createAutoLoader({
+        const { autoLoader, autoState: AUTO_STATE, startTurnMeter, subscribeProfileChange, getProfile: getAutoProfile, getProgressiveMessages, clearProgressiveMessages, hasProgressiveMessages, } = createAutoLoader({
             stateApi: stateManager,
             stateEnum: GMH_STATE,
             errorHandler,
@@ -13217,6 +13841,8 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             readTranscriptText,
             logger: ENV.console,
         });
+        // Wire up progressive messages getter after autoLoader is created
+        progressiveMessagesGetter = getProgressiveMessages;
         const { ensureAutoLoadControlsModern, mountStatusActionsModern } = createAutoLoaderControls({
             documentRef: document,
             autoLoader,
@@ -13415,6 +14041,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             buildSession,
             collectSessionStats,
             autoLoader,
+            getProgressiveMessages,
+            hasProgressiveMessages,
+            clearProgressiveMessages,
             MessageIndexer: messageIndexer,
             BookmarkListener: bookmarkListener,
         });

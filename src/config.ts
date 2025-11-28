@@ -52,8 +52,8 @@ export const CONFIG = {
           guardLimit: 140,
         },
         fast: {
-          cycleDelayMs: 350,
-          settleTimeoutMs: 900,
+          cycleDelayMs: 150,
+          settleTimeoutMs: 400,
           maxStableRounds: 2,
           guardLimit: 40,
         },

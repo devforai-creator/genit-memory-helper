@@ -20,7 +20,7 @@ const metaBanner = `// ==UserScript==\n`
   + `// @match        https://babechat.ai/*\n`
   + `// @match        https://www.babechat.ai/*\n`
   + `// @grant        GM_setClipboard\n`
-  + `// @run-at       document-idle\n`
+  + `// @run-at       document-start\n`
   + `// @updateURL    https://github.com/devforai-creator/genit-memory-helper/raw/main/genit-memory-helper.user.js\n`
   + `// @downloadURL  https://github.com/devforai-creator/genit-memory-helper/raw/main/genit-memory-helper.user.js\n`
   + `// @license      GPL-3.0-or-later\n`

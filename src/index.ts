@@ -108,6 +108,7 @@ import type {
   ShareWorkflowOptions,
   StructuredJSONOptions,
   StructuredMarkdownOptions,
+  StructuredSnapshotMessage,
   StructuredTXTOptions,
   MemoryBlockInit,
   TranscriptSession,
@@ -725,6 +726,9 @@ interface GMHFlags {
     locationRef: location,
   });
 
+  // Mutable reference for progressive messages (set after autoLoader is created)
+  let progressiveMessagesGetter: (() => StructuredSnapshotMessage[] | null) | null = null;
+
   const {
     captureStructuredSnapshot,
     readTranscriptText,
@@ -735,6 +739,8 @@ interface GMHFlags {
     getActiveAdapter,
     setEntryOriginProvider,
     documentRef: document,
+    // Wrap in callback to allow late binding
+    getProgressiveMessages: () => progressiveMessagesGetter?.() ?? null,
   });
 
   getSnapshotEntryOrigin = structuredGetEntryOrigin;
@@ -748,6 +754,9 @@ interface GMHFlags {
     startTurnMeter,
     subscribeProfileChange,
     getProfile: getAutoProfile,
+    getProgressiveMessages,
+    clearProgressiveMessages,
+    hasProgressiveMessages,
   } = createAutoLoader({
     stateApi: stateManager,
     stateEnum: GMH_STATE,
@@ -765,6 +774,9 @@ interface GMHFlags {
     readTranscriptText,
     logger: ENV.console,
   });
+
+  // Wire up progressive messages getter after autoLoader is created
+  progressiveMessagesGetter = getProgressiveMessages;
 
   const { ensureAutoLoadControlsModern, mountStatusActionsModern } = createAutoLoaderControls({
     documentRef: document,
@@ -1002,6 +1014,9 @@ interface GMHFlags {
     buildSession,
     collectSessionStats,
     autoLoader,
+    getProgressiveMessages,
+    hasProgressiveMessages,
+    clearProgressiveMessages,
     MessageIndexer: messageIndexer,
     BookmarkListener: bookmarkListener,
   });

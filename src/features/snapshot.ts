@@ -114,6 +114,7 @@ export function createStructuredSnapshotReader({
   getActiveAdapter,
   setEntryOriginProvider,
   documentRef = typeof document !== 'undefined' ? document : null,
+  getProgressiveMessages,
 }: StructuredSnapshotReaderOptions) {
   if (!getActiveAdapter) throw new Error('createStructuredSnapshotReader requires getActiveAdapter');
   const doc = ensureDocument(documentRef);
@@ -248,6 +249,62 @@ export function createStructuredSnapshotReader({
       blockIdRegistry = new WeakMap();
       blockIdCounter = 0;
     }
+
+    // Check for progressively collected messages (for virtual scroll adapters like babechat)
+    const progressiveMessages = typeof getProgressiveMessages === 'function' ? getProgressiveMessages() : null;
+    if (progressiveMessages && progressiveMessages.length > 0) {
+      // Use progressively collected messages instead of DOM query
+      const legacyLines: string[] = [];
+      const origins: Array<number | null> = [];
+      const seenLine = new Set<string>();
+
+      progressiveMessages.forEach((msg, idx) => {
+        const ordinal = msg.ordinal ?? idx;
+        // Extract legacy lines from message parts
+        if (Array.isArray(msg.parts)) {
+          msg.parts.forEach((part) => {
+            if (Array.isArray(part.lines)) {
+              part.lines.forEach((line) => {
+                const trimmed = (line || '').trim();
+                if (!trimmed) return;
+                const lineKey = `${ordinal}::${trimmed}`;
+                if (seenLine.has(lineKey)) return;
+                seenLine.add(lineKey);
+                legacyLines.push(trimmed);
+                origins.push(ordinal);
+              });
+            }
+          });
+        }
+        // Also check legacyLines property
+        if (Array.isArray(msg.legacyLines)) {
+          msg.legacyLines.forEach((line) => {
+            const trimmed = (line || '').trim();
+            if (!trimmed) return;
+            const lineKey = `${ordinal}::${trimmed}`;
+            if (seenLine.has(lineKey)) return;
+            seenLine.add(lineKey);
+            legacyLines.push(trimmed);
+            origins.push(ordinal);
+          });
+        }
+      });
+
+      entryOrigin = origins.slice();
+      latestStructuredSnapshot = {
+        messages: progressiveMessages.map((msg, idx) => ({
+          ...msg,
+          index: msg.index ?? idx,
+          ordinal: msg.ordinal ?? idx,
+        })),
+        legacyLines,
+        entryOrigin: origins,
+        errors: [],
+        generatedAt: Date.now(),
+      };
+      return latestStructuredSnapshot;
+    }
+
     const adapter = getActiveAdapter();
     const container = adapter?.findContainer?.(doc);
     const blocks = normalizeBlocks(adapter?.listMessageBlocks?.(container || doc));
