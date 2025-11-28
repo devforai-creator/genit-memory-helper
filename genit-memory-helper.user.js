@@ -2560,30 +2560,6 @@ var GMHBundle = (function (exports) {
             }
             return null;
         };
-        const collectAll = (selList, root = document) => {
-            const out = [];
-            const seen = new Set();
-            if (!selList?.length)
-                return out;
-            for (const sel of selList) {
-                if (!sel)
-                    continue;
-                let nodes;
-                try {
-                    nodes = root.querySelectorAll(sel);
-                }
-                catch (e) {
-                    continue;
-                }
-                nodes.forEach((node) => {
-                    if (!node || seen.has(node))
-                        return;
-                    seen.add(node);
-                    out.push(node);
-                });
-            }
-            return out;
-        };
         const textFromNode = (node) => {
             if (!node)
                 return '';
@@ -2636,25 +2612,38 @@ var GMHBundle = (function (exports) {
                 : targetRoot;
             if (!container)
                 return [];
-            // Get turn wrappers
-            const turns = collectAll(selectors.messageRoot, container);
-            // Skip the first element if it's a system message (px-5 without flex-col)
-            // Filter out system messages that don't have the turn structure
-            return turns.filter((turn, index) => {
-                // First child is often system message - check if it has actual content structure
-                if (index === 0) {
-                    const hasPlayerContent = turn.querySelector('.justify-end') !== null;
-                    const hasNpcContent = turn.querySelector('a[href*="/character/"]') !== null;
-                    if (!hasPlayerContent && !hasNpcContent) {
-                        return false; // Skip system intro message
-                    }
+            // Get all direct children of the container (includes system message area)
+            const children = Array.from(container.children);
+            // Filter and return valid message blocks
+            return children.filter((child) => {
+                // Include system message area (div.px-5)
+                if (child.classList.contains('px-5') && !child.classList.contains('pt-4')) {
+                    return true; // System message area
                 }
-                return true;
+                // Include turn wrappers (div.flex.flex-col.gap-3.px-5.pt-4)
+                if (child.classList.contains('flex') &&
+                    child.classList.contains('flex-col') &&
+                    child.classList.contains('gap-3')) {
+                    return true;
+                }
+                // Fallback: check if it has user or AI content
+                const hasPlayerContent = child.querySelector('.justify-end') !== null;
+                const hasNpcContent = child.querySelector('a[href*="/character/"]') !== null;
+                const hasSystemContent = child.querySelector('[class*="363636"]') !== null;
+                return hasPlayerContent || hasNpcContent || hasSystemContent;
             });
+        };
+        const isSystemMessageArea = (block) => {
+            // System message area is div.px-5 without pt-4
+            return block.classList.contains('px-5') && !block.classList.contains('pt-4');
         };
         const detectRole = (block) => {
             if (!block)
                 return 'unknown';
+            // Check for system message area (first child with special structure)
+            if (isSystemMessageArea(block)) {
+                return 'system';
+            }
             // Check for user message (has justify-end child)
             const hasJustifyEnd = block.querySelector('.justify-end') !== null;
             if (hasJustifyEnd) {
@@ -2884,6 +2873,97 @@ var GMHBundle = (function (exports) {
             const role = detectRole(block);
             if (role !== 'system')
                 return;
+            const systemLines = [];
+            const scenarioLines = [];
+            const openingDialogueLines = [];
+            const seenTexts = new Set();
+            // Check if this is the system message area (div.px-5)
+            if (isSystemMessageArea(block)) {
+                // Parse internal structure
+                const wrapper = block.children[0];
+                if (wrapper) {
+                    Array.from(wrapper.children).forEach((child) => {
+                        const text = textFromNode(child);
+                        if (!text || seenTexts.has(text))
+                            return;
+                        const className = child.className || '';
+                        // AI disclaimer message
+                        if (text.includes('AI기술') || text.includes('AI 기술') || className.includes('mx-auto')) {
+                            seenTexts.add(text);
+                            pushLine(`[SYSTEM] ${text}`);
+                            systemLines.push(text);
+                        }
+                        // Scenario/Prologue (bg-[#363636])
+                        else if (className.includes('363636')) {
+                            seenTexts.add(text);
+                            pushLine(`[시나리오] ${text}`);
+                            scenarioLines.push(text);
+                        }
+                        // Opening AI message (justify-start with dialogue)
+                        else if (className.includes('justify-start')) {
+                            const dialogueEl = child.querySelector('[class*="262727"]');
+                            if (dialogueEl) {
+                                const dialogueText = textFromNode(dialogueEl);
+                                if (dialogueText && !seenTexts.has(dialogueText)) {
+                                    seenTexts.add(dialogueText);
+                                    const characterName = extractCharacterName(child) || 'NPC';
+                                    // Check for speaker prefix
+                                    const speakerMatch = dialogueText.match(/^(.+?)\s*\|\s*(.+)$/s);
+                                    if (speakerMatch) {
+                                        pushLine(`@${speakerMatch[1].trim()}@ "${speakerMatch[2].trim()}"`);
+                                        openingDialogueLines.push(speakerMatch[2].trim());
+                                    }
+                                    else {
+                                        pushLine(`@${characterName}@ "${dialogueText}"`);
+                                        openingDialogueLines.push(dialogueText);
+                                    }
+                                }
+                            }
+                            // Also check for narration in opening
+                            const narrationEl = child.querySelector('[class*="363636"]');
+                            if (narrationEl) {
+                                const narrationText = textFromNode(narrationEl);
+                                if (narrationText && !seenTexts.has(narrationText) && !isStatusBlock(narrationText)) {
+                                    seenTexts.add(narrationText);
+                                    pushLine(narrationText);
+                                    scenarioLines.push(narrationText);
+                                }
+                            }
+                        }
+                    });
+                }
+                // Add parts to collector
+                if (collector && systemLines.length) {
+                    const part = buildStructuredPart(block, {
+                        flavor: 'meta',
+                        role: 'system',
+                        speaker: 'SYSTEM',
+                        legacyFormat: 'meta',
+                    }, { lines: systemLines, legacyFormat: 'meta' });
+                    collector.push(part, { node: block });
+                }
+                if (collector && scenarioLines.length) {
+                    const part = buildStructuredPart(block, {
+                        flavor: 'narration',
+                        role: 'narration',
+                        speaker: '시나리오',
+                        legacyFormat: 'plain',
+                    }, { lines: scenarioLines, legacyFormat: 'plain' });
+                    collector.push(part, { node: block });
+                }
+                if (collector && openingDialogueLines.length) {
+                    const characterName = extractCharacterName(block);
+                    const part = buildStructuredPart(block, {
+                        flavor: 'speech',
+                        role: 'npc',
+                        speaker: characterName,
+                        legacyFormat: 'npc',
+                    }, { lines: openingDialogueLines, legacyFormat: 'npc' });
+                    collector.push(part, { node: block });
+                }
+                return;
+            }
+            // Fallback for other system messages (like standalone narration)
             const partLines = [];
             const text = textFromNode(block);
             if (text && !isStatusBlock(text)) {
