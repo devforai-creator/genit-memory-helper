@@ -7170,44 +7170,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 return false;
             }
         };
-        /**
-         * Forces a reparse cycle to refresh sanitized stats without exporting.
-         */
-        const reparse = () => {
-            try {
-                setState(stateEnum.REDACTING, 'REDACTING', {
-                    label: '재파싱 중',
-                    message: '대화 로그를 다시 분석하는 중입니다...',
-                    tone: 'progress',
-                    progress: { indeterminate: true },
-                });
-                const { session, raw, snapshot } = parseAll();
-                const privacy = applyPrivacyPipeline(session, raw, privacyConfig.profile, snapshot);
-                const stats = collectSessionStats(privacy.sanitizedSession);
-                const summary = formatRedactionCounts(privacy.counts);
-                const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
-                const extra = privacy.blocked ? ' · ⚠️ 미성년자 맥락 감지' : '';
-                const message = `재파싱 완료 · 유저 ${stats.userMessages}개 · LLM ${stats.llmMessages}개 · 경고 ${privacy.sanitizedSession.warnings.length}건 · ${profileLabel} · ${summary}${extra}`;
-                setState(stateEnum.DONE, 'DONE', {
-                    label: '재파싱 완료',
-                    message,
-                    tone: 'info',
-                    progress: { value: 1 },
-                });
-                if (privacy.sanitizedSession.warnings.length) {
-                    logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
-                }
-            }
-            catch (error) {
-                const errorMsg = toErrorMessage(error);
-                alertFn(`오류: ${errorMsg}`);
-            }
-        };
         return {
             parseAll,
             prepareShare,
             performExport,
-            reparse,
         };
     }
 
@@ -9822,7 +9788,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     const DEFAULT_ALERT = (message) => {
         globalThis.alert?.(message);
     };
-    function createPanelInteractions({ panelVisibility, setPanelStatus, setPrivacyProfile, getPrivacyProfile, privacyProfiles, configurePrivacyLists, openPanelSettings, ensureAutoLoadControlsModern, mountStatusActionsModern, mountMemoryStatusModern, bindRangeControls, bindShortcuts, bindGuideControls, prepareShare, performExport, autoLoader, autoState, stateApi, stateEnum, alert: alertFn = DEFAULT_ALERT, logger = typeof console !== 'undefined' ? console : null, }) {
+    function createPanelInteractions({ panelVisibility, setPanelStatus, setPrivacyProfile, getPrivacyProfile, privacyProfiles, configurePrivacyLists, openPanelSettings, ensureAutoLoadControlsModern, mountStatusActionsModern, mountMemoryStatusModern, bindRangeControls, bindShortcuts, prepareShare, performExport, autoLoader, autoState, stateApi, stateEnum, alert: alertFn = DEFAULT_ALERT, logger = typeof console !== 'undefined' ? console : null, }) {
         if (!panelVisibility)
             throw new Error('createPanelInteractions requires panelVisibility');
         if (!setPrivacyProfile)
@@ -9949,7 +9915,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             mountStatusActionsModern?.(panel);
             bindRangeControls(panel);
             bindShortcuts(panel);
-            bindGuideControls?.(panel);
             attachShareHandlers(panel);
         };
         return {
@@ -10079,13 +10044,8 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         </div>
         <button id="gmh-export-html" class="gmh-panel-btn gmh-panel-btn--neutral" title="실험적 기능: 현재 화면에 보이는 메시지만 백업됩니다">🧪 HTML 백업 (실험적)</button>
       </section>
-      <section class="gmh-panel__section" id="gmh-section-guides">
-        <div class="gmh-panel__section-title">Guides & Tools</div>
-        <div class="gmh-field-row">
-          <button id="gmh-reparse" class="gmh-small-btn gmh-small-btn--muted">재파싱</button>
-          <button id="gmh-guide" class="gmh-small-btn gmh-small-btn--muted">요약 가이드</button>
-          <button id="gmh-reguide" class="gmh-small-btn gmh-small-btn--muted">재요약 가이드</button>
-        </div>
+      <section class="gmh-panel__section" id="gmh-section-settings">
+        <div class="gmh-panel__section-title">Settings</div>
         <div id="gmh-status-actions"></div>
       </section>
     `;
@@ -10329,97 +10289,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             return Boolean(result);
         };
         return { confirm };
-    }
-
-    const SUMMARY_GUIDE_PROMPT = `
-당신은 "장기기억 보관용 사서"입니다.
-아래 파일은 캐릭터 채팅 로그를 정형화한 것입니다.
-목표는 이 데이터를 2000자 이내로 요약하여, 캐릭터 플랫폼의 "유저노트"에 넣을 수 있는 형식으로 정리하는 것입니다.
-
-조건:
-1. 중요도 기준
-   - 플레이어와 NPC 관계 변화, 약속, 목표, 갈등, 선호/금기만 포함.
-   - 사소한 농담·잡담은 제외.
-   - 최근일수록 더 비중 있게 반영.
-
-2. 출력 구조
-   - [전체 줄거리 요약]: 주요 사건 흐름을 3~6개 항목으로.
-   - [주요 관계 변화]: NPC별 감정/태도 변화를 정리.
-   - [핵심 테마]: 반복된 규칙, 세계관 요소, 목표.
-
-3. 형식 규칙
-   - 전체 길이는 1200~1800자.
-   - 문장은 간결하게.
-   - 플레이어 이름은 "플레이어"로 통일.
-`;
-    const RESUMMARY_GUIDE_PROMPT = `
-아래에는 [이전 요약본]과 [새 로그 파일]이 있습니다.
-이 둘을 통합하여, 2000자 이내의 "최신 장기기억 요약본"을 만드세요.
-
-규칙:
-- 이전 요약본에서 이미 있는 사실은 유지하되, 새 로그 파일에 나온 사건/관계 변화로 업데이트.
-- 모순되면 "최근 사건"을 우선.
-- 출력 구조는 [전체 줄거리 요약] / [주요 관계 변화] / [핵심 테마].
-- 길이는 1200~1800자.
-`;
-    function createGuidePrompts({ clipboard, setPanelStatus, statusMessages = {}, }) {
-        if (!clipboard || typeof clipboard.set !== 'function') {
-            throw new Error('createGuidePrompts requires clipboard helper');
-        }
-        const notify = (message, tone) => {
-            if (typeof setPanelStatus === 'function' && message) {
-                setPanelStatus(message, tone);
-            }
-        };
-        const summaryMessage = statusMessages.summaryCopied || '요약 프롬프트가 클립보드에 복사되었습니다.';
-        const resummaryMessage = statusMessages.resummaryCopied || '재요약 프롬프트가 클립보드에 복사되었습니다.';
-        const copySummaryGuide = () => {
-            clipboard.set(SUMMARY_GUIDE_PROMPT, { type: 'text', mimetype: 'text/plain' });
-            notify(summaryMessage, 'success');
-            return SUMMARY_GUIDE_PROMPT;
-        };
-        const copyResummaryGuide = () => {
-            clipboard.set(RESUMMARY_GUIDE_PROMPT, { type: 'text', mimetype: 'text/plain' });
-            notify(resummaryMessage, 'success');
-            return RESUMMARY_GUIDE_PROMPT;
-        };
-        return {
-            copySummaryGuide,
-            copyResummaryGuide,
-            prompts: {
-                summary: SUMMARY_GUIDE_PROMPT,
-                resummary: RESUMMARY_GUIDE_PROMPT,
-            },
-        };
-    }
-
-    function createGuideControls({ reparse, copySummaryGuide, copyResummaryGuide, logger = typeof console !== 'undefined' ? console : null, }) {
-        if (typeof copySummaryGuide !== 'function' || typeof copyResummaryGuide !== 'function') {
-            throw new Error('createGuideControls requires summary and resummary copy functions');
-        }
-        const bindGuideControls = (panel) => {
-            if (!panel || typeof panel.querySelector !== 'function') {
-                logger?.warn?.('[GMH] guide controls: panel missing querySelector');
-                return;
-            }
-            const reparseBtn = panel.querySelector('#gmh-reparse');
-            if (reparseBtn && typeof reparse === 'function') {
-                reparseBtn.addEventListener('click', () => reparse());
-            }
-            const guideBtn = panel.querySelector('#gmh-guide');
-            if (guideBtn) {
-                guideBtn.addEventListener('click', () => {
-                    void copySummaryGuide();
-                });
-            }
-            const reguideBtn = panel.querySelector('#gmh-reguide');
-            if (reguideBtn) {
-                reguideBtn.addEventListener('click', () => {
-                    void copyResummaryGuide();
-                });
-            }
-        };
-        return { bindGuideControls };
     }
 
     const ensureAdaptersNamespace = (GMH) => {
@@ -13527,7 +13396,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             previewLimit: CONFIG.LIMITS.PREVIEW_TURN_LIMIT,
         });
         const confirmPrivacyGate = confirmPrivacyGateModern;
-        const { prepareShare, performExport, reparse: reparseShare, collectSessionStats, } = composeShareWorkflow({
+        const { prepareShare, performExport, collectSessionStats, } = composeShareWorkflow({
             createShareWorkflow,
             captureStructuredSnapshot,
             normalizeTranscript,
@@ -13557,18 +13426,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             getEntryOrigin: () => getSnapshotEntryOrigin?.() ?? [],
             logger: ENV.console,
         });
-        const { copySummaryGuide, copyResummaryGuide } = createGuidePrompts({
-            clipboard: {
-                set: (value, options) => ENV.GM_setClipboard(value, options),
-            },
-            setPanelStatus,
-        });
-        const { bindGuideControls } = createGuideControls({
-            reparse: reparseShare,
-            copySummaryGuide,
-            copyResummaryGuide,
-            logger: ENV.console,
-        });
         const { bindShortcuts } = createPanelShortcuts({
             windowRef: PAGE_WINDOW,
             panelVisibility: PanelVisibility,
@@ -13590,7 +13447,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             mountMemoryStatusModern: (panel) => memoryStatus.mount(panel),
             bindRangeControls,
             bindShortcuts,
-            bindGuideControls,
             prepareShare,
             performExport,
             autoLoader,

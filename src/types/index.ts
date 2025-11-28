@@ -862,7 +862,6 @@ export interface ShareWorkflowApi {
   parseAll(): { session: TranscriptSession; raw: string; snapshot: StructuredSnapshot };
   prepareShare(options?: { confirmLabel?: string; cancelStatusMessage?: string; blockedStatusMessage?: string }): Promise<PreparedShareResult | null>;
   performExport(prepared: PreparedShareResult | null, format: string): Promise<boolean>;
-  reparse(): void;
 }
 
 export interface PrivacyPipelineDependencies {
@@ -958,7 +957,6 @@ export interface PanelInteractionsOptions {
   mountMemoryStatusModern?(panel: Element): void;
   bindRangeControls(panel: Element): void;
   bindShortcuts(panel: Element): void;
-  bindGuideControls?(panel: Element): void;
   prepareShare: ShareWorkflowApi['prepareShare'];
   performExport: ShareWorkflowApi['performExport'];
   autoLoader?: AutoLoaderController | null;

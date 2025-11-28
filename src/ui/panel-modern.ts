@@ -151,13 +151,8 @@ export function createModernPanel({
         </div>
         <button id="gmh-export-html" class="gmh-panel-btn gmh-panel-btn--neutral" title="실험적 기능: 현재 화면에 보이는 메시지만 백업됩니다">🧪 HTML 백업 (실험적)</button>
       </section>
-      <section class="gmh-panel__section" id="gmh-section-guides">
-        <div class="gmh-panel__section-title">Guides & Tools</div>
-        <div class="gmh-field-row">
-          <button id="gmh-reparse" class="gmh-small-btn gmh-small-btn--muted">재파싱</button>
-          <button id="gmh-guide" class="gmh-small-btn gmh-small-btn--muted">요약 가이드</button>
-          <button id="gmh-reguide" class="gmh-small-btn gmh-small-btn--muted">재요약 가이드</button>
-        </div>
+      <section class="gmh-panel__section" id="gmh-section-settings">
+        <div class="gmh-panel__section-title">Settings</div>
         <div id="gmh-status-actions"></div>
       </section>
     `;

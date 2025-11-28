@@ -25,7 +25,6 @@ export function createPanelInteractions({
   mountMemoryStatusModern,
   bindRangeControls,
   bindShortcuts,
-  bindGuideControls,
   prepareShare,
   performExport,
   autoLoader,
@@ -182,7 +181,6 @@ export function createPanelInteractions({
 
     bindRangeControls(panel);
     bindShortcuts(panel);
-    bindGuideControls?.(panel);
     attachShareHandlers(panel);
   };
 

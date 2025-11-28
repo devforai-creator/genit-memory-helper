@@ -80,8 +80,6 @@ import createBlockViewer from './ui/block-viewer';
 import { createPanelInteractions } from './ui/panel-interactions';
 import { createModernPanel } from './ui/panel-modern';
 import { createModernPrivacyGate } from './ui/privacy-gate';
-import { createGuidePrompts } from './features/guides';
-import { createGuideControls } from './ui/guide-controls';
 import { composeAdapters } from './composition/adapter-composition';
 import { composePrivacy } from './composition/privacy-composition';
 import { composeShareWorkflow } from './composition/share-composition';
@@ -813,7 +811,6 @@ interface GMHFlags {
     parseAll,
     prepareShare,
     performExport,
-    reparse: reparseShare,
     collectSessionStats,
   } = composeShareWorkflow({
     createShareWorkflow,
@@ -851,25 +848,6 @@ interface GMHFlags {
   });
 
 
-  const { copySummaryGuide, copyResummaryGuide } = createGuidePrompts({
-    clipboard: {
-      set: (value: string, options?: Record<string, unknown>) =>
-        ENV.GM_setClipboard(
-          value,
-          options as Parameters<typeof ENV.GM_setClipboard>[1],
-        ),
-    },
-    setPanelStatus,
-  });
-
-  const { bindGuideControls } = createGuideControls({
-    reparse: reparseShare,
-    copySummaryGuide,
-    copyResummaryGuide,
-    logger: ENV.console,
-  });
-
-
   const { bindShortcuts } = createPanelShortcuts({
     windowRef: PAGE_WINDOW,
     panelVisibility: PanelVisibility,
@@ -896,7 +874,6 @@ interface GMHFlags {
     mountMemoryStatusModern: (panel) => memoryStatus.mount(panel),
     bindRangeControls,
     bindShortcuts,
-    bindGuideControls,
     prepareShare,
     performExport,
     autoLoader,

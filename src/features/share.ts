@@ -451,45 +451,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     }
   };
 
-  /**
-   * Forces a reparse cycle to refresh sanitized stats without exporting.
-   */
-  const reparse = (): void => {
-    try {
-      setState(stateEnum.REDACTING, 'REDACTING', {
-        label: '재파싱 중',
-        message: '대화 로그를 다시 분석하는 중입니다...',
-        tone: 'progress',
-        progress: { indeterminate: true },
-      });
-      const { session, raw, snapshot } = parseAll();
-      const privacy = applyPrivacyPipeline(session, raw, privacyConfig.profile, snapshot);
-      const stats = collectSessionStats(privacy.sanitizedSession);
-      const summary = formatRedactionCounts(privacy.counts);
-      const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
-      const extra = privacy.blocked ? ' · ⚠️ 미성년자 맥락 감지' : '';
-      const message = `재파싱 완료 · 유저 ${stats.userMessages}개 · LLM ${stats.llmMessages}개 · 경고 ${
-        privacy.sanitizedSession.warnings.length
-      }건 · ${profileLabel} · ${summary}${extra}`;
-      setState(stateEnum.DONE, 'DONE', {
-        label: '재파싱 완료',
-        message,
-        tone: 'info',
-        progress: { value: 1 },
-      });
-      if (privacy.sanitizedSession.warnings.length) {
-        logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
-      }
-    } catch (error) {
-      const errorMsg = toErrorMessage(error);
-      alertFn(`오류: ${errorMsg}`);
-    }
-  };
-
   return {
     parseAll,
     prepareShare,
     performExport,
-    reparse,
   };
 }
