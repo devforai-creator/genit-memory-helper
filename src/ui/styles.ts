@@ -47,10 +47,6 @@ export const DESIGN_SYSTEM_CSS = `
 .gmh-panel__drag-handle:focus-visible{outline:2px solid var(--gmh-accent);outline-offset:2px;}
 .gmh-panel__drag-handle[aria-disabled="true"]{cursor:not-allowed;opacity:0.5;}
 .gmh-panel__drag-icon{pointer-events:none;line-height:1;}
-.gmh-panel__resize-handle{position:absolute;width:18px;height:18px;bottom:6px;right:10px;cursor:nwse-resize;border-radius:6px;opacity:0.7;}
-.gmh-panel__resize-handle::after{content:'';position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,transparent 40%,rgba(148,163,184,0.35) 40%,rgba(148,163,184,0.8));}
-.gmh-panel__resize-handle:hover{opacity:1;}
-.gmh-panel__resize-handle[style*="none"]{display:none !important;}
 .gmh-settings-grid{display:grid;gap:12px;}
 .gmh-settings-row{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:var(--gmh-radius-sm);border:1px solid rgba(148,163,184,0.25);background:var(--gmh-surface-alt);}
 .gmh-settings-row__main{display:flex;flex-direction:column;gap:4px;}

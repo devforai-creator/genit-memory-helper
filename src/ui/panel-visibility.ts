@@ -18,20 +18,39 @@ interface DragSession {
   rect: DOMRect;
 }
 
+type ResizeEdge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | null;
+
 interface ResizeSession {
   pointerId?: number;
   startX: number;
   startY: number;
   width: number;
   height: number;
+  left: number;
+  top: number;
   nextWidth: number;
   nextHeight: number;
+  nextLeft: number;
+  nextTop: number;
+  edge: ResizeEdge;
 }
 
 const COLLAPSED_CLASS = 'gmh-collapsed';
 const OPEN_CLASS = 'gmh-panel-open';
 const STORAGE_KEY = 'gmh_panel_collapsed';
 const MIN_GAP = 12;
+const EDGE_THRESHOLD = 10; // px from edge to trigger resize
+
+const EDGE_CURSORS: Record<string, string> = {
+  n: 'ns-resize',
+  s: 'ns-resize',
+  e: 'ew-resize',
+  w: 'ew-resize',
+  ne: 'nesw-resize',
+  nw: 'nwse-resize',
+  se: 'nwse-resize',
+  sw: 'nesw-resize',
+};
 
 const normalizeState = (
   value: unknown,
@@ -143,7 +162,6 @@ export function createPanelVisibility({
   let fabEl: HTMLButtonElement | null = null;
   let fabLastToggleAt = 0;
   let dragHandle: HTMLButtonElement | null = null;
-  let resizeHandle: HTMLElement | null = null;
   let modernMode = false;
   let idleTimer: number | null = null;
   let stateUnsubscribe: (() => void) | null = null;
@@ -158,6 +176,9 @@ export function createPanelVisibility({
   let lastFocusTarget: HTMLElement | null = null;
   let dragSession: DragSession | null = null;
   let resizeSession: ResizeSession | null = null;
+  let currentEdge: ResizeEdge = null;
+  let panelEdgeHandler: ((event: PointerEvent) => void) | null = null;
+  let panelEdgeDownHandler: ((event: PointerEvent) => void) | null = null;
   let applyingSettings = false;
   let focusTimeouts: number[] = [];
   let focusAnimationFrame: number | null = null;
@@ -419,9 +440,6 @@ export function createPanelVisibility({
       dragHandle.disabled = !currentBehavior.allowDrag;
       dragHandle.setAttribute('aria-disabled', currentBehavior.allowDrag ? 'false' : 'true');
     }
-    if (resizeHandle) {
-      resizeHandle.style.display = currentBehavior.allowResize ? '' : 'none';
-    }
   };
 
   const refreshBehavior = (): void => {
@@ -510,6 +528,218 @@ export function createPanelVisibility({
     });
   };
 
+  const detectEdge = (event: PointerEvent): ResizeEdge => {
+    if (!panelEl) return null;
+    const rect = panelEl.getBoundingClientRect();
+    const x = event.clientX;
+    const y = event.clientY;
+
+    const nearLeft = x >= rect.left && x <= rect.left + EDGE_THRESHOLD;
+    const nearRight = x >= rect.right - EDGE_THRESHOLD && x <= rect.right;
+    const nearTop = y >= rect.top && y <= rect.top + EDGE_THRESHOLD;
+    const nearBottom = y >= rect.bottom - EDGE_THRESHOLD && y <= rect.bottom;
+
+    if (nearTop && nearLeft) return 'nw';
+    if (nearTop && nearRight) return 'ne';
+    if (nearBottom && nearLeft) return 'sw';
+    if (nearBottom && nearRight) return 'se';
+    if (nearTop) return 'n';
+    if (nearBottom) return 's';
+    if (nearLeft) return 'w';
+    if (nearRight) return 'e';
+    return null;
+  };
+
+  const updateEdgeCursor = (edge: ResizeEdge): void => {
+    if (!panelEl) return;
+    if (edge && currentBehavior.allowResize) {
+      panelEl.style.cursor = EDGE_CURSORS[edge] || '';
+    } else {
+      panelEl.style.cursor = '';
+    }
+  };
+
+  const handlePanelEdgeMove = (event: PointerEvent): void => {
+    if (!panelEl || !modernMode || resizeSession || dragSession) return;
+    if (!currentBehavior.allowResize) return;
+    const edge = detectEdge(event);
+    if (edge !== currentEdge) {
+      currentEdge = edge;
+      updateEdgeCursor(edge);
+    }
+  };
+
+  const handlePanelEdgeDown = (event: PointerEvent): void => {
+    if (!panelEl || !modernMode) return;
+    if (!currentBehavior.allowResize) return;
+    if (event.button && event.button !== 0) return;
+
+    const edge = detectEdge(event);
+    if (!edge) return;
+
+    // Don't start resize if clicking on interactive elements
+    const target = event.target;
+    if (target instanceof HTMLElement) {
+      if (target.closest('button, input, select, textarea, a, [role="button"]')) return;
+      if (target.closest('#gmh-panel-drag-handle')) return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const rect = panelEl.getBoundingClientRect();
+    resizeSession = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      width: rect.width,
+      height: rect.height,
+      left: rect.left,
+      top: rect.top,
+      nextWidth: rect.width,
+      nextHeight: rect.height,
+      nextLeft: rect.left,
+      nextTop: rect.top,
+      edge,
+    };
+    panelEl.classList.add('gmh-panel--resizing');
+    clearIdleTimer();
+
+    try {
+      panelEl.setPointerCapture(event.pointerId);
+    } catch {
+      /* noop */
+    }
+
+    win.addEventListener('pointermove', handleEdgeResizeMove);
+    win.addEventListener('pointerup', handleEdgeResizeEnd);
+    win.addEventListener('pointercancel', handleEdgeResizeCancel);
+  };
+
+  const handleEdgeResizeMove = (event: PointerEvent): void => {
+    if (!resizeSession || !panelEl) return;
+    const { edge, startX, startY, width, height, left, top } = resizeSession;
+    if (!edge) return;
+
+    const viewportWidth = win.innerWidth || doc.documentElement.clientWidth || 1280;
+    const viewportHeight = win.innerHeight || doc.documentElement.clientHeight || 720;
+
+    const dx = event.clientX - startX;
+    const dy = event.clientY - startY;
+
+    let nextWidth = width;
+    let nextHeight = height;
+    let nextLeft = left;
+    let nextTop = top;
+
+    // Handle horizontal resizing
+    if (edge.includes('e')) {
+      nextWidth = Math.max(260, Math.min(width + dx, viewportWidth - left - MIN_GAP));
+    }
+    if (edge.includes('w')) {
+      const newWidth = Math.max(260, width - dx);
+      const maxDx = width - 260;
+      const actualDx = Math.min(dx, maxDx);
+      nextWidth = width - actualDx;
+      nextLeft = Math.max(MIN_GAP, left + actualDx);
+    }
+
+    // Handle vertical resizing
+    if (edge.includes('s')) {
+      nextHeight = Math.max(240, Math.min(height + dy, viewportHeight - top - MIN_GAP));
+    }
+    if (edge.includes('n')) {
+      const newHeight = Math.max(240, height - dy);
+      const maxDy = height - 240;
+      const actualDy = Math.min(dy, maxDy);
+      nextHeight = height - actualDy;
+      nextTop = Math.max(MIN_GAP, top + actualDy);
+    }
+
+    resizeSession.nextWidth = Math.round(nextWidth);
+    resizeSession.nextHeight = Math.round(nextHeight);
+    resizeSession.nextLeft = Math.round(nextLeft);
+    resizeSession.nextTop = Math.round(nextTop);
+
+    panelEl.style.width = `${resizeSession.nextWidth}px`;
+    panelEl.style.height = `${resizeSession.nextHeight}px`;
+    panelEl.style.maxHeight = `${resizeSession.nextHeight}px`;
+    panelEl.style.left = `${resizeSession.nextLeft}px`;
+    panelEl.style.top = `${resizeSession.nextTop}px`;
+    panelEl.style.right = 'auto';
+    panelEl.style.bottom = 'auto';
+  };
+
+  const stopEdgeResizeTracking = (): void => {
+    if (!resizeSession) return;
+    win.removeEventListener('pointermove', handleEdgeResizeMove);
+    win.removeEventListener('pointerup', handleEdgeResizeEnd);
+    win.removeEventListener('pointercancel', handleEdgeResizeCancel);
+    if (panelEl && resizeSession.pointerId !== undefined) {
+      try {
+        panelEl.releasePointerCapture(resizeSession.pointerId);
+      } catch {
+        /* noop */
+      }
+    }
+    panelEl?.classList.remove('gmh-panel--resizing');
+    currentEdge = null;
+    updateEdgeCursor(null);
+    resizeSession = null;
+  };
+
+  const finalizeEdgeResizeLayout = (): void => {
+    if (!panelEl || !resizeSession) return;
+    const { nextWidth, nextHeight, nextLeft, nextTop } = resizeSession;
+    const viewportWidth = win.innerWidth || doc.documentElement.clientWidth || 1280;
+    const viewportHeight = win.innerHeight || doc.documentElement.clientHeight || 720;
+
+    // Determine anchor based on panel center position
+    const panelCenterX = nextLeft + nextWidth / 2;
+    const anchor = panelCenterX <= viewportWidth / 2 ? 'left' : 'right';
+    const offset = anchor === 'left' ? nextLeft : viewportWidth - nextLeft - nextWidth;
+    const bottom = viewportHeight - nextTop - nextHeight;
+
+    panelSettings.update({
+      layout: {
+        anchor,
+        offset: Math.max(MIN_GAP, Math.round(offset)),
+        bottom: Math.max(MIN_GAP, Math.round(bottom)),
+        width: nextWidth,
+        height: nextHeight,
+      },
+    });
+  };
+
+  const handleEdgeResizeEnd = (): void => {
+    if (!resizeSession) return;
+    finalizeEdgeResizeLayout();
+    stopEdgeResizeTracking();
+  };
+
+  const handleEdgeResizeCancel = (): void => {
+    stopEdgeResizeTracking();
+    applyLayout();
+  };
+
+  const bindEdgeHandlers = (): void => {
+    if (!panelEl) return;
+
+    // Remove old handlers if they exist
+    if (panelEdgeHandler) {
+      panelEl.removeEventListener('pointermove', panelEdgeHandler);
+    }
+    if (panelEdgeDownHandler) {
+      panelEl.removeEventListener('pointerdown', panelEdgeDownHandler);
+    }
+
+    panelEdgeHandler = handlePanelEdgeMove;
+    panelEdgeDownHandler = handlePanelEdgeDown;
+
+    panelEl.addEventListener('pointermove', panelEdgeHandler);
+    panelEl.addEventListener('pointerdown', panelEdgeDownHandler);
+  };
+
   const bindHandles = (): void => {
     if (!panelEl) return;
     const nextDragHandle = panelEl.querySelector('#gmh-panel-drag-handle') as HTMLButtonElement | null;
@@ -519,12 +749,8 @@ export function createPanelVisibility({
     dragHandle = nextDragHandle;
     if (dragHandle) dragHandle.addEventListener('pointerdown', handleDragStart);
 
-    const nextResizeHandle = panelEl.querySelector('#gmh-panel-resize-handle') as HTMLElement | null;
-    if (resizeHandle && resizeHandle !== nextResizeHandle) {
-      resizeHandle.removeEventListener('pointerdown', handleResizeStart);
-    }
-    resizeHandle = nextResizeHandle;
-    if (resizeHandle) resizeHandle.addEventListener('pointerdown', handleResizeStart);
+    // Bind edge resize handlers
+    bindEdgeHandlers();
 
     updateHandleAccessibility();
   };
@@ -611,97 +837,6 @@ export function createPanelVisibility({
 
   const handleDragCancel = (): void => {
     stopDragTracking();
-    applyLayout();
-  };
-
-  const stopResizeTracking = (): void => {
-    if (!resizeSession) return;
-    win.removeEventListener('pointermove', handleResizeMove);
-    win.removeEventListener('pointerup', handleResizeEnd);
-    win.removeEventListener('pointercancel', handleResizeCancel);
-    if (resizeHandle && resizeSession.pointerId !== undefined) {
-      try {
-        resizeHandle.releasePointerCapture(resizeSession.pointerId);
-      } catch {
-        /* noop */
-      }
-    }
-    panelEl?.classList.remove('gmh-panel--resizing');
-    resizeSession = null;
-  };
-
-  const handleResizeStart = (event: PointerEvent): void => {
-    if (!panelEl || !modernMode) return;
-    if (!currentBehavior.allowResize) return;
-    if (event.button && event.button !== 0) return;
-    event.preventDefault();
-    const rect = panelEl.getBoundingClientRect();
-    resizeSession = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      width: rect.width,
-      height: rect.height,
-      nextWidth: rect.width,
-      nextHeight: rect.height,
-    };
-    panelEl.classList.add('gmh-panel--resizing');
-    clearIdleTimer();
-    try {
-      resizeHandle?.setPointerCapture(event.pointerId);
-    } catch {
-      /* noop */
-    }
-    win.addEventListener('pointermove', handleResizeMove);
-    win.addEventListener('pointerup', handleResizeEnd);
-    win.addEventListener('pointercancel', handleResizeCancel);
-  };
-
-  const handleResizeMove = (event: PointerEvent): void => {
-    if (!resizeSession || !panelEl) return;
-    const viewportWidth = win.innerWidth || doc.documentElement.clientWidth || 1280;
-    const viewportHeight = win.innerHeight || doc.documentElement.clientHeight || 720;
-
-    const dx = event.clientX - resizeSession.startX;
-    const dy = event.clientY - resizeSession.startY;
-
-    const horizontalRoom = Math.max(
-      MIN_GAP,
-      viewportWidth - (currentLayout.offset ?? DEFAULT_LAYOUT.offset ?? MIN_GAP) - MIN_GAP,
-    );
-    const verticalRoom = Math.max(
-      MIN_GAP,
-      viewportHeight - (currentLayout.bottom ?? DEFAULT_LAYOUT.bottom ?? MIN_GAP) - MIN_GAP,
-    );
-
-    let nextWidth = resizeSession.width + dx;
-    let nextHeight = resizeSession.height + dy;
-
-    nextWidth = Math.min(Math.max(260, nextWidth), horizontalRoom);
-    nextHeight = Math.min(Math.max(240, nextHeight), verticalRoom);
-
-    resizeSession.nextWidth = Math.round(nextWidth);
-    resizeSession.nextHeight = Math.round(nextHeight);
-
-    panelEl.style.width = `${resizeSession.nextWidth}px`;
-    panelEl.style.height = `${resizeSession.nextHeight}px`;
-    panelEl.style.maxHeight = `${resizeSession.nextHeight}px`;
-  };
-
-  const handleResizeEnd = (): void => {
-    if (!resizeSession) return;
-    const { nextWidth, nextHeight } = resizeSession;
-    stopResizeTracking();
-    panelSettings.update({
-      layout: {
-        width: nextWidth,
-        height: nextHeight,
-      },
-    });
-  };
-
-  const handleResizeCancel = (): void => {
-    stopResizeTracking();
     applyLayout();
   };
 

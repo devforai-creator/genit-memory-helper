@@ -164,7 +164,6 @@ export function createModernPanel({
         </div>
         <div id="gmh-status-actions"></div>
       </section>
-      <div id="gmh-panel-resize-handle" class="gmh-panel__resize-handle" aria-hidden="true"></div>
     `;
 
     const adapter = getActiveAdapter();

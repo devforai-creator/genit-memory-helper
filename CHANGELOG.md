@@ -2,7 +2,28 @@
 
 ## Unreleased
 
-- _No changes yet_
+### ✨ New Features
+
+- **babechat.ai 어댑터 추가**: genit.ai 외에 babechat.ai도 지원합니다.
+  - Turn 기반 메시지 그룹핑 (`div.flex.flex-col.gap-3.px-5.pt-4`)
+  - 플레이어/NPC/나레이션/시스템 메시지 역할 감지
+  - `"화자 | 대사"` 형식의 speaker 파싱 지원
+  - 시스템 메시지 영역(AI 면책조항, 시나리오, 오프닝) 파싱
+  - DOM 순서 보존으로 대사와 나레이션이 원본 구조대로 출력
+
+- **패널 테두리 리사이즈**: 패널의 상/하/좌/우 테두리 및 모서리를 드래그하여 크기 조절 가능
+  - 기존 우측 하단 리사이즈 핸들 제거 (불필요)
+  - 테두리 10px 이내 호버 시 리사이즈 커서 표시
+  - 모든 방향(n, s, e, w, ne, nw, se, sw)에서 리사이즈 지원
+
+### 🐛 Fixes
+
+- Speaker 이름에 따옴표가 붙는 문제 수정 (`"치류` → `치류`)
+- 하드코딩된 플레이어 이름 제거 (`소중한코알라5299`)
+
+### 🗑️ Removed
+
+- `#gmh-panel-resize-handle` 요소 및 관련 CSS/JS 코드 제거
 
 ## v2.1.0 (YYYY-MM-DD)
 

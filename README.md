@@ -4,14 +4,20 @@
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
 [![All Contributors](https://img.shields.io/badge/all_contributors-2-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
-![Project Status](https://img.shields.io/badge/status-maintenance%20mode-yellow?style=flat-square)
+![Project Status](https://img.shields.io/badge/status-active-brightgreen?style=flat-square)
 ![Version](https://img.shields.io/badge/version-v2.1.1-blue?style=flat-square)
 
-> **⚠️ 프로젝트 상태: 안정화 및 보수 모드**
-> v2.1.1 (2025-11-11) 기준, 이 프로젝트는 **보안 업데이트 및 버그 수정만 수행**하는 상태입니다.
-> 신규 기능 개발(의미 검색, 임베딩 등)은 당분간 진행하지 않습니다.
+> **🚀 프로젝트 상태: 멀티플랫폼 확장 진행 중**
+> v2.2.0부터 babechat.ai 지원이 추가되었습니다. 향후 더 많은 AI 챗봇 플랫폼을 지원할 예정입니다.
 
-Genit.ai 대화 로그를 **구조 보존 JSON/Markdown**으로 추출하고 백업하는 Tampermonkey 사용자 스크립트입니다. LLM 요약 프롬프트 원클릭 복사로 유저노트(2000자) 작성을 돕고, 필요시 Classic(JSON/TXT/MD) 포맷으로도 전환할 수 있습니다.
+AI 챗봇 대화 로그를 **구조 보존 JSON/Markdown**으로 추출하고 백업하는 Tampermonkey 사용자 스크립트입니다. LLM 요약 프롬프트 원클릭 복사로 유저노트(2000자) 작성을 돕고, 필요시 Classic(JSON/TXT/MD) 포맷으로도 전환할 수 있습니다.
+
+### 🌐 지원 플랫폼
+
+| 플랫폼 | 상태 | 비고 |
+|--------|------|------|
+| [genit.ai](https://genit.ai) | ✅ 완전 지원 | 메인 타겟 |
+| [babechat.ai](https://babechat.ai) | ✅ 지원 (v2.2.0+) | 신규 추가 |
 
 ## 📥 설치 방법
 

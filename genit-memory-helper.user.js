@@ -2862,19 +2862,22 @@ var GMHBundle = (function (exports) {
             }
             return clean.trim();
         };
+        // Strip leading/trailing quote characters from a string
+        const stripQuoteChars = (text) => {
+            return text.replace(/^["'"'「」『』]+|["'"'「」『』]+$/g, '').trim();
+        };
         // Parse speaker prefix pattern: "화자 | 대사" or just "대사"
         const parseSpeakerDialogue = (text) => {
             const clean = stripSurroundingQuotes(text);
             // Match pattern: "화자 | 대사" (speaker before pipe)
             const match = clean.match(/^([^|]+?)\s*\|\s*(.+)$/s);
             if (match) {
-                const speaker = match[1].trim();
+                // Strip any quote chars from extracted speaker
+                const speaker = stripQuoteChars(match[1].trim());
                 let dialogue = match[2].trim();
                 // Remove trailing quote if present
-                if (dialogue.endsWith('"')) {
-                    dialogue = dialogue.slice(0, -1);
-                }
-                return { speaker, dialogue };
+                dialogue = stripQuoteChars(dialogue);
+                return { speaker: speaker || null, dialogue };
             }
             return { speaker: null, dialogue: clean };
         };
@@ -2884,68 +2887,65 @@ var GMHBundle = (function (exports) {
                 return;
             const characterName = extractCharacterName(block);
             const seenTexts = new Set();
-            const dialogueLines = [];
-            const narrationLines = [];
             let primarySpeaker = null;
-            // Collect all dialogue bubbles (dark background #262727)
-            const dialogueBubbles = block.querySelectorAll('[class*="262727"]');
-            dialogueBubbles.forEach((bubble) => {
-                const rawText = textFromNode(bubble);
+            // Find all dialogue and narration elements
+            const dialogueSelector = '[class*="262727"]';
+            const narrationSelector = '[class*="363636"]';
+            // Get all content elements and process in DOM order
+            const allElements = block.querySelectorAll(`${dialogueSelector}, ${narrationSelector}`);
+            allElements.forEach((element) => {
+                const rawText = textFromNode(element);
                 if (!rawText || seenTexts.has(rawText) || isStatusBlock(rawText))
                     return;
                 seenTexts.add(rawText);
-                // Parse speaker and dialogue
-                const { speaker, dialogue } = parseSpeakerDialogue(rawText);
-                if (speaker) {
-                    // Track the primary speaker for this turn
-                    if (!primarySpeaker) {
-                        primarySpeaker = speaker;
+                const className = element.className || '';
+                const isDialogue = className.includes('262727');
+                const isNarration = className.includes('363636');
+                if (isDialogue) {
+                    // Parse speaker and dialogue
+                    const { speaker, dialogue } = parseSpeakerDialogue(rawText);
+                    if (speaker) {
+                        // Track the primary speaker for this turn
+                        if (!primarySpeaker) {
+                            primarySpeaker = speaker;
+                        }
+                        pushLine(`@${speaker}@ "${dialogue}"`);
                     }
-                    pushLine(`@${speaker}@ "${dialogue}"`);
-                    dialogueLines.push(dialogue);
+                    else {
+                        // No speaker prefix, use character name
+                        pushLine(`@${characterName}@ "${dialogue}"`);
+                    }
+                    // Add dialogue part to collector
+                    if (collector) {
+                        const part = buildStructuredPart(element, {
+                            flavor: 'speech',
+                            role: 'npc',
+                            speaker: speaker || primarySpeaker || characterName,
+                            legacyFormat: 'npc',
+                        }, {
+                            lines: [dialogue],
+                            legacyFormat: 'npc',
+                        });
+                        collector.push(part, { node: element });
+                    }
                 }
-                else {
-                    // No speaker prefix, use character name
-                    pushLine(`@${characterName}@ "${dialogue}"`);
-                    dialogueLines.push(dialogue);
+                else if (isNarration) {
+                    pushLine(rawText); // Narration without speaker prefix
+                    // Add narration part to collector
+                    if (collector) {
+                        const part = buildStructuredPart(element, {
+                            flavor: 'narration',
+                            role: 'narration',
+                            speaker: '내레이션',
+                            legacyFormat: 'plain',
+                        }, {
+                            lines: [rawText],
+                            legacyFormat: 'plain',
+                        });
+                        collector.push(part, { node: element });
+                    }
                 }
             });
-            // Collect all narration blocks (gray background #363636)
-            const narrationBlocks = block.querySelectorAll('[class*="363636"]');
-            narrationBlocks.forEach((narration) => {
-                const text = textFromNode(narration);
-                if (!text || seenTexts.has(text) || isStatusBlock(text))
-                    return;
-                seenTexts.add(text);
-                pushLine(text); // Narration without speaker prefix
-                narrationLines.push(text);
-            });
-            // Add dialogue parts to collector (use primarySpeaker if available)
-            if (collector && dialogueLines.length) {
-                const part = buildStructuredPart(block, {
-                    flavor: 'speech',
-                    role: 'npc',
-                    speaker: primarySpeaker || characterName,
-                    legacyFormat: 'npc',
-                }, {
-                    lines: dialogueLines,
-                    legacyFormat: 'npc',
-                });
-                collector.push(part, { node: block });
-            }
-            // Add narration parts to collector
-            if (collector && narrationLines.length) {
-                const part = buildStructuredPart(block, {
-                    flavor: 'narration',
-                    role: 'narration',
-                    speaker: '내레이션',
-                    legacyFormat: 'plain',
-                }, {
-                    lines: narrationLines,
-                    legacyFormat: 'plain',
-                });
-                collector.push(part, { node: block });
-            }
         };
         const emitSystemLines = (block, pushLine, collector = null) => {
             const role = detectRole(block);
@@ -4587,10 +4587,6 @@ var GMHBundle = (function (exports) {
 .gmh-panel__drag-handle:focus-visible{outline:2px solid var(--gmh-accent);outline-offset:2px;}
 .gmh-panel__drag-handle[aria-disabled="true"]{cursor:not-allowed;opacity:0.5;}
 .gmh-panel__drag-icon{pointer-events:none;line-height:1;}
-.gmh-panel__resize-handle{position:absolute;width:18px;height:18px;bottom:6px;right:10px;cursor:nwse-resize;border-radius:6px;opacity:0.7;}
-.gmh-panel__resize-handle::after{content:'';position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,transparent 40%,rgba(148,163,184,0.35) 40%,rgba(148,163,184,0.8));}
-.gmh-panel__resize-handle:hover{opacity:1;}
-.gmh-panel__resize-handle[style*="none"]{display:none !important;}
 .gmh-settings-grid{display:grid;gap:12px;}
 .gmh-settings-row{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:var(--gmh-radius-sm);border:1px solid rgba(148,163,184,0.25);background:var(--gmh-surface-alt);}
 .gmh-settings-row__main{display:flex;flex-direction:column;gap:4px;}
@@ -9155,7 +9151,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         </div>
         <div id="gmh-status-actions"></div>
       </section>
-      <div id="gmh-panel-resize-handle" class="gmh-panel__resize-handle" aria-hidden="true"></div>
     `;
             const adapter = getActiveAdapter();
             const anchor = adapter?.getPanelAnchor?.(doc) || doc.body;
@@ -10120,6 +10115,17 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     const OPEN_CLASS = 'gmh-panel-open';
     const STORAGE_KEY = 'gmh_panel_collapsed';
     const MIN_GAP = 12;
+    const EDGE_THRESHOLD = 10; // px from edge to trigger resize
+    const EDGE_CURSORS = {
+        n: 'ns-resize',
+        s: 'ns-resize',
+        e: 'ew-resize',
+        w: 'ew-resize',
+        ne: 'nesw-resize',
+        nw: 'nwse-resize',
+        se: 'nwse-resize',
+        sw: 'nesw-resize',
+    };
     const normalizeState = (value, stateEnum) => {
         if (!value)
             return null;
@@ -10208,7 +10214,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         let fabEl = null;
         let fabLastToggleAt = 0;
         let dragHandle = null;
-        let resizeHandle = null;
         let modernMode = false;
         let idleTimer = null;
         let stateUnsubscribe = null;
@@ -10223,6 +10228,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         let lastFocusTarget = null;
         let dragSession = null;
         let resizeSession = null;
+        let currentEdge = null;
+        let panelEdgeHandler = null;
+        let panelEdgeDownHandler = null;
         let applyingSettings = false;
         let focusTimeouts = [];
         let focusAnimationFrame = null;
@@ -10499,9 +10507,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 dragHandle.disabled = !currentBehavior.allowDrag;
                 dragHandle.setAttribute('aria-disabled', currentBehavior.allowDrag ? 'false' : 'true');
             }
-            if (resizeHandle) {
-                resizeHandle.style.display = currentBehavior.allowResize ? '' : 'none';
-            }
         };
         const refreshBehavior = () => {
             if (!panelEl || !modernMode)
@@ -10597,6 +10602,213 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 }
             });
         };
+        const detectEdge = (event) => {
+            if (!panelEl)
+                return null;
+            const rect = panelEl.getBoundingClientRect();
+            const x = event.clientX;
+            const y = event.clientY;
+            const nearLeft = x >= rect.left && x <= rect.left + EDGE_THRESHOLD;
+            const nearRight = x >= rect.right - EDGE_THRESHOLD && x <= rect.right;
+            const nearTop = y >= rect.top && y <= rect.top + EDGE_THRESHOLD;
+            const nearBottom = y >= rect.bottom - EDGE_THRESHOLD && y <= rect.bottom;
+            if (nearTop && nearLeft)
+                return 'nw';
+            if (nearTop && nearRight)
+                return 'ne';
+            if (nearBottom && nearLeft)
+                return 'sw';
+            if (nearBottom && nearRight)
+                return 'se';
+            if (nearTop)
+                return 'n';
+            if (nearBottom)
+                return 's';
+            if (nearLeft)
+                return 'w';
+            if (nearRight)
+                return 'e';
+            return null;
+        };
+        const updateEdgeCursor = (edge) => {
+            if (!panelEl)
+                return;
+            if (edge && currentBehavior.allowResize) {
+                panelEl.style.cursor = EDGE_CURSORS[edge] || '';
+            }
+            else {
+                panelEl.style.cursor = '';
+            }
+        };
+        const handlePanelEdgeMove = (event) => {
+            if (!panelEl || !modernMode || resizeSession || dragSession)
+                return;
+            if (!currentBehavior.allowResize)
+                return;
+            const edge = detectEdge(event);
+            if (edge !== currentEdge) {
+                currentEdge = edge;
+                updateEdgeCursor(edge);
+            }
+        };
+        const handlePanelEdgeDown = (event) => {
+            if (!panelEl || !modernMode)
+                return;
+            if (!currentBehavior.allowResize)
+                return;
+            if (event.button && event.button !== 0)
+                return;
+            const edge = detectEdge(event);
+            if (!edge)
+                return;
+            // Don't start resize if clicking on interactive elements
+            const target = event.target;
+            if (target instanceof HTMLElement) {
+                if (target.closest('button, input, select, textarea, a, [role="button"]'))
+                    return;
+                if (target.closest('#gmh-panel-drag-handle'))
+                    return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            const rect = panelEl.getBoundingClientRect();
+            resizeSession = {
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startY: event.clientY,
+                width: rect.width,
+                height: rect.height,
+                left: rect.left,
+                top: rect.top,
+                nextWidth: rect.width,
+                nextHeight: rect.height,
+                nextLeft: rect.left,
+                nextTop: rect.top,
+                edge,
+            };
+            panelEl.classList.add('gmh-panel--resizing');
+            clearIdleTimer();
+            try {
+                panelEl.setPointerCapture(event.pointerId);
+            }
+            catch {
+                /* noop */
+            }
+            win.addEventListener('pointermove', handleEdgeResizeMove);
+            win.addEventListener('pointerup', handleEdgeResizeEnd);
+            win.addEventListener('pointercancel', handleEdgeResizeCancel);
+        };
+        const handleEdgeResizeMove = (event) => {
+            if (!resizeSession || !panelEl)
+                return;
+            const { edge, startX, startY, width, height, left, top } = resizeSession;
+            if (!edge)
+                return;
+            const viewportWidth = win.innerWidth || doc.documentElement.clientWidth || 1280;
+            const viewportHeight = win.innerHeight || doc.documentElement.clientHeight || 720;
+            const dx = event.clientX - startX;
+            const dy = event.clientY - startY;
+            let nextWidth = width;
+            let nextHeight = height;
+            let nextLeft = left;
+            let nextTop = top;
+            // Handle horizontal resizing
+            if (edge.includes('e')) {
+                nextWidth = Math.max(260, Math.min(width + dx, viewportWidth - left - MIN_GAP));
+            }
+            if (edge.includes('w')) {
+                const maxDx = width - 260;
+                const actualDx = Math.min(dx, maxDx);
+                nextWidth = width - actualDx;
+                nextLeft = Math.max(MIN_GAP, left + actualDx);
+            }
+            // Handle vertical resizing
+            if (edge.includes('s')) {
+                nextHeight = Math.max(240, Math.min(height + dy, viewportHeight - top - MIN_GAP));
+            }
+            if (edge.includes('n')) {
+                const maxDy = height - 240;
+                const actualDy = Math.min(dy, maxDy);
+                nextHeight = height - actualDy;
+                nextTop = Math.max(MIN_GAP, top + actualDy);
+            }
+            resizeSession.nextWidth = Math.round(nextWidth);
+            resizeSession.nextHeight = Math.round(nextHeight);
+            resizeSession.nextLeft = Math.round(nextLeft);
+            resizeSession.nextTop = Math.round(nextTop);
+            panelEl.style.width = `${resizeSession.nextWidth}px`;
+            panelEl.style.height = `${resizeSession.nextHeight}px`;
+            panelEl.style.maxHeight = `${resizeSession.nextHeight}px`;
+            panelEl.style.left = `${resizeSession.nextLeft}px`;
+            panelEl.style.top = `${resizeSession.nextTop}px`;
+            panelEl.style.right = 'auto';
+            panelEl.style.bottom = 'auto';
+        };
+        const stopEdgeResizeTracking = () => {
+            if (!resizeSession)
+                return;
+            win.removeEventListener('pointermove', handleEdgeResizeMove);
+            win.removeEventListener('pointerup', handleEdgeResizeEnd);
+            win.removeEventListener('pointercancel', handleEdgeResizeCancel);
+            if (panelEl && resizeSession.pointerId !== undefined) {
+                try {
+                    panelEl.releasePointerCapture(resizeSession.pointerId);
+                }
+                catch {
+                    /* noop */
+                }
+            }
+            panelEl?.classList.remove('gmh-panel--resizing');
+            currentEdge = null;
+            updateEdgeCursor(null);
+            resizeSession = null;
+        };
+        const finalizeEdgeResizeLayout = () => {
+            if (!panelEl || !resizeSession)
+                return;
+            const { nextWidth, nextHeight, nextLeft, nextTop } = resizeSession;
+            const viewportWidth = win.innerWidth || doc.documentElement.clientWidth || 1280;
+            const viewportHeight = win.innerHeight || doc.documentElement.clientHeight || 720;
+            // Determine anchor based on panel center position
+            const panelCenterX = nextLeft + nextWidth / 2;
+            const anchor = panelCenterX <= viewportWidth / 2 ? 'left' : 'right';
+            const offset = anchor === 'left' ? nextLeft : viewportWidth - nextLeft - nextWidth;
+            const bottom = viewportHeight - nextTop - nextHeight;
+            panelSettings.update({
+                layout: {
+                    anchor,
+                    offset: Math.max(MIN_GAP, Math.round(offset)),
+                    bottom: Math.max(MIN_GAP, Math.round(bottom)),
+                    width: nextWidth,
+                    height: nextHeight,
+                },
+            });
+        };
+        const handleEdgeResizeEnd = () => {
+            if (!resizeSession)
+                return;
+            finalizeEdgeResizeLayout();
+            stopEdgeResizeTracking();
+        };
+        const handleEdgeResizeCancel = () => {
+            stopEdgeResizeTracking();
+            applyLayout();
+        };
+        const bindEdgeHandlers = () => {
+            if (!panelEl)
+                return;
+            // Remove old handlers if they exist
+            if (panelEdgeHandler) {
+                panelEl.removeEventListener('pointermove', panelEdgeHandler);
+            }
+            if (panelEdgeDownHandler) {
+                panelEl.removeEventListener('pointerdown', panelEdgeDownHandler);
+            }
+            panelEdgeHandler = handlePanelEdgeMove;
+            panelEdgeDownHandler = handlePanelEdgeDown;
+            panelEl.addEventListener('pointermove', panelEdgeHandler);
+            panelEl.addEventListener('pointerdown', panelEdgeDownHandler);
+        };
         const bindHandles = () => {
             if (!panelEl)
                 return;
@@ -10607,13 +10819,8 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             dragHandle = nextDragHandle;
             if (dragHandle)
                 dragHandle.addEventListener('pointerdown', handleDragStart);
-            const nextResizeHandle = panelEl.querySelector('#gmh-panel-resize-handle');
-            if (resizeHandle && resizeHandle !== nextResizeHandle) {
-                resizeHandle.removeEventListener('pointerdown', handleResizeStart);
-            }
-            resizeHandle = nextResizeHandle;
-            if (resizeHandle)
-                resizeHandle.addEventListener('pointerdown', handleResizeStart);
+            // Bind edge resize handlers
+            bindEdgeHandlers();
             updateHandleAccessibility();
         };
         const stopDragTracking = () => {
@@ -10699,88 +10906,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         };
         const handleDragCancel = () => {
             stopDragTracking();
-            applyLayout();
-        };
-        const stopResizeTracking = () => {
-            if (!resizeSession)
-                return;
-            win.removeEventListener('pointermove', handleResizeMove);
-            win.removeEventListener('pointerup', handleResizeEnd);
-            win.removeEventListener('pointercancel', handleResizeCancel);
-            if (resizeHandle && resizeSession.pointerId !== undefined) {
-                try {
-                    resizeHandle.releasePointerCapture(resizeSession.pointerId);
-                }
-                catch {
-                    /* noop */
-                }
-            }
-            panelEl?.classList.remove('gmh-panel--resizing');
-            resizeSession = null;
-        };
-        const handleResizeStart = (event) => {
-            if (!panelEl || !modernMode)
-                return;
-            if (!currentBehavior.allowResize)
-                return;
-            if (event.button && event.button !== 0)
-                return;
-            event.preventDefault();
-            const rect = panelEl.getBoundingClientRect();
-            resizeSession = {
-                pointerId: event.pointerId,
-                startX: event.clientX,
-                startY: event.clientY,
-                width: rect.width,
-                height: rect.height,
-                nextWidth: rect.width,
-                nextHeight: rect.height,
-            };
-            panelEl.classList.add('gmh-panel--resizing');
-            clearIdleTimer();
-            try {
-                resizeHandle?.setPointerCapture(event.pointerId);
-            }
-            catch {
-                /* noop */
-            }
-            win.addEventListener('pointermove', handleResizeMove);
-            win.addEventListener('pointerup', handleResizeEnd);
-            win.addEventListener('pointercancel', handleResizeCancel);
-        };
-        const handleResizeMove = (event) => {
-            if (!resizeSession || !panelEl)
-                return;
-            const viewportWidth = win.innerWidth || doc.documentElement.clientWidth || 1280;
-            const viewportHeight = win.innerHeight || doc.documentElement.clientHeight || 720;
-            const dx = event.clientX - resizeSession.startX;
-            const dy = event.clientY - resizeSession.startY;
-            const horizontalRoom = Math.max(MIN_GAP, viewportWidth - (currentLayout.offset ?? DEFAULT_LAYOUT.offset ?? MIN_GAP) - MIN_GAP);
-            const verticalRoom = Math.max(MIN_GAP, viewportHeight - (currentLayout.bottom ?? DEFAULT_LAYOUT.bottom ?? MIN_GAP) - MIN_GAP);
-            let nextWidth = resizeSession.width + dx;
-            let nextHeight = resizeSession.height + dy;
-            nextWidth = Math.min(Math.max(260, nextWidth), horizontalRoom);
-            nextHeight = Math.min(Math.max(240, nextHeight), verticalRoom);
-            resizeSession.nextWidth = Math.round(nextWidth);
-            resizeSession.nextHeight = Math.round(nextHeight);
-            panelEl.style.width = `${resizeSession.nextWidth}px`;
-            panelEl.style.height = `${resizeSession.nextHeight}px`;
-            panelEl.style.maxHeight = `${resizeSession.nextHeight}px`;
-        };
-        const handleResizeEnd = () => {
-            if (!resizeSession)
-                return;
-            const { nextWidth, nextHeight } = resizeSession;
-            stopResizeTracking();
-            panelSettings.update({
-                layout: {
-                    width: nextWidth,
-                    height: nextHeight,
-                },
-            });
-        };
-        const handleResizeCancel = () => {
-            stopResizeTracking();
             applyLayout();
         };
         const open = ({ focus = false, persist = false } = {}) => {

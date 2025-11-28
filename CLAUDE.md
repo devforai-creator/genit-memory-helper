@@ -4,9 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Genit Memory Helper** is a Tampermonkey userscript that extracts chat logs from genit.ai (a Korean AI chatbot platform) and exports them in structured formats (JSON/Markdown/TXT) with privacy redaction features. It helps users create memory summaries for the platform's 2000-character user notes by exporting conversation history and providing LLM-ready summarization prompts.
+**Genit Memory Helper** is a Tampermonkey userscript that extracts chat logs from AI chatbot platforms (genit.ai, babechat.ai) and exports them in structured formats (JSON/Markdown/TXT) with privacy redaction features. It helps users create memory summaries for platform user notes by exporting conversation history and providing LLM-ready summarization prompts.
 
-**v2.1.0** adds real-time message indexing infrastructure for future semantic search capabilities.
+**Supported Platforms:**
+- **genit.ai** - Full support (original target)
+- **babechat.ai** - Full support (v2.2.0+)
 
 Key features:
 - Auto-scroll to load conversation history
@@ -17,6 +19,7 @@ Key features:
 - **[v2.1.0]** Real-time message indexing with 5-message block generation
 - **[v2.1.0]** IndexedDB persistent storage for conversation blocks
 - **[v2.1.0]** Feature flag system for experimental features
+- **[v2.2.0]** Multi-platform adapter architecture
 
 ## Development Commands
 
@@ -80,7 +83,7 @@ src/
 ├── env.ts              # Environment abstraction (window, localStorage, GM_* APIs)
 ├── types/              # TypeScript type definitions
 ├── core/               # State machine, error handler, export range, bookmarks, message indexer
-├── adapters/           # genit.ai adapter registry and DOM selectors
+├── adapters/           # Platform adapters (genit.ai, babechat.ai) and registry
 ├── privacy/            # Profiles, settings store, redaction pipeline
 ├── export/             # Structured + classic writers, manifest builder, parsers
 ├── features/           # Auto-loader, share workflow, snapshot, guide prompts, block builder, message stream
@@ -120,7 +123,10 @@ Rollup (see `rollup.config.js`) stitches these modules into the single userscrip
 - `src/ui/range-controls.ts`, `src/ui/auto-loader-controls.ts`, `src/ui/panel-shortcuts.ts`: modern panel wiring for range selection, auto-load toggles, and keyboard shortcuts.
 
 **Adapters:**
-- `src/adapters/genit.ts`: DOM selector definitions and role detection heuristics for genit.ai.
+- `src/adapters/genit.ts`: DOM adapter for genit.ai with selector definitions and role detection heuristics.
+- `src/adapters/babechat.ts`: DOM adapter for babechat.ai with turn-based message grouping and speaker parsing.
+- `src/adapters/registry.ts`: Adapter registry for storing and retrieving platform-specific configurations.
+- `src/composition/adapter-composition.ts`: Adapter composition logic with URL-based platform detection.
 
 ### Data Flow
 

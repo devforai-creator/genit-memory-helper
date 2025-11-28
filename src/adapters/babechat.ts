@@ -449,19 +449,23 @@ export const createBabechatAdapter = ({
     return clean.trim();
   };
 
+  // Strip leading/trailing quote characters from a string
+  const stripQuoteChars = (text: string): string => {
+    return text.replace(/^["'"'「」『』]+|["'"'「」『』]+$/g, '').trim();
+  };
+
   // Parse speaker prefix pattern: "화자 | 대사" or just "대사"
   const parseSpeakerDialogue = (text: string): { speaker: string | null; dialogue: string } => {
     const clean = stripSurroundingQuotes(text);
     // Match pattern: "화자 | 대사" (speaker before pipe)
     const match = clean.match(/^([^|]+?)\s*\|\s*(.+)$/s);
     if (match) {
-      const speaker = match[1].trim();
+      // Strip any quote chars from extracted speaker
+      const speaker = stripQuoteChars(match[1].trim());
       let dialogue = match[2].trim();
       // Remove trailing quote if present
-      if (dialogue.endsWith('"')) {
-        dialogue = dialogue.slice(0, -1);
-      }
-      return { speaker, dialogue };
+      dialogue = stripQuoteChars(dialogue);
+      return { speaker: speaker || null, dialogue };
     }
     return { speaker: null, dialogue: clean };
   };
@@ -476,79 +480,78 @@ export const createBabechatAdapter = ({
 
     const characterName = extractCharacterName(block);
     const seenTexts = new Set<string>();
-    const dialogueLines: string[] = [];
-    const narrationLines: string[] = [];
     let primarySpeaker: string | null = null;
 
-    // Collect all dialogue bubbles (dark background #262727)
-    const dialogueBubbles = block.querySelectorAll('[class*="262727"]');
-    dialogueBubbles.forEach((bubble) => {
-      const rawText = textFromNode(bubble);
+    // Find all dialogue and narration elements
+    const dialogueSelector = '[class*="262727"]';
+    const narrationSelector = '[class*="363636"]';
+
+    // Get all content elements and process in DOM order
+    const allElements = block.querySelectorAll(`${dialogueSelector}, ${narrationSelector}`);
+
+    allElements.forEach((element) => {
+      const rawText = textFromNode(element);
       if (!rawText || seenTexts.has(rawText) || isStatusBlock(rawText)) return;
       seenTexts.add(rawText);
 
-      // Parse speaker and dialogue
-      const { speaker, dialogue } = parseSpeakerDialogue(rawText);
+      const className = element.className || '';
+      const isDialogue = className.includes('262727');
+      const isNarration = className.includes('363636');
 
-      if (speaker) {
-        // Track the primary speaker for this turn
-        if (!primarySpeaker) {
-          primarySpeaker = speaker;
+      if (isDialogue) {
+        // Parse speaker and dialogue
+        const { speaker, dialogue } = parseSpeakerDialogue(rawText);
+
+        if (speaker) {
+          // Track the primary speaker for this turn
+          if (!primarySpeaker) {
+            primarySpeaker = speaker;
+          }
+          pushLine(`@${speaker}@ "${dialogue}"`);
+        } else {
+          // No speaker prefix, use character name
+          pushLine(`@${characterName}@ "${dialogue}"`);
         }
-        pushLine(`@${speaker}@ "${dialogue}"`);
-        dialogueLines.push(dialogue);
-      } else {
-        // No speaker prefix, use character name
-        pushLine(`@${characterName}@ "${dialogue}"`);
-        dialogueLines.push(dialogue);
+
+        // Add dialogue part to collector
+        if (collector) {
+          const part = buildStructuredPart(
+            element,
+            {
+              flavor: 'speech',
+              role: 'npc',
+              speaker: speaker || primarySpeaker || characterName,
+              legacyFormat: 'npc',
+            },
+            {
+              lines: [dialogue],
+              legacyFormat: 'npc',
+            },
+          );
+          collector.push(part, { node: element });
+        }
+      } else if (isNarration) {
+        pushLine(rawText); // Narration without speaker prefix
+
+        // Add narration part to collector
+        if (collector) {
+          const part = buildStructuredPart(
+            element,
+            {
+              flavor: 'narration',
+              role: 'narration',
+              speaker: '내레이션',
+              legacyFormat: 'plain',
+            },
+            {
+              lines: [rawText],
+              legacyFormat: 'plain',
+            },
+          );
+          collector.push(part, { node: element });
+        }
       }
     });
-
-    // Collect all narration blocks (gray background #363636)
-    const narrationBlocks = block.querySelectorAll('[class*="363636"]');
-    narrationBlocks.forEach((narration) => {
-      const text = textFromNode(narration);
-      if (!text || seenTexts.has(text) || isStatusBlock(text)) return;
-      seenTexts.add(text);
-      pushLine(text); // Narration without speaker prefix
-      narrationLines.push(text);
-    });
-
-    // Add dialogue parts to collector (use primarySpeaker if available)
-    if (collector && dialogueLines.length) {
-      const part = buildStructuredPart(
-        block,
-        {
-          flavor: 'speech',
-          role: 'npc',
-          speaker: primarySpeaker || characterName,
-          legacyFormat: 'npc',
-        },
-        {
-          lines: dialogueLines,
-          legacyFormat: 'npc',
-        },
-      );
-      collector.push(part, { node: block });
-    }
-
-    // Add narration parts to collector
-    if (collector && narrationLines.length) {
-      const part = buildStructuredPart(
-        block,
-        {
-          flavor: 'narration',
-          role: 'narration',
-          speaker: '내레이션',
-          legacyFormat: 'plain',
-        },
-        {
-          lines: narrationLines,
-          legacyFormat: 'plain',
-        },
-      );
-      collector.push(part, { node: block });
-    }
   };
 
   const emitSystemLines = (
