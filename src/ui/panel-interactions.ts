@@ -28,8 +28,6 @@ export function createPanelInteractions({
   bindGuideControls,
   prepareShare,
   performExport,
-  copyRecentShare,
-  copyAllShare,
   autoLoader,
   autoState,
   stateApi,
@@ -44,7 +42,7 @@ export function createPanelInteractions({
   if (!setPrivacyProfile) throw new Error('createPanelInteractions requires setPrivacyProfile');
   if (!bindRangeControls) throw new Error('createPanelInteractions requires bindRangeControls');
   if (!bindShortcuts) throw new Error('createPanelInteractions requires bindShortcuts');
-  if (!prepareShare || !performExport || !copyRecentShare || !copyAllShare) {
+  if (!prepareShare || !performExport) {
     throw new Error('createPanelInteractions requires share workflow helpers');
   }
   if (!stateApi || !stateEnum) {
@@ -87,20 +85,11 @@ export function createPanelInteractions({
     await performExport(prepared, format);
   };
 
-  const copyRecent = () => copyRecentShare(prepareShareWithDialog);
-  const copyAll = () => copyAllShare(prepareShareWithDialog);
-
   const isAutoRunning = () => Boolean(autoState?.running);
 
   const attachShareHandlers = (panel: Element): void => {
     const exportFormatSelect = panel.querySelector<HTMLSelectElement>('#gmh-export-format');
     const quickExportBtn = panel.querySelector<HTMLButtonElement>('#gmh-quick-export');
-
-    const copyRecentBtn = panel.querySelector<HTMLButtonElement>('#gmh-copy-recent');
-    copyRecentBtn?.addEventListener('click', () => void copyRecent());
-
-    const copyAllBtn = panel.querySelector<HTMLButtonElement>('#gmh-copy-all');
-    copyAllBtn?.addEventListener('click', () => void copyAll());
 
     const exportBtn = panel.querySelector<HTMLButtonElement>('#gmh-export');
     exportBtn?.addEventListener('click', async () => {

@@ -813,8 +813,6 @@ interface GMHFlags {
     parseAll,
     prepareShare,
     performExport,
-    copyRecent: copyRecentShare,
-    copyAll: copyAllShare,
     reparse: reparseShare,
     collectSessionStats,
   } = composeShareWorkflow({
@@ -901,8 +899,6 @@ interface GMHFlags {
     bindGuideControls,
     prepareShare,
     performExport,
-    copyRecentShare,
-    copyAllShare,
     autoLoader,
     autoState: AUTO_STATE,
     stateApi: stateManager,

@@ -452,107 +452,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
   };
 
   /**
-   * Copies the last 15 sanitized turns to the clipboard.
-   *
-   * @param {ShareWorkflowApi['prepareShare']} prepareShareFn
-   * @returns {Promise<void>}
-   */
-  const copyRecent = async (prepareShareFn: ShareWorkflowApi['prepareShare']): Promise<void> => {
-    const prepared = await prepareShareFn({
-      confirmLabel: '복사 계속',
-      cancelStatusMessage: '복사를 취소했습니다.',
-      blockedStatusMessage: '미성년자 민감 맥락으로 복사가 차단되었습니다.',
-    });
-    if (!prepared) return;
-    try {
-      setState(stateEnum.EXPORTING, 'EXPORTING', {
-        label: '복사 진행 중',
-        message: '최근 15메시지를 복사하는 중입니다...',
-        tone: 'progress',
-        progress: { indeterminate: true },
-      });
-      const { privacy, overallStats, stats } = prepared;
-      const effectiveStats = overallStats || stats;
-      const turns = privacy.sanitizedSession.turns.slice(-15);
-      const md = toMarkdownExport(privacy.sanitizedSession, {
-        turns,
-        includeMeta: false,
-        heading: '## 최근 15메시지',
-      });
-      clipboard.set(md, { type: 'text', mimetype: 'text/plain' });
-      const summary = formatRedactionCounts(privacy.counts);
-      const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
-      const message = `최근 15메시지 복사 완료 · 유저 ${effectiveStats.userMessages}개 · LLM ${effectiveStats.llmMessages}개 · ${profileLabel} · ${summary}`;
-      setState(stateEnum.DONE, 'DONE', {
-        label: '복사 완료',
-        message,
-        tone: 'success',
-        progress: { value: 1 },
-      });
-      if (privacy.sanitizedSession.warnings.length) {
-        logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
-      }
-    } catch (error) {
-      const errorMsg = toErrorMessage(error);
-      alertFn(`오류: ${errorMsg}`);
-      setState(stateEnum.ERROR, 'ERROR', {
-        label: '복사 실패',
-        message: '복사 실패',
-        tone: 'error',
-        progress: { value: 1 },
-      });
-    }
-  };
-
-  /**
-   * Copies the full sanitized transcript to the clipboard.
-   *
-   * @param {ShareWorkflowApi['prepareShare']} prepareShareFn
-   * @returns {Promise<void>}
-   */
-  const copyAll = async (prepareShareFn: ShareWorkflowApi['prepareShare']): Promise<void> => {
-    const prepared = await prepareShareFn({
-      confirmLabel: '복사 계속',
-      cancelStatusMessage: '복사를 취소했습니다.',
-      blockedStatusMessage: '미성년자 민감 맥락으로 복사가 차단되었습니다.',
-    });
-    if (!prepared) return;
-    try {
-      setState(stateEnum.EXPORTING, 'EXPORTING', {
-        label: '복사 진행 중',
-        message: '전체 Markdown을 복사하는 중입니다...',
-        tone: 'progress',
-        progress: { indeterminate: true },
-      });
-      const { privacy, overallStats, stats } = prepared;
-      const effectiveStats = overallStats || stats;
-      const md = toMarkdownExport(privacy.sanitizedSession);
-      clipboard.set(md, { type: 'text', mimetype: 'text/plain' });
-      const summary = formatRedactionCounts(privacy.counts);
-      const profileLabel = privacyProfiles[privacy.profile]?.label || privacy.profile;
-      const message = `전체 Markdown 복사 완료 · 유저 ${effectiveStats.userMessages}개 · LLM ${effectiveStats.llmMessages}개 · ${profileLabel} · ${summary}`;
-      setState(stateEnum.DONE, 'DONE', {
-        label: '복사 완료',
-        message,
-        tone: 'success',
-        progress: { value: 1 },
-      });
-      if (privacy.sanitizedSession.warnings.length) {
-        logger?.warn?.('[GMH] warnings:', privacy.sanitizedSession.warnings);
-      }
-    } catch (error) {
-      const errorMsg = toErrorMessage(error);
-      alertFn(`오류: ${errorMsg}`);
-      setState(stateEnum.ERROR, 'ERROR', {
-        label: '복사 실패',
-        message: '복사 실패',
-        tone: 'error',
-        progress: { value: 1 },
-      });
-    }
-  };
-
-  /**
    * Forces a reparse cycle to refresh sanitized stats without exporting.
    */
   const reparse = (): void => {
@@ -591,8 +490,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     parseAll,
     prepareShare,
     performExport,
-    copyRecent,
-    copyAll,
     reparse,
   };
 }

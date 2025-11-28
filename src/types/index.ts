@@ -862,8 +862,6 @@ export interface ShareWorkflowApi {
   parseAll(): { session: TranscriptSession; raw: string; snapshot: StructuredSnapshot };
   prepareShare(options?: { confirmLabel?: string; cancelStatusMessage?: string; blockedStatusMessage?: string }): Promise<PreparedShareResult | null>;
   performExport(prepared: PreparedShareResult | null, format: string): Promise<boolean>;
-  copyRecent(prepareShareFn: ShareWorkflowApi['prepareShare']): Promise<void>;
-  copyAll(prepareShareFn: ShareWorkflowApi['prepareShare']): Promise<void>;
   reparse(): void;
 }
 
@@ -963,8 +961,6 @@ export interface PanelInteractionsOptions {
   bindGuideControls?(panel: Element): void;
   prepareShare: ShareWorkflowApi['prepareShare'];
   performExport: ShareWorkflowApi['performExport'];
-  copyRecentShare: ShareWorkflowApi['copyRecent'];
-  copyAllShare: ShareWorkflowApi['copyAll'];
   autoLoader?: AutoLoaderController | null;
   autoState?: AutoLoaderExports['autoState'] | null;
   stateApi: PanelStateApi;

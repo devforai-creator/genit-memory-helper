@@ -98,10 +98,6 @@ export function createModernPanel({
       </section>
       <section class="gmh-panel__section" id="gmh-section-export">
         <div class="gmh-panel__section-title">Export</div>
-        <div class="gmh-field-row">
-          <button id="gmh-copy-recent" class="gmh-panel-btn gmh-panel-btn--neutral">최근 15메시지 복사</button>
-          <button id="gmh-copy-all" class="gmh-panel-btn gmh-panel-btn--neutral">전체 MD 복사</button>
-        </div>
         <div class="gmh-field-row gmh-field-row--wrap">
           <label for="gmh-range-start" class="gmh-field-label">메시지 범위</label>
           <div class="gmh-range-controls">
