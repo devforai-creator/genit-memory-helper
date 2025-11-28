@@ -198,30 +198,53 @@ export const createBabechatAdapter = ({
 
     if (!container) return [];
 
-    // Get all direct children of the container (includes system message area)
-    const children = Array.from(container.children) as Element[];
+    const blocks: Element[] = [];
+    const seen = new Set<Element>();
 
-    // Filter and return valid message blocks
-    return children.filter((child) => {
-      // Include system message area (div.px-5)
-      if (child.classList.contains('px-5') && !child.classList.contains('pt-4')) {
-        return true; // System message area
+    // 1. Find system message area (div.px-5 without pt-4) - usually first
+    const systemAreas = container.querySelectorAll('div.px-5:not(.pt-4)');
+    systemAreas.forEach((area) => {
+      // Verify it's a system area by checking for AI disclaimer or scenario content
+      const hasDisclaimer = area.textContent?.includes('AI') || area.textContent?.includes('기술');
+      const hasScenario = area.querySelector('[class*="363636"]') !== null;
+      if ((hasDisclaimer || hasScenario) && !seen.has(area)) {
+        seen.add(area);
+        blocks.push(area);
       }
-
-      // Include turn wrappers (div.flex.flex-col.gap-3.px-5.pt-4)
-      if (child.classList.contains('flex') &&
-          child.classList.contains('flex-col') &&
-          child.classList.contains('gap-3')) {
-        return true;
-      }
-
-      // Fallback: check if it has user or AI content
-      const hasPlayerContent = child.querySelector('.justify-end') !== null;
-      const hasNpcContent = child.querySelector('a[href*="/character/"]') !== null;
-      const hasSystemContent = child.querySelector('[class*="363636"]') !== null;
-
-      return hasPlayerContent || hasNpcContent || hasSystemContent;
     });
+
+    // 2. Find turn wrappers using selector
+    const turns = collectAll(selectors.messageRoot, container);
+    turns.forEach((turn) => {
+      if (!seen.has(turn)) {
+        seen.add(turn);
+        blocks.push(turn);
+      }
+    });
+
+    // 3. Fallback: find any element with user/AI content if no turns found
+    if (blocks.length === 0) {
+      const userMessages = container.querySelectorAll('.justify-end');
+      const aiMessages = container.querySelectorAll('a[href*="/character/"]');
+
+      userMessages.forEach((msg) => {
+        const parent = msg.closest('.flex.flex-col') || msg.parentElement;
+        if (parent && !seen.has(parent)) {
+          seen.add(parent);
+          blocks.push(parent);
+        }
+      });
+
+      aiMessages.forEach((msg) => {
+        const parent = msg.closest('.flex.flex-col') || msg.parentElement;
+        if (parent && !seen.has(parent)) {
+          seen.add(parent);
+          blocks.push(parent);
+        }
+      });
+    }
+
+    return blocks;
   };
 
   const isSystemMessageArea = (block: Element): boolean => {
