@@ -2922,6 +2922,7 @@ var GMHBundle = (function (exports) {
             const scenarioLines = [];
             const openingDialogueLines = [];
             const seenTexts = new Set();
+            let openingCharacterName = null;
             // Check if this is the system message area (div.px-5)
             if (isSystemMessageArea(block)) {
                 // Parse internal structure
@@ -2951,15 +2952,25 @@ var GMHBundle = (function (exports) {
                                 const dialogueText = textFromNode(dialogueEl);
                                 if (dialogueText && !seenTexts.has(dialogueText)) {
                                     seenTexts.add(dialogueText);
-                                    const characterName = extractCharacterName(child) || 'NPC';
-                                    // Check for speaker prefix
+                                    // Extract character name from the opening message element itself
+                                    const openingCharName = extractCharacterName(child) || 'NPC';
+                                    // Store for collector use later
+                                    if (!openingCharacterName) {
+                                        openingCharacterName = openingCharName;
+                                    }
+                                    // Check for speaker prefix like "치류 | "
                                     const speakerMatch = dialogueText.match(/^(.+?)\s*\|\s*(.+)$/s);
                                     if (speakerMatch) {
-                                        pushLine(`@${speakerMatch[1].trim()}@ "${speakerMatch[2].trim()}"`);
-                                        openingDialogueLines.push(speakerMatch[2].trim());
+                                        const speaker = speakerMatch[1].trim();
+                                        const dialogue = speakerMatch[2].trim();
+                                        if (!openingCharacterName || openingCharacterName === 'NPC') {
+                                            openingCharacterName = speaker;
+                                        }
+                                        pushLine(`@${speaker}@ "${dialogue}"`);
+                                        openingDialogueLines.push(dialogue);
                                     }
                                     else {
-                                        pushLine(`@${characterName}@ "${dialogueText}"`);
+                                        pushLine(`@${openingCharName}@ "${dialogueText}"`);
                                         openingDialogueLines.push(dialogueText);
                                     }
                                 }
@@ -2997,7 +3008,8 @@ var GMHBundle = (function (exports) {
                     collector.push(part, { node: block });
                 }
                 if (collector && openingDialogueLines.length) {
-                    const characterName = extractCharacterName(block);
+                    // Use the character name extracted from opening message, not from system block
+                    const characterName = openingCharacterName || 'NPC';
                     const part = buildStructuredPart(block, {
                         flavor: 'speech',
                         role: 'npc',
@@ -4149,7 +4161,7 @@ var GMHBundle = (function (exports) {
         source,
     });
 
-    const PLAYER_NAME_FALLBACKS = ['플레이어', '소중한코알라5299'];
+    const PLAYER_NAME_FALLBACKS = ['플레이어'];
     const PLAYER_MARK = '⟦PLAYER⟧ ';
     const HEADER_RE = /^(\d+월\s*\d+일.*?\d{1,2}:\d{2})\s*\|\s*([^|]+?)\s*\|\s*📍\s*([^|]+)\s*\|?(.*)$/;
     const CODE_RE = /^([A-J])\/(\d+)\/(\d+)\/(\d+)\/(\d+)$/i;

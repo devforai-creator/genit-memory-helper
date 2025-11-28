@@ -18,7 +18,7 @@ import type {
 
 type TranscriptRole = 'player' | 'npc' | 'narration';
 
-export const PLAYER_NAME_FALLBACKS = ['플레이어', '소중한코알라5299'] as const;
+export const PLAYER_NAME_FALLBACKS = ['플레이어'] as const;
 
 export const PLAYER_MARK = '⟦PLAYER⟧ ';
 

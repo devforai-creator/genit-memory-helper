@@ -527,6 +527,7 @@ export const createBabechatAdapter = ({
     const scenarioLines: string[] = [];
     const openingDialogueLines: string[] = [];
     const seenTexts = new Set<string>();
+    let openingCharacterName: string | null = null;
 
     // Check if this is the system message area (div.px-5)
     if (isSystemMessageArea(block)) {
@@ -558,14 +559,24 @@ export const createBabechatAdapter = ({
               const dialogueText = textFromNode(dialogueEl);
               if (dialogueText && !seenTexts.has(dialogueText)) {
                 seenTexts.add(dialogueText);
-                const characterName = extractCharacterName(child as Element) || 'NPC';
-                // Check for speaker prefix
+                // Extract character name from the opening message element itself
+                const openingCharName = extractCharacterName(child as Element) || 'NPC';
+                // Store for collector use later
+                if (!openingCharacterName) {
+                  openingCharacterName = openingCharName;
+                }
+                // Check for speaker prefix like "치류 | "
                 const speakerMatch = dialogueText.match(/^(.+?)\s*\|\s*(.+)$/s);
                 if (speakerMatch) {
-                  pushLine(`@${speakerMatch[1].trim()}@ "${speakerMatch[2].trim()}"`);
-                  openingDialogueLines.push(speakerMatch[2].trim());
+                  const speaker = speakerMatch[1].trim();
+                  const dialogue = speakerMatch[2].trim();
+                  if (!openingCharacterName || openingCharacterName === 'NPC') {
+                    openingCharacterName = speaker;
+                  }
+                  pushLine(`@${speaker}@ "${dialogue}"`);
+                  openingDialogueLines.push(dialogue);
                 } else {
-                  pushLine(`@${characterName}@ "${dialogueText}"`);
+                  pushLine(`@${openingCharName}@ "${dialogueText}"`);
                   openingDialogueLines.push(dialogueText);
                 }
               }
@@ -606,7 +617,8 @@ export const createBabechatAdapter = ({
       }
 
       if (collector && openingDialogueLines.length) {
-        const characterName = extractCharacterName(block);
+        // Use the character name extracted from opening message, not from system block
+        const characterName = openingCharacterName || 'NPC';
         const part = buildStructuredPart(block, {
           flavor: 'speech',
           role: 'npc',
