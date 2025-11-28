@@ -435,6 +435,37 @@ export const createBabechatAdapter = ({
     }
   };
 
+  // Strip surrounding quotes from text
+  const stripSurroundingQuotes = (text: string): string => {
+    let clean = text.trim();
+    // Remove surrounding double quotes
+    if (clean.startsWith('"') && clean.endsWith('"') && clean.length > 2) {
+      clean = clean.slice(1, -1);
+    }
+    // Remove surrounding single quotes
+    if (clean.startsWith("'") && clean.endsWith("'") && clean.length > 2) {
+      clean = clean.slice(1, -1);
+    }
+    return clean.trim();
+  };
+
+  // Parse speaker prefix pattern: "화자 | 대사" or just "대사"
+  const parseSpeakerDialogue = (text: string): { speaker: string | null; dialogue: string } => {
+    const clean = stripSurroundingQuotes(text);
+    // Match pattern: "화자 | 대사" (speaker before pipe)
+    const match = clean.match(/^([^|]+?)\s*\|\s*(.+)$/s);
+    if (match) {
+      const speaker = match[1].trim();
+      let dialogue = match[2].trim();
+      // Remove trailing quote if present
+      if (dialogue.endsWith('"')) {
+        dialogue = dialogue.slice(0, -1);
+      }
+      return { speaker, dialogue };
+    }
+    return { speaker: null, dialogue: clean };
+  };
+
   const emitNpcLines = (
     block: Element,
     pushLine: (line: string) => void,
@@ -447,24 +478,29 @@ export const createBabechatAdapter = ({
     const seenTexts = new Set<string>();
     const dialogueLines: string[] = [];
     const narrationLines: string[] = [];
+    let primarySpeaker: string | null = null;
 
     // Collect all dialogue bubbles (dark background #262727)
     const dialogueBubbles = block.querySelectorAll('[class*="262727"]');
     dialogueBubbles.forEach((bubble) => {
-      const text = textFromNode(bubble);
-      if (!text || seenTexts.has(text) || isStatusBlock(text)) return;
-      seenTexts.add(text);
+      const rawText = textFromNode(bubble);
+      if (!rawText || seenTexts.has(rawText) || isStatusBlock(rawText)) return;
+      seenTexts.add(rawText);
 
-      // Check if text has speaker prefix like "치류 | "
-      const speakerMatch = text.match(/^(.+?)\s*\|\s*(.+)$/s);
-      if (speakerMatch) {
-        const speaker = speakerMatch[1].trim();
-        const dialogue = speakerMatch[2].trim();
+      // Parse speaker and dialogue
+      const { speaker, dialogue } = parseSpeakerDialogue(rawText);
+
+      if (speaker) {
+        // Track the primary speaker for this turn
+        if (!primarySpeaker) {
+          primarySpeaker = speaker;
+        }
         pushLine(`@${speaker}@ "${dialogue}"`);
         dialogueLines.push(dialogue);
       } else {
-        pushLine(`@${characterName}@ "${text}"`);
-        dialogueLines.push(text);
+        // No speaker prefix, use character name
+        pushLine(`@${characterName}@ "${dialogue}"`);
+        dialogueLines.push(dialogue);
       }
     });
 
@@ -478,14 +514,14 @@ export const createBabechatAdapter = ({
       narrationLines.push(text);
     });
 
-    // Add dialogue parts to collector
+    // Add dialogue parts to collector (use primarySpeaker if available)
     if (collector && dialogueLines.length) {
       const part = buildStructuredPart(
         block,
         {
           flavor: 'speech',
           role: 'npc',
-          speaker: characterName,
+          speaker: primarySpeaker || characterName,
           legacyFormat: 'npc',
         },
         {
@@ -556,28 +592,29 @@ export const createBabechatAdapter = ({
           else if (className.includes('justify-start')) {
             const dialogueEl = (child as Element).querySelector('[class*="262727"]');
             if (dialogueEl) {
-              const dialogueText = textFromNode(dialogueEl);
-              if (dialogueText && !seenTexts.has(dialogueText)) {
-                seenTexts.add(dialogueText);
+              const rawDialogueText = textFromNode(dialogueEl);
+              if (rawDialogueText && !seenTexts.has(rawDialogueText)) {
+                seenTexts.add(rawDialogueText);
                 // Extract character name from the opening message element itself
                 const openingCharName = extractCharacterName(child as Element) || 'NPC';
-                // Store for collector use later
-                if (!openingCharacterName) {
-                  openingCharacterName = openingCharName;
-                }
-                // Check for speaker prefix like "치류 | "
-                const speakerMatch = dialogueText.match(/^(.+?)\s*\|\s*(.+)$/s);
-                if (speakerMatch) {
-                  const speaker = speakerMatch[1].trim();
-                  const dialogue = speakerMatch[2].trim();
+
+                // Parse speaker and dialogue using the new function
+                const { speaker, dialogue } = parseSpeakerDialogue(rawDialogueText);
+
+                if (speaker) {
+                  // Use the extracted speaker name
                   if (!openingCharacterName || openingCharacterName === 'NPC') {
                     openingCharacterName = speaker;
                   }
                   pushLine(`@${speaker}@ "${dialogue}"`);
                   openingDialogueLines.push(dialogue);
                 } else {
-                  pushLine(`@${openingCharName}@ "${dialogueText}"`);
-                  openingDialogueLines.push(dialogueText);
+                  // No speaker prefix, use character name
+                  if (!openingCharacterName) {
+                    openingCharacterName = openingCharName;
+                  }
+                  pushLine(`@${openingCharName}@ "${dialogue}"`);
+                  openingDialogueLines.push(dialogue);
                 }
               }
             }
