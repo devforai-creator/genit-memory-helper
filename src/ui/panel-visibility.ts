@@ -472,7 +472,7 @@ export function createPanelVisibility({
       fabEl.id = 'gmh-fab';
       fabEl.type = 'button';
       fabEl.textContent = 'GMH';
-      fabEl.setAttribute('aria-label', 'Genit Memory Helper 토글');
+      fabEl.setAttribute('aria-label', 'General Memory Helper 토글');
       fabEl.setAttribute('aria-controls', 'genit-memory-helper-panel');
       doc.body.appendChild(fabEl);
     }

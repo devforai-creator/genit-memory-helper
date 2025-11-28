@@ -31,9 +31,9 @@ test.describe('GMH mock smoke (offline)', () => {
     const panel = page.locator('#genit-memory-helper-panel');
     await expect(panel).toBeVisible({ timeout: 10_000 });
     await expect(panel.locator('#gmh-panel-drag-handle')).toBeVisible();
-    await expect(panel.locator('#gmh-panel-resize-handle')).toBeVisible();
+    // Note: #gmh-panel-resize-handle was removed in v2.2.0 (edge-based resizing)
     await expect(panel).toHaveAttribute('role', 'region');
-    await expect(panel).toHaveAttribute('aria-label', /Genit Memory Helper/);
+    await expect(panel).toHaveAttribute('aria-label', /General Memory Helper/);
 
     const progressBar = panel.locator('#gmh-progress-fill');
     await expect(progressBar).toHaveAttribute('role', 'progressbar');
