@@ -9,12 +9,14 @@ import type {
   GenitAdapterOptions,
   GMHNamespace,
 } from '../types';
+import type { BabechatAdapter, BabechatAdapterOptions } from '../adapters/babechat';
 
 type RegisterAdapterConfig = (name: string, config?: AdapterConfig) => void;
 type GetAdapterSelectors = (name: string) => AdapterSelectors;
 type GetAdapterMetadata = (name: string) => AdapterMetadata;
 type ListAdapterNames = () => string[];
 type CreateGenitAdapter = (options?: GenitAdapterOptions) => GenitAdapter;
+type CreateBabechatAdapter = (options?: BabechatAdapterOptions) => BabechatAdapter;
 type GetPlayerNames = () => string[];
 type SetPlayerNames = (names: string[]) => void;
 
@@ -25,6 +27,7 @@ type GMHAdapterNamespace = {
   getMetadata?: GetAdapterMetadata;
   list?: ListAdapterNames;
   genit?: GenitAdapter;
+  babechat?: BabechatAdapter;
   [key: string]: unknown;
 };
 
@@ -120,6 +123,56 @@ const registerGenitConfig = (registerAdapterConfig: RegisterAdapterConfig): void
   };
 
   registerAdapterConfig('genit', config);
+};
+
+const registerBabechatConfig = (registerAdapterConfig: RegisterAdapterConfig): void => {
+  const config: AdapterConfig = {
+    selectors: {
+      chatContainers: [
+        '.overflow-hidden.max-w-\\[840px\\]',
+        'form',
+        '.fixed.top-\\[5\\.75rem\\]',
+      ],
+      messageRoot: [
+        'div.flex.justify-end.font-normal',
+        'div.flex.justify-start.font-normal',
+      ],
+      playerScopes: [
+        '.justify-end',
+        '[class*="B56576"]',
+        '[class*="bg-[#B56576]"]',
+      ],
+      playerText: [
+        '.justify-end [class*="B56576"]',
+        '.justify-end .rounded-tl-xl',
+        '.justify-end .whitespace-pre-line',
+      ],
+      npcGroups: [
+        '.justify-start',
+      ],
+      npcBubble: [
+        '[class*="262727"]',
+        '[class*="bg-[#262727]"]',
+        '.rounded-bl-xl',
+      ],
+      characterName: [
+        '.justify-start .text-\\[0\\.75rem\\]',
+        '.justify-start [class*="text-[0.75rem]"]',
+        '.justify-start .relative.max-w-\\[70\\%\\] > div:first-child',
+      ],
+      avatarLink: [
+        'a[href*="/character/"][href*="/profile"]',
+      ],
+      systemMessage: [
+        '[class*="363636"]',
+        '.bg-\\[\\#363636\\]\\/80',
+      ],
+      panelAnchor: ['#__next', 'main', 'body'],
+      textHints: ['메시지', '채팅'],
+    },
+  };
+
+  registerAdapterConfig('babechat', config);
 };
 
 const isPrologueBlock = (element: Element | null | undefined): boolean => {
@@ -249,6 +302,7 @@ interface ComposeAdaptersOptions {
   getAdapterMetadata: GetAdapterMetadata;
   listAdapterNames: ListAdapterNames;
   createGenitAdapter: CreateGenitAdapter;
+  createBabechatAdapter?: CreateBabechatAdapter;
   errorHandler?: ErrorHandler | null;
   getPlayerNames: GetPlayerNames;
   setPlayerNames: SetPlayerNames;
@@ -257,6 +311,7 @@ interface ComposeAdaptersOptions {
 
 type ComposeAdaptersResult = AdapterAPI & {
   genitAdapter: GenitAdapter;
+  babechatAdapter?: BabechatAdapter;
 };
 
 /**
@@ -273,6 +328,7 @@ export const composeAdapters = ({
   getAdapterMetadata,
   listAdapterNames,
   createGenitAdapter,
+  createBabechatAdapter,
   errorHandler,
   getPlayerNames,
   setPlayerNames,
@@ -287,8 +343,11 @@ export const composeAdapters = ({
   adapters.getMetadata = (name) => getAdapterMetadata(name);
   adapters.list = () => listAdapterNames();
 
+  // Register adapter configs
   registerGenitConfig(registerAdapterConfig);
+  registerBabechatConfig(registerAdapterConfig);
 
+  // Create genit adapter
   const genitAdapter = createGenitAdapter({
     registry: adapterRegistry,
     getPlayerNames,
@@ -297,7 +356,20 @@ export const composeAdapters = ({
   });
 
   adapters.genit = genitAdapter;
-  core.adapters = [genitAdapter];
+
+  // Create babechat adapter if factory provided
+  let babechatAdapter: BabechatAdapter | undefined;
+  if (createBabechatAdapter) {
+    babechatAdapter = createBabechatAdapter({
+      registry: adapterRegistry,
+      getPlayerNames,
+      errorHandler,
+    });
+    adapters.babechat = babechatAdapter;
+  }
+
+  // Register all adapters (babechat first for URL matching priority)
+  core.adapters = babechatAdapter ? [babechatAdapter, genitAdapter] : [genitAdapter];
 
   const api = createAdapterAPI({
     GMH,
@@ -311,6 +383,7 @@ export const composeAdapters = ({
 
   return {
     genitAdapter,
+    babechatAdapter,
     ...api,
   };
 };

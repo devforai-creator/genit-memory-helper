@@ -2,10 +2,12 @@
 // @name         Genit Memory Helper
 // @namespace    local.dev
 // @version      2.1.1
-// @description  Genit.ai 대화 로그 추출 및 백업 도구 (JSON/Markdown/TXT Export + LLM 요약 프롬프트)
+// @description  AI 챗봇 대화 로그 추출 및 백업 도구 (JSON/Markdown/TXT Export + LLM 요약 프롬프트)
 // @author       devforai-creator
 // @match        https://genit.ai/*
 // @match        https://www.genit.ai/*
+// @match        https://babechat.ai/*
+// @match        https://www.babechat.ai/*
 // @grant        GM_setClipboard
 // @run-at       document-idle
 // @updateURL    https://github.com/devforai-creator/genit-memory-helper/raw/main/genit-memory-helper.user.js
@@ -1542,8 +1544,8 @@ var GMHBundle = (function (exports) {
         return deps;
     };
 
-    const DEFAULT_PLAYER_MARK$1 = '⟦PLAYER⟧ ';
-    const createGenitAdapter = ({ registry = adapterRegistry, playerMark = DEFAULT_PLAYER_MARK$1, getPlayerNames = () => [], isPrologueBlock = () => false, errorHandler, } = {}) => {
+    const DEFAULT_PLAYER_MARK$2 = '⟦PLAYER⟧ ';
+    const createGenitAdapter = ({ registry = adapterRegistry, playerMark = DEFAULT_PLAYER_MARK$2, getPlayerNames = () => [], isPrologueBlock = () => false, errorHandler, } = {}) => {
         let infoNodeRegistry = new WeakSet();
         let playerNameAccessor = typeof getPlayerNames === 'function' ? getPlayerNames : () => [];
         const warnWithHandler = (err, context, fallbackMessage) => {
@@ -2515,6 +2517,504 @@ var GMHBundle = (function (exports) {
             },
         };
         return genitAdapter;
+    };
+
+    const DEFAULT_PLAYER_MARK$1 = '⟦PLAYER⟧ ';
+    const createBabechatAdapter = ({ registry = adapterRegistry, playerMark = DEFAULT_PLAYER_MARK$1, getPlayerNames = () => [], errorHandler, } = {}) => {
+        let playerNameAccessor = typeof getPlayerNames === 'function' ? getPlayerNames : () => [];
+        const warnWithHandler = (err, context, fallbackMessage) => {
+            if (errorHandler?.handle) {
+                const level = errorHandler.LEVELS?.WARN || 'warn';
+                errorHandler.handle(err, context, level);
+            }
+            else if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+                console.warn(fallbackMessage, err);
+            }
+        };
+        const resolvePlayerNames = () => {
+            const names = playerNameAccessor();
+            if (Array.isArray(names)) {
+                return names.filter((name) => typeof name === 'string');
+            }
+            return [];
+        };
+        const registryGet = registry && typeof registry.get === 'function'
+            ? (name) => registry.get(name)
+            : getAdapterConfig;
+        const adapterConfig = registryGet('babechat');
+        const selectors = adapterConfig.selectors || {};
+        const collectAll = (selList, root = document) => {
+            const out = [];
+            const seen = new Set();
+            if (!selList?.length)
+                return out;
+            for (const sel of selList) {
+                if (!sel)
+                    continue;
+                if (root instanceof Element && root.matches(sel) && !seen.has(root)) {
+                    seen.add(root);
+                    out.push(root);
+                }
+                let nodes;
+                try {
+                    nodes = root.querySelectorAll(sel);
+                }
+                catch (e) {
+                    continue;
+                }
+                nodes.forEach((node) => {
+                    if (!node || seen.has(node))
+                        return;
+                    seen.add(node);
+                    out.push(node);
+                });
+            }
+            return out;
+        };
+        const firstMatch = (selList, root = document) => {
+            if (!selList?.length)
+                return null;
+            for (const sel of selList) {
+                if (!sel)
+                    continue;
+                try {
+                    const node = root.querySelector(sel);
+                    if (node)
+                        return node;
+                }
+                catch (e) {
+                    continue;
+                }
+            }
+            return null;
+        };
+        const textSegmentsFromNode = (node) => {
+            if (!node)
+                return [];
+            let text = '';
+            if (node instanceof HTMLElement) {
+                text = node.innerText ?? node.textContent ?? '';
+            }
+            else if (node instanceof Element || node instanceof Node) {
+                text = node.textContent ?? '';
+            }
+            if (!text)
+                return [];
+            return text
+                .split(/\r?\n+/)
+                .map((seg) => seg.trim())
+                .filter(Boolean);
+        };
+        const findScrollableAncestor = (node) => {
+            let current = node instanceof Element ? node : null;
+            for (let depth = 0; depth < 10 && current; depth += 1) {
+                if (isScrollable(current))
+                    return current;
+                current = current.parentElement;
+            }
+            return null;
+        };
+        const getChatContainer = (doc = document) => {
+            // Try direct selectors first
+            const direct = firstMatch(selectors.chatContainers, doc);
+            if (direct && isScrollable(direct))
+                return direct;
+            // Try finding form and its scrollable parent
+            const form = doc.querySelector('form');
+            if (form) {
+                const scrollable = findScrollableAncestor(form);
+                if (scrollable)
+                    return scrollable;
+                // Return form's parent if it looks like a chat container
+                const parent = form.parentElement;
+                if (parent && parent.classList.contains('overflow-hidden')) {
+                    return parent;
+                }
+            }
+            // Fallback: find message blocks and trace up
+            const block = firstMatch(selectors.messageRoot, doc);
+            if (block) {
+                const scrollable = findScrollableAncestor(block.parentElement);
+                if (scrollable)
+                    return scrollable;
+            }
+            return null;
+        };
+        const getMessageBlocks = (root) => {
+            const targetRoot = root || document;
+            const blocks = collectAll(selectors.messageRoot, targetRoot);
+            if (blocks.length)
+                return blocks;
+            // Fallback: query form directly
+            const form = targetRoot instanceof Document
+                ? targetRoot.querySelector('form')
+                : targetRoot.querySelector('form') || targetRoot.closest('form');
+            if (form) {
+                const userMessages = Array.from(form.querySelectorAll('.justify-end.font-normal'));
+                const aiMessages = Array.from(form.querySelectorAll('.justify-start.font-normal'));
+                return [...userMessages, ...aiMessages].sort((a, b) => {
+                    const aRect = a.getBoundingClientRect();
+                    const bRect = b.getBoundingClientRect();
+                    return aRect.top - bRect.top;
+                });
+            }
+            return [];
+        };
+        const detectRole = (block) => {
+            if (!block)
+                return 'unknown';
+            // Check for user message (justify-end)
+            if (block.classList.contains('justify-end')) {
+                return 'player';
+            }
+            // Check for AI message (justify-start with avatar)
+            if (block.classList.contains('justify-start')) {
+                const hasAvatar = block.querySelector('a[href*="/character/"][href*="/profile"]');
+                if (hasAvatar)
+                    return 'npc';
+            }
+            // Check for system message
+            const bgClass = Array.from(block.classList).find(c => c.includes('363636'));
+            if (bgClass)
+                return 'system';
+            // Check parent classes as fallback
+            const parent = block.closest('.justify-end, .justify-start');
+            if (parent?.classList.contains('justify-end'))
+                return 'player';
+            if (parent?.classList.contains('justify-start'))
+                return 'npc';
+            return 'unknown';
+        };
+        const resolvePartType = (node) => {
+            if (!(node instanceof Element))
+                return 'paragraph';
+            const tag = node.tagName?.toLowerCase?.() || '';
+            if (!tag)
+                return 'paragraph';
+            if (tag === 'pre')
+                return 'code';
+            if (tag === 'code' && node.closest('pre'))
+                return 'code';
+            if (tag === 'blockquote')
+                return 'blockquote';
+            if (tag === 'ul' || tag === 'ol')
+                return 'list';
+            if (tag === 'img')
+                return 'image';
+            if (tag === 'hr')
+                return 'horizontal-rule';
+            if (/^h[1-6]$/.test(tag))
+                return 'heading';
+            if (tag === 'em' || tag === 'i')
+                return 'narration';
+            return 'paragraph';
+        };
+        const buildStructuredPart = (node, context = {}, options = {}) => {
+            const baseLines = Array.isArray(options.lines) ? options.lines.slice() : [];
+            const partType = options.type || resolvePartType(node);
+            const part = {
+                type: partType,
+                flavor: context.flavor || 'speech',
+                role: context.role || null,
+                speaker: context.speaker || null,
+                lines: baseLines,
+                legacyFormat: options.legacyFormat || context.legacyFormat || null,
+            };
+            if (Array.isArray(options.legacyLines)) {
+                part.legacyLines = options.legacyLines.slice();
+            }
+            if (!part.lines.length) {
+                const fallbackLines = textSegmentsFromNode(node);
+                part.lines = fallbackLines;
+            }
+            return part;
+        };
+        const getOrderPath = (node, root) => {
+            if (!(node instanceof Node) || !(root instanceof Node))
+                return null;
+            const path = [];
+            let current = node;
+            let guard = 0;
+            while (current && current !== root && guard < 200) {
+                const parent = current.parentNode;
+                if (!parent)
+                    return null;
+                const index = Array.prototype.indexOf.call(parent.childNodes, current);
+                path.push(index);
+                current = parent;
+                guard += 1;
+            }
+            if (current !== root)
+                return null;
+            path.reverse();
+            return path;
+        };
+        const compareOrderPaths = (a, b) => {
+            const len = Math.max(a.length, b.length);
+            for (let i = 0; i < len; i += 1) {
+                const valA = Number.isFinite(a[i]) ? a[i] : -1;
+                const valB = Number.isFinite(b[i]) ? b[i] : -1;
+                if (valA !== valB)
+                    return valA - valB;
+            }
+            return 0;
+        };
+        const createStructuredCollector = (defaults = {}, context = {}) => {
+            const parts = [];
+            const snapshotDefaults = {
+                playerName: defaults.playerName || '플레이어',
+            };
+            const rootNode = context?.rootNode instanceof Node ? context.rootNode : null;
+            let fallbackCounter = 0;
+            return {
+                push(part, meta = {}) {
+                    if (!part)
+                        return;
+                    const next = { ...part };
+                    if (!Array.isArray(next.lines))
+                        next.lines = [];
+                    if (!next.role && next.flavor === 'speech')
+                        next.role = 'unknown';
+                    if (!next.speaker && next.role === 'player')
+                        next.speaker = snapshotDefaults.playerName;
+                    const orderNode = meta?.node instanceof Node ? meta.node : null;
+                    const orderPathRaw = orderNode && rootNode ? getOrderPath(orderNode, rootNode) : null;
+                    const fallbackToken = (fallbackCounter += 1);
+                    const orderPath = orderPathRaw
+                        ? orderPathRaw
+                        : [Number.MAX_SAFE_INTEGER, fallbackToken];
+                    parts.push({ part: next, orderPath, fallback: fallbackToken });
+                },
+                list() {
+                    return parts
+                        .slice()
+                        .sort((a, b) => {
+                        const diff = compareOrderPaths(a.orderPath, b.orderPath);
+                        if (diff !== 0)
+                            return diff;
+                        return a.fallback - b.fallback;
+                    })
+                        .map((entry) => entry.part);
+                },
+                defaults: snapshotDefaults,
+            };
+        };
+        const extractCharacterName = (block) => {
+            // Try character name selector
+            const nameNode = firstMatch(selectors.characterName, block);
+            if (nameNode) {
+                const name = nameNode.textContent?.trim();
+                if (name)
+                    return name.slice(0, 40);
+            }
+            // Fallback: look for small text before message bubble
+            const smallText = block.querySelector('.text-\\[0\\.75rem\\], [class*="text-[0.75rem]"]');
+            if (smallText) {
+                const name = smallText.textContent?.trim();
+                if (name)
+                    return name.slice(0, 40);
+            }
+            return 'NPC';
+        };
+        const emitPlayerLines = (block, pushLine, collector = null) => {
+            const role = detectRole(block);
+            if (role !== 'player')
+                return;
+            // Find text content in user message bubble
+            const textNode = block.querySelector('[class*="B56576"], [class*="bg-[#B56576]"]')
+                || block.querySelector('.rounded-tl-xl')
+                || block;
+            const partLines = [];
+            textSegmentsFromNode(textNode).forEach((seg) => {
+                if (!seg)
+                    return;
+                pushLine(playerMark + seg);
+                partLines.push(seg);
+            });
+            if (collector && partLines.length) {
+                const playerName = collector.defaults?.playerName || '플레이어';
+                const part = buildStructuredPart(textNode, {
+                    flavor: 'speech',
+                    role: 'player',
+                    speaker: playerName,
+                    legacyFormat: 'player',
+                }, {
+                    lines: partLines,
+                    legacyFormat: 'player',
+                });
+                collector.push(part, { node: textNode });
+            }
+        };
+        const emitNpcLines = (block, pushLine, collector = null) => {
+            const role = detectRole(block);
+            if (role !== 'npc')
+                return;
+            const characterName = extractCharacterName(block);
+            // Find text content in AI message bubble
+            const textNode = block.querySelector('[class*="262727"], [class*="bg-[#262727]"]')
+                || block.querySelector('.rounded-bl-xl')
+                || block.querySelector('.relative.max-w-\\[70\\%\\]');
+            if (!textNode)
+                return;
+            const partLines = [];
+            // Handle italic text as narration, regular text as dialogue
+            const children = textNode.querySelectorAll('em, i, p, span');
+            if (children.length) {
+                children.forEach((child) => {
+                    const text = child.textContent?.trim();
+                    if (!text)
+                        return;
+                    const isNarration = child.tagName.toLowerCase() === 'em' || child.tagName.toLowerCase() === 'i';
+                    if (isNarration) {
+                        pushLine(text);
+                    }
+                    else {
+                        pushLine(`@${characterName}@ "${text}"`);
+                    }
+                    partLines.push(text);
+                });
+            }
+            else {
+                // No structured children, emit all text
+                textSegmentsFromNode(textNode).forEach((seg) => {
+                    if (!seg)
+                        return;
+                    // Check if line starts with speaker indicator (e.g., "치류 |")
+                    const speakerMatch = seg.match(/^(.+?)\s*\|\s*(.+)$/);
+                    if (speakerMatch) {
+                        pushLine(`@${speakerMatch[1]}@ "${speakerMatch[2]}"`);
+                    }
+                    else {
+                        pushLine(`@${characterName}@ "${seg}"`);
+                    }
+                    partLines.push(seg);
+                });
+            }
+            if (collector && partLines.length) {
+                const part = buildStructuredPart(textNode, {
+                    flavor: 'speech',
+                    role: 'npc',
+                    speaker: characterName,
+                    legacyFormat: 'npc',
+                }, {
+                    lines: partLines,
+                    legacyFormat: 'npc',
+                });
+                collector.push(part, { node: textNode });
+            }
+        };
+        const emitSystemLines = (block, pushLine, collector = null) => {
+            const role = detectRole(block);
+            if (role !== 'system')
+                return;
+            const partLines = [];
+            textSegmentsFromNode(block).forEach((seg) => {
+                if (!seg)
+                    return;
+                pushLine(`[SYSTEM] ${seg}`);
+                partLines.push(seg);
+            });
+            if (collector && partLines.length) {
+                const part = buildStructuredPart(block, {
+                    flavor: 'meta',
+                    role: 'system',
+                    speaker: 'SYSTEM',
+                    legacyFormat: 'meta',
+                }, {
+                    lines: partLines,
+                    legacyFormat: 'meta',
+                });
+                collector.push(part, { node: block });
+            }
+        };
+        const emitTranscriptLines = (block, pushLine, collector = null) => {
+            emitPlayerLines(block, pushLine, collector);
+            emitNpcLines(block, pushLine, collector);
+            emitSystemLines(block, pushLine, collector);
+        };
+        const collectStructuredMessage = (block) => {
+            if (!block)
+                return null;
+            const playerGuess = resolvePlayerNames()[0] || '플레이어';
+            const collector = createStructuredCollector({ playerName: playerGuess }, { rootNode: block });
+            const localLines = [];
+            const pushLine = (line) => {
+                const trimmed = (line || '').trim();
+                if (!trimmed)
+                    return;
+                localLines.push(trimmed);
+            };
+            try {
+                emitTranscriptLines(block, pushLine, collector);
+            }
+            catch (err) {
+                warnWithHandler(err, 'adapter', '[GMH] babechat structured emit failed');
+                emitTranscriptLines(block, pushLine);
+            }
+            const parts = collector.list();
+            const role = block?.getAttribute?.('data-gmh-message-role') || detectRole(block) || 'unknown';
+            const ordinalAttr = Number(block?.getAttribute?.('data-gmh-message-ordinal'));
+            const indexAttr = Number(block?.getAttribute?.('data-gmh-message-index'));
+            const idAttr = block?.getAttribute?.('data-gmh-message-id') || null;
+            const firstSpeakerPart = parts.find((part) => part?.speaker);
+            const collectorPlayerName = collector?.defaults?.playerName ?? playerGuess;
+            const speaker = firstSpeakerPart?.speaker ||
+                (role === 'player'
+                    ? collectorPlayerName
+                    : role === 'npc'
+                        ? extractCharacterName(block)
+                        : null);
+            const message = {
+                id: idAttr,
+                index: Number.isFinite(indexAttr) ? indexAttr : null,
+                ordinal: Number.isFinite(ordinalAttr) ? ordinalAttr : null,
+                role,
+                channel: role === 'player' ? 'user' : role === 'npc' ? 'llm' : 'system',
+                speaker,
+                parts,
+            };
+            if (localLines.length) {
+                Object.defineProperty(message, 'legacyLines', {
+                    value: localLines.slice(),
+                    enumerable: false,
+                    writable: true,
+                    configurable: true,
+                });
+            }
+            return message;
+        };
+        const guessPlayerNames = () => {
+            // babechat.ai doesn't expose player names in DOM easily
+            // Return empty and rely on fallbacks
+            return [];
+        };
+        const getPanelAnchor = (doc = document) => {
+            const anchor = firstMatch(selectors.panelAnchor, doc);
+            return anchor || doc.body;
+        };
+        const match = (loc) => /babechat\.ai/i.test(loc.hostname ?? '');
+        const babechatAdapter = {
+            id: 'babechat',
+            label: 'BabeChat',
+            match,
+            findContainer: (doc = document) => getChatContainer(doc),
+            listMessageBlocks: (root) => getMessageBlocks(root),
+            emitTranscriptLines,
+            collectStructuredMessage,
+            detectRole,
+            guessPlayerNames,
+            getPanelAnchor,
+            dumpSelectors: () => clone(selectors),
+            resetInfoRegistry: () => {
+                // No info registry for babechat adapter
+            },
+            setPlayerNameAccessor(fn) {
+                if (typeof fn === 'function') {
+                    playerNameAccessor = fn;
+                }
+            },
+        };
+        return babechatAdapter;
     };
 
     const STORAGE_KEYS = {
@@ -8928,6 +9428,54 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         };
         registerAdapterConfig('genit', config);
     };
+    const registerBabechatConfig = (registerAdapterConfig) => {
+        const config = {
+            selectors: {
+                chatContainers: [
+                    '.overflow-hidden.max-w-\\[840px\\]',
+                    'form',
+                    '.fixed.top-\\[5\\.75rem\\]',
+                ],
+                messageRoot: [
+                    'div.flex.justify-end.font-normal',
+                    'div.flex.justify-start.font-normal',
+                ],
+                playerScopes: [
+                    '.justify-end',
+                    '[class*="B56576"]',
+                    '[class*="bg-[#B56576]"]',
+                ],
+                playerText: [
+                    '.justify-end [class*="B56576"]',
+                    '.justify-end .rounded-tl-xl',
+                    '.justify-end .whitespace-pre-line',
+                ],
+                npcGroups: [
+                    '.justify-start',
+                ],
+                npcBubble: [
+                    '[class*="262727"]',
+                    '[class*="bg-[#262727]"]',
+                    '.rounded-bl-xl',
+                ],
+                characterName: [
+                    '.justify-start .text-\\[0\\.75rem\\]',
+                    '.justify-start [class*="text-[0.75rem]"]',
+                    '.justify-start .relative.max-w-\\[70\\%\\] > div:first-child',
+                ],
+                avatarLink: [
+                    'a[href*="/character/"][href*="/profile"]',
+                ],
+                systemMessage: [
+                    '[class*="363636"]',
+                    '.bg-\\[\\#363636\\]\\/80',
+                ],
+                panelAnchor: ['#__next', 'main', 'body'],
+                textHints: ['메시지', '채팅'],
+            },
+        };
+        registerAdapterConfig('babechat', config);
+    };
     const isPrologueBlock = (element) => {
         let current = element instanceof Element ? element : null;
         let hops = 0;
@@ -9013,7 +9561,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
      * @param options Injection container.
      * @returns Adapter utilities bound to the GMH namespace.
      */
-    const composeAdapters = ({ GMH, adapterRegistry, registerAdapterConfig, getAdapterSelectors, getAdapterMetadata, listAdapterNames, createGenitAdapter, errorHandler, getPlayerNames, setPlayerNames, PLAYER_NAME_FALLBACKS, }) => {
+    const composeAdapters = ({ GMH, adapterRegistry, registerAdapterConfig, getAdapterSelectors, getAdapterMetadata, listAdapterNames, createGenitAdapter, createBabechatAdapter, errorHandler, getPlayerNames, setPlayerNames, PLAYER_NAME_FALLBACKS, }) => {
         const adapters = ensureAdaptersNamespace(GMH);
         const core = ensureCoreNamespace(GMH);
         adapters.Registry = adapterRegistry;
@@ -9021,7 +9569,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         adapters.getSelectors = (name) => getAdapterSelectors(name);
         adapters.getMetadata = (name) => getAdapterMetadata(name);
         adapters.list = () => listAdapterNames();
+        // Register adapter configs
         registerGenitConfig(registerAdapterConfig);
+        registerBabechatConfig(registerAdapterConfig);
+        // Create genit adapter
         const genitAdapter = createGenitAdapter({
             registry: adapterRegistry,
             getPlayerNames,
@@ -9029,7 +9580,18 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             errorHandler,
         });
         adapters.genit = genitAdapter;
-        core.adapters = [genitAdapter];
+        // Create babechat adapter if factory provided
+        let babechatAdapter;
+        if (createBabechatAdapter) {
+            babechatAdapter = createBabechatAdapter({
+                registry: adapterRegistry,
+                getPlayerNames,
+                errorHandler,
+            });
+            adapters.babechat = babechatAdapter;
+        }
+        // Register all adapters (babechat first for URL matching priority)
+        core.adapters = babechatAdapter ? [babechatAdapter, genitAdapter] : [genitAdapter];
         const api = createAdapterAPI({
             GMH,
             errorHandler,
@@ -9041,6 +9603,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         api.updatePlayerNames();
         return {
             genitAdapter,
+            babechatAdapter,
             ...api,
         };
     };
@@ -11239,6 +11802,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             getAdapterMetadata,
             listAdapterNames,
             createGenitAdapter,
+            createBabechatAdapter,
             errorHandler: GMH.Core?.ErrorHandler,
             getPlayerNames,
             setPlayerNames,

@@ -13,10 +13,12 @@ const metaBanner = `// ==UserScript==\n`
   + `// @name         Genit Memory Helper\n`
   + `// @namespace    local.dev\n`
   + `// @version      ${packageJson.version}\n`
-  + `// @description  Genit.ai 대화 로그 추출 및 백업 도구 (JSON/Markdown/TXT Export + LLM 요약 프롬프트)\n`
+  + `// @description  AI 챗봇 대화 로그 추출 및 백업 도구 (JSON/Markdown/TXT Export + LLM 요약 프롬프트)\n`
   + `// @author       devforai-creator\n`
   + `// @match        https://genit.ai/*\n`
   + `// @match        https://www.genit.ai/*\n`
+  + `// @match        https://babechat.ai/*\n`
+  + `// @match        https://www.babechat.ai/*\n`
   + `// @grant        GM_setClipboard\n`
   + `// @run-at       document-idle\n`
   + `// @updateURL    https://github.com/devforai-creator/genit-memory-helper/raw/main/genit-memory-helper.user.js\n`

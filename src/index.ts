@@ -15,6 +15,7 @@ import {
   getAdapterMetadata,
   listAdapterNames,
   createGenitAdapter,
+  createBabechatAdapter,
 } from './adapters/index';
 import {
   PRIVACY_PROFILES,
@@ -152,6 +153,7 @@ interface GMHFlags {
 
   const {
     genitAdapter,
+    babechatAdapter,
     getActiveAdapter,
     updatePlayerNames,
   } = composeAdapters({
@@ -162,6 +164,7 @@ interface GMHFlags {
     getAdapterMetadata,
     listAdapterNames,
     createGenitAdapter,
+    createBabechatAdapter,
     errorHandler: GMH.Core?.ErrorHandler as ErrorHandler | null | undefined,
     getPlayerNames,
     setPlayerNames,
