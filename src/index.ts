@@ -68,6 +68,13 @@ import { createPanelShortcuts } from './ui/panel-shortcuts';
 import { createShareWorkflow } from './features/share';
 import createBlockBuilder from './features/block-builder';
 import createMessageStream from './features/message-stream';
+import {
+  testImageCapture,
+  exportAsHtml,
+  exportFromStructuredData,
+  downloadHtml,
+  captureImageAsBase64,
+} from './features/html-export';
 import createMemoryStatus from './ui/memory-status';
 import createBlockViewer from './ui/block-viewer';
 import { createPanelInteractions } from './ui/panel-interactions';
@@ -476,7 +483,120 @@ interface GMHFlags {
     },
   };
 
-  GMH.Debug = debugApi;
+  // HTML Export PoC functions
+  const htmlExportApi = {
+    /**
+     * Test image capture capability
+     * Usage: GMH.Debug.testImageCapture() or GMH.Debug.testImageCapture('https://...')
+     */
+    async testImageCapture(imageUrl?: string) {
+      return testImageCapture(imageUrl, document);
+    },
+
+    /**
+     * Capture a single image as base64
+     */
+    async captureImage(imageUrl: string, maxWidth = 800) {
+      return captureImageAsBase64(imageUrl, { maxWidth });
+    },
+
+    /**
+     * Export conversation as HTML
+     * Usage: GMH.Debug.exportHtml() or GMH.Debug.exportHtml({ title: 'My Chat' })
+     */
+    async exportHtml(options: { title?: string; includeImages?: boolean } = {}) {
+      const result = await exportAsHtml(
+        {
+          documentRef: document,
+          getActiveAdapter: () => getActiveAdapter(),
+          logger: ENV.console,
+        },
+        {
+          title: options.title ?? document.title ?? 'Conversation Export',
+          includeImages: options.includeImages ?? true,
+          inlineStyles: true,
+        },
+      );
+
+      if (result.success && result.html) {
+        ENV.console?.log?.('[GMH] HTML export ready:', result.stats);
+        return result;
+      } else {
+        ENV.console?.error?.('[GMH] HTML export failed:', result.error);
+        return result;
+      }
+    },
+
+    /**
+     * Export and download HTML file (DOM-based, for non-virtual-scroll sites)
+     * Usage: GMH.Debug.downloadHtmlFile() or GMH.Debug.downloadHtmlFile('my-chat.html')
+     */
+    async downloadHtmlFile(filename?: string) {
+      const result = await this.exportHtml();
+      if (result.success && result.html) {
+        const name = filename ?? `conversation-${Date.now()}.html`;
+        downloadHtml(result.html, name);
+        ENV.console?.log?.(`[GMH] Downloaded: ${name}`);
+        return { success: true, filename: name, stats: result.stats };
+      }
+      return { success: false, error: result.error };
+    },
+
+    /**
+     * Export HTML from structured data (for virtual scrolling sites like babechat)
+     * This uses the parsed message data instead of DOM cloning
+     * Usage: GMH.Debug.exportStructuredHtml() or GMH.Debug.exportStructuredHtml({ title: 'My Chat' })
+     */
+    async exportStructuredHtml(options: { title?: string; includeImages?: boolean } = {}) {
+      // captureStructuredSnapshot will be available after composition
+      const captureSnapshot = (GMH.Core as Record<string, unknown>).captureStructuredSnapshot as
+        | (() => { messages: unknown[]; legacyLines?: string[]; generatedAt?: number })
+        | undefined;
+
+      if (typeof captureSnapshot !== 'function') {
+        return { success: false, error: 'captureStructuredSnapshot not available' };
+      }
+
+      try {
+        const snapshot = captureSnapshot();
+        ENV.console?.log?.(`[GMH] Captured ${snapshot.messages?.length || 0} messages`);
+
+        const result = await exportFromStructuredData(snapshot as Parameters<typeof exportFromStructuredData>[0], {
+          title: options.title ?? document.title ?? 'Conversation Export',
+          includeImages: options.includeImages ?? true,
+          logger: ENV.console,
+        });
+
+        if (result.success) {
+          ENV.console?.log?.('[GMH] Structured HTML export ready:', result.stats);
+        } else {
+          ENV.console?.error?.('[GMH] Structured HTML export failed:', result.error);
+        }
+        return result;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        ENV.console?.error?.('[GMH] Structured HTML export error:', msg);
+        return { success: false, error: msg };
+      }
+    },
+
+    /**
+     * Export and download HTML from structured data
+     * Usage: GMH.Debug.downloadStructuredHtml() or GMH.Debug.downloadStructuredHtml('my-chat.html')
+     */
+    async downloadStructuredHtml(filename?: string) {
+      const result = await this.exportStructuredHtml();
+      if (result.success && result.html) {
+        const name = filename ?? `conversation-${Date.now()}.html`;
+        downloadHtml(result.html, name);
+        ENV.console?.log?.(`[GMH] Downloaded: ${name}`);
+        return { success: true, filename: name, stats: result.stats };
+      }
+      return { success: false, error: result.error };
+    },
+  };
+
+  GMH.Debug = { ...debugApi, ...htmlExportApi };
 
   messageStream.subscribeBlocks((block) => {
     debugStore.capture(block);
@@ -620,6 +740,7 @@ interface GMHFlags {
   getSnapshotEntryOrigin = structuredGetEntryOrigin;
 
   GMH.Core.getEntryOrigin = () => (getSnapshotEntryOrigin ? getSnapshotEntryOrigin() : []);
+  GMH.Core.captureStructuredSnapshot = captureStructuredSnapshot;
 
   const {
     autoLoader,

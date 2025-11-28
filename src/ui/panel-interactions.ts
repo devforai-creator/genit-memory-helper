@@ -1,4 +1,6 @@
-import type { PanelInteractionsOptions } from '../types';
+import type { PanelInteractionsOptions, StructuredSnapshot } from '../types';
+import { exportFromStructuredData, downloadHtml } from '../features/html-export';
+import { GMH } from '../core/namespace';
 
 type ShareDialogOptions = {
   confirmLabel?: string;
@@ -152,6 +154,54 @@ export function createPanelInteractions({
         } finally {
           quickExportBtn.disabled = false;
           quickExportBtn.textContent = originalText ?? '';
+        }
+      });
+    }
+
+    // HTML export button handler
+    const htmlExportBtn = panel.querySelector<HTMLButtonElement>('#gmh-export-html');
+    if (htmlExportBtn) {
+      htmlExportBtn.addEventListener('click', async () => {
+        const originalText = htmlExportBtn.textContent;
+        htmlExportBtn.disabled = true;
+        htmlExportBtn.textContent = '이미지 변환 중...';
+
+        try {
+          // Access captureStructuredSnapshot from GMH.Core namespace
+          const captureStructuredSnapshot = (GMH.Core as Record<string, unknown>)?.captureStructuredSnapshot as
+            | (() => StructuredSnapshot)
+            | undefined;
+
+          if (typeof captureStructuredSnapshot !== 'function') {
+            throw new Error('captureStructuredSnapshot not available');
+          }
+
+          notify('HTML 백업 생성 중... (이미지 변환에 시간이 걸릴 수 있습니다)', 'progress');
+
+          const snapshot = captureStructuredSnapshot();
+          const result = await exportFromStructuredData(snapshot, {
+            title: document.title || 'Chat Backup',
+            includeImages: true,
+          });
+
+          if (result.success && result.html) {
+            const timestamp = new Date().toISOString().slice(0, 10);
+            const filename = `chat-backup-${timestamp}.html`;
+            downloadHtml(result.html, filename);
+            notify(`HTML 백업 완료: ${result.stats?.capturedImages || 0}개 이미지 포함`, 'success');
+          } else {
+            throw new Error(result.error || 'HTML 생성 실패');
+          }
+        } catch (error) {
+          const message =
+            error && typeof error === 'object' && 'message' in error
+              ? String((error as Error).message)
+              : String(error);
+          notify(`HTML 백업 실패: ${message}`, 'error');
+          logger?.warn?.('[GMH] HTML export failed:', error);
+        } finally {
+          htmlExportBtn.disabled = false;
+          htmlExportBtn.textContent = originalText ?? '';
         }
       });
     }

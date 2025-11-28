@@ -2819,6 +2819,42 @@ var GMHBundle = (function (exports) {
             }
             return part;
         };
+        // Collect images from a block and add them to the collector
+        const collectImagesFromBlock = (block, collector, context = {}) => {
+            if (!collector)
+                return;
+            // Find all img elements in the block
+            const images = block.querySelectorAll('img');
+            const seenSrcs = new Set();
+            images.forEach((img) => {
+                // Get source URL - try various attributes
+                const src = img.getAttribute('src') ||
+                    img.getAttribute('data-src') ||
+                    img.getAttribute('data-lazy-src') ||
+                    '';
+                // Skip empty sources, data URIs (already embedded), and duplicates
+                if (!src || src.startsWith('data:') || seenSrcs.has(src))
+                    return;
+                seenSrcs.add(src);
+                // Skip tiny images (likely icons/avatars)
+                const width = img.naturalWidth || parseInt(img.getAttribute('width') || '0', 10);
+                const height = img.naturalHeight || parseInt(img.getAttribute('height') || '0', 10);
+                if ((width > 0 && width < 50) || (height > 0 && height < 50))
+                    return;
+                // Create image part
+                const part = {
+                    type: 'image',
+                    flavor: 'media',
+                    role: context.role || null,
+                    speaker: context.speaker || null,
+                    src: src,
+                    alt: img.getAttribute('alt') || '',
+                    title: img.getAttribute('title') || '',
+                    lines: [],
+                };
+                collector.push(part, { node: img });
+            });
+        };
         const emitPlayerLines = (block, pushLine, collector = null) => {
             const role = detectRole(block);
             if (role !== 'player')
@@ -2847,6 +2883,14 @@ var GMHBundle = (function (exports) {
                     legacyFormat: 'player',
                 });
                 collector.push(part, { node: block });
+            }
+            // Collect images from player message block
+            if (collector) {
+                const playerName = collector.defaults?.playerName || '플레이어';
+                collectImagesFromBlock(block, collector, {
+                    role: 'player',
+                    speaker: playerName,
+                });
             }
         };
         // Strip surrounding quotes from text
@@ -2945,6 +2989,11 @@ var GMHBundle = (function (exports) {
                         collector.push(part, { node: element });
                     }
                 }
+            });
+            // Collect images from this NPC message block
+            collectImagesFromBlock(block, collector, {
+                role: 'npc',
+                speaker: primarySpeaker || characterName,
             });
         };
         const emitSystemLines = (block, pushLine, collector = null) => {
@@ -3050,6 +3099,11 @@ var GMHBundle = (function (exports) {
                     }, { lines: openingDialogueLines, legacyFormat: 'npc' });
                     collector.push(part, { node: block });
                 }
+                // Collect images from opening system message
+                collectImagesFromBlock(block, collector, {
+                    role: 'npc',
+                    speaker: openingCharacterName || 'NPC',
+                });
                 return;
             }
             // Fallback for other system messages (like standalone narration)
@@ -7897,6 +7951,569 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         return api;
     };
 
+    /**
+     * HTML Export Feature
+     * Exports conversation as standalone HTML with embedded images
+     */
+    /**
+     * Convert an image URL to base64 data URL using canvas
+     */
+    async function captureImageAsBase64(imageUrl, options = {}) {
+        const { maxWidth = 1200, timeout = 10000 } = options;
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            const timeoutId = setTimeout(() => {
+                resolve({
+                    success: false,
+                    originalUrl: imageUrl,
+                    error: 'Image load timeout',
+                });
+            }, timeout);
+            img.onload = () => {
+                clearTimeout(timeoutId);
+                try {
+                    // Calculate dimensions (respect maxWidth while maintaining aspect ratio)
+                    let width = img.naturalWidth;
+                    let height = img.naturalHeight;
+                    if (width > maxWidth) {
+                        const ratio = maxWidth / width;
+                        width = maxWidth;
+                        height = Math.round(height * ratio);
+                    }
+                    // Create canvas and draw image
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) {
+                        resolve({
+                            success: false,
+                            originalUrl: imageUrl,
+                            error: 'Failed to get canvas context',
+                        });
+                        return;
+                    }
+                    ctx.drawImage(img, 0, 0, width, height);
+                    // Convert to data URL
+                    const dataUrl = canvas.toDataURL('image/webp', 0.85);
+                    resolve({
+                        success: true,
+                        originalUrl: imageUrl,
+                        dataUrl,
+                        dimensions: { width, height },
+                    });
+                }
+                catch (err) {
+                    resolve({
+                        success: false,
+                        originalUrl: imageUrl,
+                        error: err instanceof Error ? err.message : 'Canvas conversion failed',
+                    });
+                }
+            };
+            img.onerror = () => {
+                clearTimeout(timeoutId);
+                resolve({
+                    success: false,
+                    originalUrl: imageUrl,
+                    error: 'Failed to load image (CORS or network error)',
+                });
+            };
+            img.src = imageUrl;
+        });
+    }
+    /**
+     * Test image capture capability (for PoC debugging)
+     */
+    async function testImageCapture(imageUrl, doc = document) {
+        const results = [];
+        // If no URL provided, find images in the page
+        const urls = [];
+        if (imageUrl) {
+            urls.push(imageUrl);
+        }
+        else {
+            // Find character/content images (not UI icons)
+            const images = doc.querySelectorAll('img[src*="blob.babechat"], img[src*="cdn-cgi/image"]');
+            images.forEach((img) => {
+                if (img.src && !urls.includes(img.src)) {
+                    urls.push(img.src);
+                }
+            });
+            // Limit to first 5 for testing
+            urls.splice(5);
+        }
+        if (urls.length === 0) {
+            return [
+                {
+                    success: false,
+                    originalUrl: '',
+                    error: 'No images found to test',
+                },
+            ];
+        }
+        // Test each image
+        for (const url of urls) {
+            const result = await captureImageAsBase64(url);
+            results.push(result);
+            // Log progress
+            const status = result.success ? '✅' : '❌';
+            const info = result.success
+                ? `${result.dimensions?.width}x${result.dimensions?.height}`
+                : result.error;
+            console.log(`[GMH] Image capture ${status}: ${info}`);
+            console.log(`  URL: ${url.substring(0, 80)}...`);
+        }
+        return results;
+    }
+    /**
+     * Clean up react-medium-image-zoom artifacts from cloned content
+     * This library adds wrapper divs and ghost elements that cause image cropping
+     */
+    function cleanupZoomLibraryArtifacts(container) {
+        // Remove ghost elements (used for zoom button positioning)
+        const ghosts = container.querySelectorAll('[data-rmiz-ghost]');
+        ghosts.forEach((ghost) => ghost.remove());
+        // Remove zoom buttons
+        const zoomBtns = container.querySelectorAll('[data-rmiz-btn-zoom], [data-rmiz-btn-unzoom]');
+        zoomBtns.forEach((btn) => btn.remove());
+        // Unwrap images from zoom wrapper divs
+        const zoomWrappers = container.querySelectorAll('[data-rmiz]');
+        zoomWrappers.forEach((wrapper) => {
+            const img = wrapper.querySelector('img');
+            if (img && wrapper.parentNode) {
+                // Move image out of zoom wrapper
+                wrapper.parentNode.insertBefore(img, wrapper);
+                wrapper.remove();
+            }
+        });
+        // Also clean up [data-rmiz-content] wrappers
+        const contentWrappers = container.querySelectorAll('[data-rmiz-content]');
+        contentWrappers.forEach((wrapper) => {
+            const img = wrapper.querySelector('img');
+            if (img && wrapper.parentNode) {
+                wrapper.parentNode.insertBefore(img, wrapper);
+                wrapper.remove();
+            }
+        });
+        // Remove aria-owns attributes that reference zoom modals
+        const ariaOwns = container.querySelectorAll('[aria-owns^="rmiz-"]');
+        ariaOwns.forEach((el) => el.removeAttribute('aria-owns'));
+    }
+    /**
+     * Clone element with computed styles inlined
+     */
+    function cloneWithInlineStyles(element, doc) {
+        const clone = element.cloneNode(true);
+        // Clean up zoom library artifacts first
+        cleanupZoomLibraryArtifacts(clone);
+        // Remove overflow:hidden from scroll containers and relax max-width constraints
+        const scrollContainers = clone.querySelectorAll('[class*="overflow-hidden"], [class*="max-w-"]');
+        scrollContainers.forEach((el) => {
+            if (el instanceof HTMLElement) {
+                el.style.overflow = 'visible';
+                el.style.maxWidth = 'none';
+            }
+        });
+        // Get all elements including the root (after cleanup)
+        const originalElements = [element, ...Array.from(element.querySelectorAll('*'))];
+        const clonedElements = [clone, ...Array.from(clone.querySelectorAll('*'))];
+        // Essential style properties to preserve
+        const styleProps = [
+            'display',
+            'flex-direction',
+            'align-items',
+            'justify-content',
+            'gap',
+            'padding',
+            'margin',
+            'width',
+            'max-width',
+            'height',
+            'background-color',
+            'color',
+            'font-family',
+            'font-size',
+            'font-weight',
+            'line-height',
+            'text-align',
+            'border',
+            'border-radius',
+            'box-shadow',
+            'overflow',
+            'white-space',
+            'word-break',
+        ];
+        // Properties to skip for image containers (to prevent cropping)
+        const imageContainerSkipProps = ['overflow', 'height', 'max-height'];
+        for (let i = 0; i < originalElements.length && i < clonedElements.length; i++) {
+            const original = originalElements[i];
+            const cloned = clonedElements[i];
+            if (!(original instanceof HTMLElement) || !(cloned instanceof HTMLElement)) {
+                continue;
+            }
+            // Check if this element contains an image (is an image container)
+            const containsImage = original.querySelector('img') !== null;
+            const isImage = original.tagName === 'IMG';
+            try {
+                const computed = doc.defaultView?.getComputedStyle(original);
+                if (!computed)
+                    continue;
+                const inlineStyles = [];
+                for (const prop of styleProps) {
+                    // Skip certain properties for image containers to prevent cropping
+                    if (containsImage && imageContainerSkipProps.includes(prop)) {
+                        continue;
+                    }
+                    const value = computed.getPropertyValue(prop);
+                    if (value && value !== 'none' && value !== 'normal' && value !== 'auto') {
+                        inlineStyles.push(`${prop}: ${value}`);
+                    }
+                }
+                if (inlineStyles.length > 0) {
+                    cloned.style.cssText = inlineStyles.join('; ');
+                }
+                // Special handling for images - ensure they display fully
+                if (isImage) {
+                    cloned.style.cssText = 'max-width: 100%; height: auto; object-fit: contain;';
+                }
+            }
+            catch {
+                // Skip elements that can't be styled
+            }
+        }
+        return clone;
+    }
+    /**
+     * Generate standalone HTML document
+     */
+    async function exportAsHtml(deps, options = {}) {
+        const { title = 'Conversation Export', includeImages = true, inlineStyles = true, maxImageWidth = 800, } = options;
+        const doc = deps.documentRef ?? document;
+        const logger = deps.logger ?? console;
+        try {
+            // Get conversation container
+            const adapter = deps.getActiveAdapter?.();
+            const container = adapter?.findContainer?.(doc);
+            if (!container) {
+                return {
+                    success: false,
+                    error: 'Conversation container not found',
+                };
+            }
+            // Clone the container
+            let clonedContent;
+            if (inlineStyles) {
+                clonedContent = cloneWithInlineStyles(container, doc);
+            }
+            else {
+                clonedContent = container.cloneNode(true);
+            }
+            // Process images
+            let totalImages = 0;
+            let capturedImages = 0;
+            let failedImages = 0;
+            if (includeImages) {
+                const images = clonedContent.querySelectorAll('img');
+                totalImages = images.length;
+                for (const img of Array.from(images)) {
+                    if (!img.src || img.src.startsWith('data:')) {
+                        continue;
+                    }
+                    // Skip small images (icons/avatars)
+                    const width = img.naturalWidth || img.width || 0;
+                    const height = img.naturalHeight || img.height || 0;
+                    if (width < 50 && height < 50) {
+                        continue;
+                    }
+                    logger.log?.(`[GMH] Capturing image: ${img.src.substring(0, 60)}...`);
+                    const result = await captureImageAsBase64(img.src, { maxWidth: maxImageWidth });
+                    if (result.success && result.dataUrl) {
+                        img.src = result.dataUrl;
+                        img.removeAttribute('srcset');
+                        img.removeAttribute('loading');
+                        capturedImages++;
+                    }
+                    else {
+                        // Keep original URL but mark as failed
+                        img.setAttribute('data-capture-failed', result.error || 'unknown');
+                        failedImages++;
+                    }
+                }
+            }
+            // Build HTML document
+            const htmlContent = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="generator" content="General Memory Helper">
+  <meta name="exported-at" content="${new Date().toISOString()}">
+  <title>${escapeHtml(title)}</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 1.6;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #e0e0e0;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+    }
+    .export-header {
+      text-align: center;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid #333;
+    }
+    .export-header h1 {
+      margin: 0 0 10px;
+      font-size: 1.5em;
+    }
+    .export-header p {
+      margin: 0;
+      color: #888;
+      font-size: 0.9em;
+    }
+    .conversation-content {
+      background: #242424;
+      border-radius: 12px;
+      padding: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="export-header">
+    <h1>${escapeHtml(title)}</h1>
+    <p>Exported by General Memory Helper on ${new Date().toLocaleString('ko-KR')}</p>
+    <p>Images: ${capturedImages}/${totalImages} captured${failedImages > 0 ? ` (${failedImages} failed)` : ''}</p>
+  </div>
+  <div class="conversation-content">
+    ${clonedContent.innerHTML}
+  </div>
+</body>
+</html>`;
+            return {
+                success: true,
+                html: htmlContent,
+                stats: {
+                    totalImages,
+                    capturedImages,
+                    failedImages,
+                    htmlSize: htmlContent.length,
+                },
+            };
+        }
+        catch (err) {
+            return {
+                success: false,
+                error: err instanceof Error ? err.message : 'Export failed',
+            };
+        }
+    }
+    /**
+     * Export HTML from structured snapshot data (for virtual scrolling sites)
+     */
+    async function exportFromStructuredData(snapshot, options = {}) {
+        const { title = 'Conversation Export', includeImages = true, maxImageWidth = 800, logger = console, } = options;
+        try {
+            const messages = snapshot.messages || [];
+            if (messages.length === 0) {
+                return { success: false, error: 'No messages in snapshot' };
+            }
+            // Collect all image URLs from parts
+            const imageUrls = new Set();
+            messages.forEach((msg) => {
+                msg.parts?.forEach((part) => {
+                    if (part.type === 'image' && part.src) {
+                        imageUrls.add(part.src);
+                    }
+                });
+            });
+            // Capture images as base64
+            const imageMap = new Map();
+            let capturedImages = 0;
+            let failedImages = 0;
+            if (includeImages) {
+                for (const url of imageUrls) {
+                    logger?.log?.(`[GMH] Capturing image: ${url.substring(0, 60)}...`);
+                    const result = await captureImageAsBase64(url, { maxWidth: maxImageWidth });
+                    if (result.success && result.dataUrl) {
+                        imageMap.set(url, result.dataUrl);
+                        capturedImages++;
+                    }
+                    else {
+                        failedImages++;
+                    }
+                }
+            }
+            // Generate HTML for each message
+            const messageHtmls = messages.map((msg) => {
+                const role = msg.role || 'unknown';
+                const speaker = msg.speaker || '';
+                const channel = msg.channel || '';
+                const isPlayer = role === 'player' || channel === 'user';
+                const bubbleClass = isPlayer ? 'message-player' : 'message-npc';
+                // Render parts
+                const partsHtml = (msg.parts || [])
+                    .map((part) => {
+                    if (part.type === 'image' && part.src) {
+                        const src = imageMap.get(part.src) || part.src;
+                        return `<img src="${escapeHtml(src)}" alt="${escapeHtml(part.alt || '')}" class="message-image" />`;
+                    }
+                    if (part.type === 'text' || part.type === 'dialogue' || part.type === 'narration') {
+                        const text = part.text || part.lines?.join('\n') || '';
+                        const partSpeaker = part.speaker ? `<span class="part-speaker">${escapeHtml(part.speaker)}</span>` : '';
+                        const flavor = part.flavor || part.type || '';
+                        return `<div class="message-part ${flavor}">${partSpeaker}${escapeHtml(text)}</div>`;
+                    }
+                    if (part.lines && part.lines.length > 0) {
+                        return `<div class="message-part">${part.lines.map((l) => escapeHtml(l)).join('<br>')}</div>`;
+                    }
+                    return '';
+                })
+                    .filter(Boolean)
+                    .join('\n');
+                const speakerHtml = speaker ? `<div class="message-speaker">${escapeHtml(speaker)}</div>` : '';
+                return `
+        <div class="message ${bubbleClass}">
+          ${speakerHtml}
+          <div class="message-content">
+            ${partsHtml}
+          </div>
+        </div>
+      `;
+            }).join('\n');
+            const htmlContent = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="generator" content="General Memory Helper">
+  <meta name="exported-at" content="${new Date().toISOString()}">
+  <title>${escapeHtml(title)}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 1.6;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #e0e0e0;
+    }
+    .export-header {
+      text-align: center;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid #333;
+    }
+    .export-header h1 { margin: 0 0 10px; font-size: 1.5em; }
+    .export-header p { margin: 5px 0; color: #888; font-size: 0.9em; }
+    .conversation { display: flex; flex-direction: column; gap: 16px; }
+    .message {
+      max-width: 80%;
+      padding: 12px 16px;
+      border-radius: 12px;
+      white-space: pre-wrap;
+    }
+    .message-player {
+      align-self: flex-end;
+      background: #2563eb;
+      border-bottom-right-radius: 4px;
+    }
+    .message-npc {
+      align-self: flex-start;
+      background: #262727;
+      border-bottom-left-radius: 4px;
+    }
+    .message-speaker {
+      font-weight: bold;
+      font-size: 0.85em;
+      margin-bottom: 4px;
+      opacity: 0.8;
+    }
+    .message-content { }
+    .message-part { margin: 4px 0; }
+    .message-part.narration { color: #a0a0a0; font-style: italic; }
+    .message-part.dialogue { }
+    .part-speaker { font-weight: bold; margin-right: 8px; }
+    .message-image {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+      margin: 8px 0;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="export-header">
+    <h1>${escapeHtml(title)}</h1>
+    <p>Exported by General Memory Helper on ${new Date().toLocaleString('ko-KR')}</p>
+    <p>Messages: ${messages.length} | Images: ${capturedImages}/${imageUrls.size} captured${failedImages > 0 ? ` (${failedImages} failed)` : ''}</p>
+  </div>
+  <div class="conversation">
+    ${messageHtmls}
+  </div>
+</body>
+</html>`;
+            return {
+                success: true,
+                html: htmlContent,
+                stats: {
+                    totalImages: imageUrls.size,
+                    capturedImages,
+                    failedImages,
+                    htmlSize: htmlContent.length,
+                },
+            };
+        }
+        catch (err) {
+            return {
+                success: false,
+                error: err instanceof Error ? err.message : 'Export failed',
+            };
+        }
+    }
+    /**
+     * Escape HTML special characters
+     */
+    function escapeHtml(str) {
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+    /**
+     * Create downloadable HTML file
+     */
+    function downloadHtml(html, filename) {
+        const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }, 100);
+    }
+
     const SECTION_ID = 'gmh-section-memory';
     const SECTION_CLASS = 'gmh-panel__section';
     const DEFAULT_STATUS_TEXT = '상태: ⛔ 비활성화됨';
@@ -8978,6 +9595,48 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                     }
                 });
             }
+            // HTML export button handler
+            const htmlExportBtn = panel.querySelector('#gmh-export-html');
+            if (htmlExportBtn) {
+                htmlExportBtn.addEventListener('click', async () => {
+                    const originalText = htmlExportBtn.textContent;
+                    htmlExportBtn.disabled = true;
+                    htmlExportBtn.textContent = '이미지 변환 중...';
+                    try {
+                        // Access captureStructuredSnapshot from GMH.Core namespace
+                        const captureStructuredSnapshot = GMH.Core?.captureStructuredSnapshot;
+                        if (typeof captureStructuredSnapshot !== 'function') {
+                            throw new Error('captureStructuredSnapshot not available');
+                        }
+                        notify('HTML 백업 생성 중... (이미지 변환에 시간이 걸릴 수 있습니다)', 'progress');
+                        const snapshot = captureStructuredSnapshot();
+                        const result = await exportFromStructuredData(snapshot, {
+                            title: document.title || 'Chat Backup',
+                            includeImages: true,
+                        });
+                        if (result.success && result.html) {
+                            const timestamp = new Date().toISOString().slice(0, 10);
+                            const filename = `chat-backup-${timestamp}.html`;
+                            downloadHtml(result.html, filename);
+                            notify(`HTML 백업 완료: ${result.stats?.capturedImages || 0}개 이미지 포함`, 'success');
+                        }
+                        else {
+                            throw new Error(result.error || 'HTML 생성 실패');
+                        }
+                    }
+                    catch (error) {
+                        const message = error && typeof error === 'object' && 'message' in error
+                            ? String(error.message)
+                            : String(error);
+                        notify(`HTML 백업 실패: ${message}`, 'error');
+                        logger?.warn?.('[GMH] HTML export failed:', error);
+                    }
+                    finally {
+                        htmlExportBtn.disabled = false;
+                        htmlExportBtn.textContent = originalText ?? '';
+                    }
+                });
+            }
         };
         const bindPanelInteractions = (panel) => {
             if (!panel || typeof panel.querySelector !== 'function') {
@@ -9141,6 +9800,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
           <button id="gmh-export" class="gmh-small-btn gmh-small-btn--accent">내보내기</button>
         </div>
         <button id="gmh-quick-export" class="gmh-panel-btn gmh-panel-btn--accent">원클릭 내보내기</button>
+        <button id="gmh-export-html" class="gmh-panel-btn gmh-panel-btn--neutral" title="실험적 기능: 현재 화면에 보이는 메시지만 백업됩니다">🧪 HTML 백업 (실험적)</button>
       </section>
       <section class="gmh-panel__section" id="gmh-section-guides">
         <div class="gmh-panel__section-title">Guides & Tools</div>
@@ -12333,7 +12993,107 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 return debugStore.get(id);
             },
         };
-        GMH.Debug = debugApi;
+        // HTML Export PoC functions
+        const htmlExportApi = {
+            /**
+             * Test image capture capability
+             * Usage: GMH.Debug.testImageCapture() or GMH.Debug.testImageCapture('https://...')
+             */
+            async testImageCapture(imageUrl) {
+                return testImageCapture(imageUrl, document);
+            },
+            /**
+             * Capture a single image as base64
+             */
+            async captureImage(imageUrl, maxWidth = 800) {
+                return captureImageAsBase64(imageUrl, { maxWidth });
+            },
+            /**
+             * Export conversation as HTML
+             * Usage: GMH.Debug.exportHtml() or GMH.Debug.exportHtml({ title: 'My Chat' })
+             */
+            async exportHtml(options = {}) {
+                const result = await exportAsHtml({
+                    documentRef: document,
+                    getActiveAdapter: () => getActiveAdapter(),
+                    logger: ENV.console,
+                }, {
+                    title: options.title ?? document.title ?? 'Conversation Export',
+                    includeImages: options.includeImages ?? true,
+                    inlineStyles: true,
+                });
+                if (result.success && result.html) {
+                    ENV.console?.log?.('[GMH] HTML export ready:', result.stats);
+                    return result;
+                }
+                else {
+                    ENV.console?.error?.('[GMH] HTML export failed:', result.error);
+                    return result;
+                }
+            },
+            /**
+             * Export and download HTML file (DOM-based, for non-virtual-scroll sites)
+             * Usage: GMH.Debug.downloadHtmlFile() or GMH.Debug.downloadHtmlFile('my-chat.html')
+             */
+            async downloadHtmlFile(filename) {
+                const result = await this.exportHtml();
+                if (result.success && result.html) {
+                    const name = filename ?? `conversation-${Date.now()}.html`;
+                    downloadHtml(result.html, name);
+                    ENV.console?.log?.(`[GMH] Downloaded: ${name}`);
+                    return { success: true, filename: name, stats: result.stats };
+                }
+                return { success: false, error: result.error };
+            },
+            /**
+             * Export HTML from structured data (for virtual scrolling sites like babechat)
+             * This uses the parsed message data instead of DOM cloning
+             * Usage: GMH.Debug.exportStructuredHtml() or GMH.Debug.exportStructuredHtml({ title: 'My Chat' })
+             */
+            async exportStructuredHtml(options = {}) {
+                // captureStructuredSnapshot will be available after composition
+                const captureSnapshot = GMH.Core.captureStructuredSnapshot;
+                if (typeof captureSnapshot !== 'function') {
+                    return { success: false, error: 'captureStructuredSnapshot not available' };
+                }
+                try {
+                    const snapshot = captureSnapshot();
+                    ENV.console?.log?.(`[GMH] Captured ${snapshot.messages?.length || 0} messages`);
+                    const result = await exportFromStructuredData(snapshot, {
+                        title: options.title ?? document.title ?? 'Conversation Export',
+                        includeImages: options.includeImages ?? true,
+                        logger: ENV.console,
+                    });
+                    if (result.success) {
+                        ENV.console?.log?.('[GMH] Structured HTML export ready:', result.stats);
+                    }
+                    else {
+                        ENV.console?.error?.('[GMH] Structured HTML export failed:', result.error);
+                    }
+                    return result;
+                }
+                catch (err) {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    ENV.console?.error?.('[GMH] Structured HTML export error:', msg);
+                    return { success: false, error: msg };
+                }
+            },
+            /**
+             * Export and download HTML from structured data
+             * Usage: GMH.Debug.downloadStructuredHtml() or GMH.Debug.downloadStructuredHtml('my-chat.html')
+             */
+            async downloadStructuredHtml(filename) {
+                const result = await this.exportStructuredHtml();
+                if (result.success && result.html) {
+                    const name = filename ?? `conversation-${Date.now()}.html`;
+                    downloadHtml(result.html, name);
+                    ENV.console?.log?.(`[GMH] Downloaded: ${name}`);
+                    return { success: true, filename: name, stats: result.stats };
+                }
+                return { success: false, error: result.error };
+            },
+        };
+        GMH.Debug = { ...debugApi, ...htmlExportApi };
         messageStream.subscribeBlocks((block) => {
             debugStore.capture(block);
         });
@@ -12439,6 +13199,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         });
         getSnapshotEntryOrigin = structuredGetEntryOrigin;
         GMH.Core.getEntryOrigin = () => (getSnapshotEntryOrigin ? getSnapshotEntryOrigin() : []);
+        GMH.Core.captureStructuredSnapshot = captureStructuredSnapshot;
         const { autoLoader, autoState: AUTO_STATE, startTurnMeter, subscribeProfileChange, getProfile: getAutoProfile, } = createAutoLoader({
             stateApi: stateManager,
             stateEnum: GMH_STATE,

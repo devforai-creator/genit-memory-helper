@@ -395,6 +395,50 @@ export const createBabechatAdapter = ({
     return part;
   };
 
+  // Collect images from a block and add them to the collector
+  const collectImagesFromBlock = (
+    block: Element,
+    collector: StructuredCollector | null,
+    context: { role?: string; speaker?: string } = {},
+  ): void => {
+    if (!collector) return;
+
+    // Find all img elements in the block
+    const images = block.querySelectorAll('img');
+    const seenSrcs = new Set<string>();
+
+    images.forEach((img) => {
+      // Get source URL - try various attributes
+      const src = img.getAttribute('src') ||
+                  img.getAttribute('data-src') ||
+                  img.getAttribute('data-lazy-src') ||
+                  '';
+
+      // Skip empty sources, data URIs (already embedded), and duplicates
+      if (!src || src.startsWith('data:') || seenSrcs.has(src)) return;
+      seenSrcs.add(src);
+
+      // Skip tiny images (likely icons/avatars)
+      const width = img.naturalWidth || parseInt(img.getAttribute('width') || '0', 10);
+      const height = img.naturalHeight || parseInt(img.getAttribute('height') || '0', 10);
+      if ((width > 0 && width < 50) || (height > 0 && height < 50)) return;
+
+      // Create image part
+      const part: StructuredSnapshotMessagePart = {
+        type: 'image',
+        flavor: 'media',
+        role: context.role || null,
+        speaker: context.speaker || null,
+        src: src,
+        alt: img.getAttribute('alt') || '',
+        title: img.getAttribute('title') || '',
+        lines: [],
+      };
+
+      collector.push(part, { node: img });
+    });
+  };
+
   const emitPlayerLines = (
     block: Element,
     pushLine: (line: string) => void,
@@ -432,6 +476,15 @@ export const createBabechatAdapter = ({
         },
       );
       collector.push(part, { node: block });
+    }
+
+    // Collect images from player message block
+    if (collector) {
+      const playerName = collector.defaults?.playerName || '플레이어';
+      collectImagesFromBlock(block, collector, {
+        role: 'player',
+        speaker: playerName,
+      });
     }
   };
 
@@ -552,6 +605,12 @@ export const createBabechatAdapter = ({
         }
       }
     });
+
+    // Collect images from this NPC message block
+    collectImagesFromBlock(block, collector, {
+      role: 'npc',
+      speaker: primarySpeaker || characterName,
+    });
   };
 
   const emitSystemLines = (
@@ -667,6 +726,12 @@ export const createBabechatAdapter = ({
         }, { lines: openingDialogueLines, legacyFormat: 'npc' });
         collector.push(part, { node: block });
       }
+
+      // Collect images from opening system message
+      collectImagesFromBlock(block, collector, {
+        role: 'npc',
+        speaker: openingCharacterName || 'NPC',
+      });
 
       return;
     }
