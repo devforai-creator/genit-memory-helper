@@ -6188,7 +6188,7 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
         };
     }
 
-    function createAutoLoaderControls({ documentRef = typeof document !== 'undefined' ? document : null, autoLoader, autoState, setPanelStatus, startTurnMeter, getAutoProfile, subscribeProfileChange, downloadDomSnapshot, }) {
+    function createAutoLoaderControls({ documentRef = typeof document !== 'undefined' ? document : null, autoLoader, autoState, setPanelStatus, startTurnMeter, getAutoProfile, subscribeProfileChange, }) {
         if (!documentRef)
             throw new Error('createAutoLoaderControls requires document reference');
         if (!autoLoader)
@@ -6312,36 +6312,12 @@ html.gmh-panel-open #gmh-fab{transform:translateY(-4px);box-shadow:0 12px 30px r
           <option value="fast">빠름</option>
         </select>
       </div>
-      <div class="gmh-field-row">
-        <button id="gmh-btn-retry" class="gmh-small-btn gmh-small-btn--muted">재시도</button>
-        <button id="gmh-btn-retry-stable" class="gmh-small-btn gmh-small-btn--muted">안정 모드</button>
-        <button id="gmh-btn-snapshot" class="gmh-small-btn gmh-small-btn--muted">DOM 스냅샷</button>
-      </div>`;
+    `;
         };
         const bindStatusActions = (actions) => {
             const select = actions.querySelector('#gmh-profile-select');
             if (select)
                 registerProfileSelect(select);
-            const retryBtn = actions.querySelector('#gmh-btn-retry');
-            retryBtn?.addEventListener('click', async () => {
-                if (autoState.running) {
-                    setPanelStatus?.('이미 자동 로딩이 진행 중입니다.', 'muted');
-                    return;
-                }
-                await autoLoader.startCurrent();
-            });
-            const retryStableBtn = actions.querySelector('#gmh-btn-retry-stable');
-            retryStableBtn?.addEventListener('click', async () => {
-                if (autoState.running) {
-                    setPanelStatus?.('이미 자동 로딩이 진행 중입니다.', 'muted');
-                    return;
-                }
-                await autoLoader.startCurrent('stability');
-            });
-            const snapshotBtn = actions.querySelector('#gmh-btn-snapshot');
-            snapshotBtn?.addEventListener('click', () => {
-                void downloadDomSnapshot?.();
-            });
         };
         const mountStatusActionsModern = (panel) => {
             if (!panel)
@@ -13330,7 +13306,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         });
         GMH.UI.BlockViewer = blockViewer;
         memoryStatus.setBlockViewerResolver(() => blockViewer);
-        const { describeNode, downloadDomSnapshot } = createSnapshotFeature({
+        const { describeNode} = createSnapshotFeature({
             getActiveAdapter: () => getActiveAdapter(),
             triggerDownload,
             setPanelStatus,
@@ -13377,7 +13353,6 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             startTurnMeter,
             getAutoProfile,
             subscribeProfileChange,
-            downloadDomSnapshot,
         });
         const { bindRangeControls } = createRangeControls({
             documentRef: document,

@@ -8,7 +8,6 @@ interface AutoLoaderControlsOptions {
   startTurnMeter: (meter: HTMLElement) => void;
   getAutoProfile: () => string;
   subscribeProfileChange: (listener: () => void) => void | (() => void);
-  downloadDomSnapshot?: () => Promise<void> | void;
 }
 
 interface AutoLoaderControls {
@@ -26,7 +25,6 @@ export function createAutoLoaderControls({
   startTurnMeter,
   getAutoProfile,
   subscribeProfileChange,
-  downloadDomSnapshot,
 }: AutoLoaderControlsOptions): AutoLoaderControls {
   if (!documentRef) throw new Error('createAutoLoaderControls requires document reference');
   if (!autoLoader) throw new Error('createAutoLoaderControls requires autoLoader');
@@ -152,39 +150,12 @@ export function createAutoLoaderControls({
           <option value="fast">빠름</option>
         </select>
       </div>
-      <div class="gmh-field-row">
-        <button id="gmh-btn-retry" class="gmh-small-btn gmh-small-btn--muted">재시도</button>
-        <button id="gmh-btn-retry-stable" class="gmh-small-btn gmh-small-btn--muted">안정 모드</button>
-        <button id="gmh-btn-snapshot" class="gmh-small-btn gmh-small-btn--muted">DOM 스냅샷</button>
-      </div>`;
+    `;
   };
 
   const bindStatusActions = (actions: HTMLElement): void => {
     const select = actions.querySelector<HTMLSelectElement>('#gmh-profile-select');
     if (select) registerProfileSelect(select);
-
-    const retryBtn = actions.querySelector<HTMLButtonElement>('#gmh-btn-retry');
-    retryBtn?.addEventListener('click', async () => {
-      if (autoState.running) {
-        setPanelStatus?.('이미 자동 로딩이 진행 중입니다.', 'muted');
-        return;
-      }
-      await autoLoader.startCurrent();
-    });
-
-    const retryStableBtn = actions.querySelector<HTMLButtonElement>('#gmh-btn-retry-stable');
-    retryStableBtn?.addEventListener('click', async () => {
-      if (autoState.running) {
-        setPanelStatus?.('이미 자동 로딩이 진행 중입니다.', 'muted');
-        return;
-      }
-      await autoLoader.startCurrent('stability');
-    });
-
-    const snapshotBtn = actions.querySelector<HTMLButtonElement>('#gmh-btn-snapshot');
-    snapshotBtn?.addEventListener('click', () => {
-      void downloadDomSnapshot?.();
-    });
   };
 
   const mountStatusActionsModern = (panel: Element | null): void => {

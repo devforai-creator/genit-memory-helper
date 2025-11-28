@@ -784,7 +784,6 @@ interface GMHFlags {
     startTurnMeter,
     getAutoProfile,
     subscribeProfileChange,
-    downloadDomSnapshot,
   });
 
   const { bindRangeControls } = createRangeControls({
