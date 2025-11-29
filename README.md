@@ -5,7 +5,7 @@
 [![All Contributors](https://img.shields.io/badge/all_contributors-2-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
 ![Project Status](https://img.shields.io/badge/status-active-brightgreen?style=flat-square)
-![Version](https://img.shields.io/badge/version-v2.3.2-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-v2.4.0-blue?style=flat-square)
 
 > **🚀 프로젝트 상태: 멀티플랫폼 확장 진행 중**
 > v2.2.0부터 babechat.ai 지원이 추가되었습니다. 향후 더 많은 AI 챗봇 플랫폼을 지원할 예정입니다.
@@ -57,7 +57,7 @@ AI 챗봇 대화 로그를 **구조 보존 JSON/Markdown**으로 추출하고 �
 - 좌측 상단 그립(⋮⋮)을 드래그하면 패널을 좌·우 하단으로 도킹할 수 있으며 위치는 브라우저별로 기억됩니다.
 - 우측 하단 손잡이로 패널 크기를 조절할 수 있습니다. 모바일에서는 자동으로 92vw/76vh 범위 안에 맞춰집니다.
 - 단축키: `Alt+M` (패널 토글), `Alt+G` (패널 포커스), `Esc` (닫기), `Alt+P` (민감어 설정).
-- ⚙ 버튼 → **GMH 설정**에서 자동 접힘 시간, 집중 모드, 드래그/리사이즈 허용 여부를 즉시 변경할 수 있습니다.
+- ⚙ 버튼 → **GMH 설정**에서 자동 접힘 시간, 집중 모드, 드래그/리사이즈 허용 여부, **GMH 버튼 위치**(좌상/우상/좌하/우하)를 변경할 수 있습니다.
 - 자동 접힘을 끄거나 집중 모드를 켜두면 패널이 화면을 가리지 않고 필요할 때만 등장합니다.
 
 ### 권장 UX 플로우
