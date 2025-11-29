@@ -17,8 +17,6 @@ const metaBanner = `// ==UserScript==\n`
   + `// @author       devforai-creator\n`
   + `// @match        https://genit.ai/*\n`
   + `// @match        https://www.genit.ai/*\n`
-  + `// @match        https://babechat.ai/*\n`
-  + `// @match        https://www.babechat.ai/*\n`
   + `// @grant        GM_setClipboard\n`
   + `// @run-at       document-start\n`
   + `// @updateURL    https://github.com/devforai-creator/genit-memory-helper/raw/main/genit-memory-helper.user.js\n`

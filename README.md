@@ -7,8 +7,8 @@
 ![Project Status](https://img.shields.io/badge/status-active-brightgreen?style=flat-square)
 ![Version](https://img.shields.io/badge/version-v2.1.1-blue?style=flat-square)
 
-> **🚀 프로젝트 상태: 멀티플랫폼 확장 진행 중**
-> v2.2.0부터 babechat.ai 지원이 추가되었습니다. 향후 더 많은 AI 챗봇 플랫폼을 지원할 예정입니다.
+> **🚀 프로젝트 상태: genit.ai 전용**
+> babechat.ai 지원은 약관 위반 가능성으로 인해 일시 중단되었습니다.
 
 > **⚠️ v2.2.0 이름 변경 안내**
 > "Genit Memory Helper" → "General Memory Helper"로 이름이 변경되었습니다.
@@ -22,7 +22,7 @@ AI 챗봇 대화 로그를 **구조 보존 JSON/Markdown**으로 추출하고 �
 | 플랫폼 | 상태 | 비고 |
 |--------|------|------|
 | [genit.ai](https://genit.ai) | ✅ 완전 지원 | 메인 타겟 |
-| [babechat.ai](https://babechat.ai) | ✅ 지원 (v2.2.0+) | 신규 추가 |
+| [babechat.ai](https://babechat.ai) | ⏸️ 일시 중단 | 약관 위반 가능성으로 중단 |
 
 ## 📥 설치 방법
 
@@ -131,22 +131,16 @@ GMH.Experimental.MemoryIndex.disable();
 - 시크릿 모드나 브라우저 초기화 시 데이터가 삭제될 수 있습니다.
 - 기능을 활성화하면 새 대화부터 자동으로 블록이 생성됩니다. 기존 대화는 새 메시지가 추가될 때부터 인덱싱됩니다.
 
-### 🧪 실험 기능: HTML 백업 (v2.2.0+)
+### 🧪 실험 기능: HTML 백업
 
-대화를 이미지가 포함된 standalone HTML 파일로 내보내는 기능입니다. 오프라인에서도 열람 가능한 완전한 백업을 생성합니다.
+대화를 standalone HTML 파일로 내보내는 기능입니다. 오프라인에서도 열람 가능한 백업을 생성합니다.
 
 **⚠️ 현재 한계**:
-- **Virtual scrolling 제한**: babechat.ai 등 일부 플랫폼은 화면에 보이는 메시지만 DOM에 유지합니다. 따라서 **현재 화면에 보이는 메시지만** HTML로 백업됩니다.
-- 전체 대화를 백업하려면 수동으로 천천히 스크롤하며 모든 메시지를 화면에 표시한 후 백업해야 합니다.
-
-**향후 개선 예정**:
-- 자동 스크롤하며 전체 메시지 누적 수집
-- 원클릭 전체 HTML 백업
+- **이미지 미포함**: 현재 버전에서는 이미지가 포함되지 않습니다.
 
 **사용 방법**:
-1. Export 섹션에서 `🧪 HTML 백업 (실험적)` 버튼 클릭
-2. 이미지 변환에 시간이 걸릴 수 있습니다 (이미지 수에 따라 다름)
-3. 완료되면 `.html` 파일이 자동 다운로드됩니다
+1. Export 섹션에서 `🧪 HTML 백업 (이미지 미포함)` 버튼 클릭
+2. 완료되면 `.html` 파일이 자동 다운로드됩니다
 
 ## 개발 & 테스트
 

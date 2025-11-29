@@ -6,8 +6,6 @@
 // @author       devforai-creator
 // @match        https://genit.ai/*
 // @match        https://www.genit.ai/*
-// @match        https://babechat.ai/*
-// @match        https://www.babechat.ai/*
 // @grant        GM_setClipboard
 // @run-at       document-start
 // @updateURL    https://github.com/devforai-creator/genit-memory-helper/raw/main/genit-memory-helper.user.js
