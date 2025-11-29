@@ -1,4 +1,5 @@
 import type {
+  FabPosition,
   PanelSettingsBehavior,
   PanelSettingsController,
   PanelSettingsLayout,
@@ -40,6 +41,8 @@ const OPEN_CLASS = 'gmh-panel-open';
 const STORAGE_KEY = 'gmh_panel_collapsed';
 const MIN_GAP = 12;
 const EDGE_THRESHOLD = 10; // px from edge to trigger resize
+const DEFAULT_FAB_POSITION: FabPosition = 'top-right';
+const VALID_FAB_POSITIONS: FabPosition[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
 
 const EDGE_CURSORS: Record<string, string> = {
   n: 'ns-resize',
@@ -186,16 +189,35 @@ export function createPanelVisibility({
   let currentSettings: PanelSettingsValue = panelSettings.get();
   let currentLayout = coerceLayout(currentSettings.layout as LayoutInput);
   let currentBehavior = coerceBehavior(currentSettings.behavior as BehaviorInput);
+  let currentFabPosition: FabPosition = (
+    VALID_FAB_POSITIONS.includes(currentSettings.fabPosition as FabPosition)
+      ? currentSettings.fabPosition
+      : DEFAULT_FAB_POSITION
+  ) as FabPosition;
+
+  const applyFabPosition = (): void => {
+    if (!fabEl) return;
+    fabEl.dataset.position = currentFabPosition;
+  };
 
   panelSettings.onChange((next: PanelSettingsValue) => {
     currentSettings = next;
     currentLayout = coerceLayout(next.layout as LayoutInput);
     currentBehavior = coerceBehavior(next.behavior as BehaviorInput);
+    const nextFabPosition = (
+      VALID_FAB_POSITIONS.includes(next.fabPosition as FabPosition)
+        ? next.fabPosition
+        : DEFAULT_FAB_POSITION
+    ) as FabPosition;
+    const fabPositionChanged = nextFabPosition !== currentFabPosition;
+    currentFabPosition = nextFabPosition;
+
     if (panelEl && modernMode) {
       applyingSettings = true;
       try {
         applyLayout();
         refreshBehavior();
+        if (fabPositionChanged) applyFabPosition();
       } finally {
         applyingSettings = false;
       }
@@ -476,6 +498,7 @@ export function createPanelVisibility({
       fabEl.setAttribute('aria-controls', 'genit-memory-helper-panel');
       doc.body.appendChild(fabEl);
     }
+    applyFabPosition();
     fabEl.onclick = (event: MouseEvent) => {
       const now = typeof performance?.now === 'function' ? performance.now() : Date.now();
       if (now - fabLastToggleAt < 350) return;

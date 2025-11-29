@@ -178,6 +178,26 @@ export function createPanelSettingsController({
         }).row,
       );
 
+      // FAB Position selector
+      const currentFabPosition = settings.fabPosition || 'top-right';
+      const fabPositionSelect = doc.createElement('select');
+      fabPositionSelect.className = 'gmh-select gmh-select--compact';
+      fabPositionSelect.innerHTML = `
+        <option value="top-left">좌상단</option>
+        <option value="top-right">우상단 (기본)</option>
+        <option value="bottom-left">좌하단</option>
+        <option value="bottom-right">우하단</option>
+      `;
+      fabPositionSelect.value = currentFabPosition;
+      grid.appendChild(
+        buildRow({
+          id: 'gmh-settings-fab-position',
+          label: 'GMH 버튼 위치',
+          description: '플로팅 버튼의 화면 위치를 선택합니다.',
+          control: fabPositionSelect,
+        }).row,
+      );
+
       const modalResult = (await modal.open({
         title: 'GMH 설정',
         size: 'large',
@@ -237,6 +257,7 @@ export function createPanelSettingsController({
           allowDrag: dragToggle.checked,
           allowResize: resizeToggle.checked,
         },
+        fabPosition: fabPositionSelect.value as 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right',
       });
 
       setPanelStatus('패널 설정을 저장했습니다.', 'success');

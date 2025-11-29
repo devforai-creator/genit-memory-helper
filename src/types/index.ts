@@ -131,9 +131,12 @@ export interface PanelSettingsBehavior {
   [key: string]: unknown;
 }
 
+export type FabPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
 export interface PanelSettingsValue {
   layout?: PanelSettingsLayout;
   behavior?: PanelSettingsBehavior;
+  fabPosition?: FabPosition;
   [key: string]: unknown;
 }
 
