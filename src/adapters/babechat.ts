@@ -2,6 +2,7 @@ import { adapterRegistry, getAdapterConfig } from './registry';
 import { clone } from '../core/utils';
 import { collapseSpaces } from '../utils/text';
 import { isScrollable } from '../utils/dom';
+import { ENV } from '../env';
 
 import type {
   AdapterConfig,
@@ -111,9 +112,7 @@ export function installFetchInterceptor(): void {
           isUGC: match[2],
           roomId: match[3],
         };
-        if (typeof console !== 'undefined') {
-          console.log('[GMH] Captured babechat API params:', capturedApiParams);
-        }
+        ENV.debugLog('[GMH] Captured babechat API params:', capturedApiParams);
       }
     }
   };
@@ -160,13 +159,11 @@ export function installFetchInterceptor(): void {
                 initialAction: data.initialAction || null,
                 initialMessage: data.initialMessage || null,
               };
-              if (typeof console !== 'undefined') {
-                console.log('[GMH] Captured character initial data:', {
-                  name: capturedCharacterData.name,
-                  hasAction: !!capturedCharacterData.initialAction,
-                  hasMessage: !!capturedCharacterData.initialMessage,
-                });
-              }
+              ENV.debugLog('[GMH] Captured character initial data:', {
+                name: capturedCharacterData.name,
+                hasAction: !!capturedCharacterData.initialAction,
+                hasMessage: !!capturedCharacterData.initialMessage,
+              });
             }
           } catch (e) {
             // Ignore parse errors
@@ -192,9 +189,7 @@ export function installFetchInterceptor(): void {
       if (name.toLowerCase() === 'authorization' || name.toLowerCase() === 'x-auth-token') {
         if (!capturedAuthHeaders) capturedAuthHeaders = {};
         capturedAuthHeaders[name] = value;
-        if (typeof console !== 'undefined') {
-          console.log('[GMH] Captured auth header:', name);
-        }
+        ENV.debugLog('[GMH] Captured auth header:', name);
       }
     }
 
@@ -202,9 +197,7 @@ export function installFetchInterceptor(): void {
   };
 
   fetchInterceptInstalled = true;
-  if (typeof console !== 'undefined') {
-    console.log('[GMH] Fetch/XHR interceptor installed for babechat');
-  }
+  ENV.debugLog('[GMH] Fetch/XHR interceptor installed for babechat');
 }
 
 // Auto-install interceptor immediately if on babechat.ai
@@ -1105,9 +1098,7 @@ export const createBabechatAdapter = ({
     const characterNameEl = document.querySelector('a[href*="/character/"] span, [class*="character-name"]');
     const characterName = characterNameEl?.textContent?.trim() || 'NPC';
 
-    if (typeof console !== 'undefined') {
-      console.log(`[GMH] Fetching messages: characterId=${characterId}, isUGC=${isUGC}, roomId=${roomId}`);
-    }
+    ENV.debugLog(`[GMH] Fetching messages: characterId=${characterId}, isUGC=${isUGC}, roomId=${roomId}`);
 
     // Get captured auth headers
     const authHeaders = getCapturedAuthHeaders();
@@ -1118,9 +1109,7 @@ export const createBabechatAdapter = ({
       Object.assign(headers, authHeaders);
     }
 
-    if (typeof console !== 'undefined') {
-      console.log('[GMH] Using auth headers:', Object.keys(headers));
-    }
+    ENV.debugLog('[GMH] Using auth headers:', Object.keys(headers));
 
     // Paginate through all messages
     while (true) {
@@ -1209,8 +1198,8 @@ export const createBabechatAdapter = ({
         });
       }
 
-      if (initialMessages.length > 0 && typeof console !== 'undefined') {
-        console.log(`[GMH] Prepending ${initialMessages.length} initial message(s) from character data`);
+      if (initialMessages.length > 0) {
+        ENV.debugLog(`[GMH] Prepending ${initialMessages.length} initial message(s) from character data`);
       }
     }
 

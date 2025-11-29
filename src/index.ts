@@ -299,7 +299,7 @@ interface GMHFlags {
   const Flags: GMHFlags = (() => {
     const storedKill = (() => {
       try {
-        return localStorage.getItem('gmh_kill');
+        return ENV.localStorage?.getItem('gmh_kill') ?? null;
       } catch (err) {
         return null;
       }

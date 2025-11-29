@@ -3,6 +3,8 @@
  * Exports conversation as standalone HTML with embedded images
  */
 
+import { ENV } from '../env';
+
 interface StructuredSnapshotMessagePart {
   speaker?: string | null;
   role?: string | null;
@@ -222,13 +224,13 @@ export async function testImageCapture(
     const result = await captureImageAsBase64(url);
     results.push(result);
 
-    // Log progress
+    // Log progress (debug only)
     const status = result.success ? '✅' : '❌';
     const info = result.success
       ? `${result.dimensions?.width}x${result.dimensions?.height}`
       : result.error;
-    console.log(`[GMH] Image capture ${status}: ${info}`);
-    console.log(`  URL: ${url.substring(0, 80)}...`);
+    ENV.debugLog(`[GMH] Image capture ${status}: ${info}`);
+    ENV.debugLog(`  URL: ${url.substring(0, 80)}...`);
   }
 
   return results;

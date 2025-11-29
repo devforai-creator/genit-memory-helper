@@ -32,6 +32,7 @@ interface Environment {
   GM_info: TampermonkeyInfo;
   console: ConsoleLike;
   localStorage?: Storage;
+  debugLog: (...args: unknown[]) => void;
 }
 
 const noop = (): void => {};
@@ -84,6 +85,24 @@ const detectStorage = (): Storage | undefined => {
   return undefined;
 };
 
+/**
+ * Debug logger - only outputs when gmh_debug is enabled in localStorage
+ * Usage: ENV.debugLog('[GMH] message', data);
+ */
+const createDebugLogger = (): ((...args: unknown[]) => void) => {
+  return (...args: unknown[]): void => {
+    try {
+      const storage = detectStorage();
+      if (storage?.getItem('gmh_debug') === '1') {
+        const consoleLike = detectConsole();
+        consoleLike.log(...args);
+      }
+    } catch {
+      // Silently ignore errors in debug logging
+    }
+  };
+};
+
 const globals = globalThis as typeof globalThis & TampermonkeyGlobals;
 
 export const ENV: Environment = {
@@ -92,6 +111,7 @@ export const ENV: Environment = {
   GM_info: detectGMInfo(globals),
   console: detectConsole(),
   localStorage: detectStorage(),
+  debugLog: createDebugLogger(),
 };
 
 export const getPageWindow = (): Environment['window'] => ENV.window;

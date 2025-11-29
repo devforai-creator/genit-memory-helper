@@ -76,6 +76,24 @@ var GMHBundle = (function (exports) {
             return localStorage;
         return undefined;
     };
+    /**
+     * Debug logger - only outputs when gmh_debug is enabled in localStorage
+     * Usage: ENV.debugLog('[GMH] message', data);
+     */
+    const createDebugLogger = () => {
+        return (...args) => {
+            try {
+                const storage = detectStorage();
+                if (storage?.getItem('gmh_debug') === '1') {
+                    const consoleLike = detectConsole();
+                    consoleLike.log(...args);
+                }
+            }
+            catch {
+                // Silently ignore errors in debug logging
+            }
+        };
+    };
     const globals = globalThis;
     const ENV = {
         window: detectWindow(globals),
@@ -83,6 +101,7 @@ var GMHBundle = (function (exports) {
         GM_info: detectGMInfo(globals),
         console: detectConsole(),
         localStorage: detectStorage(),
+        debugLog: createDebugLogger(),
     };
 
     const EXPERIMENTAL_STORAGE_PREFIX = 'gmh_experimental_';
@@ -2544,9 +2563,7 @@ var GMHBundle = (function (exports) {
                         isUGC: match[2],
                         roomId: match[3],
                     };
-                    if (typeof console !== 'undefined') {
-                        console.log('[GMH] Captured babechat API params:', capturedApiParams);
-                    }
+                    ENV.debugLog('[GMH] Captured babechat API params:', capturedApiParams);
                 }
             }
         };
@@ -2582,13 +2599,11 @@ var GMHBundle = (function (exports) {
                                     initialAction: data.initialAction || null,
                                     initialMessage: data.initialMessage || null,
                                 };
-                                if (typeof console !== 'undefined') {
-                                    console.log('[GMH] Captured character initial data:', {
-                                        name: capturedCharacterData.name,
-                                        hasAction: !!capturedCharacterData.initialAction,
-                                        hasMessage: !!capturedCharacterData.initialMessage,
-                                    });
-                                }
+                                ENV.debugLog('[GMH] Captured character initial data:', {
+                                    name: capturedCharacterData.name,
+                                    hasAction: !!capturedCharacterData.initialAction,
+                                    hasMessage: !!capturedCharacterData.initialMessage,
+                                });
                             }
                         }
                         catch (e) {
@@ -2613,17 +2628,13 @@ var GMHBundle = (function (exports) {
                     if (!capturedAuthHeaders)
                         capturedAuthHeaders = {};
                     capturedAuthHeaders[name] = value;
-                    if (typeof console !== 'undefined') {
-                        console.log('[GMH] Captured auth header:', name);
-                    }
+                    ENV.debugLog('[GMH] Captured auth header:', name);
                 }
             }
             return originalXHRSetRequestHeader.apply(this, [name, value]);
         };
         fetchInterceptInstalled = true;
-        if (typeof console !== 'undefined') {
-            console.log('[GMH] Fetch/XHR interceptor installed for babechat');
-        }
+        ENV.debugLog('[GMH] Fetch/XHR interceptor installed for babechat');
     }
     // Auto-install interceptor immediately if on babechat.ai
     // This runs at module load time, before any adapter is created
@@ -3376,9 +3387,7 @@ var GMHBundle = (function (exports) {
             // Try to get character name from page
             const characterNameEl = document.querySelector('a[href*="/character/"] span, [class*="character-name"]');
             const characterName = characterNameEl?.textContent?.trim() || 'NPC';
-            if (typeof console !== 'undefined') {
-                console.log(`[GMH] Fetching messages: characterId=${characterId}, isUGC=${isUGC}, roomId=${roomId}`);
-            }
+            ENV.debugLog(`[GMH] Fetching messages: characterId=${characterId}, isUGC=${isUGC}, roomId=${roomId}`);
             // Get captured auth headers
             const authHeaders = getCapturedAuthHeaders();
             const headers = {
@@ -3387,9 +3396,7 @@ var GMHBundle = (function (exports) {
             if (authHeaders) {
                 Object.assign(headers, authHeaders);
             }
-            if (typeof console !== 'undefined') {
-                console.log('[GMH] Using auth headers:', Object.keys(headers));
-            }
+            ENV.debugLog('[GMH] Using auth headers:', Object.keys(headers));
             // Paginate through all messages
             while (true) {
                 const apiUrl = `https://api.babechatapi.com/ko/api/messages/${characterId}/${isUGC}/${roomId}?offset=${offset}&limit=${limit}`;
@@ -3465,8 +3472,8 @@ var GMHBundle = (function (exports) {
                         parts: [msgPart],
                     });
                 }
-                if (initialMessages.length > 0 && typeof console !== 'undefined') {
-                    console.log(`[GMH] Prepending ${initialMessages.length} initial message(s) from character data`);
+                if (initialMessages.length > 0) {
+                    ENV.debugLog(`[GMH] Prepending ${initialMessages.length} initial message(s) from character data`);
                 }
             }
             // Combine: initial messages first, then API messages
@@ -8341,13 +8348,13 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         for (const url of urls) {
             const result = await captureImageAsBase64(url);
             results.push(result);
-            // Log progress
+            // Log progress (debug only)
             const status = result.success ? '✅' : '❌';
             const info = result.success
                 ? `${result.dimensions?.width}x${result.dimensions?.height}`
                 : result.error;
-            console.log(`[GMH] Image capture ${status}: ${info}`);
-            console.log(`  URL: ${url.substring(0, 80)}...`);
+            ENV.debugLog(`[GMH] Image capture ${status}: ${info}`);
+            ENV.debugLog(`  URL: ${url.substring(0, 80)}...`);
         }
         return results;
     }
@@ -13012,7 +13019,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         const Flags = (() => {
             const storedKill = (() => {
                 try {
-                    return localStorage.getItem('gmh_kill');
+                    return ENV.localStorage?.getItem('gmh_kill') ?? null;
                 }
                 catch (err) {
                     return null;
