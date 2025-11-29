@@ -7,8 +7,8 @@
 ![Project Status](https://img.shields.io/badge/status-active-brightgreen?style=flat-square)
 ![Version](https://img.shields.io/badge/version-v2.1.1-blue?style=flat-square)
 
-> **🚀 프로젝트 상태: genit.ai 전용**
-> babechat.ai 지원은 약관 위반 가능성으로 인해 일시 중단되었습니다.
+> **🚀 프로젝트 상태: 멀티플랫폼 확장 진행 중**
+> v2.2.0부터 babechat.ai 지원이 추가되었습니다. 향후 더 많은 AI 챗봇 플랫폼을 지원할 예정입니다.
 
 > **⚠️ v2.2.0 이름 변경 안내**
 > "Genit Memory Helper" → "General Memory Helper"로 이름이 변경되었습니다.
@@ -22,7 +22,7 @@ AI 챗봇 대화 로그를 **구조 보존 JSON/Markdown**으로 추출하고 �
 | 플랫폼 | 상태 | 비고 |
 |--------|------|------|
 | [genit.ai](https://genit.ai) | ✅ 완전 지원 | 메인 타겟 |
-| [babechat.ai](https://babechat.ai) | ⏸️ 일시 중단 | 약관 위반 가능성으로 중단 |
+| [babechat.ai](https://babechat.ai) | ✅ 지원 (v2.2.0+) | 신규 추가 |
 
 ## 📥 설치 방법
 

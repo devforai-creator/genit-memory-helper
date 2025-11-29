@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Supported Platforms:**
 - **genit.ai** - Full support (original target)
-- **babechat.ai** - ⏸️ 지원 일시 중지 (API 인터셉트 방식의 약관 위반 가능성으로 중단)
+- **babechat.ai** - Full support (v2.2.0+)
 
 Key features:
 - Auto-scroll to load conversation history
