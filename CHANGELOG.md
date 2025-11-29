@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### 🔧 Internal
+
+- **디버그 로깅 시스템**: `ENV.debugLog()` 추가 - `gmh_debug=1` 플래그 활성화 시에만 콘솔 출력
+- **console.log 정리**: babechat.ts, html-export.ts의 9개 디버그 로그를 조건부 출력으로 변경
+- **SoT 위반 수정**: `localStorage` 직접 접근을 `ENV.localStorage`로 통일
+- **의존성 업데이트** (patch/minor): prettier, rollup, @playwright/test, playwright, @types/node
+
+### 📋 남은 기술 부채
+
+- [ ] vite 5.4 → 7.x, vitest 2.x → 4.x (major 업그레이드, 보안 취약점 해결)
+- [ ] jsdom 24 → 27 (major 업그레이드)
+- [ ] babechat 어댑터 테스트 추가
+- [ ] privacy-gate, share 워크플로우 테스트 추가
+- [ ] 코드 중복 리팩토링 (DOM 헬퍼, 이벤트 바인딩 유틸리티)
+
 ## v2.4.0 (2025-01-30)
 
 ### ✨ New Features
