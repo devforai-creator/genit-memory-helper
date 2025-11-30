@@ -9,13 +9,21 @@
 - **SoT 위반 수정**: `localStorage` 직접 접근을 `ENV.localStorage`로 통일
 - **의존성 업데이트** (patch/minor): prettier, rollup, @playwright/test, playwright, @types/node
 
-### 📋 남은 기술 부채
+### 🔒 Security
 
-- [ ] vite 5.4 → 7.x, vitest 2.x → 4.x (major 업그레이드, 보안 취약점 해결)
-- [ ] jsdom 24 → 27 (major 업그레이드)
-- [ ] babechat 어댑터 테스트 추가
-- [ ] privacy-gate, share 워크플로우 테스트 추가
-- [ ] 코드 중복 리팩토링 (DOM 헬퍼, 이벤트 바인딩 유틸리티)
+- **vite 5.4 → 7.2**: 5개 moderate 취약점 해결 (0 vulnerabilities)
+- **vitest 2.1 → 4.0**: vite 7과 호환성 업그레이드, `--minWorkers` 옵션 제거
+
+### 📦 Dependencies
+
+- **jsdom 24 → 27**: major 업그레이드 (테스트 호환성 유지)
+
+### 🧪 Tests
+
+- **babechat 어댑터 테스트** (+18개): hostname 매칭, role 감지, speaker 파싱, API 수집
+- **privacy-gate 테스트** (+12개): 팩토리 검증, confirm 흐름, 모달 렌더링
+- **share-workflow 테스트** (+18개): parseAll, prepareShare, performExport 검증
+- 테스트 커버리지: 111 → 159개 (+48개, +43%)
 
 ## v2.4.0 (2025-01-30)
 
