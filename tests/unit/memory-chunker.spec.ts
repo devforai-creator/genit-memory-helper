@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { createChunks, createChunksFromMessages, createChunksFromTurns } from '../../src/features/memory-chunker';
+import {
+  createChunks,
+  createChunksFromMessages,
+  createChunksFromTurns,
+  chunkToBlockInit,
+  blockRecordToChunk,
+} from '../../src/features/memory-chunker';
 import { buildSummaryPrompt, buildFactsPrompt, formatChunkRange, getChunkPreview, DEFAULT_SUMMARY_PROMPT, DEFAULT_FACTS_PROMPT } from '../../src/features/memory-prompts';
-import type { StructuredSnapshotMessage, TranscriptTurn } from '../../src/types';
+import type { StructuredSnapshotMessage, TranscriptTurn, MemoryBlockRecord } from '../../src/types';
 
 const buildMessage = (
   ordinal: number,
@@ -189,6 +195,193 @@ describe('memory-prompts', () => {
 
     it('DEFAULT_FACTS_PROMPT contains {chunk} placeholder', () => {
       expect(DEFAULT_FACTS_PROMPT).toContain('{chunk}');
+    });
+  });
+});
+
+describe('chunk conversion functions', () => {
+  const buildTestMessages = (count: number): StructuredSnapshotMessage[] =>
+    Array.from({ length: count }, (_, i) => buildMessage(i + 1, {
+      speaker: i % 2 === 0 ? 'User' : 'AI',
+      channel: i % 2 === 0 ? 'user' : 'assistant',
+    }));
+
+  describe('chunkToBlockInit', () => {
+    it('converts MemoryChunk to MemoryBlockInit with correct fields', () => {
+      const messages = buildTestMessages(5);
+      const result = createChunks(messages, { chunkSize: 5 });
+      const chunk = result.chunks[0];
+      const sessionUrl = 'https://example.com/chat/123';
+
+      const blockInit = chunkToBlockInit(chunk, sessionUrl);
+
+      expect(blockInit.id).toBe(chunk.id);
+      expect(blockInit.sessionUrl).toBe(sessionUrl);
+      expect(blockInit.raw).toBe(chunk.raw);
+      expect(blockInit.ordinalRange).toEqual([chunk.range.start, chunk.range.end]);
+      expect(blockInit.timestamp).toBe(chunk.timestamp);
+      expect(blockInit.messages).toHaveLength(5);
+    });
+
+    it('preserves summary and facts fields', () => {
+      const messages = buildTestMessages(3);
+      const result = createChunks(messages, { chunkSize: 10 });
+      const chunk = result.chunks[0];
+      chunk.summary = 'Test summary';
+      chunk.facts = 'Test facts';
+
+      const blockInit = chunkToBlockInit(chunk, 'https://example.com');
+
+      expect(blockInit.summary).toBe('Test summary');
+      expect(blockInit.facts).toBe('Test facts');
+    });
+
+    it('includes chunk metadata', () => {
+      const messages = buildTestMessages(10);
+      const result = createChunks(messages, { chunkSize: 5 });
+      const chunk = result.chunks[1]; // second chunk
+
+      const blockInit = chunkToBlockInit(chunk, 'https://example.com');
+
+      expect(blockInit.meta).toBeDefined();
+      expect(blockInit.meta?.chunkIndex).toBe(1);
+      expect(blockInit.meta?.originalMessageCount).toBe(5);
+    });
+
+    it('converts TranscriptTurn messages to StructuredSnapshotMessage format', () => {
+      const turns: TranscriptTurn[] = [
+        { role: 'user', text: 'Hello' },
+        { role: 'assistant', text: 'Hi there' },
+      ];
+      const result = createChunksFromTurns(turns, { chunkSize: 10 });
+      const chunk = result.chunks[0];
+
+      const blockInit = chunkToBlockInit(chunk, 'https://example.com');
+
+      expect(blockInit.messages).toHaveLength(2);
+      expect(blockInit.messages[0].parts).toBeDefined();
+      expect(blockInit.messages[0].parts[0].text).toBe('Hello');
+    });
+  });
+
+  describe('blockRecordToChunk', () => {
+    it('converts MemoryBlockRecord to MemoryChunk with correct fields', () => {
+      const record: MemoryBlockRecord = {
+        id: 'gmh-chunk-0-12345',
+        sessionUrl: 'https://example.com/chat',
+        raw: 'User: Hello\n\nAI: Hi',
+        messages: buildTestMessages(3),
+        ordinalRange: [1, 3],
+        timestamp: 12345,
+        embedding: null,
+        messageCount: 3,
+        startOrdinal: 1,
+        endOrdinal: 3,
+        meta: { chunkIndex: 0, originalMessageCount: 3 },
+      };
+
+      const chunk = blockRecordToChunk(record);
+
+      expect(chunk.id).toBe(record.id);
+      expect(chunk.index).toBe(0);
+      expect(chunk.range).toEqual({ start: 1, end: 3 });
+      expect(chunk.raw).toBe(record.raw);
+      expect(chunk.messages).toHaveLength(3);
+      expect(chunk.timestamp).toBe(record.timestamp);
+    });
+
+    it('preserves summary and facts from record', () => {
+      const record: MemoryBlockRecord = {
+        id: 'gmh-chunk-0-12345',
+        sessionUrl: 'https://example.com',
+        raw: 'test',
+        messages: [],
+        ordinalRange: [1, 1],
+        timestamp: 12345,
+        embedding: null,
+        messageCount: 0,
+        startOrdinal: 1,
+        endOrdinal: 1,
+        summary: 'Stored summary',
+        facts: 'Stored facts',
+      };
+
+      const chunk = blockRecordToChunk(record);
+
+      expect(chunk.summary).toBe('Stored summary');
+      expect(chunk.facts).toBe('Stored facts');
+    });
+
+    it('defaults chunk index to 0 if not in meta', () => {
+      const record: MemoryBlockRecord = {
+        id: 'gmh-chunk-5-12345',
+        sessionUrl: 'https://example.com',
+        raw: 'test',
+        messages: [],
+        ordinalRange: [51, 60],
+        timestamp: 12345,
+        embedding: null,
+        messageCount: 0,
+        startOrdinal: 51,
+        endOrdinal: 60,
+        // no meta
+      };
+
+      const chunk = blockRecordToChunk(record);
+
+      expect(chunk.index).toBe(0);
+    });
+
+    it('extracts chunk index from meta.chunkIndex', () => {
+      const record: MemoryBlockRecord = {
+        id: 'gmh-chunk-3-12345',
+        sessionUrl: 'https://example.com',
+        raw: 'test',
+        messages: [],
+        ordinalRange: [31, 40],
+        timestamp: 12345,
+        embedding: null,
+        messageCount: 0,
+        startOrdinal: 31,
+        endOrdinal: 40,
+        meta: { chunkIndex: 3 },
+      };
+
+      const chunk = blockRecordToChunk(record);
+
+      expect(chunk.index).toBe(3);
+    });
+  });
+
+  describe('round-trip conversion', () => {
+    it('chunk → blockInit → record → chunk preserves data', () => {
+      const messages = buildTestMessages(5);
+      const result = createChunks(messages, { chunkSize: 5 });
+      const originalChunk = result.chunks[0];
+      originalChunk.summary = 'Test summary';
+      originalChunk.facts = 'Test facts';
+
+      // Chunk → BlockInit
+      const blockInit = chunkToBlockInit(originalChunk, 'https://example.com');
+
+      // Simulate saving to IndexedDB (create record from init)
+      const record: MemoryBlockRecord = {
+        ...blockInit,
+        embedding: null,
+        messageCount: blockInit.messages.length,
+        startOrdinal: blockInit.ordinalRange[0],
+        endOrdinal: blockInit.ordinalRange[1],
+      };
+
+      // Record → Chunk
+      const restoredChunk = blockRecordToChunk(record);
+
+      expect(restoredChunk.id).toBe(originalChunk.id);
+      expect(restoredChunk.range).toEqual(originalChunk.range);
+      expect(restoredChunk.raw).toBe(originalChunk.raw);
+      expect(restoredChunk.summary).toBe(originalChunk.summary);
+      expect(restoredChunk.facts).toBe(originalChunk.facts);
+      expect(restoredChunk.messages).toHaveLength(originalChunk.messages.length);
     });
   });
 });
