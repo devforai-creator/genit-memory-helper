@@ -4,13 +4,16 @@ import type {
   BlockStorageOptions,
   MemoryBlockInit,
   MemoryBlockRecord,
+  MetaSummaryInit,
+  MetaSummaryRecord,
 } from '../types';
 
 type ConsoleLike = Pick<Console, 'warn' | 'log' | 'error'>;
 
 const DEFAULT_DB_NAME = 'gmh-memory-blocks';
 const DEFAULT_STORE_NAME = 'blocks';
-const DEFAULT_DB_VERSION = 1;
+const META_STORE_NAME = 'meta-summaries';
+const DEFAULT_DB_VERSION = 2; // v2: meta-summaries store 추가
 
 const compareRecords = (a: MemoryBlockRecord, b: MemoryBlockRecord): number => {
   if (a.startOrdinal !== b.startOrdinal) {
@@ -188,6 +191,89 @@ const selectConsole = (consoleRef?: ConsoleLike | null): ConsoleLike | null => {
   return null;
 };
 
+// ============================================================================
+// Meta Summary Helpers (v3.1.0)
+// ============================================================================
+
+const compareMetaRecords = (a: MetaSummaryRecord, b: MetaSummaryRecord): number => {
+  // chunkRange[0]으로 정렬 (청크 시작 인덱스)
+  if (a.chunkRange[0] !== b.chunkRange[0]) {
+    return a.chunkRange[0] - b.chunkRange[0];
+  }
+  if (a.timestamp !== b.timestamp) {
+    return a.timestamp - b.timestamp;
+  }
+  return a.id.localeCompare(b.id);
+};
+
+const normalizeMetaSummary = (meta: MetaSummaryInit): MetaSummaryRecord => {
+  if (!meta || typeof meta !== 'object') {
+    throw new TypeError('Meta summary payload must be an object.');
+  }
+  const id = typeof meta.id === 'string' ? meta.id.trim() : String(meta.id ?? '').trim();
+  if (!id) {
+    throw new Error('Meta summary requires a stable id.');
+  }
+  const sessionUrl =
+    typeof meta.sessionUrl === 'string' ? meta.sessionUrl.trim() : String(meta.sessionUrl ?? '').trim();
+  if (!sessionUrl) {
+    throw new Error('Meta summary requires sessionUrl.');
+  }
+  const chunkIds = Array.isArray(meta.chunkIds) ? meta.chunkIds.filter((id) => typeof id === 'string') : [];
+  if (chunkIds.length === 0) {
+    throw new Error('Meta summary requires at least one chunkId.');
+  }
+  const chunkRangeCandidate = Array.isArray(meta.chunkRange) ? meta.chunkRange : [NaN, NaN];
+  const chunkStart = Number(chunkRangeCandidate[0]);
+  const chunkEnd = Number(chunkRangeCandidate[1]);
+  if (!Number.isFinite(chunkStart) || !Number.isFinite(chunkEnd)) {
+    throw new Error('Meta summary requires a finite chunkRange.');
+  }
+  const summary = typeof meta.summary === 'string' ? meta.summary.trim() : '';
+  if (!summary) {
+    throw new Error('Meta summary requires summary text.');
+  }
+  const timestamp = Number(meta.timestamp);
+  if (!Number.isFinite(timestamp)) {
+    throw new Error('Meta summary requires a numeric timestamp.');
+  }
+
+  return {
+    id,
+    sessionUrl,
+    chunkIds: [...chunkIds],
+    chunkRange: [chunkStart, chunkEnd],
+    summary,
+    timestamp,
+    chunkCount: chunkIds.length,
+  };
+};
+
+const cloneMetaRecord = (record: MetaSummaryRecord): MetaSummaryRecord => ({
+  id: record.id,
+  sessionUrl: record.sessionUrl,
+  chunkIds: [...record.chunkIds],
+  chunkRange: [record.chunkRange[0], record.chunkRange[1]],
+  summary: record.summary,
+  timestamp: record.timestamp,
+  chunkCount: record.chunkCount,
+});
+
+const sanitizeMetaRecord = (record: MetaSummaryRecord): MetaSummaryRecord => {
+  const chunkStart = Number.isFinite(record.chunkRange?.[0]) ? record.chunkRange[0] : 0;
+  const chunkEnd = Number.isFinite(record.chunkRange?.[1]) ? record.chunkRange[1] : chunkStart;
+  const chunkIds = Array.isArray(record.chunkIds) ? record.chunkIds : [];
+  return {
+    id: String(record.id),
+    sessionUrl: String(record.sessionUrl),
+    chunkIds: [...chunkIds],
+    chunkRange: [chunkStart, chunkEnd],
+    summary: typeof record.summary === 'string' ? record.summary : '',
+    timestamp: Number.isFinite(record.timestamp) ? record.timestamp : Date.now(),
+    chunkCount: chunkIds.length,
+  };
+};
+
 const selectIndexedDB = (factory?: IDBFactory | null): IDBFactory | null => {
   if (factory) return factory;
   const envWindow = ENV.window;
@@ -211,6 +297,15 @@ interface BlockStorageEngine {
   clear(sessionUrl?: string): Promise<number>;
   getAll(): Promise<MemoryBlockRecord[]>;
   count(): Promise<number>;
+  close(): void;
+}
+
+interface MetaStorageEngine {
+  put(record: MetaSummaryRecord): Promise<void>;
+  get(id: string): Promise<MetaSummaryRecord | null>;
+  getBySession(sessionUrl: string): Promise<MetaSummaryRecord[]>;
+  delete(id: string): Promise<boolean>;
+  clear(sessionUrl?: string): Promise<number>;
   close(): void;
 }
 
@@ -264,6 +359,50 @@ const createMemoryEngine = (): BlockStorageEngine => {
   };
 };
 
+const createMetaMemoryEngine = (): MetaStorageEngine => {
+  const buckets = new Map<string, MetaSummaryRecord>();
+  return {
+    async put(record) {
+      buckets.set(record.id, cloneMetaRecord(record));
+    },
+    async get(id) {
+      const record = buckets.get(id);
+      return record ? cloneMetaRecord(record) : null;
+    },
+    async getBySession(sessionUrl) {
+      const records: MetaSummaryRecord[] = [];
+      for (const entry of buckets.values()) {
+        if (entry.sessionUrl === sessionUrl) {
+          records.push(cloneMetaRecord(entry));
+        }
+      }
+      records.sort(compareMetaRecords);
+      return records;
+    },
+    async delete(id) {
+      return buckets.delete(id);
+    },
+    async clear(sessionUrl) {
+      if (!sessionUrl) {
+        const removed = buckets.size;
+        buckets.clear();
+        return removed;
+      }
+      let removed = 0;
+      for (const [key, record] of buckets.entries()) {
+        if (record.sessionUrl === sessionUrl) {
+          buckets.delete(key);
+          removed += 1;
+        }
+      }
+      return removed;
+    },
+    close() {
+      buckets.clear();
+    },
+  };
+};
+
 interface IndexedDBConfig {
   dbName: string;
   storeName: string;
@@ -277,9 +416,11 @@ const openIndexedDB = (factory: IDBFactory, config: IndexedDBConfig): Promise<ID
     request.onerror = () => reject(request.error ?? new Error('Failed to open IndexedDB for block storage.'));
     request.onupgradeneeded = (event) => {
       const db = request.result;
-      const storeExists = db.objectStoreNames.contains(config.storeName);
       const oldVersion = Number((event as IDBVersionChangeEvent).oldVersion || 0);
-      if (!storeExists) {
+
+      // v1: blocks store
+      const blocksStoreExists = db.objectStoreNames.contains(config.storeName);
+      if (!blocksStoreExists) {
         const store = db.createObjectStore(config.storeName, { keyPath: 'id' });
         store.createIndex('sessionUrl', 'sessionUrl', { unique: false });
         store.createIndex('startOrdinal', 'startOrdinal', { unique: false });
@@ -289,6 +430,14 @@ const openIndexedDB = (factory: IDBFactory, config: IndexedDBConfig): Promise<ID
         store?.createIndex?.('sessionUrl', 'sessionUrl', { unique: false });
         store?.createIndex?.('startOrdinal', 'startOrdinal', { unique: false });
         store?.createIndex?.('timestamp', 'timestamp', { unique: false });
+      }
+
+      // v2: meta-summaries store (v3.1.0)
+      const metaStoreExists = db.objectStoreNames.contains(META_STORE_NAME);
+      if (!metaStoreExists && config.version >= 2) {
+        const metaStore = db.createObjectStore(META_STORE_NAME, { keyPath: 'id' });
+        metaStore.createIndex('sessionUrl', 'sessionUrl', { unique: false });
+        metaStore.createIndex('timestamp', 'timestamp', { unique: false });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -320,6 +469,38 @@ const runTransaction = async <T>(
       }
     } catch (abortErr) {
       config.console?.warn?.('[GMH] Failed to abort block storage transaction', abortErr);
+    }
+    await completion.catch(() => undefined);
+    throw err;
+  }
+};
+
+const runMetaTransaction = async <T>(
+  dbPromise: Promise<IDBDatabase>,
+  config: IndexedDBConfig,
+  mode: IDBTransactionMode,
+  executor: (store: IDBObjectStore) => Promise<T>,
+): Promise<T> => {
+  const db = await dbPromise;
+  const tx = db.transaction(META_STORE_NAME, mode);
+  const store = tx.objectStore(META_STORE_NAME);
+  const completion = new Promise<void>((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error('IndexedDB meta transaction failed'));
+    tx.onabort = () => reject(tx.error ?? new Error('IndexedDB meta transaction aborted'));
+  });
+
+  try {
+    const result = await executor(store);
+    await completion;
+    return result;
+  } catch (err) {
+    try {
+      if ((tx as IDBTransaction & { readyState?: string }).readyState !== 'done') {
+        tx.abort();
+      }
+    } catch (abortErr) {
+      config.console?.warn?.('[GMH] Failed to abort meta storage transaction', abortErr);
     }
     await completion.catch(() => undefined);
     throw err;
@@ -406,6 +587,73 @@ const createIndexedDBEngine = async (
   };
 };
 
+const createMetaIndexedDBEngine = async (
+  factory: IDBFactory,
+  config: IndexedDBConfig,
+): Promise<MetaStorageEngine> => {
+  const dbPromise = openIndexedDB(factory, config);
+
+  return {
+    async put(record) {
+      await runMetaTransaction(dbPromise, config, 'readwrite', async (store) => {
+        await requestToPromise(store.put(record));
+        return undefined;
+      });
+    },
+    async get(id) {
+      const record = await runMetaTransaction(dbPromise, config, 'readonly', async (store) => {
+        const result = await requestToPromise<MetaSummaryRecord | undefined | null>(store.get(id));
+        return result ?? null;
+      });
+      return record ? sanitizeMetaRecord(record) : null;
+    },
+    async getBySession(sessionUrl) {
+      const records = await runMetaTransaction(dbPromise, config, 'readonly', async (store) => {
+        const index = store.index('sessionUrl');
+        const result = await requestToPromise<MetaSummaryRecord[]>(index.getAll(sessionUrl));
+        return result ?? [];
+      });
+      const sanitized = records.map((record) => sanitizeMetaRecord(record));
+      sanitized.sort(compareMetaRecords);
+      return sanitized;
+    },
+    async delete(id) {
+      return runMetaTransaction(dbPromise, config, 'readwrite', async (store) => {
+        const existing = await requestToPromise<MetaSummaryRecord | undefined | null>(store.get(id));
+        if (!existing) return false;
+        await requestToPromise(store.delete(id));
+        return true;
+      });
+    },
+    async clear(sessionUrl) {
+      if (!sessionUrl) {
+        return runMetaTransaction(dbPromise, config, 'readwrite', async (store) => {
+          const total = await requestToPromise<number>(store.count());
+          await requestToPromise(store.clear());
+          return total;
+        });
+      }
+      return runMetaTransaction(dbPromise, config, 'readwrite', async (store) => {
+        const index = store.index('sessionUrl');
+        const keys = await requestToPromise<IDBValidKey[]>(index.getAllKeys(sessionUrl));
+        let removed = 0;
+        for (const key of keys) {
+          await requestToPromise(store.delete(key));
+          removed += 1;
+        }
+        return removed;
+      });
+    },
+    close() {
+      dbPromise
+        .then((db) => db.close())
+        .catch((err) => {
+          config.console?.warn?.('[GMH] Failed to close meta storage database', err);
+        });
+    },
+  };
+};
+
 export const createBlockStorage = async (
   options: BlockStorageOptions = {},
 ): Promise<BlockStorageController> => {
@@ -421,20 +669,27 @@ export const createBlockStorage = async (
     Number.isFinite(versionCandidate) && versionCandidate > 0 ? Math.floor(versionCandidate) : DEFAULT_DB_VERSION;
   const factory = selectIndexedDB(options.indexedDB ?? null);
 
+  const config: IndexedDBConfig = {
+    dbName,
+    storeName,
+    version,
+    console: consoleRef,
+  };
+
   let engine: BlockStorageEngine;
+  let metaEngine: MetaStorageEngine;
+
   if (factory) {
-    engine = await createIndexedDBEngine(factory, {
-      dbName,
-      storeName,
-      version,
-      console: consoleRef,
-    });
+    engine = await createIndexedDBEngine(factory, config);
+    metaEngine = await createMetaIndexedDBEngine(factory, config);
   } else {
     consoleRef?.warn?.('[GMH] IndexedDB unavailable. Falling back to in-memory block storage.');
     engine = createMemoryEngine();
+    metaEngine = createMetaMemoryEngine();
   }
 
   const controller: BlockStorageController = {
+    // Block methods
     async save(block) {
       const record = normalizeBlock(block);
       await engine.put(record);
@@ -468,8 +723,30 @@ export const createBlockStorage = async (
         sessions: sessions.size,
       };
     },
+
+    // Meta summary methods (v3.1.0)
+    async saveMeta(meta) {
+      const record = normalizeMetaSummary(meta);
+      await metaEngine.put(record);
+    },
+    async getMeta(id) {
+      const record = await metaEngine.get(id);
+      return record ? cloneMetaRecord(record) : null;
+    },
+    async getMetaBySession(sessionUrl) {
+      const records = await metaEngine.getBySession(sessionUrl);
+      return records.map((record) => cloneMetaRecord(record));
+    },
+    async deleteMeta(id) {
+      return metaEngine.delete(id);
+    },
+    async clearMeta(sessionUrl) {
+      return metaEngine.clear(sessionUrl);
+    },
+
     close() {
       engine.close();
+      metaEngine.close();
     },
   };
 

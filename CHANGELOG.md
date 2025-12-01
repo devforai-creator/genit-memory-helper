@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+## v3.1.0 (2025-12-01)
+
+### ✨ New Features
+
+- **메타 요약 (Meta Summary)**: 10개 청크 요약을 1개의 통합 요약으로 압축하는 계층적 요약 시스템
+  - **10개 청크 그룹화**: 요약이 완료된 청크 10개를 하나의 메타 그룹으로 묶음
+  - **메타 요약 프롬프트**: 10개 청크 요약을 입력으로 받아 ~500자 통합 요약 생성
+  - **메타 요약 저장**: IndexedDB `meta-summaries` 스토어에 영구 저장
+  - **계층적 복사**: "전체 요약 복사" 시 메타 요약된 청크는 제외하고 메타 요약만 포함
+    - 예: 25개 청크 → 메타 2개 + 청크 5개 = 최적의 유저노트 길이
+
+### 🏗️ Architecture
+
+- **IndexedDB v2 마이그레이션**: `meta-summaries` 오브젝트 스토어 추가
+- **types/index.ts**: `MetaSummaryInit`, `MetaSummaryRecord` 인터페이스 추가
+- **block-storage.ts**: 메타 요약 CRUD 메서드 (`saveMeta`, `getMeta`, `getMetaBySession`, `deleteMeta`, `clearMeta`)
+- **memory-prompts.ts**: `buildMetaSummaryPrompt()`, `groupChunksForMeta()` 함수 추가
+- **dual-memory-controls.ts**:
+  - `renderMetaSummarySection()`: 메타 요약 UI 렌더링
+  - `buildHierarchicalSummary()`: 계층적 요약 생성 로직
+  - `getMetaCoveredIndices()`: 메타 요약으로 커버된 청크 추적
+
+### 🎨 UI
+
+- **메타 요약 섹션**: 청크 10개 단위로 메타 요약 생성 UI 표시 (보라색 테마)
+- **메타 프롬프트 복사 버튼**: 각 메타 그룹에 대한 프롬프트 복사
+- **메타 요약 입력/저장**: textarea + 저장 버튼
+- **배지 업데이트**: "메타 완료" 상태 표시
+
+### 🧪 Tests
+
+- **meta-summary.spec.ts** (+18개):
+  - `groupChunksForMeta` 테스트 (5개)
+  - `buildMetaSummaryPrompt` 테스트 (3개)
+  - block-storage 메타 CRUD 테스트 (10개)
+- 테스트 커버리지: 194 → 212개 (+18개)
+
 ## v3.0.1 (2025-12-01)
 
 ### 🐛 Fixes
