@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         General Memory Helper
 // @namespace    local.dev
-// @version      3.0.1
+// @version      3.1.0
 // @description  AI 챗봇 대화 로그 추출 및 백업 도구 (JSON/Markdown/TXT Export + LLM 요약 프롬프트)
 // @author       devforai-creator
 // @match        https://genit.ai/*
