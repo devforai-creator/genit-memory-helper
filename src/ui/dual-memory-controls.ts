@@ -549,14 +549,39 @@ export function createDualMemoryControls(
   };
 
   /**
+   * BlockStorage가 준비될 때까지 대기 (최대 5초, 500ms 간격)
+   */
+  const waitForStorage = async (maxAttempts = 10, intervalMs = 500): Promise<BlockStorageController | null> => {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const storage = getBlockStorage?.();
+      if (storage) return storage;
+
+      if (attempt < maxAttempts - 1) {
+        await new Promise(resolve => setTimeout(resolve, intervalMs));
+      }
+    }
+    return null;
+  };
+
+  /**
    * 저장된 청크 로드 (IndexedDB에서)
+   * - storage가 아직 초기화되지 않았으면 재시도
    */
   const loadSavedChunks = async (): Promise<void> => {
-    const blockStorage = getBlockStorage?.();
-    if (!blockStorage) return;
-
     const sessionUrl = getSessionUrl?.() ?? '';
     if (!sessionUrl) return;
+
+    // storage가 준비될 때까지 대기 (비동기 초기화 대응)
+    let blockStorage = getBlockStorage?.();
+    if (!blockStorage) {
+      logger?.log?.('[GMH] BlockStorage not ready, waiting...');
+      blockStorage = await waitForStorage();
+      if (!blockStorage) {
+        logger?.warn?.('[GMH] BlockStorage not available after retries');
+        return;
+      }
+      logger?.log?.('[GMH] BlockStorage ready after wait');
+    }
 
     try {
       savedRecords = await blockStorage.getBySession(sessionUrl);
