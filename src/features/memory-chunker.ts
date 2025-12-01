@@ -5,7 +5,7 @@
  * 요약/Facts 추출에 사용할 수 있도록 준비합니다.
  */
 
-import type { StructuredSnapshotMessage, TranscriptTurn } from '../types';
+import type { StructuredSnapshotMessage, TranscriptTurn, MemoryBlockInit } from '../types';
 
 /** 청크 단위 메시지 수 */
 const DEFAULT_CHUNK_SIZE = 10;
@@ -222,6 +222,95 @@ export const createChunksFromMessages = (
   options: ChunkerOptions = {},
 ): ChunkerResult => {
   return createChunks(messages, options);
+};
+
+/**
+ * MemoryChunk를 MemoryBlockInit으로 변환 (IndexedDB 저장용)
+ *
+ * @param chunk - MemoryChunk 인스턴스
+ * @param sessionUrl - 세션 URL
+ * @returns MemoryBlockInit
+ */
+export const chunkToBlockInit = (
+  chunk: MemoryChunk,
+  sessionUrl: string,
+): MemoryBlockInit => {
+  // 메시지를 StructuredSnapshotMessage 형태로 변환
+  const messages: StructuredSnapshotMessage[] = chunk.messages.map((msg, idx) => {
+    // 이미 StructuredSnapshotMessage 형태인 경우
+    if ('parts' in msg && Array.isArray(msg.parts)) {
+      return msg as StructuredSnapshotMessage;
+    }
+
+    // TranscriptTurn 형태인 경우 변환
+    const turn = msg as TranscriptTurn;
+    const speaker = getSpeaker(msg);
+    const text = getMessageText(msg);
+
+    return {
+      ordinal: chunk.range.start + idx,
+      speaker,
+      channel: turn.role === 'user' ? 'user' : 'assistant',
+      parts: [
+        {
+          type: 'text' as const,
+          speaker,
+          text,
+          lines: text.split('\n'),
+        },
+      ],
+      legacyLines: [text],
+    };
+  });
+
+  return {
+    id: chunk.id,
+    sessionUrl,
+    raw: chunk.raw,
+    messages,
+    ordinalRange: [chunk.range.start, chunk.range.end],
+    timestamp: chunk.timestamp,
+    summary: chunk.summary,
+    facts: chunk.facts,
+    meta: {
+      chunkIndex: chunk.index,
+      originalMessageCount: chunk.messages.length,
+    },
+  };
+};
+
+/**
+ * MemoryBlockRecord에서 MemoryChunk로 변환 (UI 표시용)
+ */
+export const blockRecordToChunk = (
+  record: {
+    id: string;
+    ordinalRange: [number, number];
+    raw: string;
+    messages: unknown[];
+    timestamp: number;
+    summary?: string;
+    facts?: string;
+    meta?: Record<string, unknown>;
+  },
+): MemoryChunk => {
+  const chunkIndex = typeof record.meta?.chunkIndex === 'number'
+    ? record.meta.chunkIndex
+    : 0;
+
+  return {
+    id: record.id,
+    index: chunkIndex,
+    range: {
+      start: record.ordinalRange[0],
+      end: record.ordinalRange[1],
+    },
+    messages: record.messages as Array<StructuredSnapshotMessage | TranscriptTurn>,
+    raw: record.raw,
+    summary: record.summary,
+    facts: record.facts,
+    timestamp: record.timestamp,
+  };
 };
 
 export default createChunks;

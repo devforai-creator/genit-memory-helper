@@ -84,6 +84,12 @@ const cloneRecord = (record: MemoryBlockRecord): MemoryBlockRecord => {
   if (record.meta) {
     copy.meta = cloneValue(record.meta);
   }
+  if (record.summary) {
+    copy.summary = record.summary;
+  }
+  if (record.facts) {
+    copy.facts = record.facts;
+  }
   return copy;
 };
 
@@ -129,6 +135,12 @@ const normalizeBlock = (block: MemoryBlockInit): MemoryBlockRecord => {
   if (block.meta) {
     record.meta = block.meta;
   }
+  if (typeof block.summary === 'string' && block.summary.trim()) {
+    record.summary = block.summary.trim();
+  }
+  if (typeof block.facts === 'string' && block.facts.trim()) {
+    record.facts = block.facts.trim();
+  }
   return record;
 };
 
@@ -159,6 +171,12 @@ const sanitizeLoadedRecord = (record: MemoryBlockRecord): MemoryBlockRecord => {
   };
   if (record.meta) {
     sanitized.meta = record.meta;
+  }
+  if (typeof record.summary === 'string' && record.summary.trim()) {
+    sanitized.summary = record.summary.trim();
+  }
+  if (typeof record.facts === 'string' && record.facts.trim()) {
+    sanitized.facts = record.facts.trim();
   }
   return sanitized;
 };

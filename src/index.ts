@@ -94,6 +94,7 @@ import {
   toDebugBlockSummary,
 } from './utils/block-debug';
 import type {
+  BlockStorageController,
   ClassicJSONExportOptions,
   ErrorHandler,
   ExportBundleOptions,
@@ -872,6 +873,7 @@ interface GMHFlags {
       ENV.GM_setClipboard(text, { type: 'text', mimetype: 'text/plain' });
     },
     showStatus: setPanelStatus,
+    getBlockStorage: () => (GMH.Core.BlockStorage as BlockStorageController | undefined) ?? null,
     logger: ENV.console,
   });
 
