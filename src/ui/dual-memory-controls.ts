@@ -235,6 +235,33 @@ export function createDualMemoryControls(
   };
 
   /**
+   * 메타 요약 섹션 동적 갱신 (v3.1.0)
+   * 요약 저장 후 메타 그룹이 새로 나타날 수 있으므로 섹션을 다시 렌더링
+   */
+  const refreshMetaSection = (chunks: MemoryChunk[]): void => {
+    if (!contentEl) return;
+
+    const existingSection = contentEl.querySelector('.gmh-meta-summary-section');
+    const userNoteSection = contentEl.querySelector('.gmh-memory-usernote-section');
+    const newHtml = renderMetaSummarySection(chunks);
+
+    if (existingSection) {
+      // 기존 섹션이 있으면 교체
+      if (newHtml) {
+        existingSection.outerHTML = newHtml;
+      } else {
+        existingSection.remove();
+      }
+    } else if (newHtml && userNoteSection) {
+      // 기존 섹션이 없고 새로 생겨야 하면 유저노트 섹션 앞에 삽입
+      userNoteSection.insertAdjacentHTML('beforebegin', newHtml);
+    }
+
+    // 메타 이벤트 다시 바인딩
+    bindMetaEvents(chunks);
+  };
+
+  /**
    * 유저노트 복사 버튼 렌더링
    */
   const renderUserNoteCopySection = (): string => {
@@ -407,6 +434,7 @@ export function createDualMemoryControls(
           showStatus?.('요약이 저장되었습니다.', 'success');
           updateChunkBadge(chunkEl, chunk);
           updateStats(chunks);
+          refreshMetaSection(chunks); // 메타 요약 섹션 갱신
         } catch {
           showStatus?.('저장에 실패했습니다.', 'error');
         } finally {
