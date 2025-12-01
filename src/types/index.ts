@@ -958,6 +958,7 @@ export interface PanelInteractionsOptions {
   ensureAutoLoadControlsModern?(panel: Element): void;
   mountStatusActionsModern?(panel: Element): void;
   mountMemoryStatusModern?(panel: Element): void;
+  mountDualMemoryModern?(panel: Element): void;
   bindRangeControls(panel: Element): void;
   bindShortcuts(panel: Element): void;
   prepareShare: ShareWorkflowApi['prepareShare'];

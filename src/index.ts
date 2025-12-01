@@ -77,6 +77,7 @@ import {
 } from './features/html-export';
 import createMemoryStatus from './ui/memory-status';
 import createBlockViewer from './ui/block-viewer';
+import { createDualMemoryControls } from './ui/dual-memory-controls';
 import { createPanelInteractions } from './ui/panel-interactions';
 import { createModernPanel } from './ui/panel-modern';
 import { createModernPrivacyGate } from './ui/privacy-gate';
@@ -857,6 +858,25 @@ interface GMHFlags {
   });
 
 
+  const dualMemoryControls = createDualMemoryControls({
+    documentRef: document,
+    getMessages: () => getProgressiveMessages() ?? captureStructuredSnapshot()?.messages ?? null,
+    getSessionUrl: () => {
+      try {
+        return PAGE_WINDOW?.location?.href ?? null;
+      } catch {
+        return null;
+      }
+    },
+    copyToClipboard: async (text) => {
+      ENV.GM_setClipboard(text, { type: 'text', mimetype: 'text/plain' });
+    },
+    showStatus: setPanelStatus,
+    logger: ENV.console,
+  });
+
+  (GMH.UI as Record<string, unknown>).DualMemory = dualMemoryControls;
+
   const {
     bindPanelInteractions,
     syncPrivacyProfileSelect: syncPrivacyProfileSelectFromUI,
@@ -871,6 +891,7 @@ interface GMHFlags {
     ensureAutoLoadControlsModern,
     mountStatusActionsModern,
     mountMemoryStatusModern: (panel) => memoryStatus.mount(panel),
+    mountDualMemoryModern: (panel) => dualMemoryControls.mount(panel),
     bindRangeControls,
     bindShortcuts,
     prepareShare,

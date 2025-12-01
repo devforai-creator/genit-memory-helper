@@ -133,6 +133,19 @@ html.gmh-panel-open #gmh-fab[data-position^="top"]{transform:translateY(4px);}
 .gmh-block-viewer__message-id{font-size:11px;color:var(--gmh-muted);}
 @media (max-width:480px){.gmh-modal{width:100%;border-radius:12px;}.gmh-modal__actions{flex-direction:column;}.gmh-panel{right:12px;left:12px;bottom:12px;width:auto;max-height:76vh;}.gmh-panel::-webkit-scrollbar{width:6px;}.gmh-panel::-webkit-scrollbar-thumb{background:rgba(148,163,184,0.35);border-radius:999px;}#gmh-fab{width:48px;height:48px;font-size:12px;}#gmh-fab[data-position="top-left"]{top:12px;left:12px;}#gmh-fab[data-position="top-right"]{top:12px;right:12px;}#gmh-fab[data-position="bottom-left"]{bottom:12px;left:12px;}#gmh-fab[data-position="bottom-right"]{bottom:12px;right:12px;}}
 @media (prefers-reduced-motion:reduce){.gmh-panel,.gmh-modal,.gmh-progress__fill,#gmh-fab{transition:none !important;animation-duration:0.001s !important;}}
+.gmh-memory-empty,.gmh-memory-loading{padding:16px;text-align:center;color:var(--gmh-muted);font-size:13px;}
+.gmh-memory-stats{font-size:12px;color:var(--gmh-muted);margin-bottom:10px;}
+.gmh-memory-chunks{display:grid;gap:10px;}
+.gmh-memory-chunk{border:1px solid var(--gmh-border);border-radius:var(--gmh-radius-sm);padding:12px;background:var(--gmh-surface-alt);}
+.gmh-memory-chunk__header{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.gmh-memory-chunk__range{font-weight:600;font-size:12px;color:var(--gmh-accent);}
+.gmh-memory-chunk__count{font-size:11px;color:var(--gmh-muted);background:rgba(148,163,184,0.15);padding:2px 6px;border-radius:999px;}
+.gmh-memory-chunk__toggle{margin-left:auto;border:0;background:none;color:var(--gmh-muted);font-size:11px;cursor:pointer;padding:4px 8px;border-radius:6px;transition:background 0.15s ease,color 0.15s ease;}
+.gmh-memory-chunk__toggle:hover{background:rgba(148,163,184,0.18);color:var(--gmh-fg);}
+.gmh-memory-chunk__preview{font-size:12px;color:var(--gmh-muted);line-height:1.45;margin-bottom:8px;word-break:break-word;}
+.gmh-memory-chunk__actions{display:flex;gap:8px;}
+.gmh-memory-chunk__detail{margin-top:10px;padding-top:10px;border-top:1px dashed rgba(148,163,184,0.32);}
+.gmh-memory-chunk__raw{font-size:11px;color:var(--gmh-fg);white-space:pre-wrap;word-break:break-word;background:rgba(15,23,42,0.6);padding:10px;border-radius:8px;max-height:200px;overflow:auto;margin:0;}
 `;
 
 /**

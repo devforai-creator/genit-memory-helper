@@ -5031,6 +5031,19 @@ html.gmh-panel-open #gmh-fab[data-position^="top"]{transform:translateY(4px);}
 .gmh-block-viewer__message-id{font-size:11px;color:var(--gmh-muted);}
 @media (max-width:480px){.gmh-modal{width:100%;border-radius:12px;}.gmh-modal__actions{flex-direction:column;}.gmh-panel{right:12px;left:12px;bottom:12px;width:auto;max-height:76vh;}.gmh-panel::-webkit-scrollbar{width:6px;}.gmh-panel::-webkit-scrollbar-thumb{background:rgba(148,163,184,0.35);border-radius:999px;}#gmh-fab{width:48px;height:48px;font-size:12px;}#gmh-fab[data-position="top-left"]{top:12px;left:12px;}#gmh-fab[data-position="top-right"]{top:12px;right:12px;}#gmh-fab[data-position="bottom-left"]{bottom:12px;left:12px;}#gmh-fab[data-position="bottom-right"]{bottom:12px;right:12px;}}
 @media (prefers-reduced-motion:reduce){.gmh-panel,.gmh-modal,.gmh-progress__fill,#gmh-fab{transition:none !important;animation-duration:0.001s !important;}}
+.gmh-memory-empty,.gmh-memory-loading{padding:16px;text-align:center;color:var(--gmh-muted);font-size:13px;}
+.gmh-memory-stats{font-size:12px;color:var(--gmh-muted);margin-bottom:10px;}
+.gmh-memory-chunks{display:grid;gap:10px;}
+.gmh-memory-chunk{border:1px solid var(--gmh-border);border-radius:var(--gmh-radius-sm);padding:12px;background:var(--gmh-surface-alt);}
+.gmh-memory-chunk__header{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.gmh-memory-chunk__range{font-weight:600;font-size:12px;color:var(--gmh-accent);}
+.gmh-memory-chunk__count{font-size:11px;color:var(--gmh-muted);background:rgba(148,163,184,0.15);padding:2px 6px;border-radius:999px;}
+.gmh-memory-chunk__toggle{margin-left:auto;border:0;background:none;color:var(--gmh-muted);font-size:11px;cursor:pointer;padding:4px 8px;border-radius:6px;transition:background 0.15s ease,color 0.15s ease;}
+.gmh-memory-chunk__toggle:hover{background:rgba(148,163,184,0.18);color:var(--gmh-fg);}
+.gmh-memory-chunk__preview{font-size:12px;color:var(--gmh-muted);line-height:1.45;margin-bottom:8px;word-break:break-word;}
+.gmh-memory-chunk__actions{display:flex;gap:8px;}
+.gmh-memory-chunk__detail{margin-top:10px;padding-top:10px;border-top:1px dashed rgba(148,163,184,0.32);}
+.gmh-memory-chunk__raw{font-size:11px;color:var(--gmh-fg);white-space:pre-wrap;word-break:break-word;background:rgba(15,23,42,0.6);padding:10px;border-radius:8px;max-height:200px;overflow:auto;margin:0;}
 `;
     /**
      * Injects the design-system stylesheet into the provided document once.
@@ -7300,7 +7313,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         }
         return lines;
     };
-    const buildRawText = (sequence, removeNarration) => {
+    const buildRawText$1 = (sequence, removeNarration) => {
         const sections = [];
         sequence.forEach(({ message }) => {
             const lines = toNormalizedLines(message, removeNarration);
@@ -7407,7 +7420,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 counter: blockCounter,
             });
             const messages = orderedSlice.map((entry) => cloneStructuredMessage$2(entry.message));
-            const raw = buildRawText(orderedSlice, removeNarration);
+            const raw = buildRawText$1(orderedSlice, removeNarration);
             const block = {
                 id: blockId,
                 sessionUrl,
@@ -8541,7 +8554,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="generator" content="General Memory Helper">
   <meta name="exported-at" content="${new Date().toISOString()}">
-  <title>${escapeHtml(title)}</title>
+  <title>${escapeHtml$1(title)}</title>
   <style>
     * {
       box-sizing: border-box;
@@ -8584,7 +8597,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 </head>
 <body>
   <div class="export-header">
-    <h1>${escapeHtml(title)}</h1>
+    <h1>${escapeHtml$1(title)}</h1>
     <p>Exported by General Memory Helper on ${new Date().toLocaleString('ko-KR')}</p>
     <p>Images: ${capturedImages}/${totalImages} captured${failedImages > 0 ? ` (${failedImages} failed)` : ''}</p>
   </div>
@@ -8659,22 +8672,22 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                     .map((part) => {
                     if (part.type === 'image' && part.src) {
                         const src = imageMap.get(part.src) || part.src;
-                        return `<img src="${escapeHtml(src)}" alt="${escapeHtml(part.alt || '')}" class="message-image" />`;
+                        return `<img src="${escapeHtml$1(src)}" alt="${escapeHtml$1(part.alt || '')}" class="message-image" />`;
                     }
                     if (part.type === 'text' || part.type === 'dialogue' || part.type === 'narration') {
                         const text = part.text || part.lines?.join('\n') || '';
-                        const partSpeaker = part.speaker ? `<span class="part-speaker">${escapeHtml(part.speaker)}</span>` : '';
+                        const partSpeaker = part.speaker ? `<span class="part-speaker">${escapeHtml$1(part.speaker)}</span>` : '';
                         const flavor = part.flavor || part.type || '';
-                        return `<div class="message-part ${flavor}">${partSpeaker}${escapeHtml(text)}</div>`;
+                        return `<div class="message-part ${flavor}">${partSpeaker}${escapeHtml$1(text)}</div>`;
                     }
                     if (part.lines && part.lines.length > 0) {
-                        return `<div class="message-part">${part.lines.map((l) => escapeHtml(l)).join('<br>')}</div>`;
+                        return `<div class="message-part">${part.lines.map((l) => escapeHtml$1(l)).join('<br>')}</div>`;
                     }
                     return '';
                 })
                     .filter(Boolean)
                     .join('\n');
-                const speakerHtml = speaker ? `<div class="message-speaker">${escapeHtml(speaker)}</div>` : '';
+                const speakerHtml = speaker ? `<div class="message-speaker">${escapeHtml$1(speaker)}</div>` : '';
                 return `
         <div class="message ${bubbleClass}">
           ${speakerHtml}
@@ -8691,7 +8704,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="generator" content="General Memory Helper">
   <meta name="exported-at" content="${new Date().toISOString()}">
-  <title>${escapeHtml(title)}</title>
+  <title>${escapeHtml$1(title)}</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -8750,7 +8763,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 </head>
 <body>
   <div class="export-header">
-    <h1>${escapeHtml(title)}</h1>
+    <h1>${escapeHtml$1(title)}</h1>
     <p>Exported by General Memory Helper on ${new Date().toLocaleString('ko-KR')}</p>
     <p>Messages: ${messages.length} | Images: ${capturedImages}/${imageUrls.size} captured${failedImages > 0 ? ` (${failedImages} failed)` : ''}</p>
   </div>
@@ -8780,7 +8793,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     /**
      * Escape HTML special characters
      */
-    function escapeHtml(str) {
+    function escapeHtml$1(str) {
         return str
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
@@ -9774,10 +9787,466 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         };
     };
 
+    /**
+     * Memory Chunker - Dual Memory 시스템을 위한 10개 메시지 청크화
+     *
+     * 온디맨드 방식으로 수집된 메시지를 10개 단위로 청크화하여
+     * 요약/Facts 추출에 사용할 수 있도록 준비합니다.
+     */
+    /** 청크 단위 메시지 수 */
+    const DEFAULT_CHUNK_SIZE = 10;
+    /**
+     * 메시지에서 speaker/role 정보 추출
+     */
+    const getSpeaker = (message) => {
+        if ('speaker' in message && message.speaker) {
+            return String(message.speaker);
+        }
+        if ('role' in message && message.role) {
+            return String(message.role);
+        }
+        if ('channel' in message && message.channel) {
+            return message.channel === 'user' ? '유저' : 'AI';
+        }
+        return 'unknown';
+    };
+    /**
+     * 메시지에서 텍스트 추출
+     */
+    const getMessageText = (message) => {
+        // TranscriptTurn 형태
+        if ('text' in message && typeof message.text === 'string') {
+            return message.text.trim();
+        }
+        // StructuredSnapshotMessage 형태
+        if ('parts' in message && Array.isArray(message.parts)) {
+            const textParts = [];
+            for (const part of message.parts) {
+                if (!part)
+                    continue;
+                // INFO 파트 제외
+                if (part.type === 'info' || part.speaker === 'INFO')
+                    continue;
+                // 텍스트 추출
+                if (typeof part.text === 'string' && part.text.trim()) {
+                    textParts.push(part.text.trim());
+                }
+                // lines 배열 처리
+                if (Array.isArray(part.lines)) {
+                    for (const line of part.lines) {
+                        if (typeof line === 'string' && line.trim()) {
+                            textParts.push(line.trim());
+                        }
+                    }
+                }
+            }
+            if (textParts.length > 0) {
+                return textParts.join('\n');
+            }
+        }
+        // legacyLines 폴백
+        const legacyLines = Reflect.get(message, 'legacyLines');
+        if (Array.isArray(legacyLines)) {
+            const lines = legacyLines
+                .filter((line) => typeof line === 'string')
+                .map((line) => line.trim())
+                .filter((line) => line && line.toUpperCase() !== 'INFO');
+            if (lines.length > 0) {
+                return lines.join('\n');
+            }
+        }
+        return '';
+    };
+    /**
+     * 메시지 배열을 LLM 프롬프트용 텍스트로 변환
+     */
+    const buildRawText = (messages) => {
+        const sections = [];
+        for (const message of messages) {
+            const speaker = getSpeaker(message);
+            const text = getMessageText(message);
+            if (!text)
+                continue;
+            // speaker: text 형태로 포맷
+            sections.push(`${speaker}: ${text}`);
+        }
+        return sections.join('\n\n');
+    };
+    /**
+     * 청크 ID 생성
+     */
+    const buildChunkId = (index, timestamp) => {
+        return `gmh-chunk-${index}-${timestamp}`;
+    };
+    /**
+     * 메시지 배열을 10개 단위 청크로 분할
+     *
+     * @param messages - 수집된 메시지 배열
+     * @param options - 청크화 옵션
+     * @returns 청크화 결과
+     */
+    const createChunks = (messages, options = {}) => {
+        const chunkSize = options.chunkSize ?? DEFAULT_CHUNK_SIZE;
+        const sessionUrl = options.sessionUrl ?? null;
+        const timestamp = Date.now();
+        if (!Array.isArray(messages) || messages.length === 0) {
+            return {
+                chunks: [],
+                totalMessages: 0,
+                sessionUrl,
+                createdAt: timestamp,
+            };
+        }
+        const chunks = [];
+        const totalMessages = messages.length;
+        for (let i = 0; i < messages.length; i += chunkSize) {
+            const chunkMessages = messages.slice(i, i + chunkSize);
+            const chunkIndex = Math.floor(i / chunkSize);
+            const chunk = {
+                id: buildChunkId(chunkIndex, timestamp),
+                index: chunkIndex,
+                range: {
+                    start: i + 1, // 1-based
+                    end: Math.min(i + chunkSize, totalMessages),
+                },
+                messages: chunkMessages,
+                raw: buildRawText(chunkMessages),
+                timestamp,
+            };
+            chunks.push(chunk);
+        }
+        return {
+            chunks,
+            totalMessages,
+            sessionUrl,
+            createdAt: timestamp,
+        };
+    };
+
+    /**
+     * Memory Prompts - Dual Memory 시스템을 위한 프롬프트 템플릿
+     *
+     * 요약(Semantic Memory)과 Facts(Episodic Memory) 추출을 위한
+     * LLM 프롬프트 템플릿을 제공합니다.
+     */
+    /** 요약 프롬프트 템플릿 (기본) */
+    const DEFAULT_SUMMARY_PROMPT = `다음 대화를 2-3문장으로 요약해주세요. 핵심 주제와 흐름만 간단히.
+
+[대화 내용]
+{chunk}`;
+    /** Facts 프롬프트 템플릿 (기본) */
+    const DEFAULT_FACTS_PROMPT = `다음 대화에서 나중에 참조할 가치가 있는 구체적 사실을 추출해주세요.
+
+추출 대상:
+- 첫 경험 (첫 만남, 첫 시도 등)
+- 구체적 정보 (날짜, 장소, 음식, 시간 등)
+- 개인 선호/습관/특징
+- 중요한 약속이나 결정
+- 감정적으로 의미 있는 순간
+
+출력 형식:
+- 각 사실을 "- " 로 시작하는 bullet point로 작성
+- 없으면 "기록할 사실 없음"이라고만 답변
+
+[대화 내용]
+{chunk}`;
+    /**
+     * 프롬프트에 청크 내용 삽입
+     */
+    const insertChunkContent = (template, chunkContent) => {
+        return template.replace('{chunk}', chunkContent);
+    };
+    /**
+     * 요약 프롬프트 생성
+     *
+     * @param chunk - 메모리 청크
+     * @param customTemplate - 사용자 정의 템플릿 (선택)
+     * @returns 완성된 프롬프트
+     */
+    const buildSummaryPrompt = (chunk, customTemplate) => {
+        const template = customTemplate ?? DEFAULT_SUMMARY_PROMPT;
+        return insertChunkContent(template, chunk.raw);
+    };
+    /**
+     * Facts 프롬프트 생성
+     *
+     * @param chunk - 메모리 청크
+     * @param customTemplate - 사용자 정의 템플릿 (선택)
+     * @returns 완성된 프롬프트
+     */
+    const buildFactsPrompt = (chunk, customTemplate) => {
+        const template = customTemplate ?? DEFAULT_FACTS_PROMPT;
+        return insertChunkContent(template, chunk.raw);
+    };
+    /**
+     * 청크 범위를 사람이 읽기 쉬운 형태로 포맷
+     */
+    const formatChunkRange = (chunk) => {
+        return `#${chunk.index + 1} (${chunk.range.start}-${chunk.range.end})`;
+    };
+    /**
+     * 청크 미리보기 텍스트 생성 (처음 100자)
+     */
+    const getChunkPreview = (chunk, maxLength = 100) => {
+        const raw = chunk.raw || '';
+        if (raw.length <= maxLength)
+            return raw;
+        return `${raw.slice(0, maxLength)}...`;
+    };
+
+    /**
+     * Dual Memory Controls - 청크 생성 및 프롬프트 복사 UI 컨트롤러
+     *
+     * Memory Panel의 "GMH에 담기" 버튼과 청크 목록 UI를 연결합니다.
+     */
+    /**
+     * HTML 이스케이프
+     */
+    const escapeHtml = (text, doc) => {
+        const div = doc.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    };
+    /**
+     * Dual Memory Controls 생성
+     */
+    function createDualMemoryControls(options = {}) {
+        const { documentRef = typeof document !== 'undefined' ? document : null, getMessages, getSessionUrl, copyToClipboard, showStatus, logger = typeof console !== 'undefined' ? console : null, } = options;
+        if (!documentRef) {
+            throw new Error('createDualMemoryControls requires documentRef');
+        }
+        const doc = documentRef;
+        let currentResult = null;
+        let contentEl = null;
+        let loadBtn = null;
+        let isLoading = false;
+        /**
+         * 빈 상태 렌더링
+         */
+        const renderEmpty = () => {
+            if (!contentEl)
+                return;
+            contentEl.innerHTML = `
+      <div class="gmh-memory-empty">
+        <p>메시지를 수집한 후 "GMH에 담기" 버튼을 눌러주세요.</p>
+      </div>
+    `;
+        };
+        /**
+         * 로딩 상태 렌더링
+         */
+        const renderLoading = () => {
+            if (!contentEl)
+                return;
+            contentEl.innerHTML = `
+      <div class="gmh-memory-loading">
+        <p>청크 생성 중...</p>
+      </div>
+    `;
+        };
+        /**
+         * 청크 아이템 HTML 생성
+         */
+        const renderChunkItem = (chunk) => {
+            const range = formatChunkRange(chunk);
+            const preview = getChunkPreview(chunk, 80);
+            const messageCount = chunk.messages.length;
+            return `
+      <div class="gmh-memory-chunk" data-chunk-id="${chunk.id}">
+        <div class="gmh-memory-chunk__header">
+          <span class="gmh-memory-chunk__range">${range}</span>
+          <span class="gmh-memory-chunk__count">${messageCount}개</span>
+          <button class="gmh-memory-chunk__toggle" type="button" aria-expanded="false">
+            펼치기 ▼
+          </button>
+        </div>
+        <div class="gmh-memory-chunk__preview">${escapeHtml(preview, doc)}</div>
+        <div class="gmh-memory-chunk__actions">
+          <button class="gmh-small-btn gmh-small-btn--accent gmh-copy-summary" type="button" title="요약 프롬프트 복사">
+            📋 요약
+          </button>
+          <button class="gmh-small-btn gmh-small-btn--accent gmh-copy-facts" type="button" title="Facts 프롬프트 복사">
+            📋 Facts
+          </button>
+        </div>
+        <div class="gmh-memory-chunk__detail" hidden>
+          <pre class="gmh-memory-chunk__raw">${escapeHtml(chunk.raw, doc)}</pre>
+        </div>
+      </div>
+    `;
+        };
+        /**
+         * 청크 목록 렌더링
+         */
+        const renderChunks = () => {
+            if (!contentEl || !currentResult)
+                return;
+            const { chunks } = currentResult;
+            if (chunks.length === 0) {
+                renderEmpty();
+                return;
+            }
+            const chunksHtml = chunks.map(renderChunkItem).join('');
+            contentEl.innerHTML = `
+      <div class="gmh-memory-stats">
+        총 ${chunks.length}개 청크 생성됨 (${currentResult.totalMessages}개 메시지)
+      </div>
+      <div class="gmh-memory-chunks">
+        ${chunksHtml}
+      </div>
+    `;
+            // 이벤트 바인딩
+            bindChunkEvents();
+        };
+        /**
+         * 클립보드 복사 실행
+         */
+        const doCopy = async (text, label) => {
+            try {
+                if (copyToClipboard) {
+                    await copyToClipboard(text);
+                }
+                else if (navigator?.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(text);
+                }
+                else {
+                    throw new Error('클립보드 API를 사용할 수 없습니다.');
+                }
+                showStatus?.(`${label} 프롬프트가 복사되었습니다.`, 'success');
+                logger?.log?.(`[GMH] ${label} prompt copied`);
+            }
+            catch (err) {
+                showStatus?.('복사에 실패했습니다.', 'error');
+                logger?.warn?.('[GMH] copy failed', err);
+            }
+        };
+        /**
+         * 청크별 이벤트 바인딩
+         */
+        const bindChunkEvents = () => {
+            if (!contentEl || !currentResult)
+                return;
+            const { chunks } = currentResult;
+            // 토글 버튼
+            contentEl.querySelectorAll('.gmh-memory-chunk__toggle').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const chunkEl = btn.closest('.gmh-memory-chunk');
+                    const detailEl = chunkEl?.querySelector('.gmh-memory-chunk__detail');
+                    if (!detailEl)
+                        return;
+                    const isExpanded = btn.getAttribute('aria-expanded') === 'true';
+                    btn.setAttribute('aria-expanded', String(!isExpanded));
+                    btn.textContent = isExpanded ? '펼치기 ▼' : '접기 ▲';
+                    detailEl.hidden = isExpanded;
+                });
+            });
+            // 요약 복사 버튼
+            contentEl.querySelectorAll('.gmh-copy-summary').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const chunkEl = btn.closest('.gmh-memory-chunk');
+                    const chunkId = chunkEl?.getAttribute('data-chunk-id');
+                    const chunk = chunks.find((c) => c.id === chunkId);
+                    if (!chunk)
+                        return;
+                    const prompt = buildSummaryPrompt(chunk);
+                    void doCopy(prompt, '요약');
+                });
+            });
+            // Facts 복사 버튼
+            contentEl.querySelectorAll('.gmh-copy-facts').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const chunkEl = btn.closest('.gmh-memory-chunk');
+                    const chunkId = chunkEl?.getAttribute('data-chunk-id');
+                    const chunk = chunks.find((c) => c.id === chunkId);
+                    if (!chunk)
+                        return;
+                    const prompt = buildFactsPrompt(chunk);
+                    void doCopy(prompt, 'Facts');
+                });
+            });
+        };
+        /**
+         * 청크 생성 실행
+         */
+        const loadChunks = () => {
+            if (isLoading)
+                return;
+            const messages = getMessages?.();
+            if (!messages || messages.length === 0) {
+                showStatus?.('수집된 메시지가 없습니다. 먼저 Auto Load를 실행해주세요.', 'error');
+                return;
+            }
+            isLoading = true;
+            if (loadBtn) {
+                loadBtn.disabled = true;
+                loadBtn.textContent = '청크 생성 중...';
+            }
+            renderLoading();
+            showStatus?.('청크 생성 중...', 'progress');
+            // 비동기로 청크 생성 (UI 블로킹 방지)
+            setTimeout(() => {
+                try {
+                    currentResult = createChunks(messages, {
+                        sessionUrl: getSessionUrl?.() ?? undefined,
+                    });
+                    renderChunks();
+                    showStatus?.(`${currentResult.chunks.length}개 청크가 생성되었습니다. 프롬프트를 복사해서 LLM에 붙여넣으세요.`, 'success');
+                    logger?.log?.('[GMH] Chunks created:', currentResult.chunks.length);
+                }
+                catch (err) {
+                    showStatus?.('청크 생성에 실패했습니다.', 'error');
+                    logger?.warn?.('[GMH] Chunk creation failed', err);
+                    renderEmpty();
+                }
+                finally {
+                    isLoading = false;
+                    if (loadBtn) {
+                        loadBtn.disabled = false;
+                        loadBtn.textContent = 'GMH에 담기';
+                    }
+                }
+            }, 0);
+        };
+        /**
+         * 패널에 마운트
+         */
+        const mount = (panel) => {
+            if (!panel)
+                return;
+            contentEl = panel.querySelector('#gmh-dual-memory-content');
+            loadBtn = panel.querySelector('#gmh-memory-load');
+            if (loadBtn) {
+                loadBtn.addEventListener('click', loadChunks);
+            }
+            // 초기 상태 렌더링
+            if (contentEl && !currentResult) {
+                renderEmpty();
+            }
+            else if (contentEl && currentResult) {
+                renderChunks();
+            }
+        };
+        /**
+         * 정리
+         */
+        const destroy = () => {
+            currentResult = null;
+            contentEl = null;
+            loadBtn = null;
+            isLoading = false;
+        };
+        return {
+            mount,
+            loadChunks,
+            getChunkResult: () => currentResult,
+            destroy,
+        };
+    }
+
     const DEFAULT_ALERT = (message) => {
         globalThis.alert?.(message);
     };
-    function createPanelInteractions({ panelVisibility, setPanelStatus, setPrivacyProfile, getPrivacyProfile, privacyProfiles, configurePrivacyLists, openPanelSettings, ensureAutoLoadControlsModern, mountStatusActionsModern, mountMemoryStatusModern, bindRangeControls, bindShortcuts, prepareShare, performExport, autoLoader, autoState, stateApi, stateEnum, alert: alertFn = DEFAULT_ALERT, logger = typeof console !== 'undefined' ? console : null, }) {
+    function createPanelInteractions({ panelVisibility, setPanelStatus, setPrivacyProfile, getPrivacyProfile, privacyProfiles, configurePrivacyLists, openPanelSettings, ensureAutoLoadControlsModern, mountStatusActionsModern, mountMemoryStatusModern, mountDualMemoryModern, bindRangeControls, bindShortcuts, prepareShare, performExport, autoLoader, autoState, stateApi, stateEnum, alert: alertFn = DEFAULT_ALERT, logger = typeof console !== 'undefined' ? console : null, }) {
         if (!panelVisibility)
             throw new Error('createPanelInteractions requires panelVisibility');
         if (!setPrivacyProfile)
@@ -9925,6 +10394,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 openPanelSettings?.();
             });
             mountMemoryStatusModern?.(panel);
+            mountDualMemoryModern?.(panel);
             ensureAutoLoadControlsModern?.(panel);
             mountStatusActionsModern?.(panel);
             bindRangeControls(panel);
@@ -10057,6 +10527,19 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
           <button id="gmh-export" class="gmh-small-btn gmh-small-btn--accent">내보내기</button>
         </div>
         <button id="gmh-export-html" class="gmh-panel-btn gmh-panel-btn--neutral" title="전체 메시지를 HTML로 백업 (이미지 미포함)">🧪 HTML 백업 (이미지 미포함)</button>
+      </section>
+      <section class="gmh-panel__section" id="gmh-section-dual-memory">
+        <div class="gmh-panel__section-title">Dual Memory</div>
+        <div id="gmh-dual-memory-content">
+          <div class="gmh-memory-empty">
+            <p>메시지를 수집한 후 "GMH에 담기" 버튼을 눌러주세요.</p>
+          </div>
+        </div>
+        <div class="gmh-field-row">
+          <button id="gmh-memory-load" class="gmh-panel-btn gmh-panel-btn--accent" type="button">
+            GMH에 담기
+          </button>
+        </div>
       </section>
       <section class="gmh-panel__section" id="gmh-section-settings">
         <div class="gmh-panel__section-title">Settings</div>
@@ -13483,6 +13966,24 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             configurePrivacyLists,
             modal,
         });
+        const dualMemoryControls = createDualMemoryControls({
+            documentRef: document,
+            getMessages: () => getProgressiveMessages() ?? captureStructuredSnapshot()?.messages ?? null,
+            getSessionUrl: () => {
+                try {
+                    return PAGE_WINDOW?.location?.href ?? null;
+                }
+                catch {
+                    return null;
+                }
+            },
+            copyToClipboard: async (text) => {
+                ENV.GM_setClipboard(text, { type: 'text', mimetype: 'text/plain' });
+            },
+            showStatus: setPanelStatus,
+            logger: ENV.console,
+        });
+        GMH.UI.DualMemory = dualMemoryControls;
         const { bindPanelInteractions, syncPrivacyProfileSelect: syncPrivacyProfileSelectFromUI, } = createPanelInteractions({
             panelVisibility: PanelVisibility,
             setPanelStatus,
@@ -13494,6 +13995,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             ensureAutoLoadControlsModern,
             mountStatusActionsModern,
             mountMemoryStatusModern: (panel) => memoryStatus.mount(panel),
+            mountDualMemoryModern: (panel) => dualMemoryControls.mount(panel),
             bindRangeControls,
             bindShortcuts,
             prepareShare,

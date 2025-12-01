@@ -151,6 +151,19 @@ export function createModernPanel({
         </div>
         <button id="gmh-export-html" class="gmh-panel-btn gmh-panel-btn--neutral" title="전체 메시지를 HTML로 백업 (이미지 미포함)">🧪 HTML 백업 (이미지 미포함)</button>
       </section>
+      <section class="gmh-panel__section" id="gmh-section-dual-memory">
+        <div class="gmh-panel__section-title">Dual Memory</div>
+        <div id="gmh-dual-memory-content">
+          <div class="gmh-memory-empty">
+            <p>메시지를 수집한 후 "GMH에 담기" 버튼을 눌러주세요.</p>
+          </div>
+        </div>
+        <div class="gmh-field-row">
+          <button id="gmh-memory-load" class="gmh-panel-btn gmh-panel-btn--accent" type="button">
+            GMH에 담기
+          </button>
+        </div>
+      </section>
       <section class="gmh-panel__section" id="gmh-section-settings">
         <div class="gmh-panel__section-title">Settings</div>
         <div id="gmh-status-actions"></div>
