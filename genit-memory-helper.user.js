@@ -5060,6 +5060,15 @@ html.gmh-panel-open #gmh-fab[data-position^="top"]{transform:translateY(4px);}
 .gmh-memory-usernote-section{margin-top:16px;padding-top:16px;border-top:1px solid var(--gmh-border);}
 .gmh-memory-section-title{font-size:12px;font-weight:600;color:var(--gmh-muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em;}
 .gmh-memory-usernote-actions{display:flex;flex-wrap:wrap;gap:8px;}
+.gmh-meta-summary-section{margin-top:16px;padding-top:16px;border-top:1px solid var(--gmh-border);}
+.gmh-meta-hint{font-size:11px;color:var(--gmh-muted);margin:0 0 12px 0;}
+.gmh-meta-groups{display:grid;gap:10px;}
+.gmh-meta-group{border:1px solid rgba(196,181,253,0.25);border-radius:var(--gmh-radius-sm);padding:12px;background:rgba(124,58,237,0.08);}
+.gmh-meta-group--saved{border-color:rgba(52,211,153,0.35);background:rgba(52,211,153,0.06);}
+.gmh-meta-group__header{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;}
+.gmh-meta-group__range{font-weight:600;font-size:12px;color:var(--gmh-accent-soft);}
+.gmh-meta-group__count{font-size:11px;color:var(--gmh-muted);background:rgba(148,163,184,0.15);padding:2px 6px;border-radius:999px;}
+.gmh-meta-group__input-section{display:flex;flex-direction:column;gap:8px;}
 .gmh-btn{padding:10px 14px;border-radius:var(--gmh-radius-sm);border:0;font-weight:600;font-size:12px;cursor:pointer;transition:background 0.15s ease,color 0.15s ease;}
 .gmh-btn--primary{background:#1e293b;color:var(--gmh-fg);border:1px solid var(--gmh-border);}
 .gmh-btn--primary:hover{background:#334155;}
@@ -10040,6 +10049,55 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
 [대화 내용]
 {chunk}`;
+    /** 메타 요약 프롬프트 템플릿 (v3.1.0) */
+    const DEFAULT_META_SUMMARY_PROMPT = `다음은 대화의 각 부분을 요약한 것입니다. 이 요약들을 하나의 통합 요약으로 압축해주세요.
+
+요구사항:
+- 전체 대화의 핵심 흐름과 주요 발전을 담아주세요
+- 반복되는 내용은 한 번만 언급
+- 500자 이내로 작성
+- 시간 순서대로 주요 사건/변화를 정리
+
+[청크 요약들]
+{summaries}`;
+    /**
+     * 메타 요약 프롬프트 생성 (v3.1.0)
+     *
+     * @param input - 메타 요약에 필요한 청크 요약들
+     * @param customTemplate - 사용자 정의 템플릿 (선택)
+     * @returns 완성된 프롬프트
+     */
+    const buildMetaSummaryPrompt = (input, customTemplate) => {
+        const template = customTemplate ?? DEFAULT_META_SUMMARY_PROMPT;
+        // 각 청크 요약을 번호와 함께 포맷
+        const formattedSummaries = input.summaries
+            .map((summary, i) => `[${input.chunkRange[0] + i + 1}] ${summary}`)
+            .join('\n\n');
+        return template.replace('{summaries}', formattedSummaries);
+    };
+    /**
+     * 메타 요약 대상 청크 그룹화 (10개씩)
+     *
+     * @param chunks - 모든 청크 (요약이 있는 것만)
+     * @param groupSize - 그룹 크기 (기본 10)
+     * @returns 메타 요약이 필요한 그룹들
+     */
+    const groupChunksForMeta = (chunks, groupSize = 10) => {
+        // 요약이 있는 청크만 필터링
+        const withSummary = chunks.filter(c => c.summary && c.summary.trim());
+        const groups = [];
+        for (let i = 0; i < withSummary.length; i += groupSize) {
+            const group = withSummary.slice(i, i + groupSize);
+            if (group.length === groupSize) {
+                groups.push({
+                    chunkIds: group.map(c => c.id),
+                    chunkRange: [group[0].index, group[group.length - 1].index],
+                    summaries: group.map(c => c.summary),
+                });
+            }
+        }
+        return groups;
+    };
     /**
      * 프롬프트에 청크 내용 삽입
      */
@@ -10108,6 +10166,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         const doc = documentRef;
         let currentResult = null;
         let savedRecords = [];
+        let savedMetaRecords = [];
         let contentEl = null;
         let loadBtn = null;
         let isLoading = false;
@@ -10189,6 +10248,61 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
     `;
         };
         /**
+         * 메타 요약 대상 그룹 목록 생성
+         */
+        const getMetaGroups = (chunks) => {
+            const chunksForGroup = chunks.map((c, i) => ({
+                id: c.id,
+                index: i,
+                summary: c.summary,
+            }));
+            return groupChunksForMeta(chunksForGroup, 10);
+        };
+        /**
+         * 메타 요약 섹션 렌더링 (v3.1.0)
+         */
+        const renderMetaSummarySection = (chunks) => {
+            const metaGroups = getMetaGroups(chunks);
+            // 메타 요약 가능한 그룹이 없으면 빈 문자열
+            if (metaGroups.length === 0) {
+                return '';
+            }
+            // 각 그룹에 대해 이미 저장된 메타 요약 확인
+            const groupsHtml = metaGroups.map((group, idx) => {
+                // 이 그룹에 해당하는 저장된 메타 요약 찾기
+                const existingMeta = savedMetaRecords.find(m => m.chunkRange[0] === group.chunkRange[0] && m.chunkRange[1] === group.chunkRange[1]);
+                const hasMeta = !!existingMeta?.summary;
+                const metaId = existingMeta?.id ?? `meta-${group.chunkRange[0]}-${group.chunkRange[1]}`;
+                return `
+        <div class="gmh-meta-group ${hasMeta ? 'gmh-meta-group--saved' : ''}" data-meta-range="${group.chunkRange[0]}-${group.chunkRange[1]}">
+          <div class="gmh-meta-group__header">
+            <span class="gmh-meta-group__range">청크 ${group.chunkRange[0] + 1}~${group.chunkRange[1] + 1}</span>
+            <span class="gmh-meta-group__count">${group.chunkIds.length}개 요약</span>
+            ${hasMeta
+                ? '<span class="gmh-memory-badge gmh-memory-badge--complete">메타 완료</span>'
+                : '<span class="gmh-memory-badge gmh-memory-badge--empty">미완료</span>'}
+            <button class="gmh-small-btn gmh-small-btn--accent gmh-copy-meta-prompt" type="button" title="메타 요약 프롬프트 복사">
+              📋 프롬프트
+            </button>
+          </div>
+          <div class="gmh-meta-group__input-section">
+            <textarea class="gmh-memory-input gmh-meta-input" placeholder="메타 요약 결과를 여기에 붙여넣으세요...">${escapeHtml(existingMeta?.summary ?? '', doc)}</textarea>
+            <button class="gmh-small-btn gmh-save-meta" type="button" data-meta-id="${metaId}">저장</button>
+          </div>
+        </div>
+      `;
+            }).join('');
+            return `
+      <div class="gmh-meta-summary-section">
+        <div class="gmh-memory-section-title">🔗 메타 요약 (10개 청크 통합)</div>
+        <p class="gmh-meta-hint">요약이 완료된 청크 10개씩 묶어서 메타 요약을 생성합니다.</p>
+        <div class="gmh-meta-groups">
+          ${groupsHtml}
+        </div>
+      </div>
+    `;
+        };
+        /**
          * 유저노트 복사 버튼 렌더링
          */
         const renderUserNoteCopySection = () => {
@@ -10196,7 +10310,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
       <div class="gmh-memory-usernote-section">
         <div class="gmh-memory-section-title">유저노트용 복사</div>
         <div class="gmh-memory-usernote-actions">
-          <button class="gmh-btn gmh-btn--primary gmh-copy-all-summary" type="button" title="모든 요약을 합쳐서 복사">
+          <button class="gmh-btn gmh-btn--primary gmh-copy-all-summary" type="button" title="모든 요약을 합쳐서 복사 (계층적)">
             📋 전체 요약 복사
           </button>
           <button class="gmh-btn gmh-btn--primary gmh-copy-all-facts" type="button" title="모든 Facts를 합쳐서 복사">
@@ -10222,18 +10336,22 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             const totalMessages = chunks.reduce((sum, c) => sum + c.messages.length, 0);
             const completedCount = chunks.filter(c => c.summary?.trim() && c.facts?.trim()).length;
             const chunksHtml = chunks.map(c => renderChunkItem(c)).join('');
+            const metaCount = savedMetaRecords.length;
             contentEl.innerHTML = `
       <div class="gmh-memory-stats">
         총 ${chunks.length}개 청크 (${totalMessages}개 메시지) | 완료: ${completedCount}/${chunks.length}
+        ${metaCount > 0 ? ` | 메타: ${metaCount}개` : ''}
         ${'<span class="gmh-memory-saved-indicator">💾 저장됨</span>' }
       </div>
       <div class="gmh-memory-chunks">
         ${chunksHtml}
       </div>
+      ${renderMetaSummarySection(chunks)}
       ${renderUserNoteCopySection()}
     `;
             // 이벤트 바인딩
             bindChunkEvents(chunks);
+            bindMetaEvents(chunks);
             bindUserNoteEvents(chunks);
         };
         /**
@@ -10391,6 +10509,103 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             });
         };
         /**
+         * 메타 요약 저장 (IndexedDB)
+         */
+        const saveMetaSummary = async (metaInit) => {
+            const blockStorage = getBlockStorage?.();
+            if (!blockStorage) {
+                logger?.warn?.('[GMH] BlockStorage not available for meta save');
+                return;
+            }
+            try {
+                await blockStorage.saveMeta(metaInit);
+                logger?.log?.('[GMH] Meta summary saved:', metaInit.id);
+            }
+            catch (err) {
+                logger?.warn?.('[GMH] Failed to save meta summary:', err);
+                throw err;
+            }
+        };
+        /**
+         * 메타 요약 이벤트 바인딩 (v3.1.0)
+         */
+        const bindMetaEvents = (chunks) => {
+            if (!contentEl)
+                return;
+            const metaGroups = getMetaGroups(chunks);
+            if (metaGroups.length === 0)
+                return;
+            // 메타 프롬프트 복사 버튼
+            contentEl.querySelectorAll('.gmh-copy-meta-prompt').forEach((btn, idx) => {
+                btn.addEventListener('click', () => {
+                    const group = metaGroups[idx];
+                    if (!group)
+                        return;
+                    const prompt = buildMetaSummaryPrompt({
+                        summaries: group.summaries,
+                        chunkRange: group.chunkRange,
+                    });
+                    void doCopy(prompt, '메타 요약 프롬프트');
+                });
+            });
+            // 메타 요약 저장 버튼
+            contentEl.querySelectorAll('.gmh-save-meta').forEach((btn, idx) => {
+                btn.addEventListener('click', async () => {
+                    const groupEl = btn.closest('.gmh-meta-group');
+                    const group = metaGroups[idx];
+                    if (!group || !groupEl)
+                        return;
+                    const textarea = groupEl.querySelector('.gmh-meta-input');
+                    const value = textarea?.value?.trim() ?? '';
+                    if (!value) {
+                        showStatus?.('메타 요약 내용을 입력해주세요.', 'error');
+                        return;
+                    }
+                    const sessionUrl = getSessionUrl?.() ?? '';
+                    if (!sessionUrl) {
+                        showStatus?.('세션 URL을 찾을 수 없습니다.', 'error');
+                        return;
+                    }
+                    btn.disabled = true;
+                    btn.textContent = '저장 중...';
+                    try {
+                        const metaId = `gmh-meta-${group.chunkRange[0]}-${group.chunkRange[1]}-${Date.now()}`;
+                        const metaInit = {
+                            id: metaId,
+                            sessionUrl,
+                            chunkIds: group.chunkIds,
+                            chunkRange: group.chunkRange,
+                            summary: value,
+                            timestamp: Date.now(),
+                        };
+                        await saveMetaSummary(metaInit);
+                        // 로컬 상태 업데이트
+                        const blockStorage = getBlockStorage?.();
+                        if (blockStorage) {
+                            savedMetaRecords = await blockStorage.getMetaBySession(sessionUrl);
+                        }
+                        showStatus?.('메타 요약이 저장되었습니다.', 'success');
+                        // 배지 업데이트
+                        const badgeEl = groupEl.querySelector('.gmh-memory-badge');
+                        if (badgeEl) {
+                            badgeEl.className = 'gmh-memory-badge gmh-memory-badge--complete';
+                            badgeEl.textContent = '메타 완료';
+                        }
+                        groupEl.classList.add('gmh-meta-group--saved');
+                        // 통계 업데이트
+                        updateStats(chunks);
+                    }
+                    catch {
+                        showStatus?.('메타 요약 저장에 실패했습니다.', 'error');
+                    }
+                    finally {
+                        btn.disabled = false;
+                        btn.textContent = '저장';
+                    }
+                });
+            });
+        };
+        /**
          * 청크 배지 업데이트
          */
         const updateChunkBadge = (chunkEl, chunk) => {
@@ -10427,10 +10642,50 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             const totalMessages = chunks.reduce((sum, c) => sum + c.messages.length, 0);
             const completedCount = chunks.filter(c => c.summary?.trim() && c.facts?.trim()).length;
             const isSaved = savedRecords.length > 0;
+            const metaCount = savedMetaRecords.length;
             statsEl.innerHTML = `
       총 ${chunks.length}개 청크 (${totalMessages}개 메시지) | 완료: ${completedCount}/${chunks.length}
+      ${metaCount > 0 ? ` | 메타: ${metaCount}개` : ''}
       ${isSaved ? '<span class="gmh-memory-saved-indicator">💾 저장됨</span>' : ''}
     `;
+        };
+        /**
+         * 메타 요약으로 커버되는 청크 인덱스 집합 계산 (v3.1.0)
+         */
+        const getMetaCoveredIndices = () => {
+            const covered = new Set();
+            for (const meta of savedMetaRecords) {
+                for (let i = meta.chunkRange[0]; i <= meta.chunkRange[1]; i++) {
+                    covered.add(i);
+                }
+            }
+            return covered;
+        };
+        /**
+         * 계층적 요약 생성 (메타 요약 + 비커버 청크 요약) (v3.1.0)
+         */
+        const buildHierarchicalSummary = (chunks) => {
+            const covered = getMetaCoveredIndices();
+            const parts = [];
+            // 메타 요약 추가 (order = 첫 번째 청크 인덱스)
+            for (const meta of savedMetaRecords) {
+                parts.push({
+                    order: meta.chunkRange[0],
+                    text: `[메타 ${meta.chunkRange[0] + 1}~${meta.chunkRange[1] + 1}]\n${meta.summary}`,
+                });
+            }
+            // 비커버 청크 요약 추가
+            chunks.forEach((c, i) => {
+                if (!covered.has(i) && c.summary?.trim()) {
+                    parts.push({
+                        order: i,
+                        text: `[청크 ${i + 1}] ${formatChunkRange(c)}\n${c.summary}`,
+                    });
+                }
+            });
+            // 순서대로 정렬
+            parts.sort((a, b) => a.order - b.order);
+            return parts.map(p => p.text);
         };
         /**
          * 유저노트 복사 이벤트 바인딩
@@ -10438,19 +10693,18 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         const bindUserNoteEvents = (chunks) => {
             if (!contentEl)
                 return;
-            // 전체 요약 복사
+            // 전체 요약 복사 (계층적 - v3.1.0)
             contentEl.querySelector('.gmh-copy-all-summary')?.addEventListener('click', () => {
-                const summaries = chunks
-                    .filter(c => c.summary?.trim())
-                    .map((c, i) => `[청크 ${i + 1}] ${formatChunkRange(c)}\n${c.summary}`)
-                    .join('\n\n---\n\n');
-                if (!summaries) {
+                const parts = buildHierarchicalSummary(chunks);
+                if (parts.length === 0) {
                     showStatus?.('저장된 요약이 없습니다.', 'error');
                     return;
                 }
-                void doCopy(summaries, '전체 요약');
+                const summaries = parts.join('\n\n---\n\n');
+                const hasMetaInfo = savedMetaRecords.length > 0 ? ` (메타 ${savedMetaRecords.length}개 포함)` : '';
+                void doCopy(summaries, `전체 요약${hasMetaInfo}`);
             });
-            // 전체 Facts 복사
+            // 전체 Facts 복사 (Facts는 계층화하지 않음 - 모든 청크의 Facts 포함)
             contentEl.querySelector('.gmh-copy-all-facts')?.addEventListener('click', () => {
                 const facts = chunks
                     .filter(c => c.facts?.trim())
@@ -10462,23 +10716,22 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 }
                 void doCopy(facts, '전체 Facts');
             });
-            // 통합 복사
+            // 통합 복사 (계층적 요약 + 전체 Facts)
             contentEl.querySelector('.gmh-copy-combined')?.addEventListener('click', () => {
                 const combined = [];
                 const sessionUrl = getSessionUrl?.() ?? 'Unknown Session';
                 combined.push(`# 대화 메모리 - ${new Date().toLocaleDateString('ko-KR')}`);
                 combined.push(`세션: ${sessionUrl}\n`);
-                // 요약 섹션
-                const summaries = chunks.filter(c => c.summary?.trim());
-                if (summaries.length > 0) {
+                // 계층적 요약 섹션 (v3.1.0)
+                const summaryParts = buildHierarchicalSummary(chunks);
+                if (summaryParts.length > 0) {
                     combined.push('## 📝 요약\n');
-                    summaries.forEach((c, i) => {
-                        combined.push(`### 청크 ${i + 1} (${formatChunkRange(c)})`);
-                        combined.push(c.summary);
+                    summaryParts.forEach(part => {
+                        combined.push(part);
                         combined.push('');
                     });
                 }
-                // Facts 섹션
+                // Facts 섹션 (모든 청크)
                 const factsChunks = chunks.filter(c => c.facts?.trim());
                 if (factsChunks.length > 0) {
                     combined.push('## 📌 Facts\n');
@@ -10488,7 +10741,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                         combined.push('');
                     });
                 }
-                if (summaries.length === 0 && factsChunks.length === 0) {
+                if (summaryParts.length === 0 && factsChunks.length === 0) {
                     showStatus?.('저장된 요약/Facts가 없습니다.', 'error');
                     return;
                 }
@@ -10583,7 +10836,10 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 logger?.log?.('[GMH] BlockStorage ready after wait');
             }
             try {
+                // 청크 로드
                 savedRecords = await blockStorage.getBySession(sessionUrl);
+                // 메타 요약 로드 (v3.1.0)
+                savedMetaRecords = await blockStorage.getMetaBySession(sessionUrl);
                 if (savedRecords.length > 0) {
                     const chunks = savedRecords.map(blockRecordToChunk);
                     currentResult = {
@@ -10593,8 +10849,9 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                         createdAt: savedRecords[0]?.timestamp ?? Date.now(),
                     };
                     renderChunks(chunks, true);
-                    showStatus?.(`${chunks.length}개 저장된 청크를 불러왔습니다.`, 'info');
-                    logger?.log?.('[GMH] Loaded saved chunks:', chunks.length);
+                    const metaInfo = savedMetaRecords.length > 0 ? ` (메타 ${savedMetaRecords.length}개)` : '';
+                    showStatus?.(`${chunks.length}개 저장된 청크를 불러왔습니다.${metaInfo}`, 'info');
+                    logger?.log?.('[GMH] Loaded saved chunks:', chunks.length, 'meta:', savedMetaRecords.length);
                 }
             }
             catch (err) {
@@ -10627,6 +10884,7 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         const destroy = () => {
             currentResult = null;
             savedRecords = [];
+            savedMetaRecords = [];
             contentEl = null;
             loadBtn = null;
             isLoading = false;
@@ -13372,7 +13630,8 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
 
     const DEFAULT_DB_NAME = 'gmh-memory-blocks';
     const DEFAULT_STORE_NAME = 'blocks';
-    const DEFAULT_DB_VERSION = 1;
+    const META_STORE_NAME = 'meta-summaries';
+    const DEFAULT_DB_VERSION = 2; // v2: meta-summaries store 추가
     const compareRecords = (a, b) => {
         if (a.startOrdinal !== b.startOrdinal) {
             return a.startOrdinal - b.startOrdinal;
@@ -13545,6 +13804,82 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             return console;
         return null;
     };
+    // ============================================================================
+    // Meta Summary Helpers (v3.1.0)
+    // ============================================================================
+    const compareMetaRecords = (a, b) => {
+        // chunkRange[0]으로 정렬 (청크 시작 인덱스)
+        if (a.chunkRange[0] !== b.chunkRange[0]) {
+            return a.chunkRange[0] - b.chunkRange[0];
+        }
+        if (a.timestamp !== b.timestamp) {
+            return a.timestamp - b.timestamp;
+        }
+        return a.id.localeCompare(b.id);
+    };
+    const normalizeMetaSummary = (meta) => {
+        if (!meta || typeof meta !== 'object') {
+            throw new TypeError('Meta summary payload must be an object.');
+        }
+        const id = typeof meta.id === 'string' ? meta.id.trim() : String(meta.id ?? '').trim();
+        if (!id) {
+            throw new Error('Meta summary requires a stable id.');
+        }
+        const sessionUrl = typeof meta.sessionUrl === 'string' ? meta.sessionUrl.trim() : String(meta.sessionUrl ?? '').trim();
+        if (!sessionUrl) {
+            throw new Error('Meta summary requires sessionUrl.');
+        }
+        const chunkIds = Array.isArray(meta.chunkIds) ? meta.chunkIds.filter((id) => typeof id === 'string') : [];
+        if (chunkIds.length === 0) {
+            throw new Error('Meta summary requires at least one chunkId.');
+        }
+        const chunkRangeCandidate = Array.isArray(meta.chunkRange) ? meta.chunkRange : [NaN, NaN];
+        const chunkStart = Number(chunkRangeCandidate[0]);
+        const chunkEnd = Number(chunkRangeCandidate[1]);
+        if (!Number.isFinite(chunkStart) || !Number.isFinite(chunkEnd)) {
+            throw new Error('Meta summary requires a finite chunkRange.');
+        }
+        const summary = typeof meta.summary === 'string' ? meta.summary.trim() : '';
+        if (!summary) {
+            throw new Error('Meta summary requires summary text.');
+        }
+        const timestamp = Number(meta.timestamp);
+        if (!Number.isFinite(timestamp)) {
+            throw new Error('Meta summary requires a numeric timestamp.');
+        }
+        return {
+            id,
+            sessionUrl,
+            chunkIds: [...chunkIds],
+            chunkRange: [chunkStart, chunkEnd],
+            summary,
+            timestamp,
+            chunkCount: chunkIds.length,
+        };
+    };
+    const cloneMetaRecord = (record) => ({
+        id: record.id,
+        sessionUrl: record.sessionUrl,
+        chunkIds: [...record.chunkIds],
+        chunkRange: [record.chunkRange[0], record.chunkRange[1]],
+        summary: record.summary,
+        timestamp: record.timestamp,
+        chunkCount: record.chunkCount,
+    });
+    const sanitizeMetaRecord = (record) => {
+        const chunkStart = Number.isFinite(record.chunkRange?.[0]) ? record.chunkRange[0] : 0;
+        const chunkEnd = Number.isFinite(record.chunkRange?.[1]) ? record.chunkRange[1] : chunkStart;
+        const chunkIds = Array.isArray(record.chunkIds) ? record.chunkIds : [];
+        return {
+            id: String(record.id),
+            sessionUrl: String(record.sessionUrl),
+            chunkIds: [...chunkIds],
+            chunkRange: [chunkStart, chunkEnd],
+            summary: typeof record.summary === 'string' ? record.summary : '',
+            timestamp: Number.isFinite(record.timestamp) ? record.timestamp : Date.now(),
+            chunkCount: chunkIds.length,
+        };
+    };
     const selectIndexedDB = (factory) => {
         if (factory)
             return factory;
@@ -13609,14 +13944,58 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             },
         };
     };
+    const createMetaMemoryEngine = () => {
+        const buckets = new Map();
+        return {
+            async put(record) {
+                buckets.set(record.id, cloneMetaRecord(record));
+            },
+            async get(id) {
+                const record = buckets.get(id);
+                return record ? cloneMetaRecord(record) : null;
+            },
+            async getBySession(sessionUrl) {
+                const records = [];
+                for (const entry of buckets.values()) {
+                    if (entry.sessionUrl === sessionUrl) {
+                        records.push(cloneMetaRecord(entry));
+                    }
+                }
+                records.sort(compareMetaRecords);
+                return records;
+            },
+            async delete(id) {
+                return buckets.delete(id);
+            },
+            async clear(sessionUrl) {
+                if (!sessionUrl) {
+                    const removed = buckets.size;
+                    buckets.clear();
+                    return removed;
+                }
+                let removed = 0;
+                for (const [key, record] of buckets.entries()) {
+                    if (record.sessionUrl === sessionUrl) {
+                        buckets.delete(key);
+                        removed += 1;
+                    }
+                }
+                return removed;
+            },
+            close() {
+                buckets.clear();
+            },
+        };
+    };
     const openIndexedDB = (factory, config) => new Promise((resolve, reject) => {
         const request = factory.open(config.dbName, config.version);
         request.onerror = () => reject(request.error ?? new Error('Failed to open IndexedDB for block storage.'));
         request.onupgradeneeded = (event) => {
             const db = request.result;
-            const storeExists = db.objectStoreNames.contains(config.storeName);
             const oldVersion = Number(event.oldVersion || 0);
-            if (!storeExists) {
+            // v1: blocks store
+            const blocksStoreExists = db.objectStoreNames.contains(config.storeName);
+            if (!blocksStoreExists) {
                 const store = db.createObjectStore(config.storeName, { keyPath: 'id' });
                 store.createIndex('sessionUrl', 'sessionUrl', { unique: false });
                 store.createIndex('startOrdinal', 'startOrdinal', { unique: false });
@@ -13627,6 +14006,13 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                 store?.createIndex?.('sessionUrl', 'sessionUrl', { unique: false });
                 store?.createIndex?.('startOrdinal', 'startOrdinal', { unique: false });
                 store?.createIndex?.('timestamp', 'timestamp', { unique: false });
+            }
+            // v2: meta-summaries store (v3.1.0)
+            const metaStoreExists = db.objectStoreNames.contains(META_STORE_NAME);
+            if (!metaStoreExists && config.version >= 2) {
+                const metaStore = db.createObjectStore(META_STORE_NAME, { keyPath: 'id' });
+                metaStore.createIndex('sessionUrl', 'sessionUrl', { unique: false });
+                metaStore.createIndex('timestamp', 'timestamp', { unique: false });
             }
         };
         request.onsuccess = () => resolve(request.result);
@@ -13653,6 +14039,33 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             }
             catch (abortErr) {
                 config.console?.warn?.('[GMH] Failed to abort block storage transaction', abortErr);
+            }
+            await completion.catch(() => undefined);
+            throw err;
+        }
+    };
+    const runMetaTransaction = async (dbPromise, config, mode, executor) => {
+        const db = await dbPromise;
+        const tx = db.transaction(META_STORE_NAME, mode);
+        const store = tx.objectStore(META_STORE_NAME);
+        const completion = new Promise((resolve, reject) => {
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error ?? new Error('IndexedDB meta transaction failed'));
+            tx.onabort = () => reject(tx.error ?? new Error('IndexedDB meta transaction aborted'));
+        });
+        try {
+            const result = await executor(store);
+            await completion;
+            return result;
+        }
+        catch (err) {
+            try {
+                if (tx.readyState !== 'done') {
+                    tx.abort();
+                }
+            }
+            catch (abortErr) {
+                config.console?.warn?.('[GMH] Failed to abort meta storage transaction', abortErr);
             }
             await completion.catch(() => undefined);
             throw err;
@@ -13734,6 +14147,69 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
             },
         };
     };
+    const createMetaIndexedDBEngine = async (factory, config) => {
+        const dbPromise = openIndexedDB(factory, config);
+        return {
+            async put(record) {
+                await runMetaTransaction(dbPromise, config, 'readwrite', async (store) => {
+                    await requestToPromise(store.put(record));
+                    return undefined;
+                });
+            },
+            async get(id) {
+                const record = await runMetaTransaction(dbPromise, config, 'readonly', async (store) => {
+                    const result = await requestToPromise(store.get(id));
+                    return result ?? null;
+                });
+                return record ? sanitizeMetaRecord(record) : null;
+            },
+            async getBySession(sessionUrl) {
+                const records = await runMetaTransaction(dbPromise, config, 'readonly', async (store) => {
+                    const index = store.index('sessionUrl');
+                    const result = await requestToPromise(index.getAll(sessionUrl));
+                    return result ?? [];
+                });
+                const sanitized = records.map((record) => sanitizeMetaRecord(record));
+                sanitized.sort(compareMetaRecords);
+                return sanitized;
+            },
+            async delete(id) {
+                return runMetaTransaction(dbPromise, config, 'readwrite', async (store) => {
+                    const existing = await requestToPromise(store.get(id));
+                    if (!existing)
+                        return false;
+                    await requestToPromise(store.delete(id));
+                    return true;
+                });
+            },
+            async clear(sessionUrl) {
+                if (!sessionUrl) {
+                    return runMetaTransaction(dbPromise, config, 'readwrite', async (store) => {
+                        const total = await requestToPromise(store.count());
+                        await requestToPromise(store.clear());
+                        return total;
+                    });
+                }
+                return runMetaTransaction(dbPromise, config, 'readwrite', async (store) => {
+                    const index = store.index('sessionUrl');
+                    const keys = await requestToPromise(index.getAllKeys(sessionUrl));
+                    let removed = 0;
+                    for (const key of keys) {
+                        await requestToPromise(store.delete(key));
+                        removed += 1;
+                    }
+                    return removed;
+                });
+            },
+            close() {
+                dbPromise
+                    .then((db) => db.close())
+                    .catch((err) => {
+                    config.console?.warn?.('[GMH] Failed to close meta storage database', err);
+                });
+            },
+        };
+    };
     const createBlockStorage = async (options = {}) => {
         const consoleRef = selectConsole(options.console ?? null);
         const dbName = typeof options.dbName === 'string' && options.dbName.trim() ? options.dbName.trim() : DEFAULT_DB_NAME;
@@ -13743,20 +14219,25 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
         const versionCandidate = Number(options.version);
         const version = Number.isFinite(versionCandidate) && versionCandidate > 0 ? Math.floor(versionCandidate) : DEFAULT_DB_VERSION;
         const factory = selectIndexedDB(options.indexedDB ?? null);
+        const config = {
+            dbName,
+            storeName,
+            version,
+            console: consoleRef,
+        };
         let engine;
+        let metaEngine;
         if (factory) {
-            engine = await createIndexedDBEngine(factory, {
-                dbName,
-                storeName,
-                version,
-                console: consoleRef,
-            });
+            engine = await createIndexedDBEngine(factory, config);
+            metaEngine = await createMetaIndexedDBEngine(factory, config);
         }
         else {
             consoleRef?.warn?.('[GMH] IndexedDB unavailable. Falling back to in-memory block storage.');
             engine = createMemoryEngine();
+            metaEngine = createMetaMemoryEngine();
         }
         const controller = {
+            // Block methods
             async save(block) {
                 const record = normalizeBlock(block);
                 await engine.put(record);
@@ -13790,8 +14271,28 @@ https://github.com/devforai-creator/genit-memory-helper/issues`);
                     sessions: sessions.size,
                 };
             },
+            // Meta summary methods (v3.1.0)
+            async saveMeta(meta) {
+                const record = normalizeMetaSummary(meta);
+                await metaEngine.put(record);
+            },
+            async getMeta(id) {
+                const record = await metaEngine.get(id);
+                return record ? cloneMetaRecord(record) : null;
+            },
+            async getMetaBySession(sessionUrl) {
+                const records = await metaEngine.getBySession(sessionUrl);
+                return records.map((record) => cloneMetaRecord(record));
+            },
+            async deleteMeta(id) {
+                return metaEngine.delete(id);
+            },
+            async clearMeta(sessionUrl) {
+                return metaEngine.clear(sessionUrl);
+            },
             close() {
                 engine.close();
+                metaEngine.close();
             },
         };
         return controller;

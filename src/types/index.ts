@@ -543,6 +543,40 @@ export interface BlockStorageController {
   clear(sessionUrl?: string): Promise<number>;
   getStats(): Promise<BlockStorageStats>;
   close(): void;
+
+  // Meta Summary methods (v3.1.0)
+  saveMeta(meta: MetaSummaryInit): Promise<void>;
+  getMeta(id: string): Promise<MetaSummaryRecord | null>;
+  getMetaBySession(sessionUrl: string): Promise<MetaSummaryRecord[]>;
+  deleteMeta(id: string): Promise<boolean>;
+  clearMeta(sessionUrl?: string): Promise<number>;
+}
+
+/**
+ * 메타 요약 초기화 데이터 (v3.1.0)
+ * 10개 청크 요약을 1개로 통합
+ */
+export interface MetaSummaryInit {
+  /** 고유 ID (예: meta-{sessionHash}-{index}) */
+  id: string;
+  /** 세션 URL */
+  sessionUrl: string;
+  /** 포함된 청크 ID 목록 (10개) */
+  chunkIds: string[];
+  /** 청크 인덱스 범위 [시작, 끝] (예: [0, 9], [10, 19]) */
+  chunkRange: [number, number];
+  /** 메타 요약 결과 텍스트 */
+  summary: string;
+  /** 생성 시각 */
+  timestamp: number;
+}
+
+/**
+ * 저장된 메타 요약 레코드 (v3.1.0)
+ */
+export interface MetaSummaryRecord extends MetaSummaryInit {
+  /** 포함된 청크 개수 */
+  chunkCount: number;
 }
 
 export interface BlockStorageOptions {

@@ -30,6 +30,76 @@ export const DEFAULT_FACTS_PROMPT = `다음 대화에서 나중에 참조할 가
 [대화 내용]
 {chunk}`;
 
+/** 메타 요약 프롬프트 템플릿 (v3.1.0) */
+export const DEFAULT_META_SUMMARY_PROMPT = `다음은 대화의 각 부분을 요약한 것입니다. 이 요약들을 하나의 통합 요약으로 압축해주세요.
+
+요구사항:
+- 전체 대화의 핵심 흐름과 주요 발전을 담아주세요
+- 반복되는 내용은 한 번만 언급
+- 500자 이내로 작성
+- 시간 순서대로 주요 사건/변화를 정리
+
+[청크 요약들]
+{summaries}`;
+
+/** 메타 요약 입력용 정보 인터페이스 */
+export interface MetaSummaryInput {
+  chunkIds: string[];
+  summaries: string[];
+  chunkRange: [number, number]; // [시작 청크 인덱스, 끝 청크 인덱스]
+}
+
+/**
+ * 메타 요약 프롬프트 생성 (v3.1.0)
+ *
+ * @param input - 메타 요약에 필요한 청크 요약들
+ * @param customTemplate - 사용자 정의 템플릿 (선택)
+ * @returns 완성된 프롬프트
+ */
+export const buildMetaSummaryPrompt = (
+  input: MetaSummaryInput,
+  customTemplate?: string,
+): string => {
+  const template = customTemplate ?? DEFAULT_META_SUMMARY_PROMPT;
+
+  // 각 청크 요약을 번호와 함께 포맷
+  const formattedSummaries = input.summaries
+    .map((summary, i) => `[${input.chunkRange[0] + i + 1}] ${summary}`)
+    .join('\n\n');
+
+  return template.replace('{summaries}', formattedSummaries);
+};
+
+/**
+ * 메타 요약 대상 청크 그룹화 (10개씩)
+ *
+ * @param chunks - 모든 청크 (요약이 있는 것만)
+ * @param groupSize - 그룹 크기 (기본 10)
+ * @returns 메타 요약이 필요한 그룹들
+ */
+export const groupChunksForMeta = (
+  chunks: Array<{ id: string; index: number; summary?: string }>,
+  groupSize = 10,
+): Array<{ chunkIds: string[]; chunkRange: [number, number]; summaries: string[] }> => {
+  // 요약이 있는 청크만 필터링
+  const withSummary = chunks.filter(c => c.summary && c.summary.trim());
+
+  const groups: Array<{ chunkIds: string[]; chunkRange: [number, number]; summaries: string[] }> = [];
+
+  for (let i = 0; i < withSummary.length; i += groupSize) {
+    const group = withSummary.slice(i, i + groupSize);
+    if (group.length === groupSize) {
+      groups.push({
+        chunkIds: group.map(c => c.id),
+        chunkRange: [group[0].index, group[group.length - 1].index],
+        summaries: group.map(c => c.summary!),
+      });
+    }
+  }
+
+  return groups;
+};
+
 /**
  * 프롬프트에 청크 내용 삽입
  */
@@ -86,8 +156,11 @@ export const getChunkPreview = (chunk: MemoryChunk, maxLength = 100): string => 
 export default {
   DEFAULT_SUMMARY_PROMPT,
   DEFAULT_FACTS_PROMPT,
+  DEFAULT_META_SUMMARY_PROMPT,
   buildSummaryPrompt,
   buildFactsPrompt,
+  buildMetaSummaryPrompt,
+  groupChunksForMeta,
   formatChunkRange,
   getChunkPreview,
 };
