@@ -5,10 +5,10 @@
 [![All Contributors](https://img.shields.io/badge/all_contributors-2-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
 ![Project Status](https://img.shields.io/badge/status-active-brightgreen?style=flat-square)
-![Version](https://img.shields.io/badge/version-v2.4.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-v3.0.0-blue?style=flat-square)
 
-> **🚀 프로젝트 상태: 멀티플랫폼 확장 진행 중**
-> v2.2.0부터 babechat.ai 지원이 추가되었습니다. 향후 더 많은 AI 챗봇 플랫폼을 지원할 예정입니다.
+> **🚀 v3.0.0: Dual Memory System 출시!**
+> 대화를 청크 단위로 분할하여 요약/Facts를 생성하고 저장하는 이중 기억 시스템이 추가되었습니다.
 
 > **⚠️ v2.2.0 이름 변경 안내**
 > "Genit Memory Helper" → "General Memory Helper"로 이름이 변경되었습니다.
@@ -94,6 +94,40 @@ localStorage.removeItem("gmh_kill"); // 킬스위치 해제 (기능 복구)
 
 - 킬스위치(`gmh_kill`)가 켜져 있으면 GMH 스크립트가 완전히 비활성화됩니다.
 - 문제가 해결되면 킬스위치를 해제하고 페이지를 새로고침하세요.
+
+### 🧠 Dual Memory System (v3.0.0+)
+
+v3.0.0부터 대화를 **10개 메시지 단위 청크**로 분할하여 **요약과 Facts를 생성**하고 브라우저에 영구 저장하는 기능이 추가되었습니다.
+
+#### 주요 기능
+
+1. **청킹**: 대화를 10개 메시지 단위로 자동 분할
+2. **요약 프롬프트**: 각 청크에 대해 LLM 요약 생성용 프롬프트 복사
+3. **Facts 프롬프트**: 청크에서 구체적 사실(이름, 날짜, 약속 등) 추출용 프롬프트 복사
+4. **결과 저장**: 외부 LLM에서 생성한 요약/Facts를 붙여넣기하여 IndexedDB에 영구 저장
+5. **유저노트 복사**: 전체 요약/Facts/통합본을 클립보드에 복사하여 플랫폼 유저노트에 붙여넣기
+
+#### 사용 방법
+
+1. GMH 패널에서 **"🧠 Dual Memory"** 섹션 찾기
+2. **"메시지 청킹"** 버튼 클릭 → 대화가 10개 메시지 단위로 분할됨
+3. 각 청크에서 **"요약 복사"** 또는 **"Facts 복사"** 클릭
+4. ChatGPT/Claude 등 외부 LLM에 붙여넣기 → 결과 받기
+5. **"결과 입력"** 버튼 클릭 → LLM 결과 붙여넣기 → **"저장"**
+6. 모든 청크 처리 후 **"유저노트 복사"** → 플랫폼 유저노트에 붙여넣기
+
+#### 유저노트 복사 옵션
+
+- **전체 요약**: 모든 청크의 요약만 모아서 복사
+- **전체 Facts**: 모든 청크의 Facts만 모아서 복사
+- **통합 (요약+Facts)**: 요약과 Facts를 함께 복사
+
+**참고**:
+- 데이터는 브라우저별로 저장되며 기기 간 동기화되지 않습니다.
+- 시크릿 모드나 브라우저 초기화 시 데이터가 삭제될 수 있습니다.
+- 저장된 요약/Facts는 세션별로 관리되며, 같은 대화를 다시 열면 자동으로 불러옵니다.
+
+---
 
 ### 🧪 실험 기능: 메모리 인덱스 (v2.1.0+)
 
