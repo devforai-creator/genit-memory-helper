@@ -516,6 +516,10 @@ export interface MemoryBlockInit {
   timestamp: number;
   embedding?: ArrayBuffer | ArrayBufferView | null;
   meta?: Record<string, unknown>;
+  /** LLM이 생성한 요약 (Dual Memory Phase 2) */
+  summary?: string;
+  /** LLM이 생성한 Facts (Dual Memory Phase 2) */
+  facts?: string;
 }
 
 export interface MemoryBlockRecord extends Omit<MemoryBlockInit, 'embedding'> {
@@ -958,6 +962,7 @@ export interface PanelInteractionsOptions {
   ensureAutoLoadControlsModern?(panel: Element): void;
   mountStatusActionsModern?(panel: Element): void;
   mountMemoryStatusModern?(panel: Element): void;
+  mountDualMemoryModern?(panel: Element): void;
   bindRangeControls(panel: Element): void;
   bindShortcuts(panel: Element): void;
   prepareShare: ShareWorkflowApi['prepareShare'];

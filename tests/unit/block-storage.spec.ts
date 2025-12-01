@@ -168,4 +168,127 @@ describe('block storage (memory fallback)', () => {
     expect(second?.messages[0].speaker).toBe('Player');
     expect(second?.ordinalRange[0]).toBe(block.ordinalRange[0]);
   });
+
+  describe('summary/facts fields (Dual Memory Phase 2)', () => {
+    it('stores and retrieves summary field', async () => {
+      const block = buildBlock({
+        id: 'summary-block',
+        summary: 'This is a test summary of the conversation.',
+      });
+      await storage.save(block);
+
+      const result = await storage.get('summary-block');
+      expect(result?.summary).toBe('This is a test summary of the conversation.');
+    });
+
+    it('stores and retrieves facts field', async () => {
+      const block = buildBlock({
+        id: 'facts-block',
+        facts: '- Fact 1: User likes coffee\n- Fact 2: Meeting scheduled for Friday',
+      });
+      await storage.save(block);
+
+      const result = await storage.get('facts-block');
+      expect(result?.facts).toBe('- Fact 1: User likes coffee\n- Fact 2: Meeting scheduled for Friday');
+    });
+
+    it('stores both summary and facts together', async () => {
+      const block = buildBlock({
+        id: 'dual-memory-block',
+        summary: 'User discussed their morning routine.',
+        facts: '- Wakes up at 6am\n- Drinks green tea',
+      });
+      await storage.save(block);
+
+      const result = await storage.get('dual-memory-block');
+      expect(result?.summary).toBe('User discussed their morning routine.');
+      expect(result?.facts).toBe('- Wakes up at 6am\n- Drinks green tea');
+    });
+
+    it('preserves summary/facts in getBySession results', async () => {
+      const sessionUrl = 'https://genit.ai/chat/dual-test';
+      const block1 = buildBlock({
+        id: 'session-block-1',
+        sessionUrl,
+        summary: 'Summary 1',
+        facts: 'Facts 1',
+      });
+      const block2 = buildBlock({
+        id: 'session-block-2',
+        sessionUrl,
+        summary: 'Summary 2',
+      });
+      await storage.save(block1);
+      await storage.save(block2);
+
+      const blocks = await storage.getBySession(sessionUrl);
+      expect(blocks).toHaveLength(2);
+      expect(blocks[0].summary).toBe('Summary 1');
+      expect(blocks[0].facts).toBe('Facts 1');
+      expect(blocks[1].summary).toBe('Summary 2');
+      expect(blocks[1].facts).toBeUndefined();
+    });
+
+    it('trims whitespace from summary and facts', async () => {
+      const block = buildBlock({
+        id: 'whitespace-block',
+        summary: '  Padded summary  ',
+        facts: '  \n  Padded facts  \n  ',
+      });
+      await storage.save(block);
+
+      const result = await storage.get('whitespace-block');
+      expect(result?.summary).toBe('Padded summary');
+      expect(result?.facts).toBe('Padded facts');
+    });
+
+    it('ignores empty summary and facts', async () => {
+      const block = buildBlock({
+        id: 'empty-fields-block',
+        summary: '   ',
+        facts: '',
+      });
+      await storage.save(block);
+
+      const result = await storage.get('empty-fields-block');
+      expect(result?.summary).toBeUndefined();
+      expect(result?.facts).toBeUndefined();
+    });
+
+    it('updates summary/facts on re-save', async () => {
+      const block = buildBlock({
+        id: 'update-block',
+        summary: 'Initial summary',
+      });
+      await storage.save(block);
+
+      // Update with new summary and add facts
+      await storage.save({
+        ...block,
+        summary: 'Updated summary',
+        facts: 'New facts added',
+      });
+
+      const result = await storage.get('update-block');
+      expect(result?.summary).toBe('Updated summary');
+      expect(result?.facts).toBe('New facts added');
+    });
+
+    it('clones summary/facts to prevent mutation', async () => {
+      const block = buildBlock({
+        id: 'clone-test-block',
+        summary: 'Original summary',
+        facts: 'Original facts',
+      });
+      await storage.save(block);
+
+      const first = await storage.get('clone-test-block');
+      if (first) {
+        (first as { summary: string }).summary = 'Mutated';
+      }
+
+      const second = await storage.get('clone-test-block');
+      expect(second?.summary).toBe('Original summary');
+    });
+  });
 });

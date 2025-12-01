@@ -23,6 +23,7 @@ export function createPanelInteractions({
   ensureAutoLoadControlsModern,
   mountStatusActionsModern,
   mountMemoryStatusModern,
+  mountDualMemoryModern,
   bindRangeControls,
   bindShortcuts,
   prepareShare,
@@ -209,6 +210,7 @@ export function createPanelInteractions({
     });
 
     mountMemoryStatusModern?.(panel);
+    mountDualMemoryModern?.(panel);
     ensureAutoLoadControlsModern?.(panel);
     mountStatusActionsModern?.(panel);
 
