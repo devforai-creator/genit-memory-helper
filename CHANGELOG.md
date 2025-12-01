@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+## v3.0.0 (2025-12-01)
+
+### ✨ New Features
+
+- **Dual Memory System (이중 기억 시스템)**: 대화를 청크 단위로 분할하여 요약/Facts를 생성하고 IndexedDB에 영구 저장하는 새로운 기억 관리 시스템
+  - **10메시지 청킹**: 대화를 10개 메시지 단위로 자동 분할
+  - **요약 프롬프트**: 각 청크에 대해 LLM 요약 생성용 프롬프트 복사 기능
+  - **Facts 프롬프트**: 청크에서 구체적 사실 추출용 프롬프트 복사 기능
+  - **결과 입력 UI**: 외부 LLM에서 생성한 요약/Facts를 붙여넣기하는 인터페이스
+  - **IndexedDB 영구 저장**: 청크별 요약/Facts를 브라우저에 영구 저장
+  - **유저노트 복사**: 전체 요약/Facts/통합본을 클립보드에 복사하여 플랫폼 유저노트에 붙여넣기
+
+### 🏗️ Architecture
+
+- **memory-chunker.ts**: 메시지 청킹 및 청크↔블록 변환 함수
+  - `createChunks()`: 메시지 배열을 청크로 분할
+  - `chunkToBlockInit()`: MemoryChunk → MemoryBlockInit 변환
+  - `blockRecordToChunk()`: MemoryBlockRecord → MemoryChunk 변환
+- **memory-prompts.ts**: 요약/Facts 프롬프트 템플릿 및 빌더 함수
+- **dual-memory-controls.ts**: 청킹 UI, 결과 입력, IndexedDB 저장/로드, 유저노트 복사
+- **memory-panel.ts**: Dual Memory 패널 렌더링 및 상태 관리
+- **block-storage.ts 확장**: `summary`/`facts` 필드 저장 및 조회 지원
+
+### 🧪 Tests
+
+- **memory-chunker.spec.ts** (+17개): 청킹, 프롬프트 생성, 변환 함수 테스트
+- **block-storage.spec.ts** (+8개): summary/facts 저장, 조회, 클론 테스트
+- 테스트 커버리지: 159 → 194개 (+35개, +22%)
+
+### 📚 Documentation
+
+- **docs/DUAL_MEMORY_SYSTEM.md**: Dual Memory 시스템 설계 문서
+- **ROADMAP.md**: v3.0.0 체크리스트 완료 표시
+
+## v2.5.0 (2025-11-30)
+
 ### 🔧 Internal
 
 - **디버그 로깅 시스템**: `ENV.debugLog()` 추가 - `gmh_debug=1` 플래그 활성화 시에만 콘솔 출력
