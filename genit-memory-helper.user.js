@@ -2663,6 +2663,9 @@ var GMHBundle = (function (exports) {
         // Install fetch interceptor to capture API parameters
         installFetchInterceptor();
         let playerNameAccessor = typeof getPlayerNames === 'function' ? getPlayerNames : () => [];
+        // API rate limiting (60 seconds cooldown)
+        const API_COOLDOWN_MS = 60 * 1000;
+        let lastApiFetchTime = 0;
         const warnWithHandler = (err, context, fallbackMessage) => {
             if (errorHandler?.handle) {
                 const level = errorHandler.LEVELS?.WARN || 'warn';
@@ -3373,9 +3376,22 @@ var GMHBundle = (function (exports) {
             };
         };
         /**
+         * Get remaining API cooldown time in milliseconds
+         */
+        const getApiCooldownRemaining = () => {
+            const elapsed = Date.now() - lastApiFetchTime;
+            return Math.max(0, API_COOLDOWN_MS - elapsed);
+        };
+        /**
          * Fetch all messages via API (bypasses virtual scroll limitation)
          */
         const fetchAllMessagesViaApi = async () => {
+            // Check rate limit
+            const cooldownRemaining = getApiCooldownRemaining();
+            if (cooldownRemaining > 0) {
+                const secondsRemaining = Math.ceil(cooldownRemaining / 1000);
+                throw new Error(`API 호출 쿨다운 중입니다. ${secondsRemaining}초 후에 다시 시도해주세요.`);
+            }
             const sessionInfo = extractSessionInfo();
             if (!sessionInfo) {
                 throw new Error('Could not extract session info - babechat API call not captured yet. Try scrolling first.');
@@ -3483,6 +3499,9 @@ var GMHBundle = (function (exports) {
                 msg.index = idx;
                 msg.ordinal = idx;
             });
+            // Update cooldown timestamp on successful fetch
+            lastApiFetchTime = Date.now();
+            ENV.debugLog(`[GMH] API fetch complete. Cooldown started (${API_COOLDOWN_MS / 1000}s)`);
             return allMessages;
         };
         /**
@@ -3515,6 +3534,7 @@ var GMHBundle = (function (exports) {
             extractSessionInfo,
             fetchAllMessagesViaApi,
             canUseApiCollection,
+            getApiCooldownRemaining,
         };
         return babechatAdapter;
     };

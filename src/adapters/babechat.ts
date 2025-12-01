@@ -260,6 +260,8 @@ export interface BabechatAdapter {
   fetchAllMessagesViaApi(): Promise<StructuredSnapshotMessage[]>;
   /** Check if API-based collection is available */
   canUseApiCollection(): boolean;
+  /** Get remaining API cooldown time in milliseconds (0 if ready) */
+  getApiCooldownRemaining(): number;
 }
 
 export const createBabechatAdapter = ({
@@ -272,6 +274,10 @@ export const createBabechatAdapter = ({
   installFetchInterceptor();
 
   let playerNameAccessor: () => unknown = typeof getPlayerNames === 'function' ? getPlayerNames : () => [];
+
+  // API rate limiting (60 seconds cooldown)
+  const API_COOLDOWN_MS = 60 * 1000;
+  let lastApiFetchTime = 0;
 
   const warnWithHandler = (err: unknown, context: string, fallbackMessage: string): void => {
     if (errorHandler?.handle) {
@@ -1081,9 +1087,24 @@ export const createBabechatAdapter = ({
   };
 
   /**
+   * Get remaining API cooldown time in milliseconds
+   */
+  const getApiCooldownRemaining = (): number => {
+    const elapsed = Date.now() - lastApiFetchTime;
+    return Math.max(0, API_COOLDOWN_MS - elapsed);
+  };
+
+  /**
    * Fetch all messages via API (bypasses virtual scroll limitation)
    */
   const fetchAllMessagesViaApi = async (): Promise<StructuredSnapshotMessage[]> => {
+    // Check rate limit
+    const cooldownRemaining = getApiCooldownRemaining();
+    if (cooldownRemaining > 0) {
+      const secondsRemaining = Math.ceil(cooldownRemaining / 1000);
+      throw new Error(`API 호출 쿨다운 중입니다. ${secondsRemaining}초 후에 다시 시도해주세요.`);
+    }
+
     const sessionInfo = extractSessionInfo();
     if (!sessionInfo) {
       throw new Error('Could not extract session info - babechat API call not captured yet. Try scrolling first.');
@@ -1212,6 +1233,10 @@ export const createBabechatAdapter = ({
       msg.ordinal = idx;
     });
 
+    // Update cooldown timestamp on successful fetch
+    lastApiFetchTime = Date.now();
+    ENV.debugLog(`[GMH] API fetch complete. Cooldown started (${API_COOLDOWN_MS / 1000}s)`);
+
     return allMessages;
   };
 
@@ -1246,6 +1271,7 @@ export const createBabechatAdapter = ({
     extractSessionInfo,
     fetchAllMessagesViaApi,
     canUseApiCollection,
+    getApiCooldownRemaining,
   };
 
   return babechatAdapter;
