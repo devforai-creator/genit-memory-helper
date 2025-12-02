@@ -38,6 +38,20 @@ AI 챗봇 대화 로그를 **구조 보존 JSON/Markdown**으로 추출하고 �
    "Install" 버튼을 눌러주면 완료됩니다 ✅
 ![설치 성공](assets/images/2.png)
 ![설치 성공](assets/images/3.png)
+
+### ⚠️ Chrome/Edge 사용자 필독 (Manifest V3)
+
+2024년부터 Chrome/Edge 정책이 변경되어 Tampermonkey 같은 유저스크립트 확장은 **개발자 모드**를 활성화해야 작동합니다.
+
+**설정 방법:**
+1. 주소창에 `chrome://extensions` 입력 (Edge는 `edge://extensions`)
+2. 오른쪽 상단 **"개발자 모드"** 토글 켜기
+3. Tampermonkey 항목 찾아서 **"세부정보"** 클릭
+4. **"사이트 액세스"** 또는 **"파일 URL에 대한 액세스 허용"** 옵션이 있으면 켜기
+5. genit.ai 또는 babechat.ai로 돌아가서 새로고침
+
+> 💡 이 설정은 최초 1회만 하면 되며, 이후에는 자동으로 유지됩니다.
+
 ---
 
 ### 🔄 업데이트
