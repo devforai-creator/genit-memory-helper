@@ -21,3 +21,4 @@ privacy-test.log
 # Sample files
 samples/
 .aider*
+coverage/
