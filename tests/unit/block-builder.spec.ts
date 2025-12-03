@@ -170,4 +170,87 @@ describe('block builder', () => {
     expect(second).toHaveLength(0);
     expect(builder.getBuffer()).toHaveLength(1);
   });
+
+  it('primes from previous blocks to seed ordinals and seen IDs', () => {
+    const builder = createBlockBuilder({
+      blockSize: 2,
+      overlap: 0,
+      clock,
+      sessionUrl: 'https://genit.ai/chat/seed',
+    });
+
+    builder.primeFromBlocks([
+      {
+        id: 'seed-block',
+        sessionUrl: 'https://genit.ai/chat/seed',
+        raw: 'seed',
+        messages: [
+          buildMessage(4, { id: 'seed-1' }),
+          buildMessage(5, { id: 'seed-2' }),
+        ],
+        ordinalRange: [4, 5],
+        timestamp: clock(),
+        meta: { sourceOrdinals: [4, 5] },
+      },
+    ]);
+
+    const duplicate = builder.append(buildMessage(null, { id: 'seed-1' }));
+    expect(duplicate).toHaveLength(0);
+
+    builder.append(buildMessage(null, { id: 'fresh-1' }));
+    const blocks = builder.flush({ includePartial: true });
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].ordinalRange).toEqual([6, 6]);
+    expect(blocks[0].messages[0]?.id).toBe('fresh-1');
+  });
+
+  it('falls back to default session URL when resolver fails', () => {
+    const warn = vi.fn();
+    const builder = createBlockBuilder({
+      blockSize: 1,
+      overlap: 0,
+      clock,
+      console: { warn },
+      getSessionUrl: () => {
+        throw new Error('resolver failed');
+      },
+    });
+
+    const blocks = builder.append(buildMessage(1));
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].sessionUrl).toBe('about:blank');
+    expect(warn).toHaveBeenCalledWith(
+      '[GMH] block builder session resolver failed',
+      expect.any(Error),
+    );
+  });
+
+  it('omits info-only content from raw text output', () => {
+    const builder = createBlockBuilder({
+      blockSize: 1,
+      overlap: 0,
+      clock,
+      sessionUrl: 'https://genit.ai/chat/info',
+    });
+
+    const [block] = builder.append(
+      buildMessage(1, {
+        role: 'system',
+        channel: 'system',
+        speaker: 'INFO',
+        parts: [
+          {
+            type: 'info',
+            flavor: 'meta',
+            role: 'system',
+            speaker: 'INFO',
+            lines: ['INFO', 'Loading...'],
+            legacyLines: ['INFO', 'Loading...'],
+          },
+        ],
+      }),
+    );
+
+    expect(block.raw).toBe('');
+  });
 });
