@@ -11,7 +11,9 @@
 - Babechat 어댑터 커버리지 강화: DOM 블록 파싱, 구조화 수집, API 파라미터/쿨다운 흐름, 초기 시나리오 프리펜드 경로
 - Auto-loader/스냅샷/BlockStorage 커버리지 확장: API 수집 경로, 필수 의존성 가드, progressive snapshot 사용, meta summary/embedding 검증
 - Core utils(clone/deepMerge) 커버리지 추가: 직렬화 실패 fallback, 배열/중첩 머지 경로
-- 커버리지 스냅샷: 전체 라인 74.42%, src 라인 78.78%, adapters 82.37%, core 83.74%, features 74.17%, storage 53.58%, privacy/pipeline 97.77%
+- Babechat 어댑터 테스트 격리: fetch/XHR 인터셉터 후 글로별/프로토타입 정리로 후행 테스트 오염 방지
+- BlockStorage 테스트 안정화: 결정적 ID/DB 이름, 가벼운 fake IndexedDB로 엔진/업그레이드 경로 포함한 영속성 검증
+- 커버리지 스냅샷: 전체 라인 77.51%, src 라인 78.78%, adapters 82.37%, core 83.74%, features 74.17%, storage 85.14%, privacy/pipeline 97.77%
 
 ## v3.1.1 (2025-12-01)
 

@@ -1,11 +1,29 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 
+const initialGlobals = {
+  window: globalThis.window,
+  document: globalThis.document,
+  Document: globalThis.Document,
+  Node: globalThis.Node,
+  Element: globalThis.Element,
+  HTMLElement: globalThis.HTMLElement,
+  fetch: globalThis.fetch,
+  XMLHttpRequest: globalThis.XMLHttpRequest,
+};
+
+let originalXhrOpen: any;
+let originalXhrSetRequestHeader: any;
+let currentDom: JSDOM | null = null;
+
 const setupDom = (): JSDOM => {
   const dom = new JSDOM('<!doctype html><html><body></body></html>', {
     url: 'https://babechat.ai/chat/room',
     pretendToBeVisual: true,
   });
+  currentDom = dom;
+  originalXhrOpen = dom.window.XMLHttpRequest.prototype.open;
+  originalXhrSetRequestHeader = dom.window.XMLHttpRequest.prototype.setRequestHeader;
   // @ts-expect-error assign jsdom globals for adapter helpers
   globalThis.window = dom.window;
   // @ts-expect-error assign jsdom globals for adapter helpers
@@ -102,6 +120,27 @@ describe('adapters/babechat', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    if (globalThis.XMLHttpRequest && originalXhrOpen) {
+      globalThis.XMLHttpRequest.prototype.open = originalXhrOpen;
+    }
+    if (globalThis.XMLHttpRequest && originalXhrSetRequestHeader) {
+      globalThis.XMLHttpRequest.prototype.setRequestHeader = originalXhrSetRequestHeader;
+    }
+    if (currentDom?.window) {
+      currentDom.window.close();
+    }
+    currentDom = null;
+    const resetGlobal = (key: keyof typeof initialGlobals) => {
+      const value = initialGlobals[key];
+      if (value === undefined) {
+        // @ts-expect-error clear global
+        delete (globalThis as any)[key];
+        return;
+      }
+      // @ts-expect-error restore global
+      (globalThis as any)[key] = value;
+    };
+    (Object.keys(initialGlobals) as Array<keyof typeof initialGlobals>).forEach(resetGlobal);
   });
 
   it('collects blocks and emits structured messages for system, player, and NPC turns', async () => {
