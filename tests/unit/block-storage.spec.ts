@@ -291,4 +291,99 @@ describe('block storage (memory fallback)', () => {
       expect(second?.summary).toBe('Original summary');
     });
   });
+
+  describe('validation and cloning helpers', () => {
+    it('covers cloneArrayBuffer fallback when slice is missing', async () => {
+      const buffer = new ArrayBuffer(8);
+      // Force fallback branch without slice
+      // @ts-expect-error remove slice to hit fallback path
+      buffer.slice = undefined;
+      const view = new Uint8Array(buffer);
+      view[0] = 7;
+
+      await storage.save({
+        ...buildBlock({ id: 'noslice-buffer', embedding: buffer }),
+      });
+
+      const stored = await storage.get('noslice-buffer');
+      expect(stored?.embedding).toBeInstanceOf(ArrayBuffer);
+      const restored = new Uint8Array(stored!.embedding as ArrayBuffer);
+      expect(restored[0]).toBe(7);
+    });
+
+    it('rejects invalid embeddings and timestamps', async () => {
+      await expect(
+        storage.save({
+          ...buildBlock({ id: 'bad-embedding' }),
+          // @ts-expect-error intentionally invalid embedding type
+          embedding: 'not-a-buffer',
+        }),
+      ).rejects.toThrow(/embedding must be an ArrayBuffer/);
+
+      await expect(
+        storage.save({
+          ...buildBlock({ id: 'bad-timestamp' }),
+          timestamp: Number.NaN,
+        }),
+      ).rejects.toThrow(/numeric timestamp/);
+    });
+
+    it('sorts by timestamp and id when startOrdinal is equal', async () => {
+      const sessionUrl = 'https://genit.ai/chat/sort-by-timestamp';
+      const base = buildBlock({ sessionUrl }, { ordinalStart: 5, ordinalEnd: 9 });
+      const early = { ...base, id: 'block-early', timestamp: 10 };
+      const late = { ...base, id: 'block-late', timestamp: 20 };
+      const tie = { ...base, id: 'block-mid', timestamp: 20 };
+
+      await storage.save(late);
+      await storage.save(tie);
+      await storage.save(early);
+
+      const blocks = await storage.getBySession(sessionUrl);
+      expect(blocks.map((b) => b.id)).toEqual(['block-early', 'block-late', 'block-mid']);
+    });
+
+    it('validates meta summary payloads', async () => {
+      await expect(
+        storage.saveMeta({
+          // @ts-expect-error missing fields on purpose
+        }),
+      ).rejects.toThrow(/stable id/i);
+
+      await expect(
+        storage.saveMeta({
+          id: 'meta-1',
+          sessionUrl: 'https://genit.ai/chat/meta',
+          chunkIds: [],
+          chunkRange: [0, 1],
+          summary: 'text',
+          timestamp: Date.now(),
+        }),
+      ).rejects.toThrow(/at least one chunkId/);
+    });
+
+    it('falls back to JSON clone when structuredClone throws', async () => {
+      const originalClone = globalThis.structuredClone;
+      // @ts-expect-error override structuredClone to throw
+      globalThis.structuredClone = () => {
+        throw new Error('no clone');
+      };
+
+      try {
+        await storage.save({
+          ...buildBlock({ id: 'clone-fallback' }),
+          meta: { complex: true },
+        });
+        const first = await storage.get('clone-fallback');
+        if (first?.meta && typeof first.meta === 'object') {
+          (first.meta as any).complex = false;
+        }
+        const second = await storage.get('clone-fallback');
+        expect((second?.meta as any).complex).toBe(true);
+      } finally {
+        // @ts-expect-error restore structuredClone
+        globalThis.structuredClone = originalClone;
+      }
+    });
+  });
 });

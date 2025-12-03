@@ -9,8 +9,9 @@
 - Privacy 파이프라인 E2E 테스트: 세션/스냅샷 전체 redaction, 차단/디버그 로깅 경로 커버
 - Utils 테스트 추가: DOM 헬퍼(triggerDownload, isScrollable, sleep)와 validation(looksLikeName, luhnValid, requireDeps)
 - Babechat 어댑터 커버리지 강화: DOM 블록 파싱, 구조화 수집, API 파라미터/쿨다운 흐름, 초기 시나리오 프리펜드 경로
+- Auto-loader/스냅샷/BlockStorage 커버리지 확장: API 수집 경로, 필수 의존성 가드, progressive snapshot 사용, meta summary/embedding 검증
 - Core utils(clone/deepMerge) 커버리지 추가: 직렬화 실패 fallback, 배열/중첩 머지 경로
-- 커버리지 스냅샷: 전체 라인 69.91%, src 라인 78.78%, adapters 82.37%, core 83.74%, privacy/pipeline 97.77%
+- 커버리지 스냅샷: 전체 라인 74.42%, src 라인 78.78%, adapters 82.37%, core 83.74%, features 74.17%, storage 53.58%, privacy/pipeline 97.77%
 
 ## v3.1.1 (2025-12-01)
 
