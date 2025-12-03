@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### 🐛 Fixes
+
+- **중복 청크 저장 방지**: "GMH에 담기" 클릭 시 이미 저장된 ordinalRange와 동일한 청크는 스킵
+  - 기존 요약/Facts 보존
+  - 상태 메시지에 저장/스킵 개수 표시
+
+### ✨ New Features
+
+- **개별 청크 삭제**: 각 청크 카드에 🗑️ 삭제 버튼 추가
+  - 삭제 전 확인 대화상자 표시
+  - 요약/Facts가 있는 경우 경고 메시지
+  - IndexedDB에서 즉시 삭제 및 UI 업데이트
+
+### 🎨 UI
+
+- **삭제 버튼 스타일**: `gmh-small-btn--danger` 클래스 추가 (빨간색 테마)
+
 ### 🧪 Tests
 
 - MessageIndexer 단위 테스트 추가: 프리뷰 필터링, 비동기 refresh 경로, 컨테이너 변경 시 리스너 가드, ordinal lookup 검증
