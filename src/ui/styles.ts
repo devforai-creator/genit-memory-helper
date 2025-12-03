@@ -85,6 +85,8 @@ html.gmh-panel-open #gmh-fab[data-position^="top"]{transform:translateY(4px);}
 .gmh-textarea{width:100%;min-height:96px;background:#111827;color:var(--gmh-fg);border:1px solid var(--gmh-border);border-radius:var(--gmh-radius-sm);padding:10px;font:inherit;resize:vertical;}
 .gmh-small-btn{padding:8px 10px;border-radius:var(--gmh-radius-sm);border:1px solid transparent;cursor:pointer;font-weight:600;font-size:12px;background:rgba(15,23,42,0.65);color:var(--gmh-muted);transition:background 0.15s ease,color 0.15s ease,border 0.15s ease;}
 .gmh-small-btn--accent{background:var(--gmh-accent);color:#041016;}
+.gmh-small-btn--danger{background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);}
+.gmh-small-btn--danger:hover{background:rgba(239,68,68,0.25);color:#fca5a5;border-color:rgba(239,68,68,0.5);}
 .gmh-small-btn--muted{background:rgba(15,23,42,0.65);color:var(--gmh-muted);border:1px solid transparent;}
 .gmh-small-btn--muted:hover{color:var(--gmh-fg);border-color:var(--gmh-border);}
 .gmh-small-btn--accent:hover{background:#0ea5e9;color:#03212f;}

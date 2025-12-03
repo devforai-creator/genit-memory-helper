@@ -150,6 +150,9 @@ export function createDualMemoryControls(
           <button class="gmh-small-btn gmh-small-btn--accent gmh-copy-facts" type="button" title="Facts 프롬프트 복사">
             📋 Facts
           </button>
+          <button class="gmh-small-btn gmh-small-btn--danger gmh-delete-chunk" type="button" title="청크 삭제">
+            🗑️
+          </button>
         </div>
         <div class="gmh-memory-chunk__detail" hidden>
           <div class="gmh-memory-chunk__raw-section">
@@ -473,6 +476,64 @@ export function createDualMemoryControls(
         } finally {
           btn.disabled = false;
           btn.textContent = '저장';
+        }
+      });
+    });
+
+    // 청크 삭제 버튼
+    contentEl.querySelectorAll<HTMLButtonElement>('.gmh-delete-chunk').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const chunkEl = btn.closest('.gmh-memory-chunk');
+        const chunkId = chunkEl?.getAttribute('data-chunk-id');
+        const chunk = chunks.find((c) => c.id === chunkId);
+        if (!chunk || !chunkId) return;
+
+        // 확인 대화상자
+        const range = formatChunkRange(chunk);
+        const hasSummary = !!chunk.summary?.trim();
+        const hasFacts = !!chunk.facts?.trim();
+        const warningMsg = hasSummary || hasFacts
+          ? `${range} 청크를 삭제하시겠습니까?\n⚠️ 저장된 요약/Facts도 함께 삭제됩니다.`
+          : `${range} 청크를 삭제하시겠습니까?`;
+
+        if (!confirm(warningMsg)) return;
+
+        btn.disabled = true;
+
+        try {
+          const blockStorage = getBlockStorage?.();
+          if (blockStorage) {
+            await blockStorage.delete(chunkId);
+          }
+
+          // chunks 배열에서 제거
+          const idx = chunks.findIndex((c) => c.id === chunkId);
+          if (idx !== -1) {
+            chunks.splice(idx, 1);
+          }
+
+          // savedRecords에서도 제거
+          const savedIdx = savedRecords.findIndex((r) => r.id === chunkId);
+          if (savedIdx !== -1) {
+            savedRecords.splice(savedIdx, 1);
+          }
+
+          // UI에서 제거
+          chunkEl?.remove();
+
+          // 통계 업데이트
+          updateStats(chunks);
+
+          // 메타 섹션 갱신
+          refreshMetaSection(chunks);
+
+          showStatus?.(`${range} 청크가 삭제되었습니다.`, 'success');
+          logger?.log?.('[GMH] Chunk deleted:', chunkId);
+        } catch (err) {
+          showStatus?.('삭제에 실패했습니다.', 'error');
+          logger?.warn?.('[GMH] Chunk delete failed:', err);
+        } finally {
+          btn.disabled = false;
         }
       });
     });
