@@ -766,30 +766,70 @@ export function createDualMemoryControls(
 
     // 비동기로 청크 생성 (UI 블로킹 방지)
     setTimeout(async () => {
+      let savedCount = 0;
+      let skippedCount = 0;
+
       try {
         currentResult = createChunks(messages, {
           sessionUrl: getSessionUrl?.() ?? undefined,
         });
 
-        // IndexedDB에 청크 저장
+        // IndexedDB에 청크 저장 (중복 체크)
         const blockStorage = getBlockStorage?.();
         if (blockStorage && currentResult.chunks.length > 0) {
           const sessionUrl = getSessionUrl?.() ?? '';
           if (sessionUrl) {
             showStatus?.('청크 저장 중...', 'progress');
+
+            // 기존 저장된 청크의 ordinalRange 가져오기
+            const existingBlocks = await blockStorage.getBySession(sessionUrl);
+            const existingRanges = new Set(
+              existingBlocks.map((b) => `${b.ordinalRange[0]}-${b.ordinalRange[1]}`),
+            );
+
             for (const chunk of currentResult.chunks) {
+              const rangeKey = `${chunk.range.start}-${chunk.range.end}`;
+              if (existingRanges.has(rangeKey)) {
+                // 이미 저장된 범위면 스킵 (기존 요약/Facts 보존)
+                skippedCount++;
+                continue;
+              }
               await saveChunk(chunk);
+              savedCount++;
             }
+
             savedRecords = await blockStorage.getBySession(sessionUrl);
+
+            if (skippedCount > 0) {
+              logger?.log?.(
+                `[GMH] Chunks: ${savedCount} saved, ${skippedCount} skipped (already exists)`,
+              );
+            }
           }
         }
 
-        renderChunks(currentResult.chunks, true);
-        showStatus?.(
-          `${currentResult.chunks.length}개 청크가 생성되었습니다. 프롬프트를 복사해서 LLM에 붙여넣으세요.`,
-          'success',
-        );
-        logger?.log?.('[GMH] Chunks created and saved:', currentResult.chunks.length);
+        // savedRecords를 청크로 변환하여 렌더링 (기존 요약/Facts 포함)
+        const chunksToRender =
+          savedRecords.length > 0
+            ? savedRecords.map(blockRecordToChunk)
+            : currentResult.chunks;
+
+        // currentResult도 업데이트 (다른 곳에서 참조할 수 있으므로)
+        currentResult = {
+          ...currentResult,
+          chunks: chunksToRender,
+        };
+
+        renderChunks(chunksToRender, true);
+
+        // 상태 메시지 개선
+        const totalChunks = chunksToRender.length;
+        const statusMsg =
+          savedCount > 0
+            ? `${savedCount}개 새 청크 저장, 총 ${totalChunks}개 청크`
+            : `${totalChunks}개 청크 (변경 없음)`;
+        showStatus?.(statusMsg, 'success');
+        logger?.log?.('[GMH] Chunks result:', { total: totalChunks, new: savedCount, skipped: skippedCount });
       } catch (err) {
         showStatus?.('청크 생성에 실패했습니다.', 'error');
         logger?.warn?.('[GMH] Chunk creation failed', err);
