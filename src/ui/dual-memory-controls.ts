@@ -217,6 +217,9 @@ export function createDualMemoryControls(
             <button class="gmh-small-btn gmh-small-btn--accent gmh-copy-meta-prompt" type="button" title="메타 요약 프롬프트 복사">
               📋 프롬프트
             </button>
+            ${hasMeta
+              ? `<button class="gmh-small-btn gmh-small-btn--danger gmh-delete-meta" type="button" title="메타 요약 삭제" data-meta-id="${existingMeta?.id}">🗑️</button>`
+              : ''}
           </div>
           <div class="gmh-meta-group__input-section">
             <textarea class="gmh-memory-input gmh-meta-input" placeholder="메타 요약 결과를 여기에 붙여넣으세요...">${escapeHtml(existingMeta?.summary ?? '', doc)}</textarea>
@@ -606,7 +609,11 @@ export function createDualMemoryControls(
         btn.textContent = '저장 중...';
 
         try {
-          const metaId = `gmh-meta-${group.chunkRange[0]}-${group.chunkRange[1]}-${Date.now()}`;
+          // 기존 메타 요약이 있으면 업데이트, 없으면 새로 생성 (중복 방지)
+          const existingMeta = savedMetaRecords.find(
+            m => m.chunkRange[0] === group.chunkRange[0] && m.chunkRange[1] === group.chunkRange[1]
+          );
+          const metaId = existingMeta?.id ?? `gmh-meta-${group.chunkRange[0]}-${group.chunkRange[1]}-${Date.now()}`;
           const metaInit: MetaSummaryInit = {
             id: metaId,
             sessionUrl,
@@ -624,7 +631,8 @@ export function createDualMemoryControls(
             savedMetaRecords = await blockStorage.getMetaBySession(sessionUrl);
           }
 
-          showStatus?.('메타 요약이 저장되었습니다.', 'success');
+          const actionMsg = existingMeta ? '업데이트' : '저장';
+          showStatus?.(`메타 요약이 ${actionMsg}되었습니다.`, 'success');
 
           // 배지 업데이트
           const badgeEl = groupEl.querySelector('.gmh-memory-badge');
@@ -641,6 +649,49 @@ export function createDualMemoryControls(
         } finally {
           btn.disabled = false;
           btn.textContent = '저장';
+        }
+      });
+    });
+
+    // 메타 요약 삭제 버튼
+    contentEl.querySelectorAll<HTMLButtonElement>('.gmh-delete-meta').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const metaId = btn.getAttribute('data-meta-id');
+        if (!metaId) return;
+
+        const groupEl = btn.closest('.gmh-meta-group');
+        const rangeText = groupEl?.querySelector('.gmh-meta-group__range')?.textContent ?? '메타 요약';
+
+        // 확인 대화상자
+        if (!confirm(`${rangeText}을 삭제하시겠습니까?`)) return;
+
+        btn.disabled = true;
+
+        try {
+          const blockStorage = getBlockStorage?.();
+          if (blockStorage) {
+            await blockStorage.deleteMeta(metaId);
+          }
+
+          // savedMetaRecords에서 제거
+          const idx = savedMetaRecords.findIndex((r) => r.id === metaId);
+          if (idx !== -1) {
+            savedMetaRecords.splice(idx, 1);
+          }
+
+          // 통계 업데이트
+          updateStats(chunks);
+
+          // 메타 섹션 전체 갱신 (삭제 후 UI 반영)
+          refreshMetaSection(chunks);
+
+          showStatus?.(`${rangeText}이 삭제되었습니다.`, 'success');
+          logger?.log?.('[GMH] Meta summary deleted:', metaId);
+        } catch (err) {
+          showStatus?.('삭제에 실패했습니다.', 'error');
+          logger?.warn?.('[GMH] Meta delete failed:', err);
+        } finally {
+          btn.disabled = false;
         }
       });
     });
