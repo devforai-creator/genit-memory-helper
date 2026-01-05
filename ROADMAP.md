@@ -94,6 +94,7 @@ v4.0.0 [Semantic Search] ⏸️     보류 - 의미 검색, 임베딩 (우선순
 | 기능 | 설명 | 난이도 |
 |------|------|--------|
 | **babechat 이미지 URL 매핑** | API 응답의 `img:[id]` 형식을 실제 이미지 URL로 변환. babechat 프론트엔드 JS 역공학 필요. | 중 |
+| **이미지 포함 HTML 백업** | 대화 + 이미지를 HTML로 백업. `GM_xmlhttpRequest`로 CORS 우회 가능 (돌파구 확인됨, 2025-01-05). TOS 검토 완료 (BabeChat 암묵적 허용). 수요에 따라 진행 예정. | 중 |
 
 ---
 
