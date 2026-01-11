@@ -201,10 +201,17 @@ export const createGenitAdapter = ({
       .filter(Boolean);
   };
 
+  const isGmhPanel = (node: Element | null): boolean => {
+    if (!node) return false;
+    if (node.id === 'genit-memory-helper-panel') return true;
+    if (node.classList?.contains('gmh-panel')) return true;
+    return false;
+  };
+
   const findScrollableAncestor = (node: Element | null | undefined): Element | null => {
     let current = node instanceof Element ? node : null;
     for (let depth = 0; depth < 6 && current; depth += 1) {
-      if (isScrollable(current)) return current;
+      if (isScrollable(current) && !isGmhPanel(current)) return current;
       current = current.parentElement;
     }
     return null;
@@ -213,6 +220,7 @@ export const createGenitAdapter = ({
   const findByRole = (root: Document | Element = document): Element | null => {
     const roleNodes = collectAll(['[role]'], root);
     return roleNodes.find((node) => {
+      if (isGmhPanel(node)) return false;
       const role = node.getAttribute('role') || '';
       return /log|list|main|region/i.test(role) && isScrollable(node);
     }) ?? null;
@@ -245,6 +253,13 @@ export const createGenitAdapter = ({
 
     const hintMatch = findByTextHint(doc);
     if (hintMatch) return hintMatch;
+
+    // Fallback: genit.ai uses full-page scroll (html/body as scroll container)
+    // Return scrollingElement as container even if message blocks don't exist yet (initial load)
+    const scrollingEl = doc.scrollingElement || doc.documentElement || doc.body;
+    if (scrollingEl && !isGmhPanel(scrollingEl as Element)) {
+      return scrollingEl as Element;
+    }
 
     return null;
   };
